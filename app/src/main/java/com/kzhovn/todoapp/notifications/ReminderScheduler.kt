@@ -9,7 +9,11 @@ import com.kzhovn.todoapp.data.Task
 class ReminderScheduler(private val context: Context, private val alarmManager: AlarmManager) {
 
     fun schedule(task: Task) {
-        val dueDate = task.dueDate ?: return
+        val dueDate = task.dueDate
+        if (dueDate == null) {
+            cancel(task)
+            return
+        }
         alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, dueDate, pendingIntentFor(task))
     }
 

@@ -49,4 +49,17 @@ class ReminderSchedulerTest {
 
         assertNull(Shadows.shadowOf(alarmManager).peekNextScheduledAlarm())
     }
+
+    @Test
+    fun `clearing a due date cancels the alarm`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val scheduler = ReminderScheduler(context, alarmManager)
+        val task = Task(id = 1, title = "Pay rent", dueDate = 1_000_000L)
+        scheduler.schedule(task)
+
+        scheduler.schedule(task.copy(dueDate = null))
+
+        assertNull(Shadows.shadowOf(alarmManager).peekNextScheduledAlarm())
+    }
 }

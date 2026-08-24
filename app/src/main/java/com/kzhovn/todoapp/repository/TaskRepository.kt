@@ -49,7 +49,10 @@ class TaskRepository(
         val completedTask = task.copy(isComplete = true, completedAt = now)
         taskDao.update(completedTask)
         reminderScheduler.cancel(completedTask)
-        RecurrenceEngine.nextInstance(completedTask, now)?.let { taskDao.insert(it) }
+        RecurrenceEngine.nextInstance(completedTask, now)?.let {
+            val nextId = taskDao.insert(it)
+            reminderScheduler.schedule(it.copy(id = nextId))
+        }
     }
 
     suspend fun getActiveTasks(now: Long, currentMinuteOfDay: Int): List<Task> =

@@ -8,17 +8,20 @@ import com.kzhovn.todoapp.data.TodoDatabase
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows
 import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 class TaskRepositoryRecurrenceTest {
     private lateinit var db: TodoDatabase
     private lateinit var repository: TaskRepository
+    private lateinit var alarmManager: android.app.AlarmManager
     private val now = 1_700_000_000_000L
 
     @Before
@@ -26,7 +29,7 @@ class TaskRepositoryRecurrenceTest {
         db = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(), TodoDatabase::class.java
         ).allowMainThreadQueries().build()
-        val alarmManager = ApplicationProvider.getApplicationContext<android.content.Context>()
+        alarmManager = ApplicationProvider.getApplicationContext<android.content.Context>()
             .getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
         repository = TaskRepository(db.taskDao(), com.kzhovn.todoapp.notifications.ReminderScheduler(
             ApplicationProvider.getApplicationContext(), alarmManager
@@ -51,5 +54,32 @@ class TaskRepositoryRecurrenceTest {
         val spawned = all.first { it.id != taskId }
         assertTrue(!spawned.isComplete)
         assertEquals(now + TimeUnit.DAYS.toMillis(7), spawned.startDate)
+    }
+
+    @Test
+    fun `spawned recurring task with due date has an alarm scheduled`() = runBlocking {
+        val dueDate = now + TimeUnit.DAYS.toMillis(1)
+        val taskId = repository.createTask(
+            Task(
+                title = "Recurring task",
+                dueDate = dueDate,
+                recurrenceType = RecurrenceType.AFTER_COMPLETION,
+                recurrenceRule = "7"
+            )
+        )
+
+        repository.markComplete(taskId, now)
+
+        val all = repository.getAllTasks()
+        assertEquals(2, all.size)
+        val spawned = all.first { it.id != taskId }
+        assertTrue(!spawned.isComplete)
+
+        // The spawned task inherits the dueDate from the original and has an alarm scheduled.
+        // Since RecurrenceEngine.nextInstance() copies the original task and only changes
+        // id, startDate, isComplete, and completedAt, the dueDate is preserved.
+        assertEquals(dueDate, spawned.dueDate)
+        val nextAlarm = Shadows.shadowOf(alarmManager).peekNextScheduledAlarm()
+        assertEquals(dueDate, nextAlarm?.triggerAtMs)
     }
 }
