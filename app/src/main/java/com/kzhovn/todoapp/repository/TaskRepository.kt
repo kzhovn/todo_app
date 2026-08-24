@@ -51,7 +51,11 @@ class TaskRepository(
         reminderScheduler.cancel(completedTask)
         RecurrenceEngine.nextInstance(completedTask, now)?.let {
             val nextId = taskDao.insert(it)
-            reminderScheduler.schedule(it.copy(id = nextId))
+            // Only schedule alarm for future due dates; spawned instances inherit the original's
+            // dueDate, which is often in the past if the task was completed at/after its due date.
+            if (it.dueDate == null || it.dueDate > now) {
+                reminderScheduler.schedule(it.copy(id = nextId))
+            }
         }
     }
 

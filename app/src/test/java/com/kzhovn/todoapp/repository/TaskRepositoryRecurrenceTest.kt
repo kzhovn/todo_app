@@ -82,4 +82,30 @@ class TaskRepositoryRecurrenceTest {
         val nextAlarm = Shadows.shadowOf(alarmManager).peekNextScheduledAlarm()
         assertEquals(dueDate, nextAlarm?.triggerAtMs)
     }
+
+    @Test
+    fun `spawned recurring task with past due date does not get an alarm`() = runBlocking {
+        val pastDueDate = now - TimeUnit.DAYS.toMillis(1)
+        val taskId = repository.createTask(
+            Task(
+                title = "Overdue recurring task",
+                dueDate = pastDueDate,
+                recurrenceType = RecurrenceType.AFTER_COMPLETION,
+                recurrenceRule = "7"
+            )
+        )
+
+        repository.markComplete(taskId, now)
+
+        val all = repository.getAllTasks()
+        assertEquals(2, all.size)
+        val spawned = all.first { it.id != taskId }
+        assertTrue(!spawned.isComplete)
+
+        // The spawned task still exists but should not have an alarm scheduled
+        // since its inherited dueDate is in the past. This prevents spurious
+        // notifications from firing immediately upon task completion.
+        assertEquals(pastDueDate, spawned.dueDate)
+        assertNull(Shadows.shadowOf(alarmManager).peekNextScheduledAlarm())
+    }
 }
