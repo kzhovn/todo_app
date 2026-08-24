@@ -20,5 +20,15 @@
             android:exported="false"
             android:theme="@style/Theme.TodoApp.QuickAdd" />
         <receiver android:name=".notifications.ReminderReceiver" android:exported="false" />
+        <receiver
+            android:name=".widget.TodoWidgetReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/todo_widget_info" />
+        </receiver>
     </application>
 </manifest>
