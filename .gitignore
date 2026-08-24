@@ -1,3 +1,11 @@
 docs/
 CLAUDE.md
 .worktrees/
+
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.cxx/
+captures/
