@@ -26,7 +26,11 @@ class TaskRepositoryRecurrenceTest {
         db = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(), TodoDatabase::class.java
         ).allowMainThreadQueries().build()
-        repository = TaskRepository(db.taskDao())
+        val alarmManager = ApplicationProvider.getApplicationContext<android.content.Context>()
+            .getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
+        repository = TaskRepository(db.taskDao(), com.kzhovn.todoapp.notifications.ReminderScheduler(
+            ApplicationProvider.getApplicationContext(), alarmManager
+        ))
     }
 
     @After

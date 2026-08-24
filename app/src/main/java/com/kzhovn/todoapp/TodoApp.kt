@@ -1,13 +1,18 @@
 package com.kzhovn.todoapp
 
 import android.app.Application
+import android.app.AlarmManager
 import androidx.room.Room
 import com.kzhovn.todoapp.data.TodoDatabase
+import com.kzhovn.todoapp.notifications.ReminderScheduler
 import com.kzhovn.todoapp.repository.TaskRepository
 
 class TodoApp : Application() {
     val database: TodoDatabase by lazy {
         Room.databaseBuilder(this, TodoDatabase::class.java, "todo.db").build()
     }
-    val repository: TaskRepository by lazy { TaskRepository(database.taskDao()) }
+    val repository: TaskRepository by lazy {
+        val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
+        TaskRepository(database.taskDao(), ReminderScheduler(this, alarmManager))
+    }
 }

@@ -3,15 +3,29 @@ package com.kzhovn.todoapp.repository
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskDao
 import com.kzhovn.todoapp.data.TaskDependency
+import com.kzhovn.todoapp.notifications.ReminderScheduler
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 
-class TaskRepository(private val taskDao: TaskDao) {
+class TaskRepository(
+    private val taskDao: TaskDao,
+    private val reminderScheduler: ReminderScheduler
+) {
 
-    suspend fun createTask(task: Task): Long = taskDao.insert(task)
+    suspend fun createTask(task: Task): Long {
+        val id = taskDao.insert(task)
+        reminderScheduler.schedule(task.copy(id = id))
+        return id
+    }
 
-    suspend fun deleteTask(task: Task) = taskDao.delete(task)
+    suspend fun deleteTask(task: Task) {
+        taskDao.delete(task)
+        reminderScheduler.cancel(task)
+    }
 
-    suspend fun undoDelete(task: Task) = taskDao.insert(task)
+    suspend fun undoDelete(task: Task) {
+        taskDao.insert(task)
+        reminderScheduler.schedule(task)
+    }
 
     suspend fun reparent(taskId: Long, newParentId: Long?) {
         val task = taskDao.getById(taskId) ?: return
@@ -25,13 +39,16 @@ class TaskRepository(private val taskDao: TaskDao) {
 
     suspend fun snooze(taskId: Long, durationMillis: Long, now: Long) {
         val task = taskDao.getById(taskId) ?: return
-        taskDao.update(task.copy(startDate = now + durationMillis))
+        val updated = task.copy(startDate = now + durationMillis)
+        taskDao.update(updated)
+        reminderScheduler.schedule(updated)
     }
 
     suspend fun markComplete(taskId: Long, now: Long) {
         val task = taskDao.getById(taskId) ?: return
         val completedTask = task.copy(isComplete = true, completedAt = now)
         taskDao.update(completedTask)
+        reminderScheduler.cancel(completedTask)
         RecurrenceEngine.nextInstance(completedTask, now)?.let { taskDao.insert(it) }
     }
 
@@ -42,7 +59,10 @@ class TaskRepository(private val taskDao: TaskDao) {
 
     suspend fun getTask(taskId: Long): Task? = taskDao.getById(taskId)
 
-    suspend fun updateTask(task: Task) = taskDao.update(task)
+    suspend fun updateTask(task: Task) {
+        taskDao.update(task)
+        reminderScheduler.schedule(task)
+    }
 
     suspend fun setSequential(folderId: Long, sequential: Boolean) {
         val task = taskDao.getById(folderId) ?: return
@@ -51,7 +71,9 @@ class TaskRepository(private val taskDao: TaskDao) {
 
     suspend fun setDueDate(taskId: Long, dueDate: Long?) {
         val task = taskDao.getById(taskId) ?: return
-        taskDao.update(task.copy(dueDate = dueDate))
+        val updated = task.copy(dueDate = dueDate)
+        taskDao.update(updated)
+        reminderScheduler.schedule(updated)
     }
 
     suspend fun getTasksUnderFolder(folderId: Long): List<Task> = taskDao.getLeafTasksUnder(folderId)
