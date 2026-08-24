@@ -1,0 +1,31 @@
+package com.kzhovn.todoapp.recurrence
+
+import com.kzhovn.todoapp.data.RecurrenceType
+import com.kzhovn.todoapp.data.Task
+import org.dmfs.rfc5545.recur.RecurrenceRule
+import java.util.TimeZone
+import java.util.concurrent.TimeUnit
+
+object RecurrenceEngine {
+
+    fun nextInstance(task: Task, completedAt: Long): Task? {
+        val type = task.recurrenceType ?: return null
+        val rule = task.recurrenceRule ?: return null
+        val nextStart = when (type) {
+            RecurrenceType.AFTER_COMPLETION -> completedAt + TimeUnit.DAYS.toMillis(rule.toLong())
+            RecurrenceType.RRULE -> nextRRuleOccurrence(task.startDate ?: completedAt, rule, completedAt)
+                ?: return null
+        }
+        return task.copy(id = 0, startDate = nextStart, isComplete = false, completedAt = null)
+    }
+
+    private fun nextRRuleOccurrence(dtStart: Long, rrule: String, after: Long): Long? {
+        val recurrenceRule = RecurrenceRule(rrule)
+        val iterator = recurrenceRule.iterator(dtStart, TimeZone.getDefault())
+        while (iterator.hasNext()) {
+            val next = iterator.next().timestamp
+            if (next > after) return next
+        }
+        return null
+    }
+}
