@@ -10,7 +10,13 @@ import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TodoDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -20,14 +26,17 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows
 import org.robolectric.shadows.ShadowWifiInfo
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 class WifiContextMonitorTest {
     private lateinit var db: TodoDatabase
     private lateinit var monitor: WifiContextMonitor
     private lateinit var wifiManager: WifiManager
+    private val testDispatcher = StandardTestDispatcher()
 
     @Before
     fun setUp() {
+        Dispatchers.setMain(testDispatcher)
         val context = ApplicationProvider.getApplicationContext<Context>()
         db = Room.inMemoryDatabaseBuilder(context, TodoDatabase::class.java).allowMainThreadQueries().build()
         wifiManager = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
@@ -37,11 +46,12 @@ class WifiContextMonitorTest {
 
     @After
     fun tearDown() {
+        Dispatchers.resetMain()
         db.close()
     }
 
     @Test
-    fun `marks place context satisfied when connected to its saved ssid`() = runBlocking {
+    fun `marks place context satisfied when connected to its saved ssid`() = runTest(testDispatcher) {
         val id = db.taskContextDao().insert(
             TaskContext(name = "Home", type = ContextType.PLACE, wifiSsid = "MyHomeNetwork")
         )
@@ -51,12 +61,13 @@ class WifiContextMonitorTest {
         Shadows.shadowOf(wifiManager).setConnectionInfo(wifiInfo)
 
         monitor.refresh()
+        Thread.sleep(100)
 
         assertEquals(true, db.taskContextDao().getById(id)?.isCurrentlySatisfied)
     }
 
     @Test
-    fun `marks place context unsatisfied when connected to a different ssid`() = runBlocking {
+    fun `marks place context unsatisfied when connected to a different ssid`() = runTest(testDispatcher) {
         val id = db.taskContextDao().insert(
             TaskContext(name = "Home", type = ContextType.PLACE, wifiSsid = "MyHomeNetwork", isCurrentlySatisfied = true)
         )
@@ -66,6 +77,7 @@ class WifiContextMonitorTest {
         Shadows.shadowOf(wifiManager).setConnectionInfo(wifiInfo)
 
         monitor.refresh()
+        Thread.sleep(100)
 
         assertEquals(false, db.taskContextDao().getById(id)?.isCurrentlySatisfied)
     }

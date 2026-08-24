@@ -9,7 +9,6 @@ import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.TaskContextDao
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 
 class WifiContextMonitor(
     private val connectivityManager: ConnectivityManager,
@@ -34,7 +33,7 @@ class WifiContextMonitor(
     }
 
     internal fun refresh() {
-        runBlocking {
+        scope.launch {
             val currentSsid = wifiManager.connectionInfo?.ssid?.trim('"')
             contextDao.getAll()
                 .filter { it.type == ContextType.PLACE }
