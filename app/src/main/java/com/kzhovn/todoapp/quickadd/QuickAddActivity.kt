@@ -1,0 +1,41 @@
+package com.kzhovn.todoapp.quickadd
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
+import com.kzhovn.todoapp.TodoApp
+import kotlinx.coroutines.launch
+
+class QuickAddActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val repository = (application as TodoApp).repository
+        setContent {
+            var text by remember { mutableStateOf("") }
+            Surface {
+                Column {
+                    OutlinedTextField(value = text, onValueChange = { text = it })
+                    Button(onClick = {
+                        val task = QuickAddParser.parse(text)
+                        lifecycleScope.launch {
+                            repository.createTask(task)
+                            finish()
+                        }
+                    }) {
+                        Text("Create")
+                    }
+                }
+            }
+        }
+    }
+}

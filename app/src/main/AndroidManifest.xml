@@ -15,6 +15,10 @@
             </intent-filter>
         </activity>
         <activity android:name=".ui.TaskEditActivity" android:exported="false" />
+        <activity
+            android:name=".quickadd.QuickAddActivity"
+            android:exported="false"
+            android:theme="@style/Theme.TodoApp.QuickAdd" />
         <receiver android:name=".notifications.ReminderReceiver" android:exported="false" />
     </application>
 </manifest>
