@@ -87,4 +87,6 @@ class TaskRepository(
 
     suspend fun addDependency(taskId: Long, dependsOnTaskId: Long) =
         taskDao.insertDependency(TaskDependency(taskId, dependsOnTaskId))
+
+    suspend fun search(query: String): List<Task> = taskDao.search(query)
 }

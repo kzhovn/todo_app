@@ -71,4 +71,7 @@ interface TaskDao {
         """
     )
     suspend fun getLeafTasksUnder(folderId: Long): List<Task>
+
+    @Query("SELECT * FROM tasks WHERE type != 'FOLDER' AND title LIKE '%' || :query || '%' COLLATE NOCASE")
+    suspend fun search(query: String): List<Task>
 }
