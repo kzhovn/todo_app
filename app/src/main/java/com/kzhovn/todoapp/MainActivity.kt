@@ -1,10 +1,15 @@
 package com.kzhovn.todoapp
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -18,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kzhovn.todoapp.ui.TaskEditActivity
 import com.kzhovn.todoapp.ui.TaskListMode
 import com.kzhovn.todoapp.ui.TaskListScreen
 import com.kzhovn.todoapp.ui.TaskListViewModel
@@ -34,7 +40,14 @@ class MainActivity : ComponentActivity() {
             var selectedMode by remember { mutableStateOf(TaskListMode.DOING) }
             LaunchedEffect(selectedMode) { viewModel.load(selectedMode) }
 
-            Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) {
+            Scaffold(
+                snackbarHost = { SnackbarHost(snackbarHostState) },
+                floatingActionButton = {
+                    FloatingActionButton(onClick = { startActivity(Intent(this@MainActivity, TaskEditActivity::class.java)) }) {
+                        Icon(Icons.Filled.Add, contentDescription = "New task")
+                    }
+                }
+            ) {
                 Column {
                     TabRow(selectedTabIndex = TaskListMode.entries.indexOf(selectedMode)) {
                         TaskListMode.entries.forEach { mode ->
@@ -58,7 +71,8 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
-                        }
+                        },
+                        onEdit = { taskId -> startActivity(Intent(this@MainActivity, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, taskId)) }
                     )
                 }
             }
