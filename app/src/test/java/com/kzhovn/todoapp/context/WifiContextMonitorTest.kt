@@ -8,12 +8,12 @@ import androidx.test.core.app.ApplicationProvider
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TodoDatabase
+import java.util.concurrent.Executor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -38,7 +38,11 @@ class WifiContextMonitorTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         val context = ApplicationProvider.getApplicationContext<Context>()
-        db = Room.inMemoryDatabaseBuilder(context, TodoDatabase::class.java).allowMainThreadQueries().build()
+        db = Room.inMemoryDatabaseBuilder(context, TodoDatabase::class.java)
+            .allowMainThreadQueries()
+            .setQueryExecutor(Executor { it.run() })
+            .setTransactionExecutor(Executor { it.run() })
+            .build()
         wifiManager = context.getSystemService(Context.WIFI_SERVICE) as WifiManager
         val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         monitor = WifiContextMonitor(connectivityManager, wifiManager, db.taskContextDao(), CoroutineScope(Dispatchers.Unconfined))
@@ -61,7 +65,7 @@ class WifiContextMonitorTest {
         Shadows.shadowOf(wifiManager).setConnectionInfo(wifiInfo)
 
         monitor.refresh()
-        Thread.sleep(100)
+        advanceUntilIdle()
 
         assertEquals(true, db.taskContextDao().getById(id)?.isCurrentlySatisfied)
     }
@@ -77,7 +81,7 @@ class WifiContextMonitorTest {
         Shadows.shadowOf(wifiManager).setConnectionInfo(wifiInfo)
 
         monitor.refresh()
-        Thread.sleep(100)
+        advanceUntilIdle()
 
         assertEquals(false, db.taskContextDao().getById(id)?.isCurrentlySatisfied)
     }
