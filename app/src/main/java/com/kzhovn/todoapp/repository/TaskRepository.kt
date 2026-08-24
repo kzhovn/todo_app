@@ -3,6 +3,7 @@ package com.kzhovn.todoapp.repository
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskDao
 import com.kzhovn.todoapp.data.TaskDependency
+import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 
 class TaskRepository(private val taskDao: TaskDao) {
 
@@ -29,7 +30,9 @@ class TaskRepository(private val taskDao: TaskDao) {
 
     suspend fun markComplete(taskId: Long, now: Long) {
         val task = taskDao.getById(taskId) ?: return
-        taskDao.update(task.copy(isComplete = true, completedAt = now))
+        val completedTask = task.copy(isComplete = true, completedAt = now)
+        taskDao.update(completedTask)
+        RecurrenceEngine.nextInstance(completedTask, now)?.let { taskDao.insert(it) }
     }
 
     suspend fun getActiveTasks(now: Long, currentMinuteOfDay: Int): List<Task> =
