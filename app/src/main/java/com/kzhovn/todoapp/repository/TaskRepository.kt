@@ -3,6 +3,7 @@ package com.kzhovn.todoapp.repository
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskDao
 import com.kzhovn.todoapp.data.TaskDependency
+import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.notifications.ReminderScheduler
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 
@@ -63,6 +64,8 @@ class TaskRepository(
         taskDao.getActiveTasks(now, currentMinuteOfDay)
 
     suspend fun getAllTasks(): List<Task> = taskDao.getAllOnce()
+
+    suspend fun getFolders(): List<Task> = getAllTasks().filter { it.type == TaskType.FOLDER }
 
     suspend fun getTask(taskId: Long): Task? = taskDao.getById(taskId)
 
