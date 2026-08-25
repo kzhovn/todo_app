@@ -139,6 +139,7 @@ private fun OutlinerRow(
                 Text(
                     task.title,
                     fontFamily = LedgerTitleFont,
+                    fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
                     textDecoration = if (task.isComplete) TextDecoration.LineThrough else null,
                     color = if (task.isComplete) LedgerMuted else LedgerInk,
