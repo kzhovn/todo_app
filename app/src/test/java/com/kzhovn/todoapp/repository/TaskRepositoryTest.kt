@@ -108,27 +108,29 @@ class TaskRepositoryTest {
     }
 
     @Test
-    fun `deleteTask refuses to delete a folder that still has children`() = runBlocking {
+    fun `deleteTask cascades to a folder's direct children`() = runBlocking {
         val folderId = repository.createTask(Task(type = TaskType.FOLDER, title = "Work"))
-        repository.createTask(Task(title = "Ship report", parentId = folderId))
+        val childId = repository.createTask(Task(title = "Ship report", parentId = folderId))
         val folder = repository.getTask(folderId)!!
 
-        val deleted = repository.deleteTask(folder)
+        repository.deleteTask(folder)
 
-        assertTrue(!deleted)
-        assertEquals("Work", repository.getTask(folderId)?.title)
+        assertNull(repository.getTask(folderId))
+        assertNull(repository.getTask(childId))
     }
 
     @Test
-    fun `deleteTask refuses to delete a task that still has subtasks`() = runBlocking {
-        val parentId = repository.createTask(Task(title = "Plan trip"))
-        repository.createTask(Task(title = "Book flight", parentId = parentId))
-        val parent = repository.getTask(parentId)!!
+    fun `deleteTask cascades through nested descendants`() = runBlocking {
+        val workId = repository.createTask(Task(type = TaskType.FOLDER, title = "Work"))
+        val projectId = repository.createTask(Task(type = TaskType.FOLDER, title = "Project A", parentId = workId))
+        val taskId = repository.createTask(Task(title = "Write spec", parentId = projectId))
+        val work = repository.getTask(workId)!!
 
-        val deleted = repository.deleteTask(parent)
+        repository.deleteTask(work)
 
-        assertTrue(!deleted)
-        assertEquals("Plan trip", repository.getTask(parentId)?.title)
+        assertNull(repository.getTask(workId))
+        assertNull(repository.getTask(projectId))
+        assertNull(repository.getTask(taskId))
     }
 
     @Test
@@ -136,10 +138,19 @@ class TaskRepositoryTest {
         val folderId = repository.createTask(Task(type = TaskType.FOLDER, title = "Empty"))
         val folder = repository.getTask(folderId)!!
 
-        val deleted = repository.deleteTask(folder)
+        repository.deleteTask(folder)
 
-        assertTrue(deleted)
         assertNull(repository.getTask(folderId))
+    }
+
+    @Test
+    fun `countDescendants counts nested descendants`() = runBlocking {
+        val workId = repository.createTask(Task(type = TaskType.FOLDER, title = "Work"))
+        val projectId = repository.createTask(Task(type = TaskType.FOLDER, title = "Project A", parentId = workId))
+        repository.createTask(Task(title = "Write spec", parentId = projectId))
+        repository.createTask(Task(title = "Unrelated top-level task"))
+
+        assertEquals(2, repository.countDescendants(workId))
     }
 
     @Test

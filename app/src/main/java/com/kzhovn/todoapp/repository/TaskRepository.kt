@@ -18,14 +18,19 @@ class TaskRepository(
         return id
     }
 
-    // Deleting a folder/task with children would orphan them: parentId still points at
-    // the now-deleted row, and there's no cascade/reparent, so they'd silently vanish
-    // from every screen. Returns false (and deletes nothing) rather than doing that.
-    suspend fun deleteTask(task: Task): Boolean {
-        if (taskDao.countChildren(task.id) > 0) return false
+    suspend fun countDescendants(taskId: Long): Int = taskDao.countDescendants(taskId)
+
+    // Cascades: deleting a folder/task also deletes every descendant, canceling each one's
+    // reminder alarm too. The confirmation dialog (TaskEditActivity) shows countDescendants()
+    // before the user commits, so this is never a surprise.
+    suspend fun deleteTask(task: Task) {
+        val descendants = taskDao.getDescendants(task.id)
+        descendants.forEach { child ->
+            taskDao.deleteById(child.id)
+            reminderScheduler.cancel(child)
+        }
         taskDao.delete(task)
         reminderScheduler.cancel(task)
-        return true
     }
 
     suspend fun undoDelete(task: Task) {

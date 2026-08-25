@@ -41,6 +41,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -84,7 +85,7 @@ class TaskEditActivity : ComponentActivity() {
             // placeholder, wiping the task's title and every other field.
             var isLoaded by remember { mutableStateOf(taskId == 0L) }
             var showDeleteConfirm by remember { mutableStateOf(false) }
-            var deleteBlockedMessage by remember { mutableStateOf<String?>(null) }
+            var descendantCount by remember { mutableStateOf(0) }
             var folders by remember { mutableStateOf<List<Task>>(emptyList()) }
             var showFolderPicker by remember { mutableStateOf(false) }
             var showNewFolderDialog by remember { mutableStateOf(false) }
@@ -314,7 +315,12 @@ class TaskEditActivity : ComponentActivity() {
                 Spacer(Modifier.height(20.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (taskId != 0L) {
-                        IconButton(onClick = { showDeleteConfirm = true }) {
+                        IconButton(onClick = {
+                            scope.launch {
+                                descendantCount = repository.countDescendants(task.id)
+                                showDeleteConfirm = true
+                            }
+                        }) {
                             Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = LedgerOverdue)
                         }
                     }
@@ -327,28 +333,32 @@ class TaskEditActivity : ComponentActivity() {
                         Text("Save")
                     }
                 }
-                deleteBlockedMessage?.let {
-                    Text(it, fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerOverdue)
-                }
             }
 
             if (showDeleteConfirm) {
                 AlertDialog(
                     onDismissRequest = { showDeleteConfirm = false },
                     title = { Text("Delete this ${if (task.type == TaskType.FOLDER) "folder" else "task"}?") },
-                    text = { Text("This can't be undone.") },
+                    text = {
+                        Text(
+                            if (descendantCount > 0)
+                                "This will also delete $descendantCount subtask${if (descendantCount == 1) "" else "s"}. This can't be undone."
+                            else
+                                "This can't be undone."
+                        )
+                    },
                     confirmButton = {
-                        Button(onClick = {
-                            showDeleteConfirm = false
-                            scope.launch {
-                                if (repository.deleteTask(task)) {
+                        Button(
+                            onClick = {
+                                showDeleteConfirm = false
+                                scope.launch {
+                                    repository.deleteTask(task)
                                     TodoWidget().updateAll(applicationContext)
                                     finish()
-                                } else {
-                                    deleteBlockedMessage = "Can't delete: still has tasks inside"
                                 }
-                            }
-                        }) { Text("Delete") }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = LedgerOverdue, contentColor = Color.White)
+                        ) { Text("Delete") }
                     },
                     dismissButton = { Button(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
                 )

@@ -21,8 +21,32 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE id = :id")
     suspend fun getById(id: Long): Task?
 
-    @Query("SELECT COUNT(*) FROM tasks WHERE parentId = :parentId")
-    suspend fun countChildren(parentId: Long): Int
+    @Query(
+        """
+        WITH RECURSIVE descendants(id) AS (
+            SELECT id FROM tasks WHERE parentId = :taskId
+            UNION ALL
+            SELECT t.id FROM tasks t JOIN descendants d ON t.parentId = d.id
+        )
+        SELECT COUNT(*) FROM descendants
+        """
+    )
+    suspend fun countDescendants(taskId: Long): Int
+
+    @Query(
+        """
+        WITH RECURSIVE descendants(id) AS (
+            SELECT id FROM tasks WHERE parentId = :taskId
+            UNION ALL
+            SELECT t.id FROM tasks t JOIN descendants d ON t.parentId = d.id
+        )
+        SELECT * FROM tasks WHERE id IN (SELECT id FROM descendants)
+        """
+    )
+    suspend fun getDescendants(taskId: Long): List<Task>
+
+    @Query("DELETE FROM tasks WHERE id = :taskId")
+    suspend fun deleteById(taskId: Long)
 
     @Query("SELECT * FROM tasks")
     suspend fun getAllOnce(): List<Task>
