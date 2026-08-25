@@ -5,6 +5,7 @@ import android.app.AlarmManager
 import androidx.room.Room
 import com.kzhovn.todoapp.data.TodoDatabase
 import com.kzhovn.todoapp.notifications.ReminderScheduler
+import com.kzhovn.todoapp.repository.ContextRepository
 import com.kzhovn.todoapp.repository.TaskRepository
 
 class TodoApp : Application() {
@@ -15,4 +16,5 @@ class TodoApp : Application() {
         val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
         TaskRepository(database.taskDao(), ReminderScheduler(this, alarmManager))
     }
+    val contextRepository: ContextRepository by lazy { ContextRepository(database.taskContextDao()) }
 }
