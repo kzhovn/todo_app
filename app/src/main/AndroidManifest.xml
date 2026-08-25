@@ -17,6 +17,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".ui.TaskEditActivity" android:exported="false" />
+        <activity android:name=".contexts.ContextsActivity" android:exported="false" />
         <activity
             android:name=".quickadd.QuickAddActivity"
             android:exported="false"

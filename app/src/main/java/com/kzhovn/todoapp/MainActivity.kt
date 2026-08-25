@@ -12,10 +12,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -29,11 +32,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.context.WifiContextMonitor
+import com.kzhovn.todoapp.contexts.ContextsActivity
 import com.kzhovn.todoapp.quickadd.QuickAddActivity
 import com.kzhovn.todoapp.ui.OutlinerScreen
 import com.kzhovn.todoapp.ui.TaskEditActivity
@@ -109,11 +114,17 @@ class MainActivity : ComponentActivity() {
                 }
             ) {
                 Column(modifier = Modifier.background(LedgerBackground)) {
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        label = { Text("Search") }
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            label = { Text("Search") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = { startActivity(Intent(this@MainActivity, ContextsActivity::class.java)) }) {
+                            Icon(Icons.Filled.Wifi, contentDescription = "Contexts")
+                        }
+                    }
                     TabRow(selectedTabIndex = TaskListMode.entries.indexOf(selectedMode)) {
                         TaskListMode.entries.forEach { mode ->
                             Tab(
