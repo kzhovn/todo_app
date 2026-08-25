@@ -19,11 +19,16 @@ class TaskListViewModel(
     private val _tasks = MutableStateFlow<List<Task>>(emptyList())
     val tasks: StateFlow<List<Task>> = _tasks
 
+    private val _subtaskCounts = MutableStateFlow<Map<Long, Pair<Int, Int>>>(emptyMap())
+    val subtaskCounts: StateFlow<Map<Long, Pair<Int, Int>>> = _subtaskCounts
+
     fun load(mode: TaskListMode) {
         viewModelScope.launch {
             val now = clock()
+            val all = repository.getAllTasks()
+            _subtaskCounts.value = subtaskCounts(all)
             _tasks.value = when (mode) {
-                TaskListMode.ALL -> repository.getAllTasks()
+                TaskListMode.ALL -> all
                 TaskListMode.ACTIVE -> repository.getActiveTasks(now, minuteOfDay(now))
                 TaskListMode.DOING -> repository.getActiveTasks(now, minuteOfDay(now))
                     .filter { it.isStarred || (it.dueDate != null && it.dueDate - now < TWO_DAYS_MILLIS) }

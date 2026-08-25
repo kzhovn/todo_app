@@ -107,4 +107,16 @@ class TaskListViewModelTest {
         advanceUntilIdle()
         assertEquals(listOf("Oops"), viewModel.tasks.value.map { it.title })
     }
+
+    @Test
+    fun `load populates subtask counts for tasks with children`() = runTest {
+        val parentId = repository.createTask(Task(title = "Draft Q3 planning doc"))
+        repository.createTask(Task(title = "Pull Q2 numbers", parentId = parentId, isComplete = true))
+        repository.createTask(Task(title = "Write draft", parentId = parentId))
+
+        viewModel.load(TaskListMode.ALL)
+        advanceUntilIdle()
+
+        assertEquals(1 to 2, viewModel.subtaskCounts.value[parentId])
+    }
 }

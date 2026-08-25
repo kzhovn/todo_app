@@ -10,6 +10,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -28,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.lifecycleScope
@@ -36,6 +38,8 @@ import com.kzhovn.todoapp.ui.TaskEditActivity
 import com.kzhovn.todoapp.ui.TaskListMode
 import com.kzhovn.todoapp.ui.TaskListScreen
 import com.kzhovn.todoapp.ui.TaskListViewModel
+import com.kzhovn.todoapp.ui.theme.LedgerBackground
+import com.kzhovn.todoapp.ui.theme.LedgerTheme
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -80,6 +84,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
+            LedgerTheme {
             val viewModel = remember { TaskListViewModel(repository) }
             val snackbarHostState = remember { SnackbarHostState() }
             val scope = rememberCoroutineScope()
@@ -103,7 +108,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             ) {
-                Column {
+                Column(modifier = Modifier.background(LedgerBackground)) {
                     OutlinedTextField(
                         value = query,
                         onValueChange = { query = it },
@@ -135,6 +140,7 @@ class MainActivity : ComponentActivity() {
                         onEdit = { taskId -> startActivity(Intent(this@MainActivity, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, taskId)) }
                     )
                 }
+            }
             }
         }
     }
