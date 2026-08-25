@@ -172,8 +172,8 @@ private fun DueChip(dueDate: Long, overdue: Boolean) {
     }
 }
 
-fun isOverdue(task: Task): Boolean =
-    !task.isComplete && task.dueDate != null && task.dueDate < System.currentTimeMillis()
+fun isOverdue(task: Task, now: Long = System.currentTimeMillis()): Boolean =
+    !task.isComplete && task.dueDate != null && task.dueDate < now
 
 fun isSameDay(a: Long, b: Long): Boolean {
     val calA = Calendar.getInstance().apply { timeInMillis = a }

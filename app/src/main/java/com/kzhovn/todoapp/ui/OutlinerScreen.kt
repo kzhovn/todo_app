@@ -9,9 +9,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,8 +34,10 @@ import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.data.OutlinerPreferences
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.ui.theme.LedgerCheckBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
+import com.kzhovn.todoapp.ui.theme.LedgerStar
 import com.kzhovn.todoapp.ui.theme.LedgerTitleFont
 import com.kzhovn.todoapp.ui.theme.LedgerUiFont
 import com.kzhovn.todoapp.ui.theme.folderColor
@@ -41,7 +47,9 @@ import kotlinx.coroutines.launch
 fun OutlinerScreen(
     tasks: List<Task>,
     onCheck: (Long) -> Unit,
-    onEdit: (Long) -> Unit
+    onEdit: (Long) -> Unit,
+    onStar: (Long) -> Unit,
+    onDelete: (Long) -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember { OutlinerPreferences(context) }
@@ -61,7 +69,7 @@ fun OutlinerScreen(
     }
 
     LazyColumn {
-        renderNodes(tree, depth = 0, collapsed = collapsed, onToggle = ::toggle, onCheck = onCheck, onEdit = onEdit)
+        renderNodes(tree, depth = 0, collapsed = collapsed, onToggle = ::toggle, onCheck = onCheck, onEdit = onEdit, onStar = onStar, onDelete = onDelete)
     }
 }
 
@@ -71,14 +79,16 @@ private fun LazyListScope.renderNodes(
     collapsed: Set<Long>,
     onToggle: (Long) -> Unit,
     onCheck: (Long) -> Unit,
-    onEdit: (Long) -> Unit
+    onEdit: (Long) -> Unit,
+    onStar: (Long) -> Unit,
+    onDelete: (Long) -> Unit
 ) {
     nodes.forEach { node ->
         item(key = node.task.id) {
-            OutlinerRow(node, depth, node.task.id in collapsed, onToggle, onCheck, onEdit)
+            OutlinerRow(node, depth, node.task.id in collapsed, onToggle, onCheck, onEdit, onStar, onDelete)
         }
         if (node.children.isNotEmpty() && node.task.id !in collapsed) {
-            renderNodes(node.children, depth + 1, collapsed, onToggle, onCheck, onEdit)
+            renderNodes(node.children, depth + 1, collapsed, onToggle, onCheck, onEdit, onStar, onDelete)
         }
     }
 }
@@ -90,7 +100,9 @@ private fun OutlinerRow(
     isCollapsed: Boolean,
     onToggle: (Long) -> Unit,
     onCheck: (Long) -> Unit,
-    onEdit: (Long) -> Unit
+    onEdit: (Long) -> Unit,
+    onStar: (Long) -> Unit,
+    onDelete: (Long) -> Unit
 ) {
     val task = node.task
     val hasChildren = node.children.isNotEmpty()
@@ -116,7 +128,17 @@ private fun OutlinerRow(
             TaskType.FOLDER -> {
                 Icon(Icons.Filled.Folder, contentDescription = null, tint = folderColor(task.id), modifier = Modifier.width(14.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(task.title, fontFamily = LedgerUiFont, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = LedgerInk)
+                Text(
+                    task.title,
+                    fontFamily = LedgerUiFont,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    color = LedgerInk,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = { onDelete(task.id) }) {
+                    Icon(Icons.Filled.Delete, contentDescription = "Delete")
+                }
             }
             TaskType.TASK -> {
                 TaskCheckbox(checked = task.isComplete, overdue = isOverdue(task), size = 13.dp, onCheckedChange = { onCheck(task.id) })
@@ -127,8 +149,18 @@ private fun OutlinerRow(
                     fontSize = 12.sp,
                     textDecoration = if (task.isComplete) TextDecoration.LineThrough else null,
                     color = if (task.isComplete) LedgerMuted else LedgerInk,
-                    modifier = Modifier.clickable { onEdit(task.id) }
+                    modifier = Modifier.weight(1f).clickable { onEdit(task.id) }
                 )
+                IconButton(onClick = { onStar(task.id) }) {
+                    Icon(
+                        if (task.isStarred) Icons.Filled.Star else Icons.Filled.StarBorder,
+                        contentDescription = "Star",
+                        tint = if (task.isStarred) LedgerStar else LedgerCheckBorder
+                    )
+                }
+                IconButton(onClick = { onDelete(task.id) }) {
+                    Icon(Icons.Filled.Delete, contentDescription = "Delete")
+                }
             }
         }
     }

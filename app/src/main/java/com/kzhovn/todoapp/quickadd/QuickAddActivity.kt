@@ -52,6 +52,7 @@ import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerSearchBackground
 import com.kzhovn.todoapp.ui.theme.LedgerStar
+import com.kzhovn.todoapp.ui.theme.LedgerTheme
 import com.kzhovn.todoapp.ui.theme.LedgerUiFont
 import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.launch
@@ -65,6 +66,7 @@ class QuickAddActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val repository = (application as TodoApp).repository
         setContent {
+            LedgerTheme {
             var title by remember { mutableStateOf("") }
             var starred by remember { mutableStateOf(false) }
             var startDate by remember { mutableStateOf<Long?>(null) }
@@ -182,6 +184,7 @@ class QuickAddActivity : ComponentActivity() {
                         }
                     }
                 )
+            }
             }
         }
     }

@@ -25,8 +25,7 @@ class TaskListViewModel(
     fun load(mode: TaskListMode) {
         viewModelScope.launch {
             val now = clock()
-            val all = repository.getAllTasks()
-            _subtaskCounts.value = subtaskCounts(all)
+            val all = refreshSubtaskCounts()
             _tasks.value = when (mode) {
                 TaskListMode.ALL -> all
                 TaskListMode.ACTIVE -> repository.getActiveTasks(now, minuteOfDay(now))
@@ -38,8 +37,15 @@ class TaskListViewModel(
 
     fun search(query: String) {
         viewModelScope.launch {
+            refreshSubtaskCounts()
             _tasks.value = repository.search(query)
         }
+    }
+
+    private suspend fun refreshSubtaskCounts(): List<Task> {
+        val all = repository.getAllTasks()
+        _subtaskCounts.value = subtaskCounts(all)
+        return all
     }
 
     fun toggleStar(taskId: Long, mode: TaskListMode) {
