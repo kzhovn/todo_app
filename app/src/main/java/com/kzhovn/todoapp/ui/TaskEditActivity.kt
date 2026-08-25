@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import androidx.glance.appwidget.updateAll
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
 import com.kzhovn.todoapp.recurrence.RecurrenceSelection
@@ -69,6 +70,7 @@ class TaskEditActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val app = application as TodoApp
         val repository = app.repository
+        val contextRepository = app.contextRepository
         val taskId = intent.getLongExtra(EXTRA_TASK_ID, 0L)
         setContent {
             LedgerTheme {
@@ -88,6 +90,8 @@ class TaskEditActivity : ComponentActivity() {
             var recurrence by remember { mutableStateOf(RecurrenceSelection(RecurrencePreset.NONE)) }
             var allTasks by remember { mutableStateOf<List<Task>>(emptyList()) }
             var selectedDependencyIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+            var allContexts by remember { mutableStateOf<List<TaskContext>>(emptyList()) }
+            var selectedContextIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
 
             LaunchedEffect(taskId) {
                 if (taskId != 0L) {
@@ -96,10 +100,12 @@ class TaskEditActivity : ComponentActivity() {
                         recurrence = recurrenceSelectionFromTask(loaded.recurrenceType, loaded.recurrenceRule)
                     }
                     selectedDependencyIds = repository.getDependencyIds(taskId)
+                    selectedContextIds = contextRepository.getContextsForTask(taskId).map { it.id }.toSet()
                     isLoaded = true
                 }
                 folders = repository.getFolders()
                 allTasks = repository.getAllTasks()
+                allContexts = contextRepository.getAllContexts()
             }
 
             Column(
@@ -250,6 +256,19 @@ class TaskEditActivity : ComponentActivity() {
                             Text(t.title, fontFamily = LedgerUiFont, fontSize = 13.sp, color = LedgerInk)
                         }
                     }
+                    Spacer(Modifier.height(12.dp))
+                    Text("Contexts", fontFamily = LedgerUiFont, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
+                    allContexts.forEach { ctx ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = ctx.id in selectedContextIds,
+                                onCheckedChange = { checked ->
+                                    selectedContextIds = if (checked) selectedContextIds + ctx.id else selectedContextIds - ctx.id
+                                }
+                            )
+                            Text(ctx.name, fontFamily = LedgerUiFont, fontSize = 13.sp, color = LedgerInk)
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -267,6 +286,7 @@ class TaskEditActivity : ComponentActivity() {
                             viewModel.save(toSave) {
                                 val savedId = if (toSave.id != 0L) toSave.id else repository.getAllTasks().maxOf { it.id }
                                 repository.setDependencies(savedId, selectedDependencyIds)
+                                contextRepository.setTaskContexts(savedId, selectedContextIds)
                                 TodoWidget().updateAll(applicationContext)
                                 finish()
                             }
