@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -40,7 +42,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.appwidget.updateAll
@@ -93,6 +97,34 @@ class TaskEditActivity : ComponentActivity() {
             var allContexts by remember { mutableStateOf<List<TaskContext>>(emptyList()) }
             var selectedContextIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
             val allById = remember(allTasks) { allTasks.associateBy { it.id } }
+            val focusManager = LocalFocusManager.current
+
+            // Folders don't carry task-only fields/relations (a due date would keep scheduling
+            // a reminder alarm; a folder can't be completed, so leaving it as someone's
+            // dependency would block that task forever) — clear them on save regardless of what
+            // the (hidden, for folders) recurrence/deps/contexts UI holds.
+            val onSave: () -> Unit = {
+                val toSave: Task
+                val dependenciesToSave: Set<Long>
+                val contextsToSave: Set<Long>
+                if (task.type == TaskType.FOLDER) {
+                    toSave = task.copy(dueDate = null, recurrenceType = null, recurrenceRule = null)
+                    dependenciesToSave = emptySet()
+                    contextsToSave = emptySet()
+                } else {
+                    val (recurrenceType, recurrenceRule) = recurrence.toTaskFields()
+                    toSave = task.copy(recurrenceType = recurrenceType, recurrenceRule = recurrenceRule)
+                    dependenciesToSave = selectedDependencyIds
+                    contextsToSave = selectedContextIds
+                }
+                viewModel.save(toSave) {
+                    val savedId = if (toSave.id != 0L) toSave.id else repository.getAllTasks().maxOf { it.id }
+                    repository.setDependencies(savedId, dependenciesToSave)
+                    contextRepository.setTaskContexts(savedId, contextsToSave)
+                    TodoWidget().updateAll(applicationContext)
+                    finish()
+                }
+            }
 
             LaunchedEffect(taskId) {
                 if (taskId != 0L) {
@@ -120,6 +152,12 @@ class TaskEditActivity : ComponentActivity() {
                         value = task.title,
                         onValueChange = { task = task.copy(title = it) },
                         placeholder = { Text("Task name") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = {
+                            focusManager.clearFocus()
+                            if (isLoaded && task.title.isNotBlank()) onSave()
+                        }),
                         modifier = Modifier.weight(1f)
                     )
                     IconButton(onClick = { task = task.copy(isStarred = !task.isStarred) }) {
@@ -283,32 +321,7 @@ class TaskEditActivity : ComponentActivity() {
                     }
                     Spacer(Modifier.weight(1f))
                     Button(
-                        onClick = {
-                            // Folders don't carry task-only fields/relations (a due date would keep
-                            // scheduling a reminder alarm; a folder can't be completed, so leaving it as
-                            // someone's dependency would block that task forever) — clear them on save
-                            // regardless of what the (hidden, for folders) recurrence/deps/contexts UI holds.
-                            val toSave: Task
-                            val dependenciesToSave: Set<Long>
-                            val contextsToSave: Set<Long>
-                            if (task.type == TaskType.FOLDER) {
-                                toSave = task.copy(dueDate = null, recurrenceType = null, recurrenceRule = null)
-                                dependenciesToSave = emptySet()
-                                contextsToSave = emptySet()
-                            } else {
-                                val (recurrenceType, recurrenceRule) = recurrence.toTaskFields()
-                                toSave = task.copy(recurrenceType = recurrenceType, recurrenceRule = recurrenceRule)
-                                dependenciesToSave = selectedDependencyIds
-                                contextsToSave = selectedContextIds
-                            }
-                            viewModel.save(toSave) {
-                                val savedId = if (toSave.id != 0L) toSave.id else repository.getAllTasks().maxOf { it.id }
-                                repository.setDependencies(savedId, dependenciesToSave)
-                                contextRepository.setTaskContexts(savedId, contextsToSave)
-                                TodoWidget().updateAll(applicationContext)
-                                finish()
-                            }
-                        },
+                        onClick = onSave,
                         enabled = isLoaded && task.title.isNotBlank(),
                         colors = ButtonDefaults.buttonColors(containerColor = LedgerAccent, contentColor = LedgerAccentInk)
                     ) {
