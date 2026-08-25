@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.context.WifiContextMonitor
 import com.kzhovn.todoapp.ui.TaskEditActivity
@@ -82,7 +83,12 @@ class MainActivity : ComponentActivity() {
             val snackbarHostState = remember { SnackbarHostState() }
             val scope = rememberCoroutineScope()
             var selectedMode by remember { mutableStateOf(TaskListMode.DOING) }
-            LaunchedEffect(selectedMode) { viewModel.load(selectedMode) }
+            // Reloads on tab change AND on every resume, so returning from TaskEditActivity
+            // (FAB/row tap) picks up whatever was just created or edited there.
+            LifecycleResumeEffect(selectedMode) {
+                viewModel.load(selectedMode)
+                onPauseOrDispose { }
+            }
 
             Scaffold(
                 snackbarHost = { SnackbarHost(snackbarHostState) },

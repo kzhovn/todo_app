@@ -13,8 +13,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.glance.appwidget.updateAll
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.widget.TodoWidget
 
 class TaskEditActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,7 +33,12 @@ class TaskEditActivity : ComponentActivity() {
                 OutlinedTextField(value = task.title, onValueChange = { task = task.copy(title = it) })
                 Text("Starred")
                 Switch(checked = task.isStarred, onCheckedChange = { task = task.copy(isStarred = it) })
-                Button(onClick = { viewModel.save(task) { finish() } }) {
+                Button(onClick = {
+                    viewModel.save(task) {
+                        TodoWidget().updateAll(applicationContext)
+                        finish()
+                    }
+                }) {
                     Text("Save")
                 }
             }

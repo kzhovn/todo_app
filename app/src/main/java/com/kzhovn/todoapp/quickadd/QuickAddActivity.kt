@@ -12,8 +12,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.TodoApp
+import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.launch
 
 class QuickAddActivity : ComponentActivity() {
@@ -29,6 +31,7 @@ class QuickAddActivity : ComponentActivity() {
                         val task = QuickAddParser.parse(text)
                         lifecycleScope.launch {
                             repository.createTask(task)
+                            TodoWidget().updateAll(applicationContext)
                             finish()
                         }
                     }) {
