@@ -136,4 +136,15 @@ class TaskListViewModelTest {
 
         assertEquals(1 to 2, viewModel.subtaskCounts.value[parentId])
     }
+
+    @Test
+    fun `toggleComplete reopens an already-complete task`() = runTest {
+        val taskId = repository.createTask(Task(title = "Ship report"))
+        repository.toggleComplete(taskId, now)
+
+        viewModel.toggleComplete(taskId, TaskListMode.ALL)
+        advanceUntilIdle()
+
+        assertEquals(false, viewModel.tasks.value.first { it.id == taskId }.isComplete)
+    }
 }

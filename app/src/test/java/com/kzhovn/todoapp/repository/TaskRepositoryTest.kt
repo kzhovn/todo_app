@@ -77,6 +77,25 @@ class TaskRepositoryTest {
     }
 
     @Test
+    fun `toggleComplete marks an incomplete task complete`() = runBlocking {
+        val taskId = repository.createTask(Task(title = "Ship report"))
+        repository.toggleComplete(taskId, now)
+        val task = repository.getTask(taskId)!!
+        assertTrue(task.isComplete)
+        assertEquals(now, task.completedAt)
+    }
+
+    @Test
+    fun `toggleComplete reopens a completed task`() = runBlocking {
+        val taskId = repository.createTask(Task(title = "Ship report"))
+        repository.toggleComplete(taskId, now)
+        repository.toggleComplete(taskId, now + 1000)
+        val task = repository.getTask(taskId)!!
+        assertTrue(!task.isComplete)
+        assertNull(task.completedAt)
+    }
+
+    @Test
     fun `deleteTask removes it and undoDelete restores it`() = runBlocking {
         val taskId = repository.createTask(Task(title = "Oops"))
         val task = repository.getTask(taskId)!!

@@ -121,7 +121,7 @@ class ToggleCompleteAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val taskId = parameters[taskIdKey] ?: return
         val repository = (context.applicationContext as TodoApp).repository
-        repository.markComplete(taskId, System.currentTimeMillis())
+        repository.toggleComplete(taskId, System.currentTimeMillis())
         TodoWidget().update(context, glanceId)
     }
 }

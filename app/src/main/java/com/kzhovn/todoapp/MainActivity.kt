@@ -152,7 +152,7 @@ class MainActivity : ComponentActivity() {
                         val tasks by viewModel.tasks.collectAsState()
                         OutlinerScreen(
                             tasks = tasks,
-                            onCheck = { viewModel.markComplete(it, selectedMode) },
+                            onCheck = { viewModel.toggleComplete(it, selectedMode) },
                             onEdit = onEdit,
                             onStar = { viewModel.toggleStar(it, selectedMode) },
                             onDelete = onDelete
@@ -160,7 +160,7 @@ class MainActivity : ComponentActivity() {
                     } else {
                         TaskListScreen(
                             viewModel = viewModel,
-                            onCheck = { viewModel.markComplete(it, selectedMode) },
+                            onCheck = { viewModel.toggleComplete(it, selectedMode) },
                             onStar = { viewModel.toggleStar(it, selectedMode) },
                             onDelete = onDelete,
                             onEdit = onEdit

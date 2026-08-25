@@ -62,6 +62,13 @@ class TaskListViewModel(
         }
     }
 
+    fun toggleComplete(taskId: Long, mode: TaskListMode) {
+        viewModelScope.launch {
+            repository.toggleComplete(taskId, clock())
+            load(mode)
+        }
+    }
+
     fun deleteWithUndo(taskId: Long, mode: TaskListMode, onDeleted: (Task) -> Unit, onBlocked: () -> Unit = {}) {
         viewModelScope.launch {
             val task = repository.getTask(taskId) ?: return@launch

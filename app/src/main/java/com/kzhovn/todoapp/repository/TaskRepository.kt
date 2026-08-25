@@ -65,6 +65,17 @@ class TaskRepository(
         }
     }
 
+    suspend fun toggleComplete(taskId: Long, now: Long) {
+        val task = taskDao.getById(taskId) ?: return
+        if (task.isComplete) {
+            val reopened = task.copy(isComplete = false, completedAt = null)
+            taskDao.update(reopened)
+            reminderScheduler.schedule(reopened)
+        } else {
+            markComplete(taskId, now)
+        }
+    }
+
     suspend fun getActiveTasks(now: Long, currentMinuteOfDay: Int): List<Task> =
         taskDao.getActiveTasks(now, currentMinuteOfDay)
 
