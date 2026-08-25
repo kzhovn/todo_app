@@ -92,6 +92,7 @@ class TaskEditActivity : ComponentActivity() {
             var selectedDependencyIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
             var allContexts by remember { mutableStateOf<List<TaskContext>>(emptyList()) }
             var selectedContextIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+            val allById = remember(allTasks) { allTasks.associateBy { it.id } }
 
             LaunchedEffect(taskId) {
                 if (taskId != 0L) {
@@ -145,7 +146,8 @@ class TaskEditActivity : ComponentActivity() {
                         label = "Start",
                         valueText = task.startDate?.let(::formatChipDate),
                         icon = Icons.Filled.Event,
-                        onClick = { pickDate(this@TaskEditActivity) { task = task.copy(startDate = it) } }
+                        onClick = { pickDate(this@TaskEditActivity) { task = task.copy(startDate = it) } },
+                        onClear = { task = task.copy(startDate = null) }
                     )
                     Spacer(Modifier.width(8.dp))
                     if (task.type == TaskType.TASK) {
@@ -153,7 +155,8 @@ class TaskEditActivity : ComponentActivity() {
                             label = "Due",
                             valueText = task.dueDate?.let(::formatChipDate),
                             icon = Icons.Filled.Flag,
-                            onClick = { pickDate(this@TaskEditActivity) { task = task.copy(dueDate = it) } }
+                            onClick = { pickDate(this@TaskEditActivity) { task = task.copy(dueDate = it) } },
+                            onClear = { task = task.copy(dueDate = null) }
                         )
                     }
                 }
@@ -281,12 +284,27 @@ class TaskEditActivity : ComponentActivity() {
                     Spacer(Modifier.weight(1f))
                     Button(
                         onClick = {
-                            val (recurrenceType, recurrenceRule) = recurrence.toTaskFields()
-                            val toSave = task.copy(recurrenceType = recurrenceType, recurrenceRule = recurrenceRule)
+                            // Folders don't carry task-only fields/relations (a due date would keep
+                            // scheduling a reminder alarm; a folder can't be completed, so leaving it as
+                            // someone's dependency would block that task forever) — clear them on save
+                            // regardless of what the (hidden, for folders) recurrence/deps/contexts UI holds.
+                            val toSave: Task
+                            val dependenciesToSave: Set<Long>
+                            val contextsToSave: Set<Long>
+                            if (task.type == TaskType.FOLDER) {
+                                toSave = task.copy(dueDate = null, recurrenceType = null, recurrenceRule = null)
+                                dependenciesToSave = emptySet()
+                                contextsToSave = emptySet()
+                            } else {
+                                val (recurrenceType, recurrenceRule) = recurrence.toTaskFields()
+                                toSave = task.copy(recurrenceType = recurrenceType, recurrenceRule = recurrenceRule)
+                                dependenciesToSave = selectedDependencyIds
+                                contextsToSave = selectedContextIds
+                            }
                             viewModel.save(toSave) {
                                 val savedId = if (toSave.id != 0L) toSave.id else repository.getAllTasks().maxOf { it.id }
-                                repository.setDependencies(savedId, selectedDependencyIds)
-                                contextRepository.setTaskContexts(savedId, selectedContextIds)
+                                repository.setDependencies(savedId, dependenciesToSave)
+                                contextRepository.setTaskContexts(savedId, contextsToSave)
                                 TodoWidget().updateAll(applicationContext)
                                 finish()
                             }
@@ -338,7 +356,7 @@ class TaskEditActivity : ComponentActivity() {
                                     .clickable { task = task.copy(parentId = null); showFolderPicker = false }
                                     .padding(vertical = 8.dp)
                             )
-                            folders.filter { it.id != task.id }.forEach { f ->
+                            folders.filter { !wouldCreateCycle(it.id, task.id, allById) }.forEach { f ->
                                 Text(
                                     f.title,
                                     modifier = Modifier
@@ -396,6 +414,18 @@ class TaskEditActivity : ComponentActivity() {
     companion object {
         const val EXTRA_TASK_ID = "task_id"
     }
+}
+
+// Would picking candidateId as editingTaskId's parent create a cycle? Walks up candidateId's
+// parentId chain looking for editingTaskId — a hit means editingTaskId would become its own
+// descendant (directly, as its own parent, or transitively through any chain length).
+private fun wouldCreateCycle(candidateId: Long, editingTaskId: Long, allById: Map<Long, Task>): Boolean {
+    var current: Long? = candidateId
+    while (current != null) {
+        if (current == editingTaskId) return true
+        current = allById[current]?.parentId
+    }
+    return false
 }
 
 // Duplicated from QuickAddActivity's private pickDate rather than shared across packages —

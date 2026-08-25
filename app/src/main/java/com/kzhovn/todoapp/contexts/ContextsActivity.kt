@@ -124,7 +124,11 @@ class ContextsActivity : ComponentActivity() {
                                     type = type,
                                     wifiSsid = if (type == ContextType.PLACE) wifiSsid else null,
                                     windowStartMinute = if (type == ContextType.TIME) startMinute else null,
-                                    windowEndMinute = if (type == ContextType.TIME) endMinute else null
+                                    windowEndMinute = if (type == ContextType.TIME) endMinute else null,
+                                    // "Use current network" captured the exact SSID we're on right now, so a
+                                    // PLACE context starts satisfied — otherwise its tasks vanish from
+                                    // Doing/Active until the next wifi connect/disconnect event.
+                                    isCurrentlySatisfied = type == ContextType.PLACE && wifiSsid != null
                                 )
                             )
                             name = ""

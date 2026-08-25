@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,7 +32,7 @@ import java.util.Locale
 // "Start"/"Due") alongside the value, so two chips holding the same-shaped value (two dates, in
 // particular) never look identical to each other the way the original quick-add chips did.
 @Composable
-fun PropertyChip(label: String, valueText: String?, icon: ImageVector, onClick: () -> Unit) {
+fun PropertyChip(label: String, valueText: String?, icon: ImageVector, onClick: () -> Unit, onClear: (() -> Unit)? = null) {
     val set = valueText != null
     Row(
         modifier = Modifier
@@ -48,6 +50,17 @@ fun PropertyChip(label: String, valueText: String?, icon: ImageVector, onClick: 
             fontSize = 12.sp,
             color = if (set) LedgerAccent else LedgerMuted
         )
+        if (set && onClear != null) {
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = "Clear $label",
+                tint = LedgerMuted,
+                modifier = Modifier
+                    .size(12.dp)
+                    .clickable { onClear() }
+            )
+        }
     }
 }
 
