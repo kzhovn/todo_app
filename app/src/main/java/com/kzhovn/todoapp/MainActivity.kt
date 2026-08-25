@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -83,11 +84,15 @@ class MainActivity : ComponentActivity() {
             val snackbarHostState = remember { SnackbarHostState() }
             val scope = rememberCoroutineScope()
             var selectedMode by remember { mutableStateOf(TaskListMode.DOING) }
+            var query by remember { mutableStateOf("") }
             // Reloads on tab change AND on every resume, so returning from TaskEditActivity
             // (FAB/row tap) picks up whatever was just created or edited there.
             LifecycleResumeEffect(selectedMode) {
                 viewModel.load(selectedMode)
                 onPauseOrDispose { }
+            }
+            LaunchedEffect(query) {
+                if (query.isBlank()) viewModel.load(selectedMode) else viewModel.search(query)
             }
 
             Scaffold(
@@ -99,6 +104,11 @@ class MainActivity : ComponentActivity() {
                 }
             ) {
                 Column {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        label = { Text("Search") }
+                    )
                     TabRow(selectedTabIndex = TaskListMode.entries.indexOf(selectedMode)) {
                         TaskListMode.entries.forEach { mode ->
                             Tab(

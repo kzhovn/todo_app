@@ -82,6 +82,17 @@ class TaskListViewModelTest {
     }
 
     @Test
+    fun `search matches title case-insensitively regardless of active status`() = runTest {
+        repository.createTask(Task(title = "Buy milk"))
+        repository.createTask(Task(title = "Walk the dog", startDate = now + 1_000))
+
+        viewModel.search("milk")
+        advanceUntilIdle()
+
+        assertEquals(listOf("Buy milk"), viewModel.tasks.value.map { it.title })
+    }
+
+    @Test
     fun `deleteWithUndo removes the task and undoDelete restores it`() = runTest {
         val taskId = repository.createTask(Task(title = "Oops"))
         viewModel.load(TaskListMode.ALL)

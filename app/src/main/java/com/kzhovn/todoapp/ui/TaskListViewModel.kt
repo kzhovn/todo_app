@@ -31,6 +31,12 @@ class TaskListViewModel(
         }
     }
 
+    fun search(query: String) {
+        viewModelScope.launch {
+            _tasks.value = repository.search(query)
+        }
+    }
+
     fun toggleStar(taskId: Long, mode: TaskListMode) {
         viewModelScope.launch {
             repository.toggleStar(taskId)
