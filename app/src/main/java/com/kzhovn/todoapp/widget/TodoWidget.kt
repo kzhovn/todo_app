@@ -10,6 +10,8 @@ import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.lazy.LazyColumn
+import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
@@ -27,35 +29,39 @@ class TodoWidget : GlanceAppWidget() {
         val rows = TodoWidgetPresenter.toRows(repository.getActiveTasks(now, currentMinuteOfDay()))
 
         provideContent {
+            // Column caps at 10 direct children and silently drops the rest — LazyColumn for the
+            // task rows keeps "+ Add" (a sibling, not a LazyColumn child) always visible.
             Column {
-                rows.forEach { row ->
-                    Row {
-                        Text(
-                            text = "✓",
-                            modifier = GlanceModifier.clickable(
-                                actionRunCallback<ToggleCompleteAction>(
-                                    actionParametersOf(taskIdKey to row.id)
-                                )
-                            )
-                        )
-                        Text(
-                            text = row.title,
-                            modifier = GlanceModifier.clickable(
-                                actionStartActivity<TaskEditActivity>(
-                                    parameters = actionParametersOf(
-                                        ActionParameters.Key<Long>(TaskEditActivity.EXTRA_TASK_ID) to row.id
+                LazyColumn {
+                    items(rows, itemId = { it.id }) { row ->
+                        Row {
+                            Text(
+                                text = "✓",
+                                modifier = GlanceModifier.clickable(
+                                    actionRunCallback<ToggleCompleteAction>(
+                                        actionParametersOf(taskIdKey to row.id)
                                     )
                                 )
                             )
-                        )
-                        Text(
-                            text = if (row.isStarred) "★" else "☆",
-                            modifier = GlanceModifier.clickable(
-                                actionRunCallback<ToggleStarAction>(
-                                    actionParametersOf(taskIdKey to row.id)
+                            Text(
+                                text = row.title,
+                                modifier = GlanceModifier.clickable(
+                                    actionStartActivity<TaskEditActivity>(
+                                        parameters = actionParametersOf(
+                                            ActionParameters.Key<Long>(TaskEditActivity.EXTRA_TASK_ID) to row.id
+                                        )
+                                    )
                                 )
                             )
-                        )
+                            Text(
+                                text = if (row.isStarred) "★" else "☆",
+                                modifier = GlanceModifier.clickable(
+                                    actionRunCallback<ToggleStarAction>(
+                                        actionParametersOf(taskIdKey to row.id)
+                                    )
+                                )
+                            )
+                        }
                     }
                 }
                 Text(
