@@ -69,25 +69,6 @@ class TaskListViewModel(
         }
     }
 
-    fun deleteWithUndo(taskId: Long, mode: TaskListMode, onDeleted: (Task) -> Unit, onBlocked: () -> Unit = {}) {
-        viewModelScope.launch {
-            val task = repository.getTask(taskId) ?: return@launch
-            if (!repository.deleteTask(task)) {
-                onBlocked()
-                return@launch
-            }
-            onDeleted(task)
-            load(mode)
-        }
-    }
-
-    fun undoDelete(task: Task, mode: TaskListMode) {
-        viewModelScope.launch {
-            repository.undoDelete(task)
-            load(mode)
-        }
-    }
-
     private fun minuteOfDay(epochMillis: Long): Int {
         val cal = Calendar.getInstance().apply { timeInMillis = epochMillis }
         return cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)

@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.HorizontalDivider
@@ -62,14 +61,13 @@ fun TaskListScreen(
     viewModel: TaskListViewModel,
     onCheck: (Long) -> Unit,
     onStar: (Long) -> Unit,
-    onDelete: (Long) -> Unit,
     onEdit: (Long) -> Unit
 ) {
     val tasks by viewModel.tasks.collectAsState()
     val subtaskCounts by viewModel.subtaskCounts.collectAsState()
     LazyColumn {
         itemsIndexed(tasks, key = { _, task -> task.id }) { index, task ->
-            TaskRow(task, subtaskCounts[task.id], onCheck, onStar, onDelete, onEdit)
+            TaskRow(task, subtaskCounts[task.id], onCheck, onStar, onEdit)
             if (index < tasks.lastIndex) {
                 HorizontalDivider(color = LedgerBorder)
             }
@@ -83,7 +81,6 @@ private fun TaskRow(
     subtasks: Pair<Int, Int>?,
     onCheck: (Long) -> Unit,
     onStar: (Long) -> Unit,
-    onDelete: (Long) -> Unit,
     onEdit: (Long) -> Unit
 ) {
     val barColor = task.parentId?.let { folderColor(it) } ?: LedgerBorder
@@ -125,9 +122,6 @@ private fun TaskRow(
                 contentDescription = "Star",
                 tint = if (task.isStarred) LedgerStar else LedgerCheckBorder
             )
-        }
-        IconButton(onClick = { onDelete(task.id) }) {
-            Icon(Icons.Filled.Delete, contentDescription = "Delete")
         }
     }
 }

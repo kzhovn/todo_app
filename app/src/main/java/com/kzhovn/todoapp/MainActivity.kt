@@ -28,7 +28,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
@@ -43,7 +42,6 @@ import com.kzhovn.todoapp.ui.TaskListScreen
 import com.kzhovn.todoapp.ui.TaskListViewModel
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private lateinit var wifiContextMonitor: WifiContextMonitor
@@ -90,7 +88,6 @@ class MainActivity : ComponentActivity() {
             LedgerTheme {
             val viewModel = remember { TaskListViewModel(repository) }
             val snackbarHostState = remember { SnackbarHostState() }
-            val scope = rememberCoroutineScope()
             var selectedMode by remember { mutableStateOf(TaskListMode.DOING) }
             var query by remember { mutableStateOf("") }
             // Reloads on tab change AND on every resume, so returning from QuickAddActivity
@@ -129,40 +126,19 @@ class MainActivity : ComponentActivity() {
                     val onEdit: (Long) -> Unit = { taskId ->
                         startActivity(Intent(this@MainActivity, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, taskId))
                     }
-                    val onDelete: (Long) -> Unit = { taskId ->
-                        viewModel.deleteWithUndo(
-                            taskId,
-                            selectedMode,
-                            onDeleted = { deletedTask ->
-                                scope.launch {
-                                    val result = snackbarHostState.showSnackbar("Task deleted", actionLabel = "Undo")
-                                    if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
-                                        viewModel.undoDelete(deletedTask, selectedMode)
-                                    }
-                                }
-                            },
-                            onBlocked = {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Can't delete: still has tasks inside")
-                                }
-                            }
-                        )
-                    }
                     if (selectedMode == TaskListMode.ALL && query.isBlank()) {
                         val tasks by viewModel.tasks.collectAsState()
                         OutlinerScreen(
                             tasks = tasks,
                             onCheck = { viewModel.toggleComplete(it, selectedMode) },
                             onEdit = onEdit,
-                            onStar = { viewModel.toggleStar(it, selectedMode) },
-                            onDelete = onDelete
+                            onStar = { viewModel.toggleStar(it, selectedMode) }
                         )
                     } else {
                         TaskListScreen(
                             viewModel = viewModel,
                             onCheck = { viewModel.toggleComplete(it, selectedMode) },
                             onStar = { viewModel.toggleStar(it, selectedMode) },
-                            onDelete = onDelete,
                             onEdit = onEdit
                         )
                     }

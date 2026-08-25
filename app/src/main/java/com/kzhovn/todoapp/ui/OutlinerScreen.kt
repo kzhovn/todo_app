@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Star
@@ -48,8 +47,7 @@ fun OutlinerScreen(
     tasks: List<Task>,
     onCheck: (Long) -> Unit,
     onEdit: (Long) -> Unit,
-    onStar: (Long) -> Unit,
-    onDelete: (Long) -> Unit
+    onStar: (Long) -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember { OutlinerPreferences(context) }
@@ -69,7 +67,7 @@ fun OutlinerScreen(
     }
 
     LazyColumn {
-        renderNodes(tree, depth = 0, collapsed = collapsed, onToggle = ::toggle, onCheck = onCheck, onEdit = onEdit, onStar = onStar, onDelete = onDelete)
+        renderNodes(tree, depth = 0, collapsed = collapsed, onToggle = ::toggle, onCheck = onCheck, onEdit = onEdit, onStar = onStar)
     }
 }
 
@@ -80,15 +78,14 @@ private fun LazyListScope.renderNodes(
     onToggle: (Long) -> Unit,
     onCheck: (Long) -> Unit,
     onEdit: (Long) -> Unit,
-    onStar: (Long) -> Unit,
-    onDelete: (Long) -> Unit
+    onStar: (Long) -> Unit
 ) {
     nodes.forEach { node ->
         item(key = node.task.id) {
-            OutlinerRow(node, depth, node.task.id in collapsed, onToggle, onCheck, onEdit, onStar, onDelete)
+            OutlinerRow(node, depth, node.task.id in collapsed, onToggle, onCheck, onEdit, onStar)
         }
         if (node.children.isNotEmpty() && node.task.id !in collapsed) {
-            renderNodes(node.children, depth + 1, collapsed, onToggle, onCheck, onEdit, onStar, onDelete)
+            renderNodes(node.children, depth + 1, collapsed, onToggle, onCheck, onEdit, onStar)
         }
     }
 }
@@ -101,8 +98,7 @@ private fun OutlinerRow(
     onToggle: (Long) -> Unit,
     onCheck: (Long) -> Unit,
     onEdit: (Long) -> Unit,
-    onStar: (Long) -> Unit,
-    onDelete: (Long) -> Unit
+    onStar: (Long) -> Unit
 ) {
     val task = node.task
     val hasChildren = node.children.isNotEmpty()
@@ -134,11 +130,8 @@ private fun OutlinerRow(
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp,
                     color = LedgerInk,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).clickable { onEdit(task.id) }
                 )
-                IconButton(onClick = { onDelete(task.id) }) {
-                    Icon(Icons.Filled.Delete, contentDescription = "Delete")
-                }
             }
             TaskType.TASK -> {
                 TaskCheckbox(checked = task.isComplete, overdue = isOverdue(task), size = 13.dp, onCheckedChange = { onCheck(task.id) })
@@ -157,9 +150,6 @@ private fun OutlinerRow(
                         contentDescription = "Star",
                         tint = if (task.isStarred) LedgerStar else LedgerCheckBorder
                     )
-                }
-                IconButton(onClick = { onDelete(task.id) }) {
-                    Icon(Icons.Filled.Delete, contentDescription = "Delete")
                 }
             }
         }
