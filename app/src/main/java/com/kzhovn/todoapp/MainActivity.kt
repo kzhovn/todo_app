@@ -129,14 +129,23 @@ class MainActivity : ComponentActivity() {
                         startActivity(Intent(this@MainActivity, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, taskId))
                     }
                     val onDelete: (Long) -> Unit = { taskId ->
-                        viewModel.deleteWithUndo(taskId, selectedMode) { deletedTask ->
-                            scope.launch {
-                                val result = snackbarHostState.showSnackbar("Task deleted", actionLabel = "Undo")
-                                if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
-                                    viewModel.undoDelete(deletedTask, selectedMode)
+                        viewModel.deleteWithUndo(
+                            taskId,
+                            selectedMode,
+                            onDeleted = { deletedTask ->
+                                scope.launch {
+                                    val result = snackbarHostState.showSnackbar("Task deleted", actionLabel = "Undo")
+                                    if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                                        viewModel.undoDelete(deletedTask, selectedMode)
+                                    }
+                                }
+                            },
+                            onBlocked = {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar("Can't delete: still has tasks inside")
                                 }
                             }
-                        }
+                        )
                     }
                     if (selectedMode == TaskListMode.ALL && query.isBlank()) {
                         val tasks by viewModel.tasks.collectAsState()

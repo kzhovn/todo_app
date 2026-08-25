@@ -89,6 +89,41 @@ class TaskRepositoryTest {
     }
 
     @Test
+    fun `deleteTask refuses to delete a folder that still has children`() = runBlocking {
+        val folderId = repository.createTask(Task(type = TaskType.FOLDER, title = "Work"))
+        repository.createTask(Task(title = "Ship report", parentId = folderId))
+        val folder = repository.getTask(folderId)!!
+
+        val deleted = repository.deleteTask(folder)
+
+        assertTrue(!deleted)
+        assertEquals("Work", repository.getTask(folderId)?.title)
+    }
+
+    @Test
+    fun `deleteTask refuses to delete a task that still has subtasks`() = runBlocking {
+        val parentId = repository.createTask(Task(title = "Plan trip"))
+        repository.createTask(Task(title = "Book flight", parentId = parentId))
+        val parent = repository.getTask(parentId)!!
+
+        val deleted = repository.deleteTask(parent)
+
+        assertTrue(!deleted)
+        assertEquals("Plan trip", repository.getTask(parentId)?.title)
+    }
+
+    @Test
+    fun `deleteTask still deletes an empty folder`() = runBlocking {
+        val folderId = repository.createTask(Task(type = TaskType.FOLDER, title = "Empty"))
+        val folder = repository.getTask(folderId)!!
+
+        val deleted = repository.deleteTask(folder)
+
+        assertTrue(deleted)
+        assertNull(repository.getTask(folderId))
+    }
+
+    @Test
     fun `getTasksUnderFolder returns nested descendants but not folders`() = runBlocking {
         val workId = repository.createTask(Task(type = TaskType.FOLDER, title = "Work"))
         val projectId = repository.createTask(Task(type = TaskType.FOLDER, title = "Project A", parentId = workId))

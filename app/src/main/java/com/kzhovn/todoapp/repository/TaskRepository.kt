@@ -18,9 +18,14 @@ class TaskRepository(
         return id
     }
 
-    suspend fun deleteTask(task: Task) {
+    // Deleting a folder/task with children would orphan them: parentId still points at
+    // the now-deleted row, and there's no cascade/reparent, so they'd silently vanish
+    // from every screen. Returns false (and deletes nothing) rather than doing that.
+    suspend fun deleteTask(task: Task): Boolean {
+        if (taskDao.countChildren(task.id) > 0) return false
         taskDao.delete(task)
         reminderScheduler.cancel(task)
+        return true
     }
 
     suspend fun undoDelete(task: Task) {

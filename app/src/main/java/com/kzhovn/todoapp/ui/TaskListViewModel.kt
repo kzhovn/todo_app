@@ -62,10 +62,13 @@ class TaskListViewModel(
         }
     }
 
-    fun deleteWithUndo(taskId: Long, mode: TaskListMode, onDeleted: (Task) -> Unit) {
+    fun deleteWithUndo(taskId: Long, mode: TaskListMode, onDeleted: (Task) -> Unit, onBlocked: () -> Unit = {}) {
         viewModelScope.launch {
             val task = repository.getTask(taskId) ?: return@launch
-            repository.deleteTask(task)
+            if (!repository.deleteTask(task)) {
+                onBlocked()
+                return@launch
+            }
             onDeleted(task)
             load(mode)
         }

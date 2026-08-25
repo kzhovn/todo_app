@@ -20,6 +20,9 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE id = :id")
     suspend fun getById(id: Long): Task?
 
+    @Query("SELECT COUNT(*) FROM tasks WHERE parentId = :parentId")
+    suspend fun countChildren(parentId: Long): Int
+
     @Query("SELECT * FROM tasks")
     suspend fun getAllOnce(): List<Task>
 

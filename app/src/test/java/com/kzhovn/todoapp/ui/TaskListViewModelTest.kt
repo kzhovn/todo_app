@@ -99,13 +99,30 @@ class TaskListViewModelTest {
         advanceUntilIdle()
 
         var deleted: Task? = null
-        viewModel.deleteWithUndo(taskId, TaskListMode.ALL) { deleted = it }
+        viewModel.deleteWithUndo(taskId, TaskListMode.ALL, onDeleted = { deleted = it })
         advanceUntilIdle()
         assertEquals(emptyList<String>(), viewModel.tasks.value.map { it.title })
 
         viewModel.undoDelete(deleted!!, TaskListMode.ALL)
         advanceUntilIdle()
         assertEquals(listOf("Oops"), viewModel.tasks.value.map { it.title })
+    }
+
+    @Test
+    fun `deleteWithUndo calls onBlocked instead of deleting when the task has children`() = runTest {
+        val parentId = repository.createTask(Task(title = "Plan trip"))
+        repository.createTask(Task(title = "Book flight", parentId = parentId))
+        viewModel.load(TaskListMode.ALL)
+        advanceUntilIdle()
+
+        var deleted: Task? = null
+        var blocked = false
+        viewModel.deleteWithUndo(parentId, TaskListMode.ALL, onDeleted = { deleted = it }, onBlocked = { blocked = true })
+        advanceUntilIdle()
+
+        assertEquals(true, blocked)
+        assertEquals(null, deleted)
+        assertEquals(setOf("Plan trip", "Book flight"), viewModel.tasks.value.map { it.title }.toSet())
     }
 
     @Test
