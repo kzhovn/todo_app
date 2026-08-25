@@ -24,6 +24,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +35,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.context.WifiContextMonitor
+import com.kzhovn.todoapp.ui.OutlinerScreen
 import com.kzhovn.todoapp.ui.TaskEditActivity
 import com.kzhovn.todoapp.ui.TaskListMode
 import com.kzhovn.todoapp.ui.TaskListScreen
@@ -123,22 +125,31 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
-                    TaskListScreen(
-                        viewModel = viewModel,
-                        onCheck = { viewModel.markComplete(it, selectedMode) },
-                        onStar = { viewModel.toggleStar(it, selectedMode) },
-                        onDelete = { taskId ->
-                            viewModel.deleteWithUndo(taskId, selectedMode) { deletedTask ->
-                                scope.launch {
-                                    val result = snackbarHostState.showSnackbar("Task deleted", actionLabel = "Undo")
-                                    if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
-                                        viewModel.undoDelete(deletedTask, selectedMode)
+                    if (selectedMode == TaskListMode.ALL && query.isBlank()) {
+                        val tasks by viewModel.tasks.collectAsState()
+                        OutlinerScreen(
+                            tasks = tasks,
+                            onCheck = { viewModel.markComplete(it, selectedMode) },
+                            onEdit = { taskId -> startActivity(Intent(this@MainActivity, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, taskId)) }
+                        )
+                    } else {
+                        TaskListScreen(
+                            viewModel = viewModel,
+                            onCheck = { viewModel.markComplete(it, selectedMode) },
+                            onStar = { viewModel.toggleStar(it, selectedMode) },
+                            onDelete = { taskId ->
+                                viewModel.deleteWithUndo(taskId, selectedMode) { deletedTask ->
+                                    scope.launch {
+                                        val result = snackbarHostState.showSnackbar("Task deleted", actionLabel = "Undo")
+                                        if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                                            viewModel.undoDelete(deletedTask, selectedMode)
+                                        }
                                     }
                                 }
-                            }
-                        },
-                        onEdit = { taskId -> startActivity(Intent(this@MainActivity, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, taskId)) }
-                    )
+                            },
+                            onEdit = { taskId -> startActivity(Intent(this@MainActivity, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, taskId)) }
+                        )
+                    }
                 }
             }
             }
