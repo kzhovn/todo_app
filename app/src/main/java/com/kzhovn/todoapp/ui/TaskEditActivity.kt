@@ -39,15 +39,21 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.appwidget.updateAll
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.recurrence.RecurrencePreset
+import com.kzhovn.todoapp.recurrence.RecurrenceSelection
+import com.kzhovn.todoapp.recurrence.recurrenceSelectionFromTask
+import com.kzhovn.todoapp.recurrence.toTaskFields
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
+import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerOverdue
 import com.kzhovn.todoapp.ui.theme.LedgerStar
@@ -78,10 +84,14 @@ class TaskEditActivity : ComponentActivity() {
             var showFolderPicker by remember { mutableStateOf(false) }
             var showNewFolderDialog by remember { mutableStateOf(false) }
             var newFolderName by remember { mutableStateOf("") }
+            var recurrence by remember { mutableStateOf(RecurrenceSelection(RecurrencePreset.NONE)) }
 
             LaunchedEffect(taskId) {
                 if (taskId != 0L) {
-                    viewModel.load(taskId)?.let { task = it }
+                    viewModel.load(taskId)?.let { loaded ->
+                        task = loaded
+                        recurrence = recurrenceSelectionFromTask(loaded.recurrenceType, loaded.recurrenceRule)
+                    }
                     isLoaded = true
                 }
                 folders = repository.getFolders()
@@ -157,6 +167,73 @@ class TaskEditActivity : ComponentActivity() {
                     }
                 }
 
+                if (task.type == TaskType.TASK) {
+                    Spacer(Modifier.height(12.dp))
+                    Text("Repeat", fontFamily = LedgerUiFont, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
+                    Row(modifier = Modifier.padding(top = 4.dp)) {
+                        listOf(
+                            RecurrencePreset.NONE to "None",
+                            RecurrencePreset.DAILY to "Daily",
+                            RecurrencePreset.WEEKLY to "Weekly",
+                            RecurrencePreset.MONTHLY to "Monthly"
+                        ).forEach { (preset, label) ->
+                            Text(
+                                label,
+                                fontFamily = LedgerUiFont,
+                                fontSize = 12.sp,
+                                color = if (recurrence.preset == preset) LedgerAccent else LedgerMuted,
+                                modifier = Modifier
+                                    .clickable { recurrence = RecurrenceSelection(preset) }
+                                    .padding(end = 12.dp, top = 4.dp, bottom = 4.dp)
+                            )
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                        Text(
+                            "Every",
+                            fontFamily = LedgerUiFont,
+                            fontSize = 12.sp,
+                            color = if (recurrence.preset == RecurrencePreset.EVERY_N_DAYS) LedgerAccent else LedgerMuted,
+                            modifier = Modifier
+                                .clickable { recurrence = RecurrenceSelection(RecurrencePreset.EVERY_N_DAYS, recurrence.n) }
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        OutlinedTextField(
+                            value = if (recurrence.preset == RecurrencePreset.EVERY_N_DAYS) recurrence.n.toString() else "",
+                            onValueChange = { text ->
+                                val n = text.toIntOrNull()?.coerceAtLeast(1) ?: return@OutlinedTextField
+                                recurrence = RecurrenceSelection(RecurrencePreset.EVERY_N_DAYS, n)
+                            },
+                            modifier = Modifier.width(56.dp),
+                            singleLine = true
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("days", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                        Text(
+                            "Repeat",
+                            fontFamily = LedgerUiFont,
+                            fontSize = 12.sp,
+                            color = if (recurrence.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS) LedgerAccent else LedgerMuted,
+                            modifier = Modifier
+                                .clickable { recurrence = RecurrenceSelection(RecurrencePreset.AFTER_COMPLETION_N_DAYS, recurrence.n) }
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        OutlinedTextField(
+                            value = if (recurrence.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS) recurrence.n.toString() else "",
+                            onValueChange = { text ->
+                                val n = text.toIntOrNull()?.coerceAtLeast(1) ?: return@OutlinedTextField
+                                recurrence = RecurrenceSelection(RecurrencePreset.AFTER_COMPLETION_N_DAYS, n)
+                            },
+                            modifier = Modifier.width(56.dp),
+                            singleLine = true
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("days after completion", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
+                    }
+                }
+
                 Spacer(Modifier.height(20.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (taskId != 0L) {
@@ -167,7 +244,8 @@ class TaskEditActivity : ComponentActivity() {
                     Spacer(Modifier.weight(1f))
                     Button(
                         onClick = {
-                            viewModel.save(task) {
+                            val (recurrenceType, recurrenceRule) = recurrence.toTaskFields()
+                            viewModel.save(task.copy(recurrenceType = recurrenceType, recurrenceRule = recurrenceRule)) {
                                 TodoWidget().updateAll(applicationContext)
                                 finish()
                             }
