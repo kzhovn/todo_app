@@ -2,6 +2,7 @@ package com.kzhovn.todoapp.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -32,7 +33,14 @@ import java.util.Locale
 // "Start"/"Due") alongside the value, so two chips holding the same-shaped value (two dates, in
 // particular) never look identical to each other the way the original quick-add chips did.
 @Composable
-fun PropertyChip(label: String, valueText: String?, icon: ImageVector, onClick: () -> Unit, onClear: (() -> Unit)? = null) {
+fun PropertyChip(
+    label: String,
+    valueText: String?,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    onClear: (() -> Unit)? = null,
+    showLabelWhenSet: Boolean = true
+) {
     val set = valueText != null
     Row(
         modifier = Modifier
@@ -45,21 +53,28 @@ fun PropertyChip(label: String, valueText: String?, icon: ImageVector, onClick: 
         Icon(icon, contentDescription = null, tint = if (set) LedgerAccent else LedgerMuted, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(4.dp))
         Text(
-            text = if (set) "$label: $valueText" else label,
+            text = when {
+                !set -> label
+                showLabelWhenSet -> "$label: $valueText"
+                else -> valueText!!
+            },
             fontFamily = LedgerUiFont,
             fontSize = 12.sp,
             color = if (set) LedgerAccent else LedgerMuted
         )
         if (set && onClear != null) {
             Spacer(Modifier.width(4.dp))
-            Icon(
-                Icons.Filled.Close,
-                contentDescription = "Clear $label",
-                tint = LedgerMuted,
-                modifier = Modifier
-                    .size(12.dp)
-                    .clickable { onClear() }
-            )
+            Box(
+                modifier = Modifier.size(20.dp).clickable { onClear() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Clear $label",
+                    tint = LedgerMuted,
+                    modifier = Modifier.size(12.dp)
+                )
+            }
         }
     }
 }

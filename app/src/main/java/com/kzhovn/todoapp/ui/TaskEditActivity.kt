@@ -204,7 +204,8 @@ class TaskEditActivity : ComponentActivity() {
                     label = "Folder",
                     valueText = folders.find { it.id == task.parentId }?.title,
                     icon = Icons.Filled.Folder,
-                    onClick = { showFolderPicker = true }
+                    onClick = { showFolderPicker = true },
+                    showLabelWhenSet = false
                 )
 
                 if (task.type == TaskType.FOLDER) {
