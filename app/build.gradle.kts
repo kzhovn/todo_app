@@ -50,6 +50,7 @@ dependencies {
     ksp("androidx.room:room-compiler:2.6.1")
 
     implementation("androidx.glance:glance-appwidget:1.1.0")
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
 
     implementation("org.dmfs:lib-recur:0.17.1")
 
