@@ -4,14 +4,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -19,6 +21,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -65,8 +68,11 @@ fun TaskListScreen(
     val tasks by viewModel.tasks.collectAsState()
     val subtaskCounts by viewModel.subtaskCounts.collectAsState()
     LazyColumn {
-        items(tasks, key = { it.id }) { task ->
+        itemsIndexed(tasks, key = { _, task -> task.id }) { index, task ->
             TaskRow(task, subtaskCounts[task.id], onCheck, onStar, onDelete, onEdit)
+            if (index < tasks.lastIndex) {
+                HorizontalDivider(color = LedgerBorder)
+            }
         }
     }
 }
@@ -82,8 +88,11 @@ private fun TaskRow(
 ) {
     val barColor = task.parentId?.let { folderColor(it) } ?: LedgerBorder
     Row(
+        // LazyColumn measures items with unbounded height, so fillMaxHeight() alone is a no-op
+        // here; the intrinsic-min pass gives the Row (and the bar Box's fillMaxHeight below) a
+        // real height to fill, sized to the tallest child.
         modifier = Modifier
-            .fillMaxHeight()
+            .height(IntrinsicSize.Min)
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
