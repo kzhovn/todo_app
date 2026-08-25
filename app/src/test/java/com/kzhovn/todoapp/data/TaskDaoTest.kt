@@ -2,7 +2,6 @@ package com.kzhovn.todoapp.data
 
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -34,13 +33,6 @@ class TaskDaoTest {
         val id = dao.insert(Task(title = "Buy milk"))
         val loaded = dao.getById(id)
         assertEquals("Buy milk", loaded?.title)
-    }
-
-    @Test
-    fun `getAll emits inserted tasks`() = runBlocking {
-        dao.insert(Task(title = "Task A"))
-        dao.insert(Task(title = "Task B"))
-        assertEquals(2, dao.getAll().first().size)
     }
 
     @Test
