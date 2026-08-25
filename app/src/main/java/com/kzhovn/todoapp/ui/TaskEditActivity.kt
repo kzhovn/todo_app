@@ -5,9 +5,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -17,11 +19,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -70,12 +74,17 @@ class TaskEditActivity : ComponentActivity() {
             var isLoaded by remember { mutableStateOf(taskId == 0L) }
             var showDeleteConfirm by remember { mutableStateOf(false) }
             var deleteBlockedMessage by remember { mutableStateOf<String?>(null) }
+            var folders by remember { mutableStateOf<List<Task>>(emptyList()) }
+            var showFolderPicker by remember { mutableStateOf(false) }
+            var showNewFolderDialog by remember { mutableStateOf(false) }
+            var newFolderName by remember { mutableStateOf("") }
 
             LaunchedEffect(taskId) {
                 if (taskId != 0L) {
                     viewModel.load(taskId)?.let { task = it }
                     isLoaded = true
                 }
+                folders = repository.getFolders()
             }
 
             Column(
@@ -128,6 +137,26 @@ class TaskEditActivity : ComponentActivity() {
                     }
                 }
 
+                Spacer(Modifier.height(12.dp))
+                PropertyChip(
+                    label = "Folder",
+                    valueText = folders.find { it.id == task.parentId }?.title,
+                    icon = Icons.Filled.Folder,
+                    onClick = { showFolderPicker = true }
+                )
+
+                if (task.type == TaskType.FOLDER) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Sequential (complete tasks in order)",
+                            fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Switch(checked = task.sequential, onCheckedChange = { task = task.copy(sequential = it) })
+                    }
+                }
+
                 Spacer(Modifier.height(20.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (taskId != 0L) {
@@ -173,6 +202,72 @@ class TaskEditActivity : ComponentActivity() {
                         }) { Text("Delete") }
                     },
                     dismissButton = { Button(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
+                )
+            }
+
+            if (showFolderPicker) {
+                AlertDialog(
+                    onDismissRequest = { showFolderPicker = false },
+                    confirmButton = {},
+                    title = { Text("Choose a folder") },
+                    text = {
+                        Column {
+                            Text(
+                                "No folder",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { task = task.copy(parentId = null); showFolderPicker = false }
+                                    .padding(vertical = 8.dp)
+                            )
+                            folders.filter { it.id != task.id }.forEach { f ->
+                                Text(
+                                    f.title,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { task = task.copy(parentId = f.id); showFolderPicker = false }
+                                        .padding(vertical = 8.dp)
+                                )
+                            }
+                            HorizontalDivider()
+                            Text(
+                                "+ New folder",
+                                color = LedgerAccent,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showFolderPicker = false; showNewFolderDialog = true }
+                                    .padding(vertical = 8.dp)
+                            )
+                        }
+                    }
+                )
+            }
+
+            if (showNewFolderDialog) {
+                AlertDialog(
+                    onDismissRequest = { showNewFolderDialog = false },
+                    title = { Text("New folder") },
+                    text = {
+                        OutlinedTextField(
+                            value = newFolderName,
+                            onValueChange = { newFolderName = it },
+                            placeholder = { Text("Folder name") }
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            enabled = newFolderName.isNotBlank(),
+                            onClick = {
+                                scope.launch {
+                                    val newId = repository.createTask(Task(type = TaskType.FOLDER, title = newFolderName))
+                                    task = task.copy(parentId = newId)
+                                    folders = repository.getFolders()
+                                    newFolderName = ""
+                                    showNewFolderDialog = false
+                                }
+                            }
+                        ) { Text("Create") }
+                    },
+                    dismissButton = { Button(onClick = { showNewFolderDialog = false }) { Text("Cancel") } }
                 )
             }
             }
