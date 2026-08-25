@@ -13,14 +13,34 @@ import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.lazy.LazyColumn
 import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.provideContent
+import androidx.glance.background
+import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
+import androidx.glance.layout.fillMaxWidth
+import androidx.glance.layout.padding
+import androidx.glance.layout.size
+import androidx.glance.text.FontFamily
+import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
+import androidx.glance.text.TextStyle
+import androidx.glance.color.ColorProvider
+import androidx.glance.unit.ColorProvider
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.quickadd.QuickAddActivity
 import com.kzhovn.todoapp.ui.TaskEditActivity
+import com.kzhovn.todoapp.ui.theme.LedgerAccent
+import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
+import com.kzhovn.todoapp.ui.theme.LedgerBackground
+import com.kzhovn.todoapp.ui.theme.LedgerInk
+import com.kzhovn.todoapp.ui.theme.LedgerMuted
+import com.kzhovn.todoapp.ui.theme.LedgerStar
 
 val taskIdKey = ActionParameters.Key<Long>("task_id")
+
+private fun fixed(color: androidx.compose.ui.graphics.Color) = ColorProvider(day = color, night = color)
 
 class TodoWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -29,45 +49,64 @@ class TodoWidget : GlanceAppWidget() {
         val rows = TodoWidgetPresenter.toRows(repository.getActiveTasks(now, currentMinuteOfDay()))
 
         provideContent {
-            // Column caps at 10 direct children and silently drops the rest — LazyColumn for the
-            // task rows keeps "+ Add" (a sibling, not a LazyColumn child) always visible.
-            Column {
+            Column(modifier = GlanceModifier.background(fixed(LedgerBackground)).padding(8.dp)) {
+                Row(
+                    modifier = GlanceModifier.fillMaxWidth().padding(bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "DOING",
+                        style = TextStyle(
+                            color = fixed(LedgerMuted),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.SansSerif
+                        ),
+                        modifier = GlanceModifier.defaultWeight()
+                    )
+                    Text(
+                        text = "+",
+                        style = TextStyle(color = fixed(LedgerAccent), fontSize = 14.sp, fontWeight = FontWeight.Bold),
+                        modifier = GlanceModifier
+                            .size(18.dp)
+                            .background(fixed(LedgerAccentSoft))
+                            .clickable(actionStartActivity<QuickAddActivity>())
+                    )
+                }
                 LazyColumn {
                     items(rows, itemId = { it.id }) { row ->
-                        Row {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.padding(vertical = 2.dp)) {
                             Text(
                                 text = "✓",
+                                style = TextStyle(color = fixed(if (row.isComplete) LedgerAccent else LedgerMuted), fontSize = 11.sp),
                                 modifier = GlanceModifier.clickable(
-                                    actionRunCallback<ToggleCompleteAction>(
-                                        actionParametersOf(taskIdKey to row.id)
-                                    )
+                                    actionRunCallback<ToggleCompleteAction>(actionParametersOf(taskIdKey to row.id))
                                 )
                             )
                             Text(
                                 text = row.title,
-                                modifier = GlanceModifier.clickable(
-                                    actionStartActivity<TaskEditActivity>(
-                                        parameters = actionParametersOf(
-                                            ActionParameters.Key<Long>(TaskEditActivity.EXTRA_TASK_ID) to row.id
+                                style = TextStyle(color = fixed(LedgerInk), fontSize = 11.sp, fontFamily = FontFamily.Serif),
+                                modifier = GlanceModifier
+                                    .defaultWeight()
+                                    .padding(horizontal = 4.dp)
+                                    .clickable(
+                                        actionStartActivity<TaskEditActivity>(
+                                            parameters = actionParametersOf(
+                                                ActionParameters.Key<Long>(TaskEditActivity.EXTRA_TASK_ID) to row.id
+                                            )
                                         )
                                     )
-                                )
                             )
                             Text(
                                 text = if (row.isStarred) "★" else "☆",
+                                style = TextStyle(color = fixed(if (row.isStarred) LedgerStar else LedgerMuted), fontSize = 11.sp),
                                 modifier = GlanceModifier.clickable(
-                                    actionRunCallback<ToggleStarAction>(
-                                        actionParametersOf(taskIdKey to row.id)
-                                    )
+                                    actionRunCallback<ToggleStarAction>(actionParametersOf(taskIdKey to row.id))
                                 )
                             )
                         }
                     }
                 }
-                Text(
-                    text = "+ Add",
-                    modifier = GlanceModifier.clickable(actionStartActivity<QuickAddActivity>())
-                )
             }
         }
     }
