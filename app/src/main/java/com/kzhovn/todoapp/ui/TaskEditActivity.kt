@@ -26,19 +26,29 @@ class TaskEditActivity : ComponentActivity() {
         setContent {
             val viewModel = remember { TaskEditViewModel(repository) }
             var task by remember { mutableStateOf(Task(id = taskId, title = "")) }
+            // For an existing task, Save must stay disabled until the real task data has
+            // loaded — otherwise a tap before the load completes commits this empty
+            // placeholder, wiping the task's title and every other field.
+            var isLoaded by remember { mutableStateOf(taskId == 0L) }
             LaunchedEffect(taskId) {
-                if (taskId != 0L) viewModel.load(taskId)?.let { task = it }
+                if (taskId != 0L) {
+                    viewModel.load(taskId)?.let { task = it }
+                    isLoaded = true
+                }
             }
             Column {
                 OutlinedTextField(value = task.title, onValueChange = { task = task.copy(title = it) })
                 Text("Starred")
                 Switch(checked = task.isStarred, onCheckedChange = { task = task.copy(isStarred = it) })
-                Button(onClick = {
-                    viewModel.save(task) {
-                        TodoWidget().updateAll(applicationContext)
-                        finish()
-                    }
-                }) {
+                Button(
+                    onClick = {
+                        viewModel.save(task) {
+                            TodoWidget().updateAll(applicationContext)
+                            finish()
+                        }
+                    },
+                    enabled = isLoaded && task.title.isNotBlank()
+                ) {
                     Text("Save")
                 }
             }

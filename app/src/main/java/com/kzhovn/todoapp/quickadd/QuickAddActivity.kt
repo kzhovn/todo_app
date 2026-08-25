@@ -27,14 +27,18 @@ class QuickAddActivity : ComponentActivity() {
             Surface {
                 Column {
                     OutlinedTextField(value = text, onValueChange = { text = it })
-                    Button(onClick = {
-                        val task = QuickAddParser.parse(text)
-                        lifecycleScope.launch {
-                            repository.createTask(task)
-                            TodoWidget().updateAll(applicationContext)
-                            finish()
-                        }
-                    }) {
+                    Button(
+                        onClick = {
+                            val task = QuickAddParser.parse(text)
+                            if (task.title.isBlank()) return@Button
+                            lifecycleScope.launch {
+                                repository.createTask(task)
+                                TodoWidget().updateAll(applicationContext)
+                                finish()
+                            }
+                        },
+                        enabled = text.isNotBlank()
+                    ) {
                         Text("Create")
                     }
                 }
