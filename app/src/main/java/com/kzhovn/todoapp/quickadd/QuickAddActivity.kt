@@ -1,6 +1,5 @@
 package com.kzhovn.todoapp.quickadd
 
-import android.app.DatePickerDialog
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -49,6 +48,7 @@ import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.ui.PropertyChip
 import com.kzhovn.todoapp.ui.TaskEditActivity
 import com.kzhovn.todoapp.ui.formatChipDate
+import com.kzhovn.todoapp.ui.pickDate
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
 import com.kzhovn.todoapp.ui.theme.LedgerBorder
@@ -60,7 +60,6 @@ import com.kzhovn.todoapp.ui.theme.LedgerTheme
 import com.kzhovn.todoapp.ui.theme.LedgerUiFont
 import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.launch
-import java.util.Calendar
 
 class QuickAddActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -127,14 +126,14 @@ class QuickAddActivity : ComponentActivity() {
                         label = "Start",
                         valueText = startDate?.let(::formatChipDate),
                         icon = Icons.Filled.Event,
-                        onClick = { pickDate(this@QuickAddActivity) { startDate = it } }
+                        onClick = { pickDate(this@QuickAddActivity, startDate) { startDate = it } }
                     )
                     Spacer(Modifier.width(8.dp))
                     PropertyChip(
                         label = "Due",
                         valueText = dueDate?.let(::formatChipDate),
                         icon = Icons.Filled.Flag,
-                        onClick = { pickDate(this@QuickAddActivity) { dueDate = it } }
+                        onClick = { pickDate(this@QuickAddActivity, dueDate) { dueDate = it } }
                     )
                     Spacer(Modifier.width(8.dp))
                     PropertyChip(
@@ -201,19 +200,4 @@ class QuickAddActivity : ComponentActivity() {
             }
         }
     }
-}
-
-private fun pickDate(activity: android.app.Activity, onPicked: (Long) -> Unit) {
-    val cal = Calendar.getInstance()
-    DatePickerDialog(
-        activity,
-        { _, year, month, day ->
-            val picked = Calendar.getInstance().apply {
-                set(year, month, day, 0, 0, 0)
-                set(Calendar.MILLISECOND, 0)
-            }
-            onPicked(picked.timeInMillis)
-        },
-        cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)
-    ).show()
 }

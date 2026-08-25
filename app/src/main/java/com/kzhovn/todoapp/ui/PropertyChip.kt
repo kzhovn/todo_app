@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.ui
 
+import android.app.Activity
+import android.app.DatePickerDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -26,6 +28,7 @@ import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerUiFont
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -80,3 +83,19 @@ fun PropertyChip(
 }
 
 fun formatChipDate(epochMillis: Long): String = SimpleDateFormat("MMM d", Locale.US).format(Date(epochMillis))
+
+fun pickDate(activity: Activity, currentValue: Long?, onPicked: (Long) -> Unit) {
+    val cal = Calendar.getInstance()
+    if (currentValue != null) cal.timeInMillis = currentValue
+    DatePickerDialog(
+        activity,
+        { _, year, month, day ->
+            val picked = Calendar.getInstance().apply {
+                set(year, month, day, 0, 0, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            onPicked(picked.timeInMillis)
+        },
+        cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)
+    ).show()
+}

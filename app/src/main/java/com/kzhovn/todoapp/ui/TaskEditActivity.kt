@@ -1,6 +1,5 @@
 package com.kzhovn.todoapp.ui
 
-import android.app.DatePickerDialog
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -67,7 +66,6 @@ import com.kzhovn.todoapp.ui.theme.LedgerTheme
 import com.kzhovn.todoapp.ui.theme.LedgerUiFont
 import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.launch
-import java.util.Calendar
 
 class TaskEditActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -184,7 +182,7 @@ class TaskEditActivity : ComponentActivity() {
                         label = "Start",
                         valueText = task.startDate?.let(::formatChipDate),
                         icon = Icons.Filled.Event,
-                        onClick = { pickDate(this@TaskEditActivity) { task = task.copy(startDate = it) } },
+                        onClick = { pickDate(this@TaskEditActivity, task.startDate) { task = task.copy(startDate = it) } },
                         onClear = { task = task.copy(startDate = null) }
                     )
                     Spacer(Modifier.width(8.dp))
@@ -193,7 +191,7 @@ class TaskEditActivity : ComponentActivity() {
                             label = "Due",
                             valueText = task.dueDate?.let(::formatChipDate),
                             icon = Icons.Filled.Flag,
-                            onClick = { pickDate(this@TaskEditActivity) { task = task.copy(dueDate = it) } },
+                            onClick = { pickDate(this@TaskEditActivity, task.dueDate) { task = task.copy(dueDate = it) } },
                             onClear = { task = task.copy(dueDate = null) }
                         )
                     }
@@ -442,19 +440,3 @@ private fun wouldCreateCycle(candidateId: Long, editingTaskId: Long, allById: Ma
     return false
 }
 
-// Duplicated from QuickAddActivity's private pickDate rather than shared across packages —
-// keeps this task's diff scoped to this one file, per the brief.
-private fun pickDate(activity: android.app.Activity, onPicked: (Long) -> Unit) {
-    val cal = Calendar.getInstance()
-    DatePickerDialog(
-        activity,
-        { _, year, month, day ->
-            val picked = Calendar.getInstance().apply {
-                set(year, month, day, 0, 0, 0)
-                set(Calendar.MILLISECOND, 0)
-            }
-            onPicked(picked.timeInMillis)
-        },
-        cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)
-    ).show()
-}
