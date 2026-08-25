@@ -15,7 +15,7 @@ import org.robolectric.Shadows
 class ReminderSchedulerTest {
 
     @Test
-    fun `schedules an exact alarm at the task due date`() {
+    fun `schedules an alarm at the task due date`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val scheduler = ReminderScheduler(context, alarmManager)

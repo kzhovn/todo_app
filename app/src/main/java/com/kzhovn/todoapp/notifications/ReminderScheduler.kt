@@ -14,7 +14,10 @@ class ReminderScheduler(private val context: Context, private val alarmManager: 
             cancel(task)
             return
         }
-        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, dueDate, pendingIntentFor(task))
+        // Inexact: fires within a few minutes of dueDate, not to-the-second. Avoids
+        // SCHEDULE_EXACT_ALARM, which needs a manifest permission plus a user grant on API 33+ —
+        // not worth it for a todo reminder.
+        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, dueDate, pendingIntentFor(task))
     }
 
     fun cancel(task: Task) {
