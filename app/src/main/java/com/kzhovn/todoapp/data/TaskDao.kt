@@ -3,6 +3,7 @@ package com.kzhovn.todoapp.data
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 
@@ -26,8 +27,14 @@ interface TaskDao {
     @Query("SELECT * FROM tasks")
     suspend fun getAllOnce(): List<Task>
 
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertDependency(dependency: TaskDependency)
+
+    @Query("SELECT dependsOnTaskId FROM task_dependencies WHERE taskId = :taskId")
+    suspend fun getDependencyIds(taskId: Long): List<Long>
+
+    @Query("DELETE FROM task_dependencies WHERE taskId = :taskId AND dependsOnTaskId = :dependsOnTaskId")
+    suspend fun removeDependency(taskId: Long, dependsOnTaskId: Long)
 
     @Query(
         """

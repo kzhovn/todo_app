@@ -107,5 +107,13 @@ class TaskRepository(
     suspend fun addDependency(taskId: Long, dependsOnTaskId: Long) =
         taskDao.insertDependency(TaskDependency(taskId, dependsOnTaskId))
 
+    suspend fun getDependencyIds(taskId: Long): Set<Long> = taskDao.getDependencyIds(taskId).toSet()
+
+    suspend fun setDependencies(taskId: Long, dependsOnIds: Set<Long>) {
+        val current = taskDao.getDependencyIds(taskId).toSet()
+        (dependsOnIds - current).forEach { taskDao.insertDependency(TaskDependency(taskId, it)) }
+        (current - dependsOnIds).forEach { taskDao.removeDependency(taskId, it) }
+    }
+
     suspend fun search(query: String): List<Task> = taskDao.search(query)
 }

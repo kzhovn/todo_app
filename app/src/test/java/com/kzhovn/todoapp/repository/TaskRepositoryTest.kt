@@ -153,4 +153,27 @@ class TaskRepositoryTest {
 
         assertEquals(listOf("Write spec"), underWork.map { it.title })
     }
+
+    @Test
+    fun `setDependencies assigns and reads back dependencies`() = runBlocking {
+        val taskId = repository.createTask(Task(title = "Ship report"))
+        val depA = repository.createTask(Task(title = "Gather data"))
+        val depB = repository.createTask(Task(title = "Get approval"))
+
+        repository.setDependencies(taskId, setOf(depA, depB))
+
+        assertEquals(setOf(depA, depB), repository.getDependencyIds(taskId))
+    }
+
+    @Test
+    fun `setDependencies removes an unassigned dependency`() = runBlocking {
+        val taskId = repository.createTask(Task(title = "Ship report"))
+        val depA = repository.createTask(Task(title = "Gather data"))
+        val depB = repository.createTask(Task(title = "Get approval"))
+        repository.setDependencies(taskId, setOf(depA, depB))
+
+        repository.setDependencies(taskId, setOf(depA))
+
+        assertEquals(setOf(depA), repository.getDependencyIds(taskId))
+    }
 }
