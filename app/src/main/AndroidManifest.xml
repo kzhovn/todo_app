@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:name=".TodoApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:label="Todo App"
         android:theme="@style/Theme.TodoApp">
         <activity
