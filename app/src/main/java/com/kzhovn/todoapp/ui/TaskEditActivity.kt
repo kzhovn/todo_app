@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -33,6 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,8 +47,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.appwidget.updateAll
@@ -59,6 +65,7 @@ import com.kzhovn.todoapp.recurrence.toTaskFields
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
+import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerOverdue
@@ -169,15 +176,6 @@ class TaskEditActivity : ComponentActivity() {
                 }
 
                 Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("This is a folder", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = task.type == TaskType.FOLDER,
-                        onCheckedChange = { task = task.copy(type = if (it) TaskType.FOLDER else TaskType.TASK) }
-                    )
-                }
-
-                Spacer(Modifier.height(12.dp))
                 Row {
                     PropertyChip(
                         label = "Start",
@@ -206,18 +204,6 @@ class TaskEditActivity : ComponentActivity() {
                     onClick = { showFolderPicker = true },
                     showLabelWhenSet = false
                 )
-
-                if (task.type == TaskType.FOLDER) {
-                    Spacer(Modifier.height(12.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "Sequential (complete tasks in order)",
-                            fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Switch(checked = task.sequential, onCheckedChange = { task = task.copy(sequential = it) })
-                    }
-                }
 
                 if (task.type == TaskType.TASK) {
                     Spacer(Modifier.height(12.dp))
@@ -250,15 +236,10 @@ class TaskEditActivity : ComponentActivity() {
                                 .clickable { recurrence = RecurrenceSelection(RecurrencePreset.EVERY_N_DAYS, recurrence.n) }
                         )
                         Spacer(Modifier.width(6.dp))
-                        OutlinedTextField(
-                            value = if (recurrence.preset == RecurrencePreset.EVERY_N_DAYS) recurrence.n.toString() else "",
-                            onValueChange = { text ->
-                                val n = text.toIntOrNull()?.coerceAtLeast(1) ?: return@OutlinedTextField
-                                recurrence = RecurrenceSelection(RecurrencePreset.EVERY_N_DAYS, n)
-                            },
-                            modifier = Modifier.width(56.dp),
-                            singleLine = true
-                        )
+                        CompactNumberField(
+                            value = recurrence.n,
+                            enabled = recurrence.preset == RecurrencePreset.EVERY_N_DAYS
+                        ) { n -> recurrence = RecurrenceSelection(RecurrencePreset.EVERY_N_DAYS, n) }
                         Spacer(Modifier.width(6.dp))
                         Text("days", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
                     }
@@ -272,15 +253,10 @@ class TaskEditActivity : ComponentActivity() {
                                 .clickable { recurrence = RecurrenceSelection(RecurrencePreset.AFTER_COMPLETION_N_DAYS, recurrence.n) }
                         )
                         Spacer(Modifier.width(6.dp))
-                        OutlinedTextField(
-                            value = if (recurrence.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS) recurrence.n.toString() else "",
-                            onValueChange = { text ->
-                                val n = text.toIntOrNull()?.coerceAtLeast(1) ?: return@OutlinedTextField
-                                recurrence = RecurrenceSelection(RecurrencePreset.AFTER_COMPLETION_N_DAYS, n)
-                            },
-                            modifier = Modifier.width(56.dp),
-                            singleLine = true
-                        )
+                        CompactNumberField(
+                            value = recurrence.n,
+                            enabled = recurrence.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS
+                        ) { n -> recurrence = RecurrenceSelection(RecurrencePreset.AFTER_COMPLETION_N_DAYS, n) }
                         Spacer(Modifier.width(6.dp))
                         Text("days after completion", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
                     }
@@ -309,6 +285,27 @@ class TaskEditActivity : ComponentActivity() {
                             )
                             Text(ctx.name, fontFamily = LedgerUiFont, fontSize = 13.sp, color = LedgerInk)
                         }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("This is a folder", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = task.type == TaskType.FOLDER,
+                        onCheckedChange = { task = task.copy(type = if (it) TaskType.FOLDER else TaskType.TASK) }
+                    )
+                }
+
+                if (task.type == TaskType.FOLDER) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Sequential (complete tasks in order)",
+                            fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Switch(checked = task.sequential, onCheckedChange = { task = task.copy(sequential = it) })
                     }
                 }
 
@@ -448,5 +445,25 @@ private fun wouldCreateCycle(candidateId: Long, editingTaskId: Long, allById: Ma
         current = allById[current]?.parentId
     }
     return false
+}
+
+@Composable
+private fun CompactNumberField(value: Int, enabled: Boolean, onValueChange: (Int) -> Unit) {
+    var text by remember(value, enabled) { mutableStateOf(if (enabled) value.toString() else "") }
+    BasicTextField(
+        value = text,
+        onValueChange = { new ->
+            text = new
+            new.toIntOrNull()?.takeIf { it > 0 }?.let(onValueChange)
+        },
+        enabled = enabled,
+        singleLine = true,
+        textStyle = TextStyle(fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerInk),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier
+            .width(28.dp)
+            .border(1.dp, LedgerBorder, RoundedCornerShape(4.dp))
+            .padding(horizontal = 4.dp, vertical = 3.dp)
+    )
 }
 
