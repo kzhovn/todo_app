@@ -8,7 +8,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +16,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -26,7 +28,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,8 +35,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,10 +42,11 @@ import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.ui.PropertyChip
 import com.kzhovn.todoapp.ui.TaskEditActivity
+import com.kzhovn.todoapp.ui.formatChipDate
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
-import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
@@ -56,10 +56,7 @@ import com.kzhovn.todoapp.ui.theme.LedgerTheme
 import com.kzhovn.todoapp.ui.theme.LedgerUiFont
 import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Date
-import java.util.Locale
 
 class QuickAddActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -107,21 +104,24 @@ class QuickAddActivity : ComponentActivity() {
                     }
                 }
                 Row(modifier = Modifier.padding(vertical = 12.dp)) {
-                    QuickAddChip(
-                        label = startDate?.let { formatDate(it) } ?: "Start",
-                        set = startDate != null,
+                    PropertyChip(
+                        label = "Start",
+                        valueText = startDate?.let(::formatChipDate),
+                        icon = Icons.Filled.Event,
                         onClick = { pickDate(this@QuickAddActivity) { startDate = it } }
                     )
                     Spacer(Modifier.width(8.dp))
-                    QuickAddChip(
-                        label = dueDate?.let { formatDate(it) } ?: "Due",
-                        set = dueDate != null,
+                    PropertyChip(
+                        label = "Due",
+                        valueText = dueDate?.let(::formatChipDate),
+                        icon = Icons.Filled.Flag,
                         onClick = { pickDate(this@QuickAddActivity) { dueDate = it } }
                     )
                     Spacer(Modifier.width(8.dp))
-                    QuickAddChip(
-                        label = folder?.title ?: "Folder",
-                        set = folder != null,
+                    PropertyChip(
+                        label = "Folder",
+                        valueText = folder?.title,
+                        icon = Icons.Filled.Folder,
                         onClick = { showFolderPicker = true }
                     )
                 }
@@ -190,19 +190,6 @@ class QuickAddActivity : ComponentActivity() {
     }
 }
 
-@Composable
-private fun QuickAddChip(label: String, set: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(5.dp))
-            .background(if (set) LedgerAccentSoft else Color.Transparent)
-            .clickable { onClick() }
-            .padding(horizontal = 10.dp, vertical = 6.dp)
-    ) {
-        Text(label, fontFamily = LedgerUiFont, fontSize = 12.sp, color = if (set) LedgerAccent else LedgerMuted)
-    }
-}
-
 private fun pickDate(activity: android.app.Activity, onPicked: (Long) -> Unit) {
     val cal = Calendar.getInstance()
     DatePickerDialog(
@@ -217,6 +204,3 @@ private fun pickDate(activity: android.app.Activity, onPicked: (Long) -> Unit) {
         cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)
     ).show()
 }
-
-private fun formatDate(epochMillis: Long): String =
-    SimpleDateFormat("MMM d", Locale.US).format(Date(epochMillis))
