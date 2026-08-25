@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -85,6 +86,8 @@ class TaskEditActivity : ComponentActivity() {
             var showNewFolderDialog by remember { mutableStateOf(false) }
             var newFolderName by remember { mutableStateOf("") }
             var recurrence by remember { mutableStateOf(RecurrenceSelection(RecurrencePreset.NONE)) }
+            var allTasks by remember { mutableStateOf<List<Task>>(emptyList()) }
+            var selectedDependencyIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
 
             LaunchedEffect(taskId) {
                 if (taskId != 0L) {
@@ -92,9 +95,11 @@ class TaskEditActivity : ComponentActivity() {
                         task = loaded
                         recurrence = recurrenceSelectionFromTask(loaded.recurrenceType, loaded.recurrenceRule)
                     }
+                    selectedDependencyIds = repository.getDependencyIds(taskId)
                     isLoaded = true
                 }
                 folders = repository.getFolders()
+                allTasks = repository.getAllTasks()
             }
 
             Column(
@@ -232,6 +237,19 @@ class TaskEditActivity : ComponentActivity() {
                         Spacer(Modifier.width(6.dp))
                         Text("days after completion", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
                     }
+                    Spacer(Modifier.height(12.dp))
+                    Text("Depends on", fontFamily = LedgerUiFont, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
+                    allTasks.filter { it.id != task.id && it.type == TaskType.TASK }.forEach { t ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = t.id in selectedDependencyIds,
+                                onCheckedChange = { checked ->
+                                    selectedDependencyIds = if (checked) selectedDependencyIds + t.id else selectedDependencyIds - t.id
+                                }
+                            )
+                            Text(t.title, fontFamily = LedgerUiFont, fontSize = 13.sp, color = LedgerInk)
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -245,7 +263,10 @@ class TaskEditActivity : ComponentActivity() {
                     Button(
                         onClick = {
                             val (recurrenceType, recurrenceRule) = recurrence.toTaskFields()
-                            viewModel.save(task.copy(recurrenceType = recurrenceType, recurrenceRule = recurrenceRule)) {
+                            val toSave = task.copy(recurrenceType = recurrenceType, recurrenceRule = recurrenceRule)
+                            viewModel.save(toSave) {
+                                val savedId = if (toSave.id != 0L) toSave.id else repository.getAllTasks().maxOf { it.id }
+                                repository.setDependencies(savedId, selectedDependencyIds)
                                 TodoWidget().updateAll(applicationContext)
                                 finish()
                             }
