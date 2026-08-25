@@ -35,6 +35,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.context.WifiContextMonitor
+import com.kzhovn.todoapp.quickadd.QuickAddActivity
 import com.kzhovn.todoapp.ui.OutlinerScreen
 import com.kzhovn.todoapp.ui.TaskEditActivity
 import com.kzhovn.todoapp.ui.TaskListMode
@@ -92,8 +93,8 @@ class MainActivity : ComponentActivity() {
             val scope = rememberCoroutineScope()
             var selectedMode by remember { mutableStateOf(TaskListMode.DOING) }
             var query by remember { mutableStateOf("") }
-            // Reloads on tab change AND on every resume, so returning from TaskEditActivity
-            // (FAB/row tap) picks up whatever was just created or edited there.
+            // Reloads on tab change AND on every resume, so returning from QuickAddActivity
+            // (FAB) or TaskEditActivity (row tap) picks up whatever was just created or edited.
             LifecycleResumeEffect(selectedMode) {
                 viewModel.load(selectedMode)
                 onPauseOrDispose { }
@@ -105,7 +106,7 @@ class MainActivity : ComponentActivity() {
             Scaffold(
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 floatingActionButton = {
-                    FloatingActionButton(onClick = { startActivity(Intent(this@MainActivity, TaskEditActivity::class.java)) }) {
+                    FloatingActionButton(onClick = { startActivity(Intent(this@MainActivity, QuickAddActivity::class.java)) }) {
                         Icon(Icons.Filled.Add, contentDescription = "New task")
                     }
                 }

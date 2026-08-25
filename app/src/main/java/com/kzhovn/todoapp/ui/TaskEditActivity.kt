@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.glance.appwidget.updateAll
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.ui.theme.LedgerTheme
 import com.kzhovn.todoapp.widget.TodoWidget
 
 class TaskEditActivity : ComponentActivity() {
@@ -24,6 +25,7 @@ class TaskEditActivity : ComponentActivity() {
         val repository = (application as TodoApp).repository
         val taskId = intent.getLongExtra(EXTRA_TASK_ID, 0L)
         setContent {
+            LedgerTheme {
             val viewModel = remember { TaskEditViewModel(repository) }
             var task by remember { mutableStateOf(Task(id = taskId, title = "")) }
             // For an existing task, Save must stay disabled until the real task data has
@@ -51,6 +53,7 @@ class TaskEditActivity : ComponentActivity() {
                 ) {
                     Text("Save")
                 }
+            }
             }
         }
     }
