@@ -3,6 +3,7 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application
         android:name=".TodoApp"
         android:allowBackup="false"
@@ -25,6 +26,11 @@
             android:screenOrientation="portrait"
             android:theme="@style/Theme.TodoApp.QuickAdd" />
         <receiver android:name=".notifications.ReminderReceiver" android:exported="false" />
+        <receiver android:name=".notifications.BootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
         <receiver
             android:name=".widget.TodoWidgetReceiver"
             android:exported="false">
