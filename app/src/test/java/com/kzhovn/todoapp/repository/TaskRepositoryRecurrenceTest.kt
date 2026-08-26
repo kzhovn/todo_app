@@ -78,17 +78,18 @@ class TaskRepositoryRecurrenceTest {
         val spawned = all.first { it.id != taskId }
         assertTrue(!spawned.isComplete)
 
-        // The spawned task inherits dueDate and reminderOffsetMinutes from the original.
-        // Since RecurrenceEngine.nextInstance() copies the original task and only changes
-        // id, startDate, isComplete, and completedAt, both fields are preserved.
-        assertEquals(dueDate, spawned.dueDate)
+        // The spawned task's dueDate shifts forward by the same 7 days its startDate did
+        // (RecurrenceEngine.nextInstance keeps the start-to-due gap constant); its
+        // reminderOffsetMinutes is preserved unchanged since that's not part of the shift.
+        val expectedSpawnedDueDate = dueDate + TimeUnit.DAYS.toMillis(7)
+        assertEquals(expectedSpawnedDueDate, spawned.dueDate)
         val nextAlarm = Shadows.shadowOf(alarmManager).peekNextScheduledAlarm()
-        assertEquals(dueDate - 30 * 60_000L, nextAlarm?.triggerAtMs)
+        assertEquals(expectedSpawnedDueDate - 30 * 60_000L, nextAlarm?.triggerAtMs)
     }
 
     @Test
     fun `spawned recurring task with past due date does not get an alarm`() = runBlocking {
-        val pastDueDate = now - TimeUnit.DAYS.toMillis(1)
+        val pastDueDate = now - TimeUnit.DAYS.toMillis(10) // still in the past after the 7-day recurrence shift
         val taskId = repository.createTask(
             Task(
                 title = "Overdue recurring task",
@@ -106,10 +107,9 @@ class TaskRepositoryRecurrenceTest {
         val spawned = all.first { it.id != taskId }
         assertTrue(!spawned.isComplete)
 
-        // The spawned task still exists but should not have an alarm scheduled
-        // since its inherited dueDate is in the past. This prevents spurious
-        // notifications from firing immediately upon task completion.
-        assertEquals(pastDueDate, spawned.dueDate)
+        // The spawned task's dueDate shifts forward by 7 days (pastDueDate + 7 days = now - 3 days),
+        // still in the past, so it correctly gets no alarm.
+        assertEquals(pastDueDate + TimeUnit.DAYS.toMillis(7), spawned.dueDate)
         assertNull(Shadows.shadowOf(alarmManager).peekNextScheduledAlarm())
     }
 }

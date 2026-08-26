@@ -16,7 +16,11 @@ object RecurrenceEngine {
             RecurrenceType.RRULE -> nextRRuleOccurrence(task.startDate ?: completedAt, rule, completedAt)
                 ?: return null
         }
-        return task.copy(id = 0, startDate = nextStart, isComplete = false, completedAt = null)
+        // Keep the start-to-due gap constant across recurrences instead of freezing dueDate at its
+        // original (now stale) absolute timestamp.
+        val startAnchor = task.startDate ?: completedAt
+        val nextDueDate = task.dueDate?.plus(nextStart - startAnchor)
+        return task.copy(id = 0, startDate = nextStart, dueDate = nextDueDate, isComplete = false, completedAt = null)
     }
 
     private fun nextRRuleOccurrence(dtStart: Long, rrule: String, after: Long): Long? {

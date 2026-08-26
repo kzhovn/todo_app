@@ -41,4 +41,44 @@ class RecurrenceEngineTest {
         val task = Task(id = 1, title = "One-off")
         assertNull(RecurrenceEngine.nextInstance(task, 1_700_000_000_000L))
     }
+
+    @Test
+    fun `after-completion recurrence shifts the due date by the same amount as the start date`() {
+        val completedAt = 1_700_000_000_000L
+        val originalDue = completedAt + TimeUnit.DAYS.toMillis(1) // due 1 day after this completion
+        val task = Task(
+            id = 1, title = "Water plants", dueDate = originalDue,
+            recurrenceType = RecurrenceType.AFTER_COMPLETION, recurrenceRule = "3"
+        )
+
+        val next = RecurrenceEngine.nextInstance(task, completedAt)
+
+        // No original startDate, so the anchor is completedAt: shift = (completedAt + 3 days) - completedAt = 3 days.
+        assertEquals(originalDue + TimeUnit.DAYS.toMillis(3), next?.dueDate)
+    }
+
+    @Test
+    fun `rrule recurrence shifts the due date by the same amount as the start date`() {
+        val dtStart = 1_700_000_000_000L
+        val originalDue = dtStart + TimeUnit.DAYS.toMillis(2) // due 2 days after the original start
+        val completedAt = dtStart + TimeUnit.DAYS.toMillis(1)
+        val task = Task(
+            id = 1, title = "Every 4 days", startDate = dtStart, dueDate = originalDue,
+            recurrenceType = RecurrenceType.RRULE, recurrenceRule = "FREQ=DAILY;INTERVAL=4"
+        )
+
+        val next = RecurrenceEngine.nextInstance(task, completedAt)
+
+        // Anchor is the original startDate (dtStart): shift = (dtStart + 4 days) - dtStart = 4 days.
+        assertEquals(originalDue + TimeUnit.DAYS.toMillis(4), next?.dueDate)
+    }
+
+    @Test
+    fun `a task with no due date still spawns a next instance with no due date`() {
+        val task = Task(
+            id = 1, title = "No due date", recurrenceType = RecurrenceType.AFTER_COMPLETION, recurrenceRule = "3"
+        )
+        val next = RecurrenceEngine.nextInstance(task, 1_700_000_000_000L)
+        assertNull(next?.dueDate)
+    }
 }
