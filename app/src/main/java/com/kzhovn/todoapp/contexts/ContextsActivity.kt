@@ -72,6 +72,10 @@ class ContextsActivity : ComponentActivity() {
             var type by remember { mutableStateOf(ContextType.PLACE) }
             var wifiSsid by remember { mutableStateOf<String?>(null) }
             var windows by remember { mutableStateOf<List<ContextTimeWindow>>(emptyList()) }
+            // Preserves the stored satisfaction state while editing a PLACE context, since
+            // wifiSsid gets prefilled from the saved row (not freshly captured) and may not
+            // reflect the network the device is on right now.
+            var editingIsCurrentlySatisfied by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
 
             suspend fun refresh() { contexts = contextRepository.getAllContexts() }
@@ -88,6 +92,7 @@ class ContextsActivity : ComponentActivity() {
                     name = ctx.name
                     type = ctx.type
                     wifiSsid = ctx.wifiSsid
+                    editingIsCurrentlySatisfied = ctx.isCurrentlySatisfied
                     windows = if (ctx.type == ContextType.TIME) contextRepository.getTimeWindows(ctx.id) else emptyList()
                 }
             }
@@ -172,7 +177,11 @@ class ContextsActivity : ComponentActivity() {
                                     name = name,
                                     type = type,
                                     wifiSsid = if (type == ContextType.PLACE) wifiSsid else null,
-                                    isCurrentlySatisfied = type == ContextType.PLACE && wifiSsid != null
+                                    isCurrentlySatisfied = if (editingContextId != null) {
+                                        editingIsCurrentlySatisfied
+                                    } else {
+                                        type == ContextType.PLACE && wifiSsid != null
+                                    }
                                 )
                                 val savedId = if (editingContextId != null) {
                                     contextRepository.updateContext(contextToSave)

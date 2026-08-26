@@ -213,7 +213,7 @@ class TaskEditActivity : ComponentActivity() {
                 Spacer(Modifier.height(12.dp))
                 PropertyChip(
                     label = "Folder",
-                    valueText = folders.find { it.id == task.parentId }?.title,
+                    valueText = allById[task.parentId]?.title,
                     icon = Icons.Filled.Folder,
                     onClick = { showFolderPicker = true },
                     showLabelWhenSet = false

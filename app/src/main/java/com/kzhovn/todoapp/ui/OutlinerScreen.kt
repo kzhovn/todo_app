@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.draganddrop.dragAndDropSource
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -152,7 +153,12 @@ private fun OutlinerRow(
             .padding(start = indent, top = 3.dp, bottom = 3.dp, end = 12.dp)
             .then(if (isDropHover) Modifier.background(LedgerAccentSoft) else Modifier)
             .dragAndDropSource {
-                DragAndDropTransferData(ClipData.newPlainText("task_id", task.id.toString()))
+                detectDragGesturesAfterLongPress(
+                    onDragStart = {
+                        startTransfer(DragAndDropTransferData(ClipData.newPlainText("task_id", task.id.toString())))
+                    },
+                    onDrag = { _, _ -> }
+                )
             }
             .dragAndDropTarget(
                 shouldStartDragAndDrop = { it.mimeTypes().contains(ClipDescription.MIMETYPE_TEXT_PLAIN) },

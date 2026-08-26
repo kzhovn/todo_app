@@ -45,6 +45,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +69,7 @@ import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private lateinit var wifiContextMonitor: WifiContextMonitor
@@ -114,6 +116,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             LedgerTheme {
             val viewModel = remember { TaskListViewModel(repository) }
+            val scope = rememberCoroutineScope()
             val snackbarHostState = remember { SnackbarHostState() }
             var selectedMode by remember { mutableStateOf(TaskListMode.DOING) }
             var query by remember { mutableStateOf("") }
@@ -127,9 +130,14 @@ class MainActivity : ComponentActivity() {
                 viewModel.load(selectedMode)
                 onPauseOrDispose { }
             }
-            LaunchedEffect(Unit) {
-                folders = repository.getFolders()
-                contexts = contextRepository.getAllContexts()
+            // FAB long-press can create a folder/context without leaving this activity, so
+            // resume (not just initial composition) must re-pull to pick up the new one.
+            LifecycleResumeEffect(Unit) {
+                scope.launch {
+                    folders = repository.getFolders()
+                    contexts = contextRepository.getAllContexts()
+                }
+                onPauseOrDispose { }
             }
             LaunchedEffect(query, filters) {
                 if (query.isBlank()) viewModel.load(selectedMode) else viewModel.search(query, filters)
