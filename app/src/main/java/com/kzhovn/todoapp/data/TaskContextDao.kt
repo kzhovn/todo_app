@@ -37,4 +37,25 @@ interface TaskContextDao {
 
     @Query("DELETE FROM task_contexts WHERE taskId = :taskId AND contextId = :contextId")
     suspend fun unassignContext(taskId: Long, contextId: Long)
+
+    @Insert
+    suspend fun insertTimeWindow(window: ContextTimeWindow): Long
+
+    @Update
+    suspend fun updateTimeWindow(window: ContextTimeWindow)
+
+    @Query("DELETE FROM context_time_windows WHERE id = :id")
+    suspend fun deleteTimeWindow(id: Long)
+
+    @Query("SELECT * FROM context_time_windows WHERE contextId = :contextId")
+    suspend fun getTimeWindows(contextId: Long): List<ContextTimeWindow>
+
+    @Query("DELETE FROM context_time_windows WHERE contextId = :contextId")
+    suspend fun deleteTimeWindowsForContext(contextId: Long)
+
+    @Query("DELETE FROM task_contexts WHERE contextId = :contextId")
+    suspend fun deleteContextAssignments(contextId: Long)
+
+    @Query("DELETE FROM contexts WHERE id = :id")
+    suspend fun deleteContext(id: Long)
 }

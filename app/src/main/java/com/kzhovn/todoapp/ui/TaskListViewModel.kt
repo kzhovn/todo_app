@@ -28,8 +28,8 @@ class TaskListViewModel(
             val all = refreshSubtaskCounts()
             _tasks.value = when (mode) {
                 TaskListMode.ALL -> all
-                TaskListMode.ACTIVE -> repository.getActiveTasks(now, minuteOfDay(now))
-                TaskListMode.DOING -> repository.getActiveTasks(now, minuteOfDay(now))
+                TaskListMode.ACTIVE -> repository.getActiveTasks(now, minuteOfDay(now), dayOfWeekMask(now))
+                TaskListMode.DOING -> repository.getActiveTasks(now, minuteOfDay(now), dayOfWeekMask(now))
                     .filter { it.isStarred || (it.dueDate != null && it.dueDate - now < TWO_DAYS_MILLIS) }
             }
         }
@@ -72,6 +72,11 @@ class TaskListViewModel(
     private fun minuteOfDay(epochMillis: Long): Int {
         val cal = Calendar.getInstance().apply { timeInMillis = epochMillis }
         return cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+    }
+
+    private fun dayOfWeekMask(epochMillis: Long): Int {
+        val cal = Calendar.getInstance().apply { timeInMillis = epochMillis }
+        return 1 shl (cal.get(Calendar.DAY_OF_WEEK) - 1)
     }
 
     companion object {

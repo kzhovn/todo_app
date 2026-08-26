@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.TodoApp
+import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
@@ -80,7 +81,7 @@ class ContextsActivity : ComponentActivity() {
                             text = if (ctx.type == ContextType.PLACE) {
                                 "${ctx.name} — Wifi: ${ctx.wifiSsid}"
                             } else {
-                                "${ctx.name} — ${minuteToLabel(ctx.windowStartMinute ?: 0)}–${minuteToLabel(ctx.windowEndMinute ?: 0)}"
+                                "${ctx.name} — time window"
                             },
                             fontFamily = LedgerUiFont, fontSize = 14.sp, color = LedgerInk,
                             modifier = Modifier.padding(vertical = 8.dp)
@@ -118,19 +119,22 @@ class ContextsActivity : ComponentActivity() {
                 Button(
                     onClick = {
                         scope.launch {
-                            contextRepository.createContext(
+                            val contextId = contextRepository.createContext(
                                 TaskContext(
                                     name = name,
                                     type = type,
                                     wifiSsid = if (type == ContextType.PLACE) wifiSsid else null,
-                                    windowStartMinute = if (type == ContextType.TIME) startMinute else null,
-                                    windowEndMinute = if (type == ContextType.TIME) endMinute else null,
                                     // "Use current network" captured the exact SSID we're on right now, so a
                                     // PLACE context starts satisfied — otherwise its tasks vanish from
                                     // Doing/Active until the next wifi connect/disconnect event.
                                     isCurrentlySatisfied = type == ContextType.PLACE && wifiSsid != null
                                 )
                             )
+                            if (type == ContextType.TIME && startMinute != null && endMinute != null) {
+                                contextRepository.addTimeWindow(
+                                    ContextTimeWindow(contextId = contextId, windowStartMinute = startMinute!!, windowEndMinute = endMinute!!)
+                                )
+                            }
                             name = ""
                             wifiSsid = null
                             startMinute = null

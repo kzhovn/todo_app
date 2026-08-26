@@ -5,8 +5,8 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 
 @Database(
-    entities = [Task::class, TaskDependency::class, TaskContext::class, TaskContextCrossRef::class],
-    version = 1
+    entities = [Task::class, TaskDependency::class, TaskContext::class, TaskContextCrossRef::class, ContextTimeWindow::class],
+    version = 2
 )
 @TypeConverters(Converters::class)
 abstract class TodoDatabase : RoomDatabase() {

@@ -2,6 +2,7 @@ package com.kzhovn.todoapp.repository
 
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.TodoDatabase
@@ -60,11 +61,11 @@ class TaskRepositoryTest {
     @Test
     fun `snooze pushes the start date forward so the task drops out of active`() = runBlocking {
         val taskId = repository.createTask(Task(title = "Later"))
-        assertEquals(1, repository.getActiveTasks(now, 600).size)
+        assertEquals(1, repository.getActiveTasks(now, 600, ContextTimeWindow.ALL_DAYS).size)
 
         repository.snooze(taskId, durationMillis = 60_000, now = now)
 
-        assertTrue(repository.getActiveTasks(now, 600).isEmpty())
+        assertTrue(repository.getActiveTasks(now, 600, ContextTimeWindow.ALL_DAYS).isEmpty())
     }
 
     @Test

@@ -84,11 +84,20 @@ interface TaskDao {
             SELECT tc.taskId FROM task_contexts tc
             JOIN contexts ctx ON ctx.id = tc.contextId
             WHERE (ctx.type = 'PLACE' AND ctx.isCurrentlySatisfied = 0)
-               OR (ctx.type = 'TIME' AND NOT (:currentMinuteOfDay BETWEEN ctx.windowStartMinute AND ctx.windowEndMinute))
+               OR (ctx.type = 'TIME' AND NOT EXISTS (
+                     SELECT 1 FROM context_time_windows w
+                     WHERE w.contextId = ctx.id
+                       AND (w.daysMask & :todayMask) != 0
+                       AND (
+                         (w.windowStartMinute <= w.windowEndMinute AND :currentMinuteOfDay BETWEEN w.windowStartMinute AND w.windowEndMinute)
+                         OR
+                         (w.windowStartMinute > w.windowEndMinute AND (:currentMinuteOfDay >= w.windowStartMinute OR :currentMinuteOfDay <= w.windowEndMinute))
+                       )
+                 ))
           )
         """
     )
-    suspend fun getActiveTasks(now: Long, currentMinuteOfDay: Int): List<Task>
+    suspend fun getActiveTasks(now: Long, currentMinuteOfDay: Int, todayMask: Int): List<Task>
 
     @Query(
         """

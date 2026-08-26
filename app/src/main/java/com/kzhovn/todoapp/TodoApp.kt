@@ -10,7 +10,9 @@ import com.kzhovn.todoapp.repository.TaskRepository
 
 class TodoApp : Application() {
     val database: TodoDatabase by lazy {
-        Room.databaseBuilder(this, TodoDatabase::class.java, "todo.db").build()
+        Room.databaseBuilder(this, TodoDatabase::class.java, "todo.db")
+            .fallbackToDestructiveMigration()
+            .build()
     }
     val repository: TaskRepository by lazy {
         val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager

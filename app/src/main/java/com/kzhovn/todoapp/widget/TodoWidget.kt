@@ -46,7 +46,7 @@ class TodoWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repository = (context.applicationContext as TodoApp).repository
         val now = System.currentTimeMillis()
-        val rows = TodoWidgetPresenter.toRows(repository.getActiveTasks(now, currentMinuteOfDay()))
+        val rows = TodoWidgetPresenter.toRows(repository.getActiveTasks(now, currentMinuteOfDay(), currentDayMask()))
 
         provideContent {
             Column(modifier = GlanceModifier.background(fixed(LedgerBackground)).padding(8.dp)) {
@@ -114,6 +114,11 @@ class TodoWidget : GlanceAppWidget() {
     private fun currentMinuteOfDay(): Int {
         val cal = java.util.Calendar.getInstance()
         return cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+    }
+
+    private fun currentDayMask(): Int {
+        val cal = java.util.Calendar.getInstance()
+        return 1 shl (cal.get(java.util.Calendar.DAY_OF_WEEK) - 1)
     }
 }
 

@@ -81,8 +81,8 @@ class TaskRepository(
         }
     }
 
-    suspend fun getActiveTasks(now: Long, currentMinuteOfDay: Int): List<Task> =
-        taskDao.getActiveTasks(now, currentMinuteOfDay)
+    suspend fun getActiveTasks(now: Long, currentMinuteOfDay: Int, todayMask: Int): List<Task> =
+        taskDao.getActiveTasks(now, currentMinuteOfDay, todayMask)
 
     suspend fun getAllTasks(): List<Task> = taskDao.getAllOnce()
 
