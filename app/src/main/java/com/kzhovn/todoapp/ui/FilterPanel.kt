@@ -9,11 +9,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.data.SearchFilters
@@ -58,6 +62,25 @@ fun FilterPanel(
                 Spacer(Modifier.width(6.dp))
                 FilterChipItem(c.name, filters.contextId == c.id) { onFiltersChange(filters.copy(contextId = c.id)) }
             }
+        }
+        Spacer(Modifier.height(6.dp))
+        Row {
+            val activity = LocalContext.current as android.app.Activity
+            PropertyChip(
+                label = "Due after",
+                valueText = filters.dueAfter?.let(::formatChipDate),
+                icon = Icons.Filled.Event,
+                onClick = { pickDate(activity, filters.dueAfter) { onFiltersChange(filters.copy(dueAfter = it)) } },
+                onClear = { onFiltersChange(filters.copy(dueAfter = null)) }
+            )
+            Spacer(Modifier.width(8.dp))
+            PropertyChip(
+                label = "Due before",
+                valueText = filters.dueBefore?.let(::formatChipDate),
+                icon = Icons.Filled.Flag,
+                onClick = { pickDate(activity, filters.dueBefore) { onFiltersChange(filters.copy(dueBefore = it)) } },
+                onClear = { onFiltersChange(filters.copy(dueBefore = null)) }
+            )
         }
     }
 }
