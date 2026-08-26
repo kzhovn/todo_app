@@ -141,6 +141,9 @@ class TaskRepository(
 
     suspend fun getAllTasks(): List<Task> = taskDao.getAllOnce()
 
+    suspend fun getAllTaskContexts(): Map<Long, Set<Long>> =
+        taskContextDao.getAllCrossRefs().groupBy({ it.taskId }, { it.contextId }).mapValues { it.value.toSet() }
+
     suspend fun getFolders(): List<Task> = getAllTasks().filter { it.type == TaskType.FOLDER }
 
     suspend fun getTask(taskId: Long): Task? = taskDao.getById(taskId)

@@ -209,7 +209,7 @@ private fun OutlinerRow(
                     task.title,
                     fontFamily = LedgerTitleFont,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
+                    fontSize = 14.sp,
                     textDecoration = if (task.isComplete) TextDecoration.LineThrough else null,
                     color = if (task.isComplete) LedgerMuted else LedgerInk,
                     modifier = Modifier.weight(1f).clickable { onEdit(task.id) }

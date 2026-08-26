@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.TaskContext
+import com.kzhovn.todoapp.repository.ContextRepository
 import com.kzhovn.todoapp.repository.TaskRepository
 import com.kzhovn.todoapp.repository.filterDoing
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +17,7 @@ enum class TaskListMode { DOING, ACTIVE, ALL }
 
 class TaskListViewModel(
     private val repository: TaskRepository,
+    private val contextRepository: ContextRepository,
     private val clock: () -> Long = System::currentTimeMillis
 ) : ViewModel() {
 
@@ -23,6 +26,15 @@ class TaskListViewModel(
 
     private val _subtaskCounts = MutableStateFlow<Map<Long, Pair<Int, Int>>>(emptyMap())
     val subtaskCounts: StateFlow<Map<Long, Pair<Int, Int>>> = _subtaskCounts
+
+    private val _allById = MutableStateFlow<Map<Long, Task>>(emptyMap())
+    val allById: StateFlow<Map<Long, Task>> = _allById
+
+    private val _contextsByTaskId = MutableStateFlow<Map<Long, Set<Long>>>(emptyMap())
+    val contextsByTaskId: StateFlow<Map<Long, Set<Long>>> = _contextsByTaskId
+
+    private val _allContexts = MutableStateFlow<Map<Long, TaskContext>>(emptyMap())
+    val allContexts: StateFlow<Map<Long, TaskContext>> = _allContexts
 
     fun load(mode: TaskListMode) {
         viewModelScope.launch {
@@ -46,6 +58,9 @@ class TaskListViewModel(
     private suspend fun refreshSubtaskCounts(): List<Task> {
         val all = repository.getAllTasks()
         _subtaskCounts.value = subtaskCounts(all)
+        _allById.value = all.associateBy { it.id }
+        _contextsByTaskId.value = repository.getAllTaskContexts()
+        _allContexts.value = contextRepository.getAllContexts().associateBy { it.id }
         return all
     }
 

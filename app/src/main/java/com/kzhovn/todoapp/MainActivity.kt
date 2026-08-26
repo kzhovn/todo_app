@@ -127,7 +127,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             LedgerTheme {
-            val viewModel = remember { TaskListViewModel(repository) }
+            val viewModel = remember { TaskListViewModel(repository, contextRepository) }
             val scope = rememberCoroutineScope()
             val snackbarHostState = remember { SnackbarHostState() }
             var selectedMode by remember { mutableStateOf(TaskListMode.DOING) }

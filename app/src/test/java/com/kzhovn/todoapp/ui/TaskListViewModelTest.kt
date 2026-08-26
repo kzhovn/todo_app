@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TodoDatabase
 import com.kzhovn.todoapp.notifications.ReminderScheduler
+import com.kzhovn.todoapp.repository.ContextRepository
 import com.kzhovn.todoapp.repository.TaskRepository
 import java.util.concurrent.Executor
 import kotlinx.coroutines.Dispatchers
@@ -38,7 +39,7 @@ class TaskListViewModelTest {
             .build()
         val alarmManager = context.getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
         repository = TaskRepository(db.taskDao(), ReminderScheduler(context, alarmManager), db.taskContextDao())
-        viewModel = TaskListViewModel(repository, clock = { now })
+        viewModel = TaskListViewModel(repository, ContextRepository(db.taskContextDao()), clock = { now })
     }
 
     @After
