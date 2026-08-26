@@ -1,6 +1,12 @@
 package com.kzhovn.todoapp.ui
 
+import android.content.ClipData
+import android.content.ClipDescription
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.draganddrop.dragAndDropSource
+import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -25,6 +31,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTarget
+import androidx.compose.ui.draganddrop.DragAndDropTransferData
+import androidx.compose.ui.draganddrop.mimeTypes
+import androidx.compose.ui.draganddrop.toAndroidDragEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -33,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.data.OutlinerPreferences
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerCheckBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
@@ -47,7 +59,8 @@ fun OutlinerScreen(
     tasks: List<Task>,
     onCheck: (Long) -> Unit,
     onEdit: (Long) -> Unit,
-    onStar: (Long) -> Unit
+    onStar: (Long) -> Unit,
+    onReparent: (Long, Long) -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember { OutlinerPreferences(context) }
@@ -59,6 +72,7 @@ fun OutlinerScreen(
     }
 
     val tree = remember(tasks) { buildOutlinerTree(tasks, hideCompleted = true) }
+    val allById = remember(tasks) { tasks.associateBy { it.id } }
 
     fun toggle(folderId: Long) {
         val nowCollapsed = folderId !in collapsed
@@ -67,7 +81,7 @@ fun OutlinerScreen(
     }
 
     LazyColumn {
-        renderNodes(tree, depth = 0, collapsed = collapsed, onToggle = ::toggle, onCheck = onCheck, onEdit = onEdit, onStar = onStar)
+        renderNodes(tree, depth = 0, collapsed = collapsed, onToggle = ::toggle, onCheck = onCheck, onEdit = onEdit, onStar = onStar, onReparent = onReparent, allById = allById)
     }
 }
 
@@ -78,18 +92,21 @@ private fun LazyListScope.renderNodes(
     onToggle: (Long) -> Unit,
     onCheck: (Long) -> Unit,
     onEdit: (Long) -> Unit,
-    onStar: (Long) -> Unit
+    onStar: (Long) -> Unit,
+    onReparent: (Long, Long) -> Unit,
+    allById: Map<Long, Task>
 ) {
     nodes.forEach { node ->
         item(key = node.task.id) {
-            OutlinerRow(node, depth, node.task.id in collapsed, onToggle, onCheck, onEdit, onStar)
+            OutlinerRow(node, depth, node.task.id in collapsed, onToggle, onCheck, onEdit, onStar, onReparent, allById)
         }
         if (node.children.isNotEmpty() && node.task.id !in collapsed) {
-            renderNodes(node.children, depth + 1, collapsed, onToggle, onCheck, onEdit, onStar)
+            renderNodes(node.children, depth + 1, collapsed, onToggle, onCheck, onEdit, onStar, onReparent, allById)
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun OutlinerRow(
     node: OutlinerNode,
@@ -98,14 +115,49 @@ private fun OutlinerRow(
     onToggle: (Long) -> Unit,
     onCheck: (Long) -> Unit,
     onEdit: (Long) -> Unit,
-    onStar: (Long) -> Unit
+    onStar: (Long) -> Unit,
+    onReparent: (Long, Long) -> Unit,
+    allById: Map<Long, Task>
 ) {
     val task = node.task
     val hasChildren = node.children.isNotEmpty()
     val indent = (8 + depth * 13).dp
+    var isDropHover by remember { mutableStateOf(false) }
+
+    val dropTarget = remember(task.id, allById) {
+        object : DragAndDropTarget {
+            override fun onEntered(event: DragAndDropEvent) {
+                isDropHover = true
+            }
+
+            override fun onExited(event: DragAndDropEvent) {
+                isDropHover = false
+            }
+
+            override fun onDrop(event: DragAndDropEvent): Boolean {
+                isDropHover = false
+                val draggedId = event.toAndroidDragEvent().clipData
+                    ?.takeIf { it.itemCount > 0 }
+                    ?.getItemAt(0)?.text?.toString()?.toLongOrNull()
+                    ?: return false
+                if (draggedId == task.id || wouldCreateCycle(task.id, draggedId, allById)) return false
+                onReparent(draggedId, task.id)
+                return true
+            }
+        }
+    }
+
     Row(
         modifier = Modifier
             .padding(start = indent, top = 3.dp, bottom = 3.dp, end = 12.dp)
+            .then(if (isDropHover) Modifier.background(LedgerAccentSoft) else Modifier)
+            .dragAndDropSource {
+                DragAndDropTransferData(ClipData.newPlainText("task_id", task.id.toString()))
+            }
+            .dragAndDropTarget(
+                shouldStartDragAndDrop = { it.mimeTypes().contains(ClipDescription.MIMETYPE_TEXT_PLAIN) },
+                target = dropTarget
+            )
             .clickable(enabled = hasChildren) { onToggle(task.id) },
         verticalAlignment = Alignment.CenterVertically
     ) {

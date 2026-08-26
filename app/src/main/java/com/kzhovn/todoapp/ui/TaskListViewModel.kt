@@ -77,6 +77,13 @@ class TaskListViewModel(
         }
     }
 
+    fun reparent(taskId: Long, newParentId: Long?, mode: TaskListMode) {
+        viewModelScope.launch {
+            repository.reparent(taskId, newParentId)
+            load(mode)
+        }
+    }
+
     private fun minuteOfDay(epochMillis: Long): Int {
         val cal = Calendar.getInstance().apply { timeInMillis = epochMillis }
         return cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)

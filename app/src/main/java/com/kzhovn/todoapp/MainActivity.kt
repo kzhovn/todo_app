@@ -201,7 +201,8 @@ class MainActivity : ComponentActivity() {
                             tasks = tasks,
                             onCheck = { viewModel.toggleComplete(it, selectedMode) },
                             onEdit = onEdit,
-                            onStar = { viewModel.toggleStar(it, selectedMode) }
+                            onStar = { viewModel.toggleStar(it, selectedMode) },
+                            onReparent = { taskId, newParentId -> viewModel.reparent(taskId, newParentId, selectedMode) }
                         )
                     } else {
                         TaskListScreen(
