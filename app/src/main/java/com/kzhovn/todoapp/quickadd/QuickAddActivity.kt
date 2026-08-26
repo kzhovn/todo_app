@@ -77,13 +77,18 @@ class QuickAddActivity : ComponentActivity() {
 
             LaunchedEffect(Unit) { folders = repository.getFolders() }
 
-            fun buildTask() = Task(
-                title = title,
-                isStarred = starred,
-                startDate = startDate,
-                dueDate = dueDate,
-                parentId = folder?.id
-            )
+            fun buildTask(): Task {
+                val parsed = QuickAddParser.parse(title)
+                return Task(
+                    title = parsed.title,
+                    isStarred = starred,
+                    // Chip values are an explicit, later user action, so they override whatever
+                    // the shorthand parser found in the title text.
+                    startDate = startDate ?: parsed.startDate,
+                    dueDate = dueDate ?: parsed.dueDate,
+                    parentId = folder?.id
+                )
+            }
 
             val focusManager = LocalFocusManager.current
             val onAdd: () -> Unit = {
