@@ -6,12 +6,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -83,8 +83,12 @@ fun <T> SearchableMultiSelectDropdown(
                     modifier = Modifier.padding(horizontal = 8.dp).width(240.dp)
                 )
             }
-            LazyColumn(modifier = Modifier.height((filtered.size.coerceIn(1, 6) * 40).dp)) {
-                items(filtered, key = { idOf(it) }) { item ->
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 240.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                filtered.forEach { item ->
                     val id = idOf(item)
                     Row(
                         modifier = Modifier
