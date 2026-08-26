@@ -44,6 +44,7 @@ import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.TaskContext
+import com.kzhovn.todoapp.ui.DayOfWeekToggle
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
@@ -255,28 +256,6 @@ private fun WindowRow(
             )
         }
         DayOfWeekToggle(window.daysMask) { onChange(window.copy(daysMask = it)) }
-    }
-}
-
-@Composable
-private fun DayOfWeekToggle(daysMask: Int, onChange: (Int) -> Unit) {
-    val labels = listOf("Su", "Mo", "Tu", "We", "Th", "Fr", "Sa")
-    Row {
-        labels.forEachIndexed { i, label ->
-            val bit = 1 shl i
-            val on = (daysMask and bit) != 0
-            Text(
-                label,
-                fontFamily = LedgerUiFont,
-                fontSize = 11.sp,
-                color = if (on) LedgerAccent else LedgerMuted,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(if (on) LedgerAccentSoft else Color.Transparent)
-                    .clickable { onChange(daysMask xor bit) }
-                    .padding(horizontal = 6.dp, vertical = 4.dp)
-            )
-        }
     }
 }
 

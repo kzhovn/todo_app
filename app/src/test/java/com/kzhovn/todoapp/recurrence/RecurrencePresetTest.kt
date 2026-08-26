@@ -6,63 +6,92 @@ import org.junit.Test
 
 class RecurrencePresetTest {
     @Test
-    fun `NONE maps to null recurrence fields`() {
-        assertEquals(null to null, RecurrenceSelection(RecurrencePreset.NONE).toTaskFields())
+    fun `none maps to null fields`() {
+        val (type, rule) = RecurrenceSelection(RecurrencePreset.NONE).toTaskFields()
+        assertEquals(null, type)
+        assertEquals(null, rule)
     }
 
     @Test
-    fun `DAILY maps to FREQ=DAILY`() {
-        assertEquals(RecurrenceType.RRULE to "FREQ=DAILY", RecurrenceSelection(RecurrencePreset.DAILY).toTaskFields())
+    fun `every 1 day maps to bare FREQ=DAILY`() {
+        val (type, rule) = RecurrenceSelection(RecurrencePreset.CALENDAR, n = 1, unit = RecurrenceUnit.DAY).toTaskFields()
+        assertEquals(RecurrenceType.RRULE, type)
+        assertEquals("FREQ=DAILY", rule)
     }
 
     @Test
-    fun `WEEKLY maps to FREQ=WEEKLY`() {
-        assertEquals(RecurrenceType.RRULE to "FREQ=WEEKLY", RecurrenceSelection(RecurrencePreset.WEEKLY).toTaskFields())
+    fun `every 3 days includes INTERVAL`() {
+        val (_, rule) = RecurrenceSelection(RecurrencePreset.CALENDAR, n = 3, unit = RecurrenceUnit.DAY).toTaskFields()
+        assertEquals("FREQ=DAILY;INTERVAL=3", rule)
     }
 
     @Test
-    fun `MONTHLY maps to FREQ=MONTHLY`() {
-        assertEquals(RecurrenceType.RRULE to "FREQ=MONTHLY", RecurrenceSelection(RecurrencePreset.MONTHLY).toTaskFields())
+    fun `every 1 week maps to bare FREQ=WEEKLY`() {
+        val (_, rule) = RecurrenceSelection(RecurrencePreset.CALENDAR, n = 1, unit = RecurrenceUnit.WEEK).toTaskFields()
+        assertEquals("FREQ=WEEKLY", rule)
     }
 
     @Test
-    fun `EVERY_N_DAYS maps to an interval RRULE`() {
-        assertEquals(
-            RecurrenceType.RRULE to "FREQ=DAILY;INTERVAL=4",
-            RecurrenceSelection(RecurrencePreset.EVERY_N_DAYS, n = 4).toTaskFields()
-        )
+    fun `every 1 month maps to bare FREQ=MONTHLY`() {
+        val (_, rule) = RecurrenceSelection(RecurrencePreset.CALENDAR, n = 1, unit = RecurrenceUnit.MONTH).toTaskFields()
+        assertEquals("FREQ=MONTHLY", rule)
     }
 
     @Test
-    fun `AFTER_COMPLETION_N_DAYS maps to a bare day count`() {
-        assertEquals(
-            RecurrenceType.AFTER_COMPLETION to "3",
-            RecurrenceSelection(RecurrencePreset.AFTER_COMPLETION_N_DAYS, n = 3).toTaskFields()
-        )
+    fun `weekly with weekdays adds BYDAY in Su-Mo-Tu order`() {
+        // Monday (bit 1) + Wednesday (bit 3) + Friday (bit 5)
+        val mask = (1 shl 1) or (1 shl 3) or (1 shl 5)
+        val (_, rule) = RecurrenceSelection(RecurrencePreset.CALENDAR, n = 1, unit = RecurrenceUnit.WEEK, weekdaysMask = mask).toTaskFields()
+        assertEquals("FREQ=WEEKLY;BYDAY=MO,WE,FR", rule)
     }
 
     @Test
-    fun `a task with no recurrence round-trips to NONE`() {
+    fun `weekly with interval and weekdays combines both`() {
+        val mask = (1 shl 2) // Tuesday
+        val (_, rule) = RecurrenceSelection(RecurrencePreset.CALENDAR, n = 2, unit = RecurrenceUnit.WEEK, weekdaysMask = mask).toTaskFields()
+        assertEquals("FREQ=WEEKLY;INTERVAL=2;BYDAY=TU", rule)
+    }
+
+    @Test
+    fun `after completion maps to AFTER_COMPLETION with n as the rule string`() {
+        val (type, rule) = RecurrenceSelection(RecurrencePreset.AFTER_COMPLETION_N_DAYS, n = 5).toTaskFields()
+        assertEquals(RecurrenceType.AFTER_COMPLETION, type)
+        assertEquals("5", rule)
+    }
+
+    @Test
+    fun `parsing null fields returns NONE`() {
         assertEquals(RecurrenceSelection(RecurrencePreset.NONE), recurrenceSelectionFromTask(null, null))
     }
 
     @Test
-    fun `every-N-days round-trips through toTaskFields and back`() {
-        val (type, rule) = RecurrenceSelection(RecurrencePreset.EVERY_N_DAYS, n = 6).toTaskFields()
-        assertEquals(RecurrenceSelection(RecurrencePreset.EVERY_N_DAYS, n = 6), recurrenceSelectionFromTask(type, rule))
+    fun `parsing AFTER_COMPLETION round-trips n`() {
+        val selection = recurrenceSelectionFromTask(RecurrenceType.AFTER_COMPLETION, "7")
+        assertEquals(RecurrenceSelection(RecurrencePreset.AFTER_COMPLETION_N_DAYS, n = 7), selection)
     }
 
     @Test
-    fun `after-completion round-trips through toTaskFields and back`() {
-        val (type, rule) = RecurrenceSelection(RecurrencePreset.AFTER_COMPLETION_N_DAYS, n = 10).toTaskFields()
-        assertEquals(RecurrenceSelection(RecurrencePreset.AFTER_COMPLETION_N_DAYS, n = 10), recurrenceSelectionFromTask(type, rule))
+    fun `parsing bare FREQ=DAILY round-trips to every 1 day`() {
+        val selection = recurrenceSelectionFromTask(RecurrenceType.RRULE, "FREQ=DAILY")
+        assertEquals(RecurrenceSelection(RecurrencePreset.CALENDAR, n = 1, unit = RecurrenceUnit.DAY), selection)
     }
 
     @Test
-    fun `an unrecognized custom RRULE falls back to NONE rather than crashing`() {
-        assertEquals(
-            RecurrenceSelection(RecurrencePreset.NONE),
-            recurrenceSelectionFromTask(RecurrenceType.RRULE, "FREQ=YEARLY;BYMONTH=12")
-        )
+    fun `parsing FREQ=DAILY with INTERVAL round-trips n`() {
+        val selection = recurrenceSelectionFromTask(RecurrenceType.RRULE, "FREQ=DAILY;INTERVAL=4")
+        assertEquals(RecurrenceSelection(RecurrencePreset.CALENDAR, n = 4, unit = RecurrenceUnit.DAY), selection)
+    }
+
+    @Test
+    fun `parsing FREQ=WEEKLY with BYDAY round-trips the weekday mask`() {
+        val selection = recurrenceSelectionFromTask(RecurrenceType.RRULE, "FREQ=WEEKLY;BYDAY=MO,WE,FR")
+        val expectedMask = (1 shl 1) or (1 shl 3) or (1 shl 5)
+        assertEquals(RecurrenceSelection(RecurrencePreset.CALENDAR, n = 1, unit = RecurrenceUnit.WEEK, weekdaysMask = expectedMask), selection)
+    }
+
+    @Test
+    fun `parsing an unrecognized FREQ falls back to NONE`() {
+        val selection = recurrenceSelectionFromTask(RecurrenceType.RRULE, "FREQ=YEARLY")
+        assertEquals(RecurrenceSelection(RecurrencePreset.NONE), selection)
     }
 }

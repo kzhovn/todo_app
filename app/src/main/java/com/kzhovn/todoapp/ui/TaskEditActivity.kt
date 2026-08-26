@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,6 +31,8 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,6 +67,7 @@ import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
 import com.kzhovn.todoapp.recurrence.RecurrenceSelection
+import com.kzhovn.todoapp.recurrence.RecurrenceUnit
 import com.kzhovn.todoapp.recurrence.recurrenceSelectionFromTask
 import com.kzhovn.todoapp.recurrence.toTaskFields
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
@@ -226,9 +230,8 @@ class TaskEditActivity : ComponentActivity() {
                     Row(modifier = Modifier.padding(top = 4.dp)) {
                         listOf(
                             RecurrencePreset.NONE to "None",
-                            RecurrencePreset.DAILY to "Daily",
-                            RecurrencePreset.WEEKLY to "Weekly",
-                            RecurrencePreset.MONTHLY to "Monthly"
+                            RecurrencePreset.CALENDAR to "Every",
+                            RecurrencePreset.AFTER_COMPLETION_N_DAYS to "After completion"
                         ).forEach { (preset, label) ->
                             Text(
                                 label,
@@ -236,44 +239,60 @@ class TaskEditActivity : ComponentActivity() {
                                 fontSize = 12.sp,
                                 color = if (recurrence.preset == preset) LedgerAccent else LedgerMuted,
                                 modifier = Modifier
-                                    .clickable { recurrence = RecurrenceSelection(preset) }
+                                    .clickable { recurrence = recurrence.copy(preset = preset) }
                                     .padding(end = 12.dp, top = 4.dp, bottom = 4.dp)
                             )
                         }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                        Text(
-                            "Every",
-                            fontFamily = LedgerUiFont,
-                            fontSize = 12.sp,
-                            color = if (recurrence.preset == RecurrencePreset.EVERY_N_DAYS) LedgerAccent else LedgerMuted,
-                            modifier = Modifier
-                                .clickable { recurrence = RecurrenceSelection(RecurrencePreset.EVERY_N_DAYS, recurrence.n) }
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        CompactNumberField(
-                            value = recurrence.n,
-                            enabled = recurrence.preset == RecurrencePreset.EVERY_N_DAYS
-                        ) { n -> recurrence = RecurrenceSelection(RecurrencePreset.EVERY_N_DAYS, n) }
-                        Spacer(Modifier.width(6.dp))
-                        Text("days", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
+                    if (recurrence.preset == RecurrencePreset.CALENDAR) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                            Text("Every", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
+                            Spacer(Modifier.width(6.dp))
+                            CompactNumberField(
+                                value = recurrence.n,
+                                enabled = true
+                            ) { n -> recurrence = recurrence.copy(n = n) }
+                            Spacer(Modifier.width(6.dp))
+                            var showUnitMenu by remember { mutableStateOf(false) }
+                            Box {
+                                Text(
+                                    when (recurrence.unit) {
+                                        RecurrenceUnit.DAY -> "day(s)"
+                                        RecurrenceUnit.WEEK -> "week(s)"
+                                        RecurrenceUnit.MONTH -> "month(s)"
+                                    },
+                                    fontFamily = LedgerUiFont,
+                                    fontSize = 12.sp,
+                                    color = LedgerAccent,
+                                    modifier = Modifier.clickable { showUnitMenu = true }
+                                )
+                                DropdownMenu(expanded = showUnitMenu, onDismissRequest = { showUnitMenu = false }) {
+                                    listOf(RecurrenceUnit.DAY to "Day(s)", RecurrenceUnit.WEEK to "Week(s)", RecurrenceUnit.MONTH to "Month(s)")
+                                        .forEach { (unit, label) ->
+                                            DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                showUnitMenu = false
+                                                recurrence = recurrence.copy(unit = unit)
+                                            })
+                                        }
+                                }
+                            }
+                        }
+                        if (recurrence.unit == RecurrenceUnit.WEEK) {
+                            Spacer(Modifier.height(4.dp))
+                            DayOfWeekToggle(recurrence.weekdaysMask) { mask -> recurrence = recurrence.copy(weekdaysMask = mask) }
+                        }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                        Text(
-                            "Repeat",
-                            fontFamily = LedgerUiFont,
-                            fontSize = 12.sp,
-                            color = if (recurrence.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS) LedgerAccent else LedgerMuted,
-                            modifier = Modifier
-                                .clickable { recurrence = RecurrenceSelection(RecurrencePreset.AFTER_COMPLETION_N_DAYS, recurrence.n) }
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        CompactNumberField(
-                            value = recurrence.n,
-                            enabled = recurrence.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS
-                        ) { n -> recurrence = RecurrenceSelection(RecurrencePreset.AFTER_COMPLETION_N_DAYS, n) }
-                        Spacer(Modifier.width(6.dp))
-                        Text("days after completion", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
+                    if (recurrence.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                            Text("Repeat", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
+                            Spacer(Modifier.width(6.dp))
+                            CompactNumberField(
+                                value = recurrence.n,
+                                enabled = true
+                            ) { n -> recurrence = recurrence.copy(n = n) }
+                            Spacer(Modifier.width(6.dp))
+                            Text("days after completion", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
+                        }
                     }
                     Spacer(Modifier.height(12.dp))
                     Text("Depends on", fontFamily = LedgerUiFont, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
@@ -469,12 +488,12 @@ private fun CompactNumberField(value: Int, enabled: Boolean, onValueChange: (Int
         },
         enabled = enabled,
         singleLine = true,
-        textStyle = TextStyle(fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerInk),
+        textStyle = TextStyle(fontFamily = LedgerUiFont, fontSize = 14.sp, color = LedgerInk),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = Modifier
-            .width(28.dp)
+            .width(44.dp)
             .border(1.dp, LedgerBorder, RoundedCornerShape(4.dp))
-            .padding(horizontal = 4.dp, vertical = 3.dp)
+            .padding(horizontal = 8.dp, vertical = 8.dp)
     )
 }
 
