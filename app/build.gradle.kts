@@ -17,6 +17,15 @@ android {
         versionName = "0.1"
     }
 
+    buildTypes {
+        release {
+            // Reuses the auto-generated debug keystore purely so `assembleRelease` produces an
+            // installable, non-debuggable APK for manual testing — not a real distribution signing
+            // setup. Replace with a dedicated release keystore before ever distributing this app.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
     buildFeatures {
         compose = true
     }
