@@ -42,6 +42,16 @@ class TaskInheritanceTest {
         assertNull(effective.effectiveDueDate)
     }
 
+    // Termination is the assertion here: without walkUp's `seen` guard this input loops forever.
+    @Test
+    fun `a cyclic parent chain with no values anywhere terminates instead of hanging`() {
+        val a = Task(id = 1, title = "A", parentId = 2, startDate = null)
+        val b = Task(id = 2, title = "B", parentId = 1, startDate = null)
+        val allById = mapOf(1L to a, 2L to b)
+        val effective = resolveEffective(a, allById, emptyMap())
+        assertNull(effective.effectiveStartDate)
+    }
+
     @Test
     fun `a task with its own context assignments does not inherit the parent's`() {
         val parent = Task(id = 1, title = "Parent")
