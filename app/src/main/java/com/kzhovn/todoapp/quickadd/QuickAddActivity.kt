@@ -104,7 +104,6 @@ class QuickAddActivity : ComponentActivity() {
                     TextField(
                         value = title,
                         onValueChange = { title = it },
-                        placeholder = { Text("Task name") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = {

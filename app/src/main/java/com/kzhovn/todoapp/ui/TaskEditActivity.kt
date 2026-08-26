@@ -171,7 +171,6 @@ class TaskEditActivity : ComponentActivity() {
                     OutlinedTextField(
                         value = task.title,
                         onValueChange = { task = task.copy(title = it) },
-                        placeholder = { Text("Task name") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = {
