@@ -3,6 +3,7 @@ package com.kzhovn.todoapp.notifications
 import android.app.AlarmManager
 import androidx.test.core.app.ApplicationProvider
 import com.kzhovn.todoapp.data.Task
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -66,5 +67,21 @@ class ReminderSchedulerTest {
         scheduler.schedule(task)
         val shadow: ShadowAlarmManager = shadowOf(alarmManager)
         assertNull(shadow.nextScheduledAlarm)
+    }
+
+    @Test
+    fun `two task ids that collide on their lower 32 bits get distinct scheduled alarms`() {
+        val idA = 1L
+        val idB = 1L + (1L shl 32) // same lower 32 bits as idA, different Long value
+        val taskA = Task(id = idA, title = "Task A", dueDate = futureDue, reminderOffsetMinutes = 0)
+        val taskB = Task(id = idB, title = "Task B", dueDate = futureDue + 60_000L, reminderOffsetMinutes = 0)
+
+        scheduler.schedule(taskA)
+        scheduler.schedule(taskB)
+
+        val shadow: ShadowAlarmManager = shadowOf(alarmManager)
+        // Both alarms must still be present — if the two tasks shared identity, the second
+        // schedule() call would have silently replaced the first instead of adding to it.
+        assertEquals(2, shadow.scheduledAlarms.size)
     }
 }
