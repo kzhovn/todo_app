@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -116,10 +117,12 @@ private fun TaskRow(
                 fontSize = 13.sp,
                 textDecoration = if (task.isComplete) TextDecoration.LineThrough else null,
                 color = if (task.isComplete) LedgerMuted else LedgerInk,
-                modifier = Modifier.combinedClickable(
-                    onClick = { onEdit(task.id) },
-                    onLongClick = { showSnoozeMenu = true }
-                )
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onClick = { onEdit(task.id) },
+                        onLongClick = { showSnoozeMenu = true }
+                    )
             )
             DropdownMenu(expanded = showSnoozeMenu, onDismissRequest = { showSnoozeMenu = false }) {
                 DropdownMenuItem(text = { Text("Snooze 1 hour") }, onClick = { showSnoozeMenu = false; onSnooze(task.id, HOUR_MILLIS) })
