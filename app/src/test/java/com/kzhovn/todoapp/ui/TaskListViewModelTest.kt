@@ -37,7 +37,7 @@ class TaskListViewModelTest {
             .setTransactionExecutor(Executor { it.run() })
             .build()
         val alarmManager = context.getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
-        repository = TaskRepository(db.taskDao(), ReminderScheduler(context, alarmManager))
+        repository = TaskRepository(db.taskDao(), ReminderScheduler(context, alarmManager), db.taskContextDao())
         viewModel = TaskListViewModel(repository, clock = { now })
     }
 

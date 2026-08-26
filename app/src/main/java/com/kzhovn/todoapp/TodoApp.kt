@@ -16,7 +16,7 @@ class TodoApp : Application() {
     }
     val repository: TaskRepository by lazy {
         val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
-        TaskRepository(database.taskDao(), ReminderScheduler(this, alarmManager))
+        TaskRepository(database.taskDao(), ReminderScheduler(this, alarmManager), database.taskContextDao())
     }
     val contextRepository: ContextRepository by lazy { ContextRepository(database.taskContextDao()) }
 }

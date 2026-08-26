@@ -33,7 +33,7 @@ class TaskRepositoryRecurrenceTest {
             .getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
         repository = TaskRepository(db.taskDao(), com.kzhovn.todoapp.notifications.ReminderScheduler(
             ApplicationProvider.getApplicationContext(), alarmManager
-        ))
+        ), db.taskContextDao())
     }
 
     @After

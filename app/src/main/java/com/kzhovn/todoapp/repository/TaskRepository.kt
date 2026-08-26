@@ -1,16 +1,20 @@
 package com.kzhovn.todoapp.repository
 
+import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.TaskContextDao
 import com.kzhovn.todoapp.data.TaskDao
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.notifications.ReminderScheduler
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 
 class TaskRepository(
     private val taskDao: TaskDao,
-    private val reminderScheduler: ReminderScheduler
+    private val reminderScheduler: ReminderScheduler,
+    private val taskContextDao: TaskContextDao
 ) {
 
     suspend fun createTask(task: Task): Long {
@@ -82,8 +86,58 @@ class TaskRepository(
         }
     }
 
-    suspend fun getActiveTasks(now: Long, currentMinuteOfDay: Int, todayMask: Int): List<Task> =
-        taskDao.getActiveTasks(now, currentMinuteOfDay, todayMask)
+    // Computed in Kotlin rather than SQL: effective start date and contexts are inherited from
+    // ancestors (see resolveEffective), which a single query can't express without several
+    // recursive CTEs. At this app's scale, fetching the whole graph once is cheap.
+    suspend fun getActiveTasks(now: Long, currentMinuteOfDay: Int, todayMask: Int): List<Task> {
+        val all = taskDao.getAllOnce()
+        val allById = all.associateBy { it.id }
+        val contextsByTaskId = taskContextDao.getAllCrossRefs()
+            .groupBy({ it.taskId }, { it.contextId })
+            .mapValues { it.value.toSet() }
+        val allContexts = taskContextDao.getAll().associateBy { it.id }
+        val timeWindows = taskContextDao.getAllTimeWindows().groupBy { it.contextId }
+
+        val blockedByDependency = taskDao.getAllDependencies()
+            .filter { edge -> allById[edge.dependsOnTaskId]?.isComplete == false }
+            .map { it.taskId }
+            .toSet()
+
+        val childrenByParentId = all.groupBy { it.parentId }
+
+        // Under a sequential parent, only the lowest-id incomplete child is workable.
+        fun isSequentiallyBlocked(task: Task): Boolean {
+            val parent = task.parentId?.let { allById[it] } ?: return false
+            if (!parent.sequential) return false
+            val firstIncomplete = childrenByParentId[parent.id].orEmpty()
+                .filter { !it.isComplete }
+                .minByOrNull { it.id } ?: return false
+            return firstIncomplete.id != task.id
+        }
+
+        fun isContextSatisfied(contextId: Long): Boolean {
+            val ctx = allContexts[contextId] ?: return true
+            return when (ctx.type) {
+                ContextType.PLACE -> ctx.isCurrentlySatisfied
+                ContextType.TIME -> timeWindows[contextId].orEmpty().any { w ->
+                    (w.daysMask and todayMask) != 0 &&
+                        if (w.windowStartMinute <= w.windowEndMinute) {
+                            currentMinuteOfDay in w.windowStartMinute..w.windowEndMinute
+                        } else { // window spans midnight
+                            currentMinuteOfDay >= w.windowStartMinute || currentMinuteOfDay <= w.windowEndMinute
+                        }
+                }
+            }
+        }
+
+        return all.filter { task ->
+            if (task.type == TaskType.FOLDER || task.isComplete) return@filter false
+            if (task.id in blockedByDependency || isSequentiallyBlocked(task)) return@filter false
+            val effective = resolveEffective(task, allById, contextsByTaskId)
+            (effective.effectiveStartDate == null || effective.effectiveStartDate <= now) &&
+                effective.effectiveContextIds.all(::isContextSatisfied)
+        }
+    }
 
     suspend fun getAllTasks(): List<Task> = taskDao.getAllOnce()
 

@@ -58,4 +58,10 @@ interface TaskContextDao {
 
     @Query("DELETE FROM contexts WHERE id = :id")
     suspend fun deleteContext(id: Long)
+
+    @Query("SELECT * FROM task_contexts")
+    suspend fun getAllCrossRefs(): List<TaskContextCrossRef>
+
+    @Query("SELECT * FROM context_time_windows")
+    suspend fun getAllTimeWindows(): List<ContextTimeWindow>
 }

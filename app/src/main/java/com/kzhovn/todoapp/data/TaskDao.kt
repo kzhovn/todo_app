@@ -77,45 +77,6 @@ interface TaskDao {
 
     @Query(
         """
-        SELECT * FROM tasks
-        WHERE type != 'FOLDER'
-          AND isComplete = 0
-          AND (startDate IS NULL OR startDate <= :now)
-          AND id NOT IN (
-            SELECT td.taskId FROM task_dependencies td
-            JOIN tasks dep ON dep.id = td.dependsOnTaskId
-            WHERE dep.isComplete = 0
-          )
-          AND (
-            parentId IS NULL
-            OR NOT EXISTS (SELECT 1 FROM tasks p WHERE p.id = tasks.parentId AND p.sequential = 1)
-            OR id = (
-              SELECT c.id FROM tasks c
-              WHERE c.parentId = tasks.parentId AND c.isComplete = 0
-              ORDER BY c.id ASC LIMIT 1
-            )
-          )
-          AND id NOT IN (
-            SELECT tc.taskId FROM task_contexts tc
-            JOIN contexts ctx ON ctx.id = tc.contextId
-            WHERE (ctx.type = 'PLACE' AND ctx.isCurrentlySatisfied = 0)
-               OR (ctx.type = 'TIME' AND NOT EXISTS (
-                     SELECT 1 FROM context_time_windows w
-                     WHERE w.contextId = ctx.id
-                       AND (w.daysMask & :todayMask) != 0
-                       AND (
-                         (w.windowStartMinute <= w.windowEndMinute AND :currentMinuteOfDay BETWEEN w.windowStartMinute AND w.windowEndMinute)
-                         OR
-                         (w.windowStartMinute > w.windowEndMinute AND (:currentMinuteOfDay >= w.windowStartMinute OR :currentMinuteOfDay <= w.windowEndMinute))
-                       )
-                 ))
-          )
-        """
-    )
-    suspend fun getActiveTasks(now: Long, currentMinuteOfDay: Int, todayMask: Int): List<Task>
-
-    @Query(
-        """
         WITH RECURSIVE descendants(id) AS (
             SELECT id FROM tasks WHERE parentId = :folderId
             UNION ALL
