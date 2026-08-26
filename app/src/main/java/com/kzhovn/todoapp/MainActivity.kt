@@ -218,6 +218,8 @@ class MainActivity : ComponentActivity() {
                         startActivity(Intent(this@MainActivity, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, taskId))
                     }
                     var completeDecision by remember { mutableStateOf<Pair<Long, Int>?>(null) }
+                    var addSubtaskParentId by remember { mutableStateOf<Long?>(null) }
+                    var newSubtaskTitle by remember { mutableStateOf("") }
                     val onCheck: (Long) -> Unit = { id ->
                         viewModel.requestComplete(id, selectedMode) { taskId, activeCount ->
                             completeDecision = taskId to activeCount
@@ -230,7 +232,8 @@ class MainActivity : ComponentActivity() {
                             onCheck = onCheck,
                             onEdit = onEdit,
                             onStar = { viewModel.toggleStar(it, selectedMode) },
-                            onReparent = { taskId, newParentId -> viewModel.reparent(taskId, newParentId, selectedMode) }
+                            onReparent = { taskId, newParentId -> viewModel.reparent(taskId, newParentId, selectedMode) },
+                            onAddSubtask = { parentId -> addSubtaskParentId = parentId }
                         )
                     } else {
                         TaskListScreen(
@@ -262,6 +265,33 @@ class MainActivity : ComponentActivity() {
                                     Button(onClick = { completeDecision = null }) { Text("Cancel") }
                                 }
                             }
+                        )
+                    }
+                    addSubtaskParentId?.let { parentId ->
+                        AlertDialog(
+                            onDismissRequest = { addSubtaskParentId = null; newSubtaskTitle = "" },
+                            title = { Text("Add subtask") },
+                            text = {
+                                OutlinedTextField(
+                                    value = newSubtaskTitle,
+                                    onValueChange = { newSubtaskTitle = it },
+                                    placeholder = { Text("Subtask name") }
+                                )
+                            },
+                            confirmButton = {
+                                Button(
+                                    enabled = newSubtaskTitle.isNotBlank(),
+                                    onClick = {
+                                        scope.launch {
+                                            repository.createTask(Task(title = newSubtaskTitle, parentId = parentId))
+                                            newSubtaskTitle = ""
+                                            addSubtaskParentId = null
+                                            viewModel.load(selectedMode)
+                                        }
+                                    }
+                                ) { Text("Add") }
+                            },
+                            dismissButton = { Button(onClick = { addSubtaskParentId = null; newSubtaskTitle = "" }) { Text("Cancel") } }
                         )
                     }
                 }
