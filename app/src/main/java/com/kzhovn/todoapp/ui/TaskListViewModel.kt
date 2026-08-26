@@ -2,6 +2,7 @@ package com.kzhovn.todoapp.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.repository.TaskRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,10 +36,10 @@ class TaskListViewModel(
         }
     }
 
-    fun search(query: String) {
+    fun search(query: String, filters: SearchFilters = SearchFilters()) {
         viewModelScope.launch {
             refreshSubtaskCounts()
-            _tasks.value = repository.search(query)
+            _tasks.value = repository.search(query, filters)
         }
     }
 

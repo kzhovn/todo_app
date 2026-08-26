@@ -3,6 +3,7 @@ package com.kzhovn.todoapp.repository
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.kzhovn.todoapp.data.ContextTimeWindow
+import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.TodoDatabase
@@ -187,5 +188,47 @@ class TaskRepositoryTest {
         repository.setDependencies(taskId, setOf(depA))
 
         assertEquals(setOf(depA), repository.getDependencyIds(taskId))
+    }
+
+    @Test
+    fun `search excludes completed tasks by default`() = runBlocking {
+        val id = repository.createTask(Task(title = "Buy milk"))
+        repository.markComplete(id, now)
+        repository.createTask(Task(title = "Buy eggs"))
+
+        val results = repository.search("buy")
+
+        assertEquals(listOf("Buy eggs"), results.map { it.title })
+    }
+
+    @Test
+    fun `search includes completed tasks when requested`() = runBlocking {
+        val id = repository.createTask(Task(title = "Buy milk"))
+        repository.markComplete(id, now)
+
+        val results = repository.search("buy", SearchFilters(includeCompleted = true))
+
+        assertEquals(listOf("Buy milk"), results.map { it.title })
+    }
+
+    @Test
+    fun `search filters by folder`() = runBlocking {
+        val folderId = repository.createTask(Task(type = TaskType.FOLDER, title = "Work"))
+        repository.createTask(Task(title = "Ship report", parentId = folderId))
+        repository.createTask(Task(title = "Ship kayak"))
+
+        val results = repository.search("ship", SearchFilters(folderId = folderId))
+
+        assertEquals(listOf("Ship report"), results.map { it.title })
+    }
+
+    @Test
+    fun `search filters by starred`() = runBlocking {
+        repository.createTask(Task(title = "Starred task", isStarred = true))
+        repository.createTask(Task(title = "Plain task"))
+
+        val results = repository.search("task", SearchFilters(starredOnly = true))
+
+        assertEquals(listOf("Starred task"), results.map { it.title })
     }
 }

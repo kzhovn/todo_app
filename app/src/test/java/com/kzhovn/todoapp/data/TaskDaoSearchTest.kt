@@ -34,7 +34,7 @@ class TaskDaoSearchTest {
         dao.insert(Task(title = "Buy Milk"))
         dao.insert(Task(title = "Walk the dog"))
 
-        val results = dao.search("milk")
+        val results = dao.searchFiltered("milk", includeCompleted = false, folderId = null, starredOnly = false, dueAfter = null, dueBefore = null, contextId = null)
 
         assertEquals(listOf("Buy Milk"), results.map { it.title })
     }
@@ -44,7 +44,7 @@ class TaskDaoSearchTest {
         dao.insert(Task(type = TaskType.FOLDER, title = "Milk Projects"))
         dao.insert(Task(title = "Buy Milk"))
 
-        val results = dao.search("milk")
+        val results = dao.searchFiltered("milk", includeCompleted = false, folderId = null, starredOnly = false, dueAfter = null, dueBefore = null, contextId = null)
 
         assertEquals(listOf("Buy Milk"), results.map { it.title })
     }
@@ -52,6 +52,6 @@ class TaskDaoSearchTest {
     @Test
     fun `search with no matches returns empty list`() = runBlocking {
         dao.insert(Task(title = "Buy Milk"))
-        assertTrue(dao.search("xylophone").isEmpty())
+        assertTrue(dao.searchFiltered("xylophone", includeCompleted = false, folderId = null, starredOnly = false, dueAfter = null, dueBefore = null, contextId = null).isEmpty())
     }
 }

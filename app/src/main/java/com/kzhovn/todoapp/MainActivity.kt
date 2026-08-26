@@ -21,10 +21,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AlternateEmail
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -48,7 +50,10 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.context.WifiContextMonitor
 import com.kzhovn.todoapp.contexts.ContextsActivity
+import com.kzhovn.todoapp.data.SearchFilters
+import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.quickadd.QuickAddActivity
+import com.kzhovn.todoapp.ui.FilterPanel
 import com.kzhovn.todoapp.ui.OutlinerScreen
 import com.kzhovn.todoapp.ui.TaskEditActivity
 import com.kzhovn.todoapp.ui.TaskListMode
@@ -57,6 +62,7 @@ import com.kzhovn.todoapp.ui.TaskListViewModel
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
+import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
 
 class MainActivity : ComponentActivity() {
@@ -78,6 +84,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val app = application as TodoApp
         val repository = app.repository
+        val contextRepository = app.contextRepository
 
         val connectivityManager = getSystemService(ConnectivityManager::class.java)
         val wifiManager = getSystemService(WifiManager::class.java)
@@ -106,14 +113,22 @@ class MainActivity : ComponentActivity() {
             val snackbarHostState = remember { SnackbarHostState() }
             var selectedMode by remember { mutableStateOf(TaskListMode.DOING) }
             var query by remember { mutableStateOf("") }
+            var showFilters by remember { mutableStateOf(false) }
+            var filters by remember { mutableStateOf(SearchFilters()) }
+            var folders by remember { mutableStateOf<List<Task>>(emptyList()) }
+            var contexts by remember { mutableStateOf<List<com.kzhovn.todoapp.data.TaskContext>>(emptyList()) }
             // Reloads on tab change AND on every resume, so returning from QuickAddActivity
             // (FAB) or TaskEditActivity (row tap) picks up whatever was just created or edited.
             LifecycleResumeEffect(selectedMode) {
                 viewModel.load(selectedMode)
                 onPauseOrDispose { }
             }
-            LaunchedEffect(query) {
-                if (query.isBlank()) viewModel.load(selectedMode) else viewModel.search(query)
+            LaunchedEffect(Unit) {
+                folders = repository.getFolders()
+                contexts = contextRepository.getAllContexts()
+            }
+            LaunchedEffect(query, filters) {
+                if (query.isBlank()) viewModel.load(selectedMode) else viewModel.search(query, filters)
             }
 
             Scaffold(
@@ -157,6 +172,16 @@ class MainActivity : ComponentActivity() {
                             label = { Text("Search") },
                             modifier = Modifier.weight(1f)
                         )
+                        IconButton(onClick = { showFilters = !showFilters }) {
+                            Icon(
+                                Icons.Filled.FilterList,
+                                contentDescription = "Filters",
+                                tint = if (filters != SearchFilters()) LedgerAccent else LedgerMuted
+                            )
+                        }
+                    }
+                    if (showFilters) {
+                        FilterPanel(filters = filters, folders = folders, contexts = contexts, onFiltersChange = { filters = it })
                     }
                     TabRow(selectedTabIndex = TaskListMode.entries.indexOf(selectedMode)) {
                         TaskListMode.entries.forEach { mode ->

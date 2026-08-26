@@ -111,8 +111,28 @@ interface TaskDao {
     )
     suspend fun getLeafTasksUnder(folderId: Long): List<Task>
 
-    @Query("SELECT * FROM tasks WHERE type != 'FOLDER' AND title LIKE '%' || :query || '%' COLLATE NOCASE")
-    suspend fun search(query: String): List<Task>
+    @Query(
+        """
+        SELECT * FROM tasks
+        WHERE type != 'FOLDER'
+          AND title LIKE '%' || :query || '%' COLLATE NOCASE
+          AND (:includeCompleted OR isComplete = 0)
+          AND (:folderId IS NULL OR parentId = :folderId)
+          AND (:starredOnly = 0 OR isStarred = 1)
+          AND (:dueAfter IS NULL OR dueDate >= :dueAfter)
+          AND (:dueBefore IS NULL OR dueDate <= :dueBefore)
+          AND (:contextId IS NULL OR id IN (SELECT taskId FROM task_contexts WHERE contextId = :contextId))
+        """
+    )
+    suspend fun searchFiltered(
+        query: String,
+        includeCompleted: Boolean,
+        folderId: Long?,
+        starredOnly: Boolean,
+        dueAfter: Long?,
+        dueBefore: Long?,
+        contextId: Long?
+    ): List<Task>
 
     @Query("SELECT * FROM task_dependencies")
     suspend fun getAllDependencies(): List<TaskDependency>
