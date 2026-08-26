@@ -17,20 +17,29 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AlternateEmail
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DrawerState
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -39,6 +48,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -121,6 +131,8 @@ class MainActivity : ComponentActivity() {
             val scope = rememberCoroutineScope()
             val snackbarHostState = remember { SnackbarHostState() }
             var selectedMode by remember { mutableStateOf(TaskListMode.DOING) }
+            val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+            var searchMode by remember { mutableStateOf(false) }
             var query by remember { mutableStateOf("") }
             var showFilters by remember { mutableStateOf(false) }
             var filters by remember { mutableStateOf(SearchFilters()) }
@@ -153,6 +165,33 @@ class MainActivity : ComponentActivity() {
                 TodoWidget().updateAll(applicationContext)
             }
 
+            ModalNavigationDrawer(
+                drawerState = drawerState,
+                drawerContent = {
+                    ModalDrawerSheet {
+                        NavigationDrawerItem(
+                            label = { Text("Search") },
+                            icon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                            selected = searchMode,
+                            onClick = {
+                                searchMode = true
+                                scope.launch { drawerState.close() }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                        NavigationDrawerItem(
+                            label = { Text("Contexts") },
+                            icon = { Icon(Icons.Filled.AlternateEmail, contentDescription = null) },
+                            selected = false,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                startActivity(Intent(this@MainActivity, ContextsActivity::class.java))
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            ) {
             Scaffold(
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 floatingActionButton = {
@@ -188,18 +227,32 @@ class MainActivity : ComponentActivity() {
             ) {
                 Column(modifier = Modifier.background(LedgerBackground)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = query,
-                            onValueChange = { query = it },
-                            label = { Text("Search") },
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(onClick = { showFilters = !showFilters }) {
-                            Icon(
-                                Icons.Filled.FilterList,
-                                contentDescription = "Filters",
-                                tint = if (filters != SearchFilters()) LedgerAccent else LedgerMuted
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Filled.Menu, contentDescription = "Menu")
+                        }
+                        if (searchMode) {
+                            OutlinedTextField(
+                                value = query,
+                                onValueChange = { query = it },
+                                label = { Text("Search") },
+                                modifier = Modifier.weight(1f)
                             )
+                            IconButton(onClick = { showFilters = !showFilters }) {
+                                Icon(
+                                    Icons.Filled.FilterList,
+                                    contentDescription = "Filters",
+                                    tint = if (filters != SearchFilters()) LedgerAccent else LedgerMuted
+                                )
+                            }
+                            IconButton(onClick = {
+                                searchMode = false
+                                query = ""
+                                showFilters = false
+                            }) {
+                                Icon(Icons.Filled.Close, contentDescription = "Close search")
+                            }
+                        } else {
+                            Spacer(Modifier.weight(1f))
                         }
                     }
                     if (showFilters) {
@@ -295,6 +348,7 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
+            }
             }
             }
         }
