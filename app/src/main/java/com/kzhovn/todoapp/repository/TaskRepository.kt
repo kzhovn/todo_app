@@ -74,7 +74,7 @@ class TaskRepository(
         val task = taskDao.getById(taskId) ?: return
         val updated = task.copy(startDate = now + durationMillis)
         taskDao.update(updated)
-        reminderScheduler.schedule(updated)
+        reminderScheduler.schedule(updated, now)
     }
 
     suspend fun markComplete(taskId: Long, now: Long) {
@@ -84,7 +84,7 @@ class TaskRepository(
         reminderScheduler.cancel(completedTask)
         RecurrenceEngine.nextInstance(completedTask, now)?.let {
             val nextId = taskDao.insert(it)
-            reminderScheduler.schedule(it.copy(id = nextId))
+            reminderScheduler.schedule(it.copy(id = nextId), now)
         }
     }
 
@@ -93,7 +93,7 @@ class TaskRepository(
         if (task.isComplete) {
             val reopened = task.copy(isComplete = false, completedAt = null)
             taskDao.update(reopened)
-            reminderScheduler.schedule(reopened)
+            reminderScheduler.schedule(reopened, now)
         } else {
             markComplete(taskId, now)
         }

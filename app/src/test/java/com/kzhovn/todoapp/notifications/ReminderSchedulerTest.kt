@@ -84,4 +84,30 @@ class ReminderSchedulerTest {
         // schedule() call would have silently replaced the first instead of adding to it.
         assertEquals(2, shadow.scheduledAlarms.size)
     }
+
+    @Test
+    fun `an explicit now parameter is used instead of the real clock`() {
+        val fakeNow = futureDue - 60 * 60 * 1000L // 1 hour before futureDue
+        val task = Task(id = 1, title = "Uses fake now", dueDate = futureDue, reminderOffsetMinutes = 0)
+
+        // Relative to the real clock this would schedule fine (futureDue is in the real future),
+        // but relative to fakeNow (which is also before futureDue) it should ALSO schedule fine —
+        // this just confirms the now parameter is actually being read, not ignored.
+        scheduler.schedule(task, now = fakeNow)
+
+        val shadow: ShadowAlarmManager = shadowOf(alarmManager)
+        assertEquals(futureDue, shadow.nextScheduledAlarm?.triggerAtTime)
+    }
+
+    @Test
+    fun `an explicit now parameter in the future relative to the trigger time cancels instead of scheduling`() {
+        val dueDate = System.currentTimeMillis() + 60 * 60 * 1000L // 1 hour from the real now
+        val fakeNow = dueDate + 60 * 60 * 1000L // 1 hour AFTER the trigger time, relative to fakeNow
+        val task = Task(id = 1, title = "Past relative to fake now", dueDate = dueDate, reminderOffsetMinutes = 0)
+
+        scheduler.schedule(task, now = fakeNow)
+
+        val shadow: ShadowAlarmManager = shadowOf(alarmManager)
+        assertNull(shadow.nextScheduledAlarm)
+    }
 }

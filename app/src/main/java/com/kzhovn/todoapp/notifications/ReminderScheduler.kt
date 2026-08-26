@@ -9,7 +9,7 @@ import com.kzhovn.todoapp.data.Task
 
 class ReminderScheduler(private val context: Context, private val alarmManager: AlarmManager) {
 
-    fun schedule(task: Task) {
+    fun schedule(task: Task, now: Long = System.currentTimeMillis()) {
         val dueDate = task.dueDate
         val offsetMinutes = task.reminderOffsetMinutes
         if (dueDate == null || offsetMinutes == null) {
@@ -19,7 +19,7 @@ class ReminderScheduler(private val context: Context, private val alarmManager: 
         val triggerAt = dueDate - offsetMinutes * 60_000L
         // The date picker is date-only, so "due today" is already a past timestamp for most of the
         // day; setAndAllowWhileIdle would fire such an alarm immediately, on save.
-        if (triggerAt <= System.currentTimeMillis()) {
+        if (triggerAt <= now) {
             cancel(task)
             return
         }
