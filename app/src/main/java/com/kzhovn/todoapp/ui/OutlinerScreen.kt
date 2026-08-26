@@ -58,7 +58,7 @@ fun OutlinerScreen(
         collapsed = prefs.collapsedIds()
     }
 
-    val tree = remember(tasks) { buildOutlinerTree(tasks) }
+    val tree = remember(tasks) { buildOutlinerTree(tasks, hideCompleted = true) }
 
     fun toggle(folderId: Long) {
         val nowCollapsed = folderId !in collapsed

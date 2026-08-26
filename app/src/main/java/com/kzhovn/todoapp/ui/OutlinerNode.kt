@@ -11,15 +11,22 @@ sealed class OutlinerNode {
     data class TaskNode(override val task: Task, override val children: List<OutlinerNode>) : OutlinerNode()
 }
 
-fun buildOutlinerTree(tasks: List<Task>): List<OutlinerNode> {
+fun buildOutlinerTree(tasks: List<Task>, hideCompleted: Boolean = false): List<OutlinerNode> {
     val byParent: Map<Long?, List<Task>> = tasks.groupBy { it.parentId }
     fun build(parentId: Long?): List<OutlinerNode> =
         byParent[parentId].orEmpty()
             .sortedBy { it.id }
-            .map { task ->
+            .flatMap { task ->
                 val children = build(task.id)
-                if (task.type == TaskType.FOLDER) OutlinerNode.FolderNode(task, children)
-                else OutlinerNode.TaskNode(task, children)
+                if (hideCompleted && task.type == TaskType.TASK && task.isComplete) {
+                    // Splice this task's still-visible children in at the same level instead of
+                    // dropping them along with their now-hidden completed parent.
+                    children
+                } else {
+                    val node = if (task.type == TaskType.FOLDER) OutlinerNode.FolderNode(task, children)
+                                else OutlinerNode.TaskNode(task, children)
+                    listOf(node)
+                }
             }
     return build(null)
 }

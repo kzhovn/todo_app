@@ -76,4 +76,31 @@ class OutlinerNodeTest {
         val tasks = listOf(Task(id = 1, title = "Call dentist"))
         assertTrue(subtaskCounts(tasks).isEmpty())
     }
+
+    @Test
+    fun `hideCompleted omits a completed task but keeps its active children`() {
+        val tasks = listOf(
+            Task(id = 1, type = TaskType.FOLDER, title = "Project"),
+            Task(id = 2, title = "Old milestone", parentId = 1, isComplete = true),
+            Task(id = 3, title = "Next step", parentId = 2)
+        )
+        val tree = buildOutlinerTree(tasks, hideCompleted = true)
+        val project = tree[0]
+        assertEquals(1, project.children.size)
+        assertEquals("Next step", project.children[0].task.title)
+    }
+
+    @Test
+    fun `hideCompleted omits a completed top-level task with no children`() {
+        val tasks = listOf(Task(id = 1, title = "Done", isComplete = true))
+        val tree = buildOutlinerTree(tasks, hideCompleted = true)
+        assertTrue(tree.isEmpty())
+    }
+
+    @Test
+    fun `hideCompleted defaults to false, keeping existing behavior`() {
+        val tasks = listOf(Task(id = 1, title = "Done", isComplete = true))
+        val tree = buildOutlinerTree(tasks)
+        assertEquals(1, tree.size)
+    }
 }
