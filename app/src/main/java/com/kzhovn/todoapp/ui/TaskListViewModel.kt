@@ -70,6 +70,13 @@ class TaskListViewModel(
         }
     }
 
+    fun snooze(taskId: Long, durationMillis: Long, mode: TaskListMode) {
+        viewModelScope.launch {
+            repository.snooze(taskId, durationMillis, clock())
+            load(mode)
+        }
+    }
+
     private fun minuteOfDay(epochMillis: Long): Int {
         val cal = Calendar.getInstance().apply { timeInMillis = epochMillis }
         return cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)

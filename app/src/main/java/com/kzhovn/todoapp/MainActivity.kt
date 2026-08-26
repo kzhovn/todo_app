@@ -208,7 +208,8 @@ class MainActivity : ComponentActivity() {
                             viewModel = viewModel,
                             onCheck = { viewModel.toggleComplete(it, selectedMode) },
                             onStar = { viewModel.toggleStar(it, selectedMode) },
-                            onEdit = onEdit
+                            onEdit = onEdit,
+                            onSnooze = { id, duration -> viewModel.snooze(id, duration, selectedMode) }
                         )
                     }
                 }

@@ -1,8 +1,10 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -20,6 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,6 +31,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,13 +68,14 @@ fun TaskListScreen(
     viewModel: TaskListViewModel,
     onCheck: (Long) -> Unit,
     onStar: (Long) -> Unit,
-    onEdit: (Long) -> Unit
+    onEdit: (Long) -> Unit,
+    onSnooze: (Long, Long) -> Unit
 ) {
     val tasks by viewModel.tasks.collectAsState()
     val subtaskCounts by viewModel.subtaskCounts.collectAsState()
     LazyColumn {
         itemsIndexed(tasks, key = { _, task -> task.id }) { index, task ->
-            TaskRow(task, subtaskCounts[task.id], onCheck, onStar, onEdit)
+            TaskRow(task, subtaskCounts[task.id], onCheck, onStar, onEdit, onSnooze)
             if (index < tasks.lastIndex) {
                 HorizontalDivider(color = LedgerBorder)
             }
@@ -75,15 +83,18 @@ fun TaskListScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TaskRow(
     task: Task,
     subtasks: Pair<Int, Int>?,
     onCheck: (Long) -> Unit,
     onStar: (Long) -> Unit,
-    onEdit: (Long) -> Unit
+    onEdit: (Long) -> Unit,
+    onSnooze: (Long, Long) -> Unit
 ) {
     val barColor = task.parentId?.let { folderColor(it) } ?: LedgerBorder
+    var showSnoozeMenu by remember { mutableStateOf(false) }
     Row(
         // LazyColumn measures items with unbounded height, so fillMaxHeight() alone is a no-op
         // here; the intrinsic-min pass gives the Row (and the bar Box's fillMaxHeight below) a
@@ -97,15 +108,25 @@ private fun TaskRow(
         Spacer(Modifier.width(8.dp))
         TaskCheckbox(checked = task.isComplete, overdue = isOverdue(task), onCheckedChange = { onCheck(task.id) })
         Spacer(Modifier.width(8.dp))
-        Text(
-            text = task.title,
-            fontFamily = LedgerTitleFont,
-            fontWeight = FontWeight.Bold,
-            fontSize = 13.sp,
-            textDecoration = if (task.isComplete) TextDecoration.LineThrough else null,
-            color = if (task.isComplete) LedgerMuted else LedgerInk,
-            modifier = Modifier.weight(1f).clickable { onEdit(task.id) }
-        )
+        Box(modifier = Modifier.weight(1f)) {
+            Text(
+                text = task.title,
+                fontFamily = LedgerTitleFont,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                textDecoration = if (task.isComplete) TextDecoration.LineThrough else null,
+                color = if (task.isComplete) LedgerMuted else LedgerInk,
+                modifier = Modifier.combinedClickable(
+                    onClick = { onEdit(task.id) },
+                    onLongClick = { showSnoozeMenu = true }
+                )
+            )
+            DropdownMenu(expanded = showSnoozeMenu, onDismissRequest = { showSnoozeMenu = false }) {
+                DropdownMenuItem(text = { Text("Snooze 1 hour") }, onClick = { showSnoozeMenu = false; onSnooze(task.id, HOUR_MILLIS) })
+                DropdownMenuItem(text = { Text("Snooze to tomorrow") }, onClick = { showSnoozeMenu = false; onSnooze(task.id, DAY_MILLIS) })
+                DropdownMenuItem(text = { Text("Snooze 1 week") }, onClick = { showSnoozeMenu = false; onSnooze(task.id, WEEK_MILLIS) })
+            }
+        }
         task.dueDate?.let { due -> DueChip(due, isOverdue(task)) }
         if (subtasks != null && subtasks.second > 0) {
             Text(
@@ -125,6 +146,10 @@ private fun TaskRow(
         }
     }
 }
+
+private const val HOUR_MILLIS = 60 * 60 * 1000L
+private const val DAY_MILLIS = 24 * HOUR_MILLIS
+private const val WEEK_MILLIS = 7 * DAY_MILLIS
 
 @Composable
 fun TaskCheckbox(checked: Boolean, overdue: Boolean, size: Dp = 16.dp, onCheckedChange: () -> Unit) {
