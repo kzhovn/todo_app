@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -128,7 +129,7 @@ class TaskEditActivity : ComponentActivity() {
                 val dependenciesToSave: Set<Long>
                 val contextsToSave: Set<Long>
                 if (task.type == TaskType.FOLDER) {
-                    toSave = task.copy(dueDate = null, recurrenceType = null, recurrenceRule = null)
+                    toSave = task.copy(dueDate = null, recurrenceType = null, recurrenceRule = null, reminderOffsetMinutes = null)
                     dependenciesToSave = emptySet()
                     contextsToSave = emptySet()
                 } else {
@@ -209,6 +210,31 @@ class TaskEditActivity : ComponentActivity() {
                             onClear = { task = task.copy(dueDate = null) },
                             showLabelWhenSet = false
                         )
+                    }
+                }
+
+                if (task.dueDate != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Remind me", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
+                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                        listOf(
+                            null to "No reminder",
+                            0 to "At due time",
+                            5 to "5 min before",
+                            30 to "30 min before",
+                            60 to "1 hour before",
+                            1440 to "1 day before"
+                        ).forEach { (offset, label) ->
+                            Text(
+                                label,
+                                fontFamily = LedgerUiFont,
+                                fontSize = 12.sp,
+                                color = if (task.reminderOffsetMinutes == offset) LedgerAccent else LedgerMuted,
+                                modifier = Modifier
+                                    .clickable { task = task.copy(reminderOffsetMinutes = offset) }
+                                    .padding(end = 12.dp, top = 4.dp, bottom = 4.dp)
+                            )
+                        }
                     }
                 }
 

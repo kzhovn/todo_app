@@ -57,12 +57,13 @@ class TaskRepositoryRecurrenceTest {
     }
 
     @Test
-    fun `spawned recurring task with due date has an alarm scheduled`() = runBlocking {
+    fun `spawned recurring task with due date and reminder has an alarm scheduled`() = runBlocking {
         val dueDate = now + TimeUnit.DAYS.toMillis(1)
         val taskId = repository.createTask(
             Task(
                 title = "Recurring task",
                 dueDate = dueDate,
+                reminderOffsetMinutes = 30,
                 recurrenceType = RecurrenceType.AFTER_COMPLETION,
                 recurrenceRule = "7"
             )
@@ -75,12 +76,12 @@ class TaskRepositoryRecurrenceTest {
         val spawned = all.first { it.id != taskId }
         assertTrue(!spawned.isComplete)
 
-        // The spawned task inherits the dueDate from the original and has an alarm scheduled.
+        // The spawned task inherits dueDate and reminderOffsetMinutes from the original.
         // Since RecurrenceEngine.nextInstance() copies the original task and only changes
-        // id, startDate, isComplete, and completedAt, the dueDate is preserved.
+        // id, startDate, isComplete, and completedAt, both fields are preserved.
         assertEquals(dueDate, spawned.dueDate)
         val nextAlarm = Shadows.shadowOf(alarmManager).peekNextScheduledAlarm()
-        assertEquals(dueDate, nextAlarm?.triggerAtMs)
+        assertEquals(dueDate - 30 * 60_000L, nextAlarm?.triggerAtMs)
     }
 
     @Test
@@ -90,6 +91,7 @@ class TaskRepositoryRecurrenceTest {
             Task(
                 title = "Overdue recurring task",
                 dueDate = pastDueDate,
+                reminderOffsetMinutes = 30,
                 recurrenceType = RecurrenceType.AFTER_COMPLETION,
                 recurrenceRule = "7"
             )

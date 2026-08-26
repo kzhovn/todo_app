@@ -20,5 +20,6 @@ data class Task(
     val completedAt: Long? = null,
     val recurrenceType: RecurrenceType? = null,
     val recurrenceRule: String? = null,
-    val icon: String? = null
+    val icon: String? = null,
+    val reminderOffsetMinutes: Int? = null
 )

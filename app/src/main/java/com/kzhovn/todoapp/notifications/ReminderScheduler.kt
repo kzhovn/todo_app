@@ -10,14 +10,16 @@ class ReminderScheduler(private val context: Context, private val alarmManager: 
 
     fun schedule(task: Task) {
         val dueDate = task.dueDate
-        if (dueDate == null) {
+        val offsetMinutes = task.reminderOffsetMinutes
+        if (dueDate == null || offsetMinutes == null) {
             cancel(task)
             return
         }
-        // Inexact: fires within a few minutes of dueDate, not to-the-second. Avoids
+        val triggerAt = dueDate - offsetMinutes * 60_000L
+        // Inexact: fires within a few minutes of triggerAt, not to-the-second. Avoids
         // SCHEDULE_EXACT_ALARM, which needs a manifest permission plus a user grant on API 33+ —
         // not worth it for a todo reminder.
-        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, dueDate, pendingIntentFor(task))
+        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntentFor(task))
     }
 
     fun cancel(task: Task) {

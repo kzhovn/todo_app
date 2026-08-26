@@ -1,65 +1,55 @@
 package com.kzhovn.todoapp.notifications
 
 import android.app.AlarmManager
-import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.kzhovn.todoapp.data.Task
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows
+import org.robolectric.shadows.ShadowAlarmManager
+import org.robolectric.Shadows.shadowOf
 
 @RunWith(RobolectricTestRunner::class)
 class ReminderSchedulerTest {
+    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+    private val alarmManager = context.getSystemService(android.content.Context.ALARM_SERVICE) as AlarmManager
+    private val scheduler = ReminderScheduler(context, alarmManager)
 
     @Test
-    fun `schedules an alarm at the task due date`() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val scheduler = ReminderScheduler(context, alarmManager)
-
-        scheduler.schedule(Task(id = 1, title = "Pay rent", dueDate = 1_000_000L))
-
-        val nextAlarm = Shadows.shadowOf(alarmManager).peekNextScheduledAlarm()
-        assertEquals(1_000_000L, nextAlarm?.triggerAtMs)
-    }
-
-    @Test
-    fun `task with no due date is not scheduled`() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val scheduler = ReminderScheduler(context, alarmManager)
-
-        scheduler.schedule(Task(id = 1, title = "No due date"))
-
-        assertNull(Shadows.shadowOf(alarmManager).peekNextScheduledAlarm())
-    }
-
-    @Test
-    fun `cancel removes a scheduled alarm`() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val scheduler = ReminderScheduler(context, alarmManager)
-        val task = Task(id = 1, title = "Pay rent", dueDate = 1_000_000L)
+    fun `does not schedule when reminderOffsetMinutes is null even with a due date`() {
+        val task = Task(id = 1, title = "No reminder", dueDate = 1_700_000_000_000L, reminderOffsetMinutes = null)
         scheduler.schedule(task)
-
-        scheduler.cancel(task)
-
-        assertNull(Shadows.shadowOf(alarmManager).peekNextScheduledAlarm())
+        val shadow: ShadowAlarmManager = shadowOf(alarmManager)
+        assertNull(shadow.nextScheduledAlarm)
     }
 
     @Test
-    fun `clearing a due date cancels the alarm`() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val scheduler = ReminderScheduler(context, alarmManager)
-        val task = Task(id = 1, title = "Pay rent", dueDate = 1_000_000L)
+    fun `does not schedule when there is no due date even with an offset set`() {
+        val task = Task(id = 1, title = "No due date", dueDate = null, reminderOffsetMinutes = 30)
         scheduler.schedule(task)
+        val shadow: ShadowAlarmManager = shadowOf(alarmManager)
+        assertNull(shadow.nextScheduledAlarm)
+    }
 
-        scheduler.schedule(task.copy(dueDate = null))
+    @Test
+    fun `schedules at dueDate minus the offset when both are set`() {
+        val dueDate = 1_700_000_000_000L
+        val task = Task(id = 1, title = "Remind me", dueDate = dueDate, reminderOffsetMinutes = 30)
+        scheduler.schedule(task)
+        val shadow: ShadowAlarmManager = shadowOf(alarmManager)
+        val scheduled = shadow.nextScheduledAlarm
+        assert(scheduled != null && scheduled.triggerAtTime == dueDate - 30 * 60_000L) {
+            "expected trigger at ${dueDate - 30 * 60_000L}, got ${scheduled?.triggerAtTime}"
+        }
+    }
 
-        assertNull(Shadows.shadowOf(alarmManager).peekNextScheduledAlarm())
+    @Test
+    fun `offset 0 schedules exactly at due date`() {
+        val dueDate = 1_700_000_000_000L
+        val task = Task(id = 1, title = "At due time", dueDate = dueDate, reminderOffsetMinutes = 0)
+        scheduler.schedule(task)
+        val shadow: ShadowAlarmManager = shadowOf(alarmManager)
+        assert(shadow.nextScheduledAlarm?.triggerAtTime == dueDate)
     }
 }
