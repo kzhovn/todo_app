@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -96,20 +95,23 @@ private fun TaskRow(
 ) {
     val barColor = task.parentId?.let { folderColor(it) } ?: LedgerBorder
     var showSnoozeMenu by remember { mutableStateOf(false) }
-    Row(
-        // LazyColumn measures items with unbounded height, so fillMaxHeight() alone is a no-op
-        // here; the intrinsic-min pass gives the Row (and the bar Box's fillMaxHeight below) a
-        // real height to fill, sized to the tallest child.
-        modifier = Modifier
-            .height(IntrinsicSize.Min)
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(Modifier.width(3.dp).fillMaxHeight().background(barColor))
-        Spacer(Modifier.width(8.dp))
-        TaskCheckbox(checked = task.isComplete, overdue = isOverdue(task), onCheckedChange = { onCheck(task.id) })
-        Spacer(Modifier.width(8.dp))
-        Box(modifier = Modifier.weight(1f)) {
+    // DropdownMenu is Popup-based (SubcomposeLayout internally) and can't answer the intrinsic
+    // width queries an IntrinsicSize.Min row needs from its children, so it must live outside
+    // the Row below as a plain sibling rather than nested inside one of the Row's children.
+    Box {
+        Row(
+            // LazyColumn measures items with unbounded height, so fillMaxHeight() alone is a no-op
+            // here; the intrinsic-min pass gives the Row (and the bar Box's fillMaxHeight below) a
+            // real height to fill, sized to the tallest child.
+            modifier = Modifier
+                .height(IntrinsicSize.Min)
+                .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.width(3.dp).fillMaxHeight().background(barColor))
+            Spacer(Modifier.width(8.dp))
+            TaskCheckbox(checked = task.isComplete, overdue = isOverdue(task), onCheckedChange = { onCheck(task.id) })
+            Spacer(Modifier.width(8.dp))
             Text(
                 text = task.title,
                 fontFamily = LedgerTitleFont,
@@ -118,34 +120,34 @@ private fun TaskRow(
                 textDecoration = if (task.isComplete) TextDecoration.LineThrough else null,
                 color = if (task.isComplete) LedgerMuted else LedgerInk,
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .weight(1f)
                     .combinedClickable(
                         onClick = { onEdit(task.id) },
                         onLongClick = { showSnoozeMenu = true }
                     )
             )
-            DropdownMenu(expanded = showSnoozeMenu, onDismissRequest = { showSnoozeMenu = false }) {
-                DropdownMenuItem(text = { Text("Snooze 1 hour") }, onClick = { showSnoozeMenu = false; onSnooze(task.id, HOUR_MILLIS) })
-                DropdownMenuItem(text = { Text("Snooze to tomorrow") }, onClick = { showSnoozeMenu = false; onSnooze(task.id, DAY_MILLIS) })
-                DropdownMenuItem(text = { Text("Snooze 1 week") }, onClick = { showSnoozeMenu = false; onSnooze(task.id, WEEK_MILLIS) })
+            task.dueDate?.let { due -> DueChip(due, isOverdue(task)) }
+            if (subtasks != null && subtasks.second > 0) {
+                Text(
+                    text = "${subtasks.first}/${subtasks.second}",
+                    fontFamily = LedgerMonoFont,
+                    fontSize = 10.sp,
+                    color = LedgerMuted,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+            }
+            IconButton(onClick = { onStar(task.id) }) {
+                Icon(
+                    if (task.isStarred) Icons.Filled.Star else Icons.Filled.StarBorder,
+                    contentDescription = "Star",
+                    tint = if (task.isStarred) LedgerStar else LedgerCheckBorder
+                )
             }
         }
-        task.dueDate?.let { due -> DueChip(due, isOverdue(task)) }
-        if (subtasks != null && subtasks.second > 0) {
-            Text(
-                text = "${subtasks.first}/${subtasks.second}",
-                fontFamily = LedgerMonoFont,
-                fontSize = 10.sp,
-                color = LedgerMuted,
-                modifier = Modifier.padding(horizontal = 4.dp)
-            )
-        }
-        IconButton(onClick = { onStar(task.id) }) {
-            Icon(
-                if (task.isStarred) Icons.Filled.Star else Icons.Filled.StarBorder,
-                contentDescription = "Star",
-                tint = if (task.isStarred) LedgerStar else LedgerCheckBorder
-            )
+        DropdownMenu(expanded = showSnoozeMenu, onDismissRequest = { showSnoozeMenu = false }) {
+            DropdownMenuItem(text = { Text("Snooze 1 hour") }, onClick = { showSnoozeMenu = false; onSnooze(task.id, HOUR_MILLIS) })
+            DropdownMenuItem(text = { Text("Snooze to tomorrow") }, onClick = { showSnoozeMenu = false; onSnooze(task.id, DAY_MILLIS) })
+            DropdownMenuItem(text = { Text("Snooze 1 week") }, onClick = { showSnoozeMenu = false; onSnooze(task.id, WEEK_MILLIS) })
         }
     }
 }
