@@ -103,4 +103,22 @@ class OutlinerNodeTest {
         val tree = buildOutlinerTree(tasks)
         assertEquals(1, tree.size)
     }
+
+    @Test(timeout = 2000)
+    fun `a parentId cycle among tasks does not hang buildOutlinerTree`() {
+        // build() only ever recurses into an id it discovers as a child of an already-reached
+        // parent, so a mutual cycle among ids the walk never reaches from the root (e.g. two
+        // *distinct* ids each pointing at the other) is actually harmless — it's just silently
+        // absent from the tree. Triggering a genuine hang here requires a duplicate id: a root
+        // task and a second, distinct task both claiming id 1, where the second is its own
+        // "child" — that's what makes id 1 reachable from the root *and* self-recursive.
+        val root = Task(id = 1, title = "A")
+        val loopChild = Task(id = 1, title = "B", parentId = 1)
+
+        // The 2-second JUnit timeout is the actual assertion: without the visited-set guard this
+        // recurses forever (manifesting as a StackOverflowError long before 2s) rather than
+        // passing vacuously. The returned tree's contents aren't asserted on — a duplicate-id
+        // input has no single obviously-correct tree shape, and that's not what this test checks.
+        buildOutlinerTree(listOf(root, loopChild))
+    }
 }
