@@ -177,12 +177,12 @@ class MainActivity : ComponentActivity() {
                 val result = snackbarHostState.showSnackbar(
                     message = message,
                     actionLabel = "Undo",
-                    duration = SnackbarDuration.Short
+                    duration = SnackbarDuration.Long
                 )
                 if (result == SnackbarResult.ActionPerformed) {
                     repository.undoDelete(deleted)
                     TodoWidget().updateAll(applicationContext)
-                    viewModel.load(selectedMode)
+                    if (query.isBlank()) viewModel.load(selectedMode) else viewModel.search(query, filters)
                 } else {
                     repository.clearLastDeleted()
                 }

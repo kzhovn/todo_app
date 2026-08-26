@@ -13,7 +13,7 @@ sealed class OutlinerNode {
 
 fun buildOutlinerTree(tasks: List<Task>, hideCompleted: Boolean = false): List<OutlinerNode> {
     val byParent: Map<Long?, List<Task>> = tasks.groupBy { it.parentId }
-    val seen = mutableSetOf<Long>() // nothing in the data layer forbids a parentId cycle; don't recurse forever on one
+    val seen = mutableSetOf<Long>() // a duplicate id in the input would otherwise recurse forever; place each task at most once
     fun build(parentId: Long?): List<OutlinerNode> =
         byParent[parentId].orEmpty()
             .filter { seen.add(it.id) }

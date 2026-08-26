@@ -404,14 +404,11 @@ class TaskEditActivity : ComponentActivity() {
                 AlertDialog(
                     onDismissRequest = { showDeleteConfirm = false },
                     title = { Text("Delete this ${if (task.type == TaskType.FOLDER) "folder" else "task"}?") },
-                    text = {
-                        Text(
-                            if (descendantCount > 0)
-                                "This will also delete $descendantCount subtask${if (descendantCount == 1) "" else "s"}. You can undo this from the task list."
-                            else
-                                "You can undo this from the task list."
-                        )
-                    },
+                    text = if (descendantCount > 0) {
+                        {
+                            Text("This will also delete $descendantCount subtask${if (descendantCount == 1) "" else "s"}.")
+                        }
+                    } else null,
                     confirmButton = {
                         Button(
                             onClick = {
