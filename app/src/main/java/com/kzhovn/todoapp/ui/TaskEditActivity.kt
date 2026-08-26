@@ -104,6 +104,8 @@ class TaskEditActivity : ComponentActivity() {
             var showFolderPicker by remember { mutableStateOf(false) }
             var showNewFolderDialog by remember { mutableStateOf(false) }
             var newFolderName by remember { mutableStateOf("") }
+            var showAddSubtaskDialog by remember { mutableStateOf(false) }
+            var newSubtaskTitle by remember { mutableStateOf("") }
             var recurrence by remember { mutableStateOf(RecurrenceSelection(RecurrencePreset.NONE)) }
             var allTasks by remember { mutableStateOf<List<Task>>(emptyList()) }
             var selectedDependencyIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
@@ -342,6 +344,17 @@ class TaskEditActivity : ComponentActivity() {
                         onCreateNew = { startActivity(Intent(this@TaskEditActivity, ContextsActivity::class.java)) },
                         createNewLabel = "Create new context"
                     )
+
+                    if (taskId != 0L) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "+ Add subtask",
+                            color = LedgerAccent,
+                            fontFamily = LedgerUiFont,
+                            fontSize = 12.sp,
+                            modifier = Modifier.clickable { showAddSubtaskDialog = true }
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(12.dp))
@@ -480,6 +493,33 @@ class TaskEditActivity : ComponentActivity() {
                         ) { Text("Create") }
                     },
                     dismissButton = { Button(onClick = { showNewFolderDialog = false }) { Text("Cancel") } }
+                )
+            }
+
+            if (showAddSubtaskDialog) {
+                AlertDialog(
+                    onDismissRequest = { showAddSubtaskDialog = false },
+                    title = { Text("Add subtask") },
+                    text = {
+                        OutlinedTextField(
+                            value = newSubtaskTitle,
+                            onValueChange = { newSubtaskTitle = it },
+                            placeholder = { Text("Subtask name") }
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            enabled = newSubtaskTitle.isNotBlank(),
+                            onClick = {
+                                scope.launch {
+                                    repository.createTask(Task(title = newSubtaskTitle, parentId = task.id))
+                                    newSubtaskTitle = ""
+                                    showAddSubtaskDialog = false
+                                }
+                            }
+                        ) { Text("Add") }
+                    },
+                    dismissButton = { Button(onClick = { showAddSubtaskDialog = false }) { Text("Cancel") } }
                 )
             }
             }
