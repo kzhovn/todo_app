@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -66,6 +67,28 @@ class TaskEditViewModelTest {
         advanceUntilIdle()
 
         assertEquals("Renamed", repository.getTask(taskId)?.title)
+    }
+
+    @Test
+    fun `save passes the newly created task's id to onSaved`() = runTest {
+        var savedId: Long? = null
+        viewModel.save(Task(title = "New task")) { id -> savedId = id }
+        advanceUntilIdle()
+
+        assertNotNull(savedId)
+        assertEquals("New task", repository.getTask(savedId!!)?.title)
+    }
+
+    @Test
+    fun `save passes the existing task's id to onSaved on update`() = runTest {
+        val taskId = repository.createTask(Task(title = "Original"))
+        var savedId: Long? = null
+
+        viewModel.save(Task(id = taskId, title = "Updated")) { id -> savedId = id }
+        advanceUntilIdle()
+
+        assertEquals(taskId, savedId)
+        assertEquals("Updated", repository.getTask(taskId)?.title)
     }
 
     @Test

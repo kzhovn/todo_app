@@ -140,8 +140,7 @@ class TaskEditActivity : ComponentActivity() {
                     dependenciesToSave = selectedDependencyIds
                     contextsToSave = selectedContextIds
                 }
-                viewModel.save(toSave) {
-                    val savedId = if (toSave.id != 0L) toSave.id else repository.getAllTasks().maxOf { it.id }
+                viewModel.save(toSave) { savedId ->
                     repository.setDependencies(savedId, dependenciesToSave)
                     contextRepository.setTaskContexts(savedId, contextsToSave)
                     TodoWidget().updateAll(applicationContext)

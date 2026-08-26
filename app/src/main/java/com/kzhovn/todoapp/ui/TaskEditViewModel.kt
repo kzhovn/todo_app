@@ -10,10 +10,13 @@ class TaskEditViewModel(private val repository: TaskRepository) : ViewModel() {
 
     suspend fun load(taskId: Long): Task? = repository.getTask(taskId)
 
-    fun save(task: Task, onSaved: suspend () -> Unit) {
+    fun save(task: Task, onSaved: suspend (Long) -> Unit) {
         viewModelScope.launch {
-            if (task.id == 0L) repository.createTask(task) else repository.updateTask(task)
-            onSaved()
+            val savedId = if (task.id == 0L) repository.createTask(task) else {
+                repository.updateTask(task)
+                task.id
+            }
+            onSaved(savedId)
         }
     }
 
