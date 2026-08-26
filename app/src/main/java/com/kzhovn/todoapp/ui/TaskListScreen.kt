@@ -121,6 +121,9 @@ private fun TaskRow(
     val barColor = task.parentId?.let { folderColor(it) } ?: LedgerBorder
     var showSnoozeMenu by remember { mutableStateOf(false) }
     val contextName = effective.effectiveContextIds.firstOrNull()?.let { allContexts[it]?.name }
+    // Overdue styling must track the *displayed* (effective/inherited) due date, not the task's
+    // own possibly-null field, or an inherited overdue date would render in the neutral color.
+    val effectiveOverdue = !task.isComplete && effective.effectiveDueDate != null && effective.effectiveDueDate < System.currentTimeMillis()
     // DropdownMenu is Popup-based (SubcomposeLayout internally) and can't answer the intrinsic
     // width queries an IntrinsicSize.Min row needs from its children, so it must live outside
     // the Row below as a plain sibling rather than nested inside one of the Row's children.
@@ -136,7 +139,7 @@ private fun TaskRow(
         ) {
             Box(Modifier.width(3.dp).fillMaxHeight().background(barColor))
             Spacer(Modifier.width(8.dp))
-            TaskCheckbox(checked = task.isComplete, overdue = isOverdue(task), onCheckedChange = { onCheck(task.id) })
+            TaskCheckbox(checked = task.isComplete, overdue = effectiveOverdue, onCheckedChange = { onCheck(task.id) })
             Spacer(Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -158,7 +161,7 @@ private fun TaskRow(
                 }
                 if (effective.effectiveDueDate != null || contextName != null || (subtasks != null && subtasks.second > 0)) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-                        effective.effectiveDueDate?.let { due -> DueChip(due, isOverdue(task)) }
+                        effective.effectiveDueDate?.let { due -> DueChip(due, effectiveOverdue) }
                         if (subtasks != null && subtasks.second > 0) {
                             Text(
                                 text = "${subtasks.first}/${subtasks.second}",
