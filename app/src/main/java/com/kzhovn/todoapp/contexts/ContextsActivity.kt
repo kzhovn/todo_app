@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -77,6 +78,7 @@ class ContextsActivity : ComponentActivity() {
             // wifiSsid gets prefilled from the saved row (not freshly captured) and may not
             // reflect the network the device is on right now.
             var editingIsCurrentlySatisfied by remember { mutableStateOf(false) }
+            var contextPendingDelete by remember { mutableStateOf<TaskContext?>(null) }
             val scope = rememberCoroutineScope()
 
             suspend fun refresh() { contexts = contextRepository.getAllContexts() }
@@ -116,13 +118,7 @@ class ContextsActivity : ComponentActivity() {
                                 Icons.Filled.Close,
                                 contentDescription = "Delete ${ctx.name}",
                                 tint = LedgerOverdue,
-                                modifier = Modifier.clickable {
-                                    scope.launch {
-                                        contextRepository.deleteContext(ctx.id)
-                                        refresh()
-                                        if (editingContextId == ctx.id) resetForm()
-                                    }
-                                }
+                                modifier = Modifier.clickable { contextPendingDelete = ctx }
                             )
                         }
                     }
@@ -210,6 +206,27 @@ class ContextsActivity : ComponentActivity() {
                         Button(onClick = { resetForm() }) { Text("Cancel") }
                     }
                 }
+            }
+            contextPendingDelete?.let { ctx ->
+                AlertDialog(
+                    onDismissRequest = { contextPendingDelete = null },
+                    title = { Text("Delete this context?") },
+                    text = { Text("\"${ctx.name}\" will be removed from every task using it. This can't be undone.") },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                contextPendingDelete = null
+                                scope.launch {
+                                    contextRepository.deleteContext(ctx.id)
+                                    refresh()
+                                    if (editingContextId == ctx.id) resetForm()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = LedgerOverdue, contentColor = Color.White)
+                        ) { Text("Delete") }
+                    },
+                    dismissButton = { Button(onClick = { contextPendingDelete = null }) { Text("Cancel") } }
+                )
             }
             }
         }
