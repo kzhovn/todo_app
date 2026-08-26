@@ -304,7 +304,7 @@ class TaskEditActivity : ComponentActivity() {
                             selectedContextIds = if (id in selectedContextIds) selectedContextIds - id else selectedContextIds + id
                         },
                         onCreateNew = { startActivity(Intent(this@TaskEditActivity, ContextsActivity::class.java)) },
-                        createNewLabel = "+ Create new context"
+                        createNewLabel = "Create new context"
                     )
                 }
 
