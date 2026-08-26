@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.quickadd.QuickAddActivity
+import com.kzhovn.todoapp.repository.filterDoing
 import com.kzhovn.todoapp.ui.TaskEditActivity
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
@@ -46,7 +47,8 @@ class TodoWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repository = (context.applicationContext as TodoApp).repository
         val now = System.currentTimeMillis()
-        val rows = TodoWidgetPresenter.toRows(repository.getActiveTasks(now, currentMinuteOfDay(), currentDayMask()))
+        val activeTasks = repository.getActiveTasks(now, currentMinuteOfDay(), currentDayMask())
+        val rows = TodoWidgetPresenter.toRows(filterDoing(activeTasks, now))
 
         provideContent {
             Column(modifier = GlanceModifier.background(fixed(LedgerBackground)).padding(8.dp)) {

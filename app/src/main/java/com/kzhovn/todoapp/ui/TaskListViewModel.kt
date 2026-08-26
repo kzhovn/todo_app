@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.repository.TaskRepository
+import com.kzhovn.todoapp.repository.filterDoing
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -30,8 +31,7 @@ class TaskListViewModel(
             _tasks.value = when (mode) {
                 TaskListMode.ALL -> all
                 TaskListMode.ACTIVE -> repository.getActiveTasks(now, minuteOfDay(now), dayOfWeekMask(now))
-                TaskListMode.DOING -> repository.getActiveTasks(now, minuteOfDay(now), dayOfWeekMask(now))
-                    .filter { it.isStarred || (it.dueDate != null && it.dueDate - now < TWO_DAYS_MILLIS) }
+                TaskListMode.DOING -> filterDoing(repository.getActiveTasks(now, minuteOfDay(now), dayOfWeekMask(now)), now)
             }
         }
     }
@@ -127,7 +127,4 @@ class TaskListViewModel(
         return 1 shl (cal.get(Calendar.DAY_OF_WEEK) - 1)
     }
 
-    companion object {
-        private const val TWO_DAYS_MILLIS = 2 * 24 * 60 * 60 * 1000L
-    }
 }
