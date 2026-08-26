@@ -16,9 +16,13 @@ class ReminderSchedulerTest {
     private val alarmManager = context.getSystemService(android.content.Context.ALARM_SERVICE) as AlarmManager
     private val scheduler = ReminderScheduler(context, alarmManager)
 
+    // schedule() drops any trigger time already in the past, so the happy-path fixtures have to be
+    // relative to the real clock rather than a hardcoded timestamp.
+    private val futureDue = System.currentTimeMillis() + 7 * 24 * 60 * 60 * 1000L
+
     @Test
     fun `does not schedule when reminderOffsetMinutes is null even with a due date`() {
-        val task = Task(id = 1, title = "No reminder", dueDate = 1_700_000_000_000L, reminderOffsetMinutes = null)
+        val task = Task(id = 1, title = "No reminder", dueDate = futureDue, reminderOffsetMinutes = null)
         scheduler.schedule(task)
         val shadow: ShadowAlarmManager = shadowOf(alarmManager)
         assertNull(shadow.nextScheduledAlarm)
@@ -34,7 +38,7 @@ class ReminderSchedulerTest {
 
     @Test
     fun `schedules at dueDate minus the offset when both are set`() {
-        val dueDate = 1_700_000_000_000L
+        val dueDate = futureDue
         val task = Task(id = 1, title = "Remind me", dueDate = dueDate, reminderOffsetMinutes = 30)
         scheduler.schedule(task)
         val shadow: ShadowAlarmManager = shadowOf(alarmManager)
@@ -46,10 +50,21 @@ class ReminderSchedulerTest {
 
     @Test
     fun `offset 0 schedules exactly at due date`() {
-        val dueDate = 1_700_000_000_000L
+        val dueDate = futureDue
         val task = Task(id = 1, title = "At due time", dueDate = dueDate, reminderOffsetMinutes = 0)
         scheduler.schedule(task)
         val shadow: ShadowAlarmManager = shadowOf(alarmManager)
         assert(shadow.nextScheduledAlarm?.triggerAtTime == dueDate)
+    }
+
+    // "Due today" is midnight today, so an offset pushes triggerAt into the past — an alarm set
+    // then would fire the moment the user hits Save.
+    @Test
+    fun `does not schedule when the offset puts the trigger time in the past`() {
+        val dueDate = System.currentTimeMillis() - 60 * 60 * 1000L
+        val task = Task(id = 1, title = "Due earlier today", dueDate = dueDate, reminderOffsetMinutes = 30)
+        scheduler.schedule(task)
+        val shadow: ShadowAlarmManager = shadowOf(alarmManager)
+        assertNull(shadow.nextScheduledAlarm)
     }
 }

@@ -22,7 +22,9 @@ class TaskRepositoryRecurrenceTest {
     private lateinit var db: TodoDatabase
     private lateinit var repository: TaskRepository
     private lateinit var alarmManager: android.app.AlarmManager
-    private val now = 1_700_000_000_000L
+    // Real-clock-relative: ReminderScheduler drops trigger times already in the past, so a
+    // hardcoded "now" would make the future-due-date case unschedulable.
+    private val now = System.currentTimeMillis()
 
     @Before
     fun setUp() {

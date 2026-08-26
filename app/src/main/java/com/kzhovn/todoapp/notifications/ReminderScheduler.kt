@@ -16,6 +16,12 @@ class ReminderScheduler(private val context: Context, private val alarmManager: 
             return
         }
         val triggerAt = dueDate - offsetMinutes * 60_000L
+        // The date picker is date-only, so "due today" is already a past timestamp for most of the
+        // day; setAndAllowWhileIdle would fire such an alarm immediately, on save.
+        if (triggerAt <= System.currentTimeMillis()) {
+            cancel(task)
+            return
+        }
         // Inexact: fires within a few minutes of triggerAt, not to-the-second. Avoids
         // SCHEDULE_EXACT_ALARM, which needs a manifest permission plus a user grant on API 33+ —
         // not worth it for a todo reminder.
