@@ -29,6 +29,7 @@ import androidx.glance.unit.ColorProvider
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.TodoApp
+import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.quickadd.QuickAddActivity
 import com.kzhovn.todoapp.repository.filterDoing
 import com.kzhovn.todoapp.ui.TaskEditActivity
@@ -47,8 +48,14 @@ class TodoWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repository = (context.applicationContext as TodoApp).repository
         val now = System.currentTimeMillis()
+        val allById = repository.getAllTasks().associateBy { it.id }
+        val contextsByTaskId = repository.getAllTaskContexts()
         val activeTasks = repository.getActiveTasks(now, currentMinuteOfDay(), currentDayMask())
-        val rows = TodoWidgetPresenter.toRows(filterDoing(activeTasks, now))
+        val rows = TodoWidgetPresenter.toRows(
+            filterDoing(activeTasks, now) {
+                resolveEffective(it, allById, contextsByTaskId).effectiveDueDate
+            }
+        )
 
         provideContent {
             Column(modifier = GlanceModifier.background(fixed(LedgerBackground)).padding(8.dp)) {

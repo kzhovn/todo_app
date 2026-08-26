@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskContext
+import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.repository.ContextRepository
 import com.kzhovn.todoapp.repository.TaskRepository
 import com.kzhovn.todoapp.repository.filterDoing
@@ -43,7 +44,10 @@ class TaskListViewModel(
             _tasks.value = when (mode) {
                 TaskListMode.ALL -> all
                 TaskListMode.ACTIVE -> repository.getActiveTasks(now, minuteOfDay(now), dayOfWeekMask(now))
-                TaskListMode.DOING -> filterDoing(repository.getActiveTasks(now, minuteOfDay(now), dayOfWeekMask(now)), now)
+                TaskListMode.DOING -> filterDoing(
+                    repository.getActiveTasks(now, minuteOfDay(now), dayOfWeekMask(now)),
+                    now
+                ) { resolveEffective(it, _allById.value, _contextsByTaskId.value).effectiveDueDate }
             }
         }
     }
