@@ -7,7 +7,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,8 +30,6 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -253,28 +250,20 @@ class TaskEditActivity : ComponentActivity() {
                                 enabled = true
                             ) { n -> recurrence = recurrence.copy(n = n) }
                             Spacer(Modifier.width(6.dp))
-                            var showUnitMenu by remember { mutableStateOf(false) }
-                            Box {
+                            listOf(
+                                RecurrenceUnit.DAY to "day(s)",
+                                RecurrenceUnit.WEEK to "week(s)",
+                                RecurrenceUnit.MONTH to "month(s)"
+                            ).forEach { (unit, label) ->
                                 Text(
-                                    when (recurrence.unit) {
-                                        RecurrenceUnit.DAY -> "day(s)"
-                                        RecurrenceUnit.WEEK -> "week(s)"
-                                        RecurrenceUnit.MONTH -> "month(s)"
-                                    },
+                                    label,
                                     fontFamily = LedgerUiFont,
                                     fontSize = 12.sp,
-                                    color = LedgerAccent,
-                                    modifier = Modifier.clickable { showUnitMenu = true }
+                                    color = if (recurrence.unit == unit) LedgerAccent else LedgerMuted,
+                                    modifier = Modifier
+                                        .clickable { recurrence = recurrence.copy(unit = unit) }
+                                        .padding(end = 8.dp)
                                 )
-                                DropdownMenu(expanded = showUnitMenu, onDismissRequest = { showUnitMenu = false }) {
-                                    listOf(RecurrenceUnit.DAY to "Day(s)", RecurrenceUnit.WEEK to "Week(s)", RecurrenceUnit.MONTH to "Month(s)")
-                                        .forEach { (unit, label) ->
-                                            DropdownMenuItem(text = { Text(label) }, onClick = {
-                                                showUnitMenu = false
-                                                recurrence = recurrence.copy(unit = unit)
-                                            })
-                                        }
-                                }
                             }
                         }
                         if (recurrence.unit == RecurrenceUnit.WEEK) {
