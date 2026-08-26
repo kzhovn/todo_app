@@ -231,4 +231,35 @@ class TaskRepositoryTest {
 
         assertEquals(listOf("Starred task"), results.map { it.title })
     }
+
+    @Test
+    fun `countActiveDescendants counts only incomplete descendants`() = runBlocking {
+        val parentId = repository.createTask(Task(title = "Plan trip"))
+        val doneId = repository.createTask(Task(title = "Book flight", parentId = parentId))
+        repository.createTask(Task(title = "Pack bags", parentId = parentId))
+        repository.markComplete(doneId, now)
+
+        assertEquals(1, repository.countActiveDescendants(parentId))
+    }
+
+    @Test
+    fun `completeWithDescendants completes every active descendant`() = runBlocking {
+        val parentId = repository.createTask(Task(title = "Plan trip"))
+        val childId = repository.createTask(Task(title = "Book flight", parentId = parentId))
+
+        repository.completeWithDescendants(parentId, now)
+
+        assertTrue(repository.getTask(parentId)!!.isComplete)
+        assertTrue(repository.getTask(childId)!!.isComplete)
+    }
+
+    @Test
+    fun `promoteChildrenToTopLevel detaches direct children`() = runBlocking {
+        val parentId = repository.createTask(Task(title = "Plan trip"))
+        val childId = repository.createTask(Task(title = "Book flight", parentId = parentId))
+
+        repository.promoteChildrenToTopLevel(parentId)
+
+        assertNull(repository.getTask(childId)!!.parentId)
+    }
 }

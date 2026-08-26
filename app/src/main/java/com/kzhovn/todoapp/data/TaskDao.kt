@@ -57,6 +57,21 @@ interface TaskDao {
     @Query("SELECT dependsOnTaskId FROM task_dependencies WHERE taskId = :taskId")
     suspend fun getDependencyIds(taskId: Long): List<Long>
 
+    @Query(
+        """
+        WITH RECURSIVE descendants(id) AS (
+            SELECT id FROM tasks WHERE parentId = :taskId
+            UNION ALL
+            SELECT t.id FROM tasks t JOIN descendants d ON t.parentId = d.id
+        )
+        SELECT COUNT(*) FROM tasks WHERE id IN (SELECT id FROM descendants) AND type != 'FOLDER' AND isComplete = 0
+        """
+    )
+    suspend fun countActiveDescendants(taskId: Long): Int
+
+    @Query("SELECT * FROM tasks WHERE parentId = :parentId")
+    suspend fun getChildren(parentId: Long): List<Task>
+
     @Query("DELETE FROM task_dependencies WHERE taskId = :taskId AND dependsOnTaskId = :dependsOnTaskId")
     suspend fun removeDependency(taskId: Long, dependsOnTaskId: Long)
 

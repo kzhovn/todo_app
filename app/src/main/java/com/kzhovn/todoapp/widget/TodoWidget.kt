@@ -126,7 +126,15 @@ class ToggleCompleteAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val taskId = parameters[taskIdKey] ?: return
         val repository = (context.applicationContext as TodoApp).repository
-        repository.toggleComplete(taskId, System.currentTimeMillis())
+        val task = repository.getTask(taskId)
+        val now = System.currentTimeMillis()
+        // A Glance widget can't show the in-app 3-way dialog for a task with active subtasks,
+        // so completing from the widget always cascades — the "complete subtasks too" choice.
+        if (task != null && !task.isComplete) {
+            repository.completeWithDescendants(taskId, now)
+        } else {
+            repository.toggleComplete(taskId, now)
+        }
         TodoWidget().update(context, glanceId)
     }
 }

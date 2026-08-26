@@ -133,4 +133,21 @@ class TaskRepository(
         )
 
     suspend fun getAllDependencyEdges(): List<TaskDependency> = taskDao.getAllDependencies()
+
+    suspend fun countActiveDescendants(taskId: Long): Int = taskDao.countActiveDescendants(taskId)
+
+    // Cascades completion to every active descendant first — each goes through markComplete
+    // individually so a recurring descendant still spawns its own next instance.
+    suspend fun completeWithDescendants(taskId: Long, now: Long) {
+        taskDao.getDescendants(taskId)
+            .filter { it.type != TaskType.FOLDER && !it.isComplete }
+            .forEach { markComplete(it.id, now) }
+        markComplete(taskId, now)
+    }
+
+    // Detaches this task's direct children (only direct — any grandchildren stay nested under
+    // their own now-top-level parent) so they survive as independent tasks.
+    suspend fun promoteChildrenToTopLevel(taskId: Long) {
+        taskDao.getChildren(taskId).forEach { child -> taskDao.update(child.copy(parentId = null)) }
+    }
 }

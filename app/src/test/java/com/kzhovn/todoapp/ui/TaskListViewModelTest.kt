@@ -114,4 +114,29 @@ class TaskListViewModelTest {
 
         assertEquals(false, viewModel.tasks.value.first { it.id == taskId }.isComplete)
     }
+
+    @Test
+    fun `requestComplete asks for a decision when active subtasks exist`() = runTest {
+        val parentId = repository.createTask(Task(title = "Plan trip"))
+        repository.createTask(Task(title = "Book flight", parentId = parentId))
+        var decision: Pair<Long, Int>? = null
+
+        viewModel.requestComplete(parentId, TaskListMode.ALL) { id, count -> decision = id to count }
+        advanceUntilIdle()
+
+        assertEquals(parentId to 1, decision)
+        assertEquals(false, repository.getTask(parentId)!!.isComplete)
+    }
+
+    @Test
+    fun `requestComplete completes directly when there are no active subtasks`() = runTest {
+        val taskId = repository.createTask(Task(title = "Ship report"))
+        var decisionCalled = false
+
+        viewModel.requestComplete(taskId, TaskListMode.ALL) { _, _ -> decisionCalled = true }
+        advanceUntilIdle()
+
+        assertEquals(false, decisionCalled)
+        assertEquals(true, repository.getTask(taskId)!!.isComplete)
+    }
 }

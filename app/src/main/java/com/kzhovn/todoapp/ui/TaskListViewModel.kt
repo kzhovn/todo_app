@@ -84,6 +84,39 @@ class TaskListViewModel(
         }
     }
 
+    fun requestComplete(taskId: Long, mode: TaskListMode, onNeedsDecision: (Long, Int) -> Unit) {
+        viewModelScope.launch {
+            val task = repository.getTask(taskId) ?: return@launch
+            if (task.isComplete) {
+                repository.toggleComplete(taskId, clock())
+                load(mode)
+                return@launch
+            }
+            val activeDescendants = repository.countActiveDescendants(taskId)
+            if (activeDescendants > 0) {
+                onNeedsDecision(taskId, activeDescendants)
+            } else {
+                repository.toggleComplete(taskId, clock())
+                load(mode)
+            }
+        }
+    }
+
+    fun completeWithSubtasks(taskId: Long, mode: TaskListMode) {
+        viewModelScope.launch {
+            repository.completeWithDescendants(taskId, clock())
+            load(mode)
+        }
+    }
+
+    fun completeAndPromoteSubtasks(taskId: Long, mode: TaskListMode) {
+        viewModelScope.launch {
+            repository.promoteChildrenToTopLevel(taskId)
+            repository.toggleComplete(taskId, clock())
+            load(mode)
+        }
+    }
+
     private fun minuteOfDay(epochMillis: Long): Int {
         val cal = Calendar.getInstance().apply { timeInMillis = epochMillis }
         return cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)

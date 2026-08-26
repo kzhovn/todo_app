@@ -16,13 +16,17 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -195,11 +199,17 @@ class MainActivity : ComponentActivity() {
                     val onEdit: (Long) -> Unit = { taskId ->
                         startActivity(Intent(this@MainActivity, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, taskId))
                     }
+                    var completeDecision by remember { mutableStateOf<Pair<Long, Int>?>(null) }
+                    val onCheck: (Long) -> Unit = { id ->
+                        viewModel.requestComplete(id, selectedMode) { taskId, activeCount ->
+                            completeDecision = taskId to activeCount
+                        }
+                    }
                     if (selectedMode == TaskListMode.ALL && query.isBlank()) {
                         val tasks by viewModel.tasks.collectAsState()
                         OutlinerScreen(
                             tasks = tasks,
-                            onCheck = { viewModel.toggleComplete(it, selectedMode) },
+                            onCheck = onCheck,
                             onEdit = onEdit,
                             onStar = { viewModel.toggleStar(it, selectedMode) },
                             onReparent = { taskId, newParentId -> viewModel.reparent(taskId, newParentId, selectedMode) }
@@ -207,10 +217,33 @@ class MainActivity : ComponentActivity() {
                     } else {
                         TaskListScreen(
                             viewModel = viewModel,
-                            onCheck = { viewModel.toggleComplete(it, selectedMode) },
+                            onCheck = onCheck,
                             onStar = { viewModel.toggleStar(it, selectedMode) },
                             onEdit = onEdit,
                             onSnooze = { id, duration -> viewModel.snooze(id, duration, selectedMode) }
+                        )
+                    }
+                    completeDecision?.let { (taskId, activeCount) ->
+                        AlertDialog(
+                            onDismissRequest = { completeDecision = null },
+                            title = { Text("Complete this task?") },
+                            text = { Text("It has $activeCount active subtask${if (activeCount == 1) "" else "s"}.") },
+                            confirmButton = {
+                                Button(onClick = {
+                                    viewModel.completeWithSubtasks(taskId, selectedMode)
+                                    completeDecision = null
+                                }) { Text("Complete subtasks too") }
+                            },
+                            dismissButton = {
+                                Row {
+                                    Button(onClick = {
+                                        viewModel.completeAndPromoteSubtasks(taskId, selectedMode)
+                                        completeDecision = null
+                                    }) { Text("Move subtasks out") }
+                                    Spacer(Modifier.width(8.dp))
+                                    Button(onClick = { completeDecision = null }) { Text("Cancel") }
+                                }
+                            }
                         )
                     }
                 }
