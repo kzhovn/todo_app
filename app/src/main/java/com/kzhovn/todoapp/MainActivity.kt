@@ -42,8 +42,10 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -163,6 +165,27 @@ class MainActivity : ComponentActivity() {
             val widgetRefreshTasks by viewModel.tasks.collectAsState()
             LaunchedEffect(widgetRefreshTasks) {
                 TodoWidget().updateAll(applicationContext)
+            }
+
+            val lastDeleted by repository.lastDeleted.collectAsState()
+            LaunchedEffect(lastDeleted) {
+                val deleted = lastDeleted ?: return@LaunchedEffect
+                val topLevelTitle = deleted.firstOrNull { it.id !in deleted.map { d -> d.parentId } }?.title
+                    ?: deleted.first().title
+                val extra = deleted.size - 1
+                val message = "Deleted \"$topLevelTitle\"" + if (extra > 0) " and $extra more" else ""
+                val result = snackbarHostState.showSnackbar(
+                    message = message,
+                    actionLabel = "Undo",
+                    duration = SnackbarDuration.Short
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    repository.undoDelete(deleted)
+                    TodoWidget().updateAll(applicationContext)
+                    viewModel.load(selectedMode)
+                } else {
+                    repository.clearLastDeleted()
+                }
             }
 
             ModalNavigationDrawer(

@@ -10,6 +10,7 @@ import com.kzhovn.todoapp.data.TodoDatabase
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -105,8 +106,50 @@ class TaskRepositoryTest {
         repository.deleteTask(task)
         assertNull(repository.getTask(taskId))
 
-        repository.undoDelete(task)
+        repository.undoDelete(listOf(task))
         assertEquals("Oops", repository.getTask(taskId)?.title)
+    }
+
+    @Test
+    fun `deleteTask populates lastDeleted with the task and its descendants`() = runBlocking {
+        val folderId = repository.createTask(Task(type = TaskType.FOLDER, title = "Work"))
+        val childId = repository.createTask(Task(title = "Ship report", parentId = folderId))
+        val folder = repository.getTask(folderId)!!
+        val child = repository.getTask(childId)!!
+
+        repository.deleteTask(folder)
+
+        val deleted = repository.lastDeleted.value
+        assertEquals(setOf(folderId, childId), deleted?.map { it.id }?.toSet())
+    }
+
+    @Test
+    fun `undoDelete restores a deleted folder and its children together`() = runBlocking {
+        val folderId = repository.createTask(Task(type = TaskType.FOLDER, title = "Work"))
+        val childId = repository.createTask(Task(title = "Ship report", parentId = folderId))
+        val folder = repository.getTask(folderId)!!
+        val child = repository.getTask(childId)!!
+
+        repository.deleteTask(folder)
+        assertNull(repository.getTask(folderId))
+        assertNull(repository.getTask(childId))
+
+        repository.undoDelete(listOf(folder, child))
+
+        assertEquals("Work", repository.getTask(folderId)?.title)
+        assertEquals(folderId, repository.getTask(childId)?.parentId)
+    }
+
+    @Test
+    fun `clearLastDeleted resets lastDeleted to null`() = runBlocking {
+        val taskId = repository.createTask(Task(title = "Oops"))
+        val task = repository.getTask(taskId)!!
+        repository.deleteTask(task)
+        assertNotNull(repository.lastDeleted.value)
+
+        repository.clearLastDeleted()
+
+        assertNull(repository.lastDeleted.value)
     }
 
     @Test

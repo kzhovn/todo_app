@@ -10,12 +10,17 @@ import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.notifications.ReminderScheduler
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 class TaskRepository(
     private val taskDao: TaskDao,
     private val reminderScheduler: ReminderScheduler,
     private val taskContextDao: TaskContextDao
 ) {
+
+    private val _lastDeleted = MutableStateFlow<List<Task>?>(null)
+    val lastDeleted: StateFlow<List<Task>?> = _lastDeleted
 
     suspend fun createTask(task: Task): Long {
         val id = taskDao.insert(task)
@@ -27,9 +32,11 @@ class TaskRepository(
 
     // Cascades: deleting a folder/task also deletes every descendant, canceling each one's
     // reminder alarm too. The confirmation dialog (TaskEditActivity) shows countDescendants()
-    // before the user commits, so this is never a surprise.
+    // before the user commits, so this is never a surprise. Snapshots the task + descendants into
+    // lastDeleted BEFORE removing anything, so undoDelete can restore the whole subtree.
     suspend fun deleteTask(task: Task) {
         val descendants = taskDao.getDescendants(task.id)
+        _lastDeleted.value = descendants + task
         descendants.forEach { child ->
             taskDao.deleteById(child.id)
             reminderScheduler.cancel(child)
@@ -38,9 +45,19 @@ class TaskRepository(
         reminderScheduler.cancel(task)
     }
 
-    suspend fun undoDelete(task: Task) {
-        taskDao.insert(task)
-        reminderScheduler.schedule(task)
+    // Reinserts every task in the snapshot (the originally-deleted task plus all its descendants)
+    // with their original ids intact, so parentId relationships between them are preserved exactly
+    // as they were.
+    suspend fun undoDelete(tasks: List<Task>) {
+        tasks.forEach { t ->
+            taskDao.insert(t)
+            reminderScheduler.schedule(t)
+        }
+        _lastDeleted.value = null
+    }
+
+    fun clearLastDeleted() {
+        _lastDeleted.value = null
     }
 
     suspend fun reparent(taskId: Long, newParentId: Long?) {
