@@ -69,6 +69,8 @@ import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
+import com.kzhovn.todoapp.widget.TodoWidget
+import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -141,6 +143,14 @@ class MainActivity : ComponentActivity() {
             }
             LaunchedEffect(query, filters) {
                 if (query.isBlank()) viewModel.load(selectedMode) else viewModel.search(query, filters)
+            }
+            // Independent subscription (rather than reusing the ALL-branch collectAsState below)
+            // so the widget refreshes no matter which tab is active. Every mutation method routes
+            // through load()/search(), which update viewModel.tasks, so watching it here catches
+            // star/complete/snooze/reparent centrally instead of patching each call site.
+            val widgetRefreshTasks by viewModel.tasks.collectAsState()
+            LaunchedEffect(widgetRefreshTasks) {
+                TodoWidget().updateAll(applicationContext)
             }
 
             Scaffold(
