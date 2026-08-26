@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -29,7 +30,6 @@ import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,7 +54,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.appwidget.updateAll
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.kzhovn.todoapp.TodoApp
+import com.kzhovn.todoapp.contexts.ContextsActivity
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskDependency
@@ -108,6 +110,13 @@ class TaskEditActivity : ComponentActivity() {
             var selectedContextIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
             val allById = remember(allTasks) { allTasks.associateBy { it.id } }
             val focusManager = LocalFocusManager.current
+
+            // ContextsActivity is launched with plain startActivity (not for a result), so
+            // returning here via back needs an explicit re-pull to pick up newly created contexts.
+            LifecycleResumeEffect(Unit) {
+                scope.launch { allContexts = contextRepository.getAllContexts() }
+                onPauseOrDispose { }
+            }
 
             // Folders don't carry task-only fields/relations (a due date would keep scheduling
             // a reminder alarm; a folder can't be completed, so leaving it as someone's
@@ -286,17 +295,18 @@ class TaskEditActivity : ComponentActivity() {
                     )
                     Spacer(Modifier.height(12.dp))
                     Text("Contexts", fontFamily = LedgerUiFont, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
-                    allContexts.forEach { ctx ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = ctx.id in selectedContextIds,
-                                onCheckedChange = { checked ->
-                                    selectedContextIds = if (checked) selectedContextIds + ctx.id else selectedContextIds - ctx.id
-                                }
-                            )
-                            Text(ctx.name, fontFamily = LedgerUiFont, fontSize = 13.sp, color = LedgerInk)
-                        }
-                    }
+                    SearchableMultiSelectDropdown(
+                        label = "Choose contexts",
+                        items = allContexts,
+                        selectedIds = selectedContextIds,
+                        idOf = { it.id },
+                        labelOf = { it.name },
+                        onToggle = { id ->
+                            selectedContextIds = if (id in selectedContextIds) selectedContextIds - id else selectedContextIds + id
+                        },
+                        onCreateNew = { startActivity(Intent(this@TaskEditActivity, ContextsActivity::class.java)) },
+                        createNewLabel = "+ Create new context"
+                    )
                 }
 
                 Spacer(Modifier.height(12.dp))
