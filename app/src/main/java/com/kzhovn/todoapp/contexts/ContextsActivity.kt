@@ -73,6 +73,7 @@ class ContextsActivity : ComponentActivity() {
             var name by remember { mutableStateOf("") }
             var type by remember { mutableStateOf(ContextType.PLACE) }
             var wifiSsid by remember { mutableStateOf<String?>(null) }
+            var wifiSsidError by remember { mutableStateOf<String?>(null) }
             var windows by remember { mutableStateOf<List<ContextTimeWindow>>(emptyList()) }
             // Preserves the stored satisfaction state while editing a PLACE context, since
             // wifiSsid gets prefilled from the saved row (not freshly captured) and may not
@@ -86,7 +87,7 @@ class ContextsActivity : ComponentActivity() {
 
             fun resetForm() {
                 editingContextId = null; name = ""; type = ContextType.PLACE
-                wifiSsid = null; windows = emptyList()
+                wifiSsid = null; windows = emptyList(); wifiSsidError = null
             }
 
             fun loadForEdit(ctx: TaskContext) {
@@ -95,6 +96,7 @@ class ContextsActivity : ComponentActivity() {
                     name = ctx.name
                     type = ctx.type
                     wifiSsid = ctx.wifiSsid
+                    wifiSsidError = null
                     editingIsCurrentlySatisfied = ctx.isCurrentlySatisfied
                     windows = if (ctx.type == ContextType.TIME) contextRepository.getTimeWindows(ctx.id) else emptyList()
                 }
@@ -139,8 +141,29 @@ class ContextsActivity : ComponentActivity() {
                 }
                 Spacer(Modifier.height(8.dp))
                 if (type == ContextType.PLACE) {
-                    Button(onClick = { wifiSsid = wifiManager?.connectionInfo?.ssid?.trim('"') }) {
-                        Text(wifiSsid?.let { "Network: $it" } ?: "Use current network")
+                    Column {
+                        Button(onClick = {
+                            val ssid = wifiManager?.connectionInfo?.ssid?.trim('"')
+                            if (ssid == null || ssid == WifiManager.UNKNOWN_SSID) {
+                                wifiSsid = null
+                                wifiSsidError = "Couldn't read your network name — check that Location " +
+                                    "is turned on and this app has Location permission, then try again."
+                            } else {
+                                wifiSsid = ssid
+                                wifiSsidError = null
+                            }
+                        }) {
+                            Text(wifiSsid?.let { "Network: $it" } ?: "Use current network")
+                        }
+                        wifiSsidError?.let { error ->
+                            Text(
+                                error,
+                                fontFamily = LedgerUiFont,
+                                fontSize = 11.sp,
+                                color = LedgerOverdue,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
                     }
                 } else {
                     Column {
