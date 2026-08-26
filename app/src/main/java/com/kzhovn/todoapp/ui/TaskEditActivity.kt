@@ -57,7 +57,9 @@ import androidx.glance.appwidget.updateAll
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskContext
+import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
 import com.kzhovn.todoapp.recurrence.RecurrenceSelection
 import com.kzhovn.todoapp.recurrence.recurrenceSelectionFromTask
@@ -100,6 +102,7 @@ class TaskEditActivity : ComponentActivity() {
             var recurrence by remember { mutableStateOf(RecurrenceSelection(RecurrencePreset.NONE)) }
             var allTasks by remember { mutableStateOf<List<Task>>(emptyList()) }
             var selectedDependencyIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+            var allDependencyEdges by remember { mutableStateOf<List<TaskDependency>>(emptyList()) }
             var allContexts by remember { mutableStateOf<List<TaskContext>>(emptyList()) }
             var selectedContextIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
             val allById = remember(allTasks) { allTasks.associateBy { it.id } }
@@ -144,6 +147,7 @@ class TaskEditActivity : ComponentActivity() {
                 }
                 folders = repository.getFolders()
                 allTasks = repository.getAllTasks()
+                allDependencyEdges = repository.getAllDependencyEdges()
                 allContexts = contextRepository.getAllContexts()
             }
 
@@ -262,17 +266,23 @@ class TaskEditActivity : ComponentActivity() {
                     }
                     Spacer(Modifier.height(12.dp))
                     Text("Depends on", fontFamily = LedgerUiFont, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
-                    allTasks.filter { it.id != task.id && it.type == TaskType.TASK }.forEach { t ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = t.id in selectedDependencyIds,
-                                onCheckedChange = { checked ->
-                                    selectedDependencyIds = if (checked) selectedDependencyIds + t.id else selectedDependencyIds - t.id
-                                }
-                            )
-                            Text(t.title, fontFamily = LedgerUiFont, fontSize = 13.sp, color = LedgerInk)
+                    val dependencyCandidates = remember(allTasks, allDependencyEdges, task.id) {
+                        allTasks.filter {
+                            it.id != task.id && it.type == TaskType.TASK && !it.isComplete &&
+                                !wouldCreateDependencyCycle(it.id, task.id, allDependencyEdges)
                         }
                     }
+                    SearchableMultiSelectDropdown(
+                        label = "Choose tasks",
+                        items = dependencyCandidates,
+                        selectedIds = selectedDependencyIds,
+                        idOf = { it.id },
+                        labelOf = { it.title },
+                        onToggle = { id ->
+                            selectedDependencyIds = if (id in selectedDependencyIds) selectedDependencyIds - id else selectedDependencyIds + id
+                        },
+                        searchable = true
+                    )
                     Spacer(Modifier.height(12.dp))
                     Text("Contexts", fontFamily = LedgerUiFont, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
                     allContexts.forEach { ctx ->

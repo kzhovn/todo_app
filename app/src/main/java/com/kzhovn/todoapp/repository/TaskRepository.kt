@@ -121,4 +121,6 @@ class TaskRepository(
     }
 
     suspend fun search(query: String): List<Task> = taskDao.search(query)
+
+    suspend fun getAllDependencyEdges(): List<TaskDependency> = taskDao.getAllDependencies()
 }

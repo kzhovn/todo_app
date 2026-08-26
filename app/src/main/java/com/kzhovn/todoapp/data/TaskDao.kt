@@ -104,4 +104,7 @@ interface TaskDao {
 
     @Query("SELECT * FROM tasks WHERE type != 'FOLDER' AND title LIKE '%' || :query || '%' COLLATE NOCASE")
     suspend fun search(query: String): List<Task>
+
+    @Query("SELECT * FROM task_dependencies")
+    suspend fun getAllDependencies(): List<TaskDependency>
 }
