@@ -10,22 +10,30 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material.icons.filled.AlternateEmail
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -34,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.lifecycleScope
@@ -45,6 +54,8 @@ import com.kzhovn.todoapp.ui.TaskEditActivity
 import com.kzhovn.todoapp.ui.TaskListMode
 import com.kzhovn.todoapp.ui.TaskListScreen
 import com.kzhovn.todoapp.ui.TaskListViewModel
+import com.kzhovn.todoapp.ui.theme.LedgerAccent
+import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
 
@@ -108,8 +119,33 @@ class MainActivity : ComponentActivity() {
             Scaffold(
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 floatingActionButton = {
-                    FloatingActionButton(onClick = { startActivity(Intent(this@MainActivity, QuickAddActivity::class.java)) }) {
-                        Icon(Icons.Filled.Add, contentDescription = "New task")
+                    var showFabMenu by remember { mutableStateOf(false) }
+                    Box {
+                        QuickAddFab(
+                            onClick = { startActivity(Intent(this@MainActivity, QuickAddActivity::class.java)) },
+                            onLongClick = { showFabMenu = true }
+                        )
+                        DropdownMenu(expanded = showFabMenu, onDismissRequest = { showFabMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("+ Contexts") },
+                                leadingIcon = { Icon(Icons.Filled.AlternateEmail, contentDescription = null) },
+                                onClick = {
+                                    showFabMenu = false
+                                    startActivity(Intent(this@MainActivity, ContextsActivity::class.java))
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("+ Folder") },
+                                leadingIcon = { Icon(Icons.Filled.Folder, contentDescription = null) },
+                                onClick = {
+                                    showFabMenu = false
+                                    startActivity(
+                                        Intent(this@MainActivity, TaskEditActivity::class.java)
+                                            .putExtra(TaskEditActivity.EXTRA_CREATE_AS_FOLDER, true)
+                                    )
+                                }
+                            )
+                        }
                     }
                 }
             ) {
@@ -121,9 +157,6 @@ class MainActivity : ComponentActivity() {
                             label = { Text("Search") },
                             modifier = Modifier.weight(1f)
                         )
-                        IconButton(onClick = { startActivity(Intent(this@MainActivity, ContextsActivity::class.java)) }) {
-                            Icon(Icons.Filled.Wifi, contentDescription = "Contexts")
-                        }
                     }
                     TabRow(selectedTabIndex = TaskListMode.entries.indexOf(selectedMode)) {
                         TaskListMode.entries.forEach { mode ->
@@ -162,5 +195,25 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         if (wifiMonitorStarted) wifiContextMonitor.stop()
+    }
+}
+
+// Material3's FloatingActionButton doesn't expose long-press, so this re-implements its look
+// with Surface + combinedClickable to add the "+Contexts/+Folder" menu trigger.
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun QuickAddFab(onClick: () -> Unit, onLongClick: () -> Unit) {
+    Surface(
+        modifier = Modifier
+            .size(56.dp)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        shape = CircleShape,
+        color = LedgerAccent,
+        contentColor = LedgerAccentInk,
+        shadowElevation = 6.dp
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.Add, contentDescription = "New task")
+        }
     }
 }

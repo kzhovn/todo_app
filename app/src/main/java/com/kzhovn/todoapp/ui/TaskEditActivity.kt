@@ -84,11 +84,12 @@ class TaskEditActivity : ComponentActivity() {
         val repository = app.repository
         val contextRepository = app.contextRepository
         val taskId = intent.getLongExtra(EXTRA_TASK_ID, 0L)
+        val createAsFolder = intent.getBooleanExtra(EXTRA_CREATE_AS_FOLDER, false)
         setContent {
             LedgerTheme {
             val viewModel = remember { TaskEditViewModel(repository) }
             val scope = rememberCoroutineScope()
-            var task by remember { mutableStateOf(Task(id = taskId, title = "")) }
+            var task by remember { mutableStateOf(Task(id = taskId, title = "", type = if (createAsFolder) TaskType.FOLDER else TaskType.TASK)) }
             // For an existing task, Save must stay disabled until the real task data has
             // loaded — otherwise a tap before the load completes commits this empty
             // placeholder, wiping the task's title and every other field.
@@ -442,6 +443,7 @@ class TaskEditActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_TASK_ID = "task_id"
+        const val EXTRA_CREATE_AS_FOLDER = "create_as_folder"
     }
 }
 
