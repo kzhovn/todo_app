@@ -125,14 +125,16 @@ class QuickAddActivity : ComponentActivity() {
                         label = "Start",
                         valueText = startDate?.let(::formatChipDate),
                         icon = Icons.Filled.Event,
-                        onClick = { pickDate(this@QuickAddActivity, startDate) { startDate = it } }
+                        onClick = { pickDate(this@QuickAddActivity, startDate) { startDate = it } },
+                        showLabelWhenSet = false
                     )
                     Spacer(Modifier.width(8.dp))
                     PropertyChip(
                         label = "Due",
                         valueText = dueDate?.let(::formatChipDate),
                         icon = Icons.Filled.Flag,
-                        onClick = { pickDate(this@QuickAddActivity, dueDate) { dueDate = it } }
+                        onClick = { pickDate(this@QuickAddActivity, dueDate) { dueDate = it } },
+                        showLabelWhenSet = false
                     )
                     Spacer(Modifier.width(8.dp))
                     PropertyChip(

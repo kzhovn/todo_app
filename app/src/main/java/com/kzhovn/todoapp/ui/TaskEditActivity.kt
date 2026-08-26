@@ -195,7 +195,8 @@ class TaskEditActivity : ComponentActivity() {
                         valueText = task.startDate?.let(::formatChipDate),
                         icon = Icons.Filled.Event,
                         onClick = { pickDate(this@TaskEditActivity, task.startDate) { task = task.copy(startDate = it) } },
-                        onClear = { task = task.copy(startDate = null) }
+                        onClear = { task = task.copy(startDate = null) },
+                        showLabelWhenSet = false
                     )
                     Spacer(Modifier.width(8.dp))
                     if (task.type == TaskType.TASK) {
@@ -204,7 +205,8 @@ class TaskEditActivity : ComponentActivity() {
                             valueText = task.dueDate?.let(::formatChipDate),
                             icon = Icons.Filled.Flag,
                             onClick = { pickDate(this@TaskEditActivity, task.dueDate) { task = task.copy(dueDate = it) } },
-                            onClear = { task = task.copy(dueDate = null) }
+                            onClear = { task = task.copy(dueDate = null) },
+                            showLabelWhenSet = false
                         )
                     }
                 }
