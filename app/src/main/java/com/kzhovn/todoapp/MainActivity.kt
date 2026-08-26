@@ -170,7 +170,7 @@ class MainActivity : ComponentActivity() {
             val lastDeleted by repository.lastDeleted.collectAsState()
             LaunchedEffect(lastDeleted) {
                 val deleted = lastDeleted ?: return@LaunchedEffect
-                val topLevelTitle = deleted.firstOrNull { it.id !in deleted.map { d -> d.parentId } }?.title
+                val topLevelTitle = deleted.firstOrNull { it.parentId !in deleted.map { d -> d.id } }?.title
                     ?: deleted.first().title
                 val extra = deleted.size - 1
                 val message = "Deleted \"$topLevelTitle\"" + if (extra > 0) " and $extra more" else ""

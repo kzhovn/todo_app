@@ -408,9 +408,9 @@ class TaskEditActivity : ComponentActivity() {
                     text = {
                         Text(
                             if (descendantCount > 0)
-                                "This will also delete $descendantCount subtask${if (descendantCount == 1) "" else "s"}. This can't be undone."
+                                "This will also delete $descendantCount subtask${if (descendantCount == 1) "" else "s"}. You can undo this from the task list."
                             else
-                                "This can't be undone."
+                                "You can undo this from the task list."
                         )
                     },
                     confirmButton = {
