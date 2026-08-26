@@ -180,9 +180,10 @@ class ContextsActivity : ComponentActivity() {
                                         type == ContextType.PLACE && wifiSsid != null
                                     }
                                 )
-                                val savedId = if (editingContextId != null) {
+                                val currentEditingId = editingContextId
+                                val savedId = if (currentEditingId != null) {
                                     contextRepository.updateContext(contextToSave)
-                                    editingContextId!!
+                                    currentEditingId
                                 } else {
                                     contextRepository.createContext(contextToSave)
                                 }

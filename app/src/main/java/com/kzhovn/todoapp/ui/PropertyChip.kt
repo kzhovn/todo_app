@@ -55,12 +55,13 @@ fun PropertyChip(
     ) {
         Icon(icon, contentDescription = null, tint = if (set) LedgerAccent else LedgerMuted, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(4.dp))
+        val text = when {
+            !set -> label
+            showLabelWhenSet -> "$label: $valueText"
+            else -> valueText ?: label
+        }
         Text(
-            text = when {
-                !set -> label
-                showLabelWhenSet -> "$label: $valueText"
-                else -> valueText!!
-            },
+            text = text,
             fontFamily = LedgerUiFont,
             fontSize = 12.sp,
             color = if (set) LedgerAccent else LedgerMuted

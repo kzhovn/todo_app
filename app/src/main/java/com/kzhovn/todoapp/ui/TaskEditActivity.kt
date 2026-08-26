@@ -214,7 +214,7 @@ class TaskEditActivity : ComponentActivity() {
                     }
                 }
 
-                if (task.dueDate != null) {
+                if (task.dueDate != null && task.type == TaskType.TASK) {
                     Spacer(Modifier.height(8.dp))
                     Text("Remind me", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
                     Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
