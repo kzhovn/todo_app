@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -45,6 +44,7 @@ import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.TaskContext
+import com.kzhovn.todoapp.ui.ConfirmDialog
 import com.kzhovn.todoapp.ui.DayOfWeekToggle
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
@@ -232,24 +232,19 @@ class ContextsActivity : ComponentActivity() {
                 }
             }
             contextPendingDelete?.let { ctx ->
-                AlertDialog(
-                    onDismissRequest = { contextPendingDelete = null },
-                    title = { Text("Delete this context?") },
-                    text = { Text("\"${ctx.name}\" will be removed from every task using it. This can't be undone.") },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                contextPendingDelete = null
-                                scope.launch {
-                                    contextRepository.deleteContext(ctx.id)
-                                    refresh()
-                                    if (editingContextId == ctx.id) resetForm()
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = LedgerOverdue, contentColor = Color.White)
-                        ) { Text("Delete") }
+                ConfirmDialog(
+                    title = "Delete this context?",
+                    body = "\"${ctx.name}\" will be removed from every task using it. This can't be undone.",
+                    confirmLabel = "Delete",
+                    onConfirm = {
+                        contextPendingDelete = null
+                        scope.launch {
+                            contextRepository.deleteContext(ctx.id)
+                            refresh()
+                            if (editingContextId == ctx.id) resetForm()
+                        }
                     },
-                    dismissButton = { Button(onClick = { contextPendingDelete = null }) { Text("Cancel") } }
+                    onDismiss = { contextPendingDelete = null }
                 )
             }
             }

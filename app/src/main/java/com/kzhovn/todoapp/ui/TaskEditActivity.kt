@@ -46,7 +46,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -401,28 +400,21 @@ class TaskEditActivity : ComponentActivity() {
             }
 
             if (showDeleteConfirm) {
-                AlertDialog(
-                    onDismissRequest = { showDeleteConfirm = false },
-                    title = { Text("Delete this ${if (task.type == TaskType.FOLDER) "folder" else "task"}?") },
-                    text = if (descendantCount > 0) {
-                        {
-                            Text("This will also delete $descendantCount subtask${if (descendantCount == 1) "" else "s"}.")
-                        }
+                ConfirmDialog(
+                    title = "Delete this ${if (task.type == TaskType.FOLDER) "folder" else "task"}?",
+                    body = if (descendantCount > 0) {
+                        "This will also delete $descendantCount subtask${if (descendantCount == 1) "" else "s"}."
                     } else null,
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                showDeleteConfirm = false
-                                scope.launch {
-                                    repository.deleteTask(task)
-                                    TodoWidget().updateAll(applicationContext)
-                                    finish()
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = LedgerOverdue, contentColor = Color.White)
-                        ) { Text("Delete") }
+                    confirmLabel = "Delete",
+                    onConfirm = {
+                        showDeleteConfirm = false
+                        scope.launch {
+                            repository.deleteTask(task)
+                            TodoWidget().updateAll(applicationContext)
+                            finish()
+                        }
                     },
-                    dismissButton = { Button(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
+                    onDismiss = { showDeleteConfirm = false }
                 )
             }
 
