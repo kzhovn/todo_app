@@ -48,6 +48,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.appwidget.updateAll
@@ -214,24 +215,18 @@ class TaskEditActivity : ComponentActivity() {
                     Spacer(Modifier.height(8.dp))
                     Text("Remind me", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
                     Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                        listOf(
-                            null to "No reminder",
-                            0 to "At due time",
-                            5 to "5 min before",
-                            30 to "30 min before",
-                            60 to "1 hour before",
-                            1440 to "1 day before"
-                        ).forEach { (offset, label) ->
-                            Text(
-                                label,
-                                fontFamily = LedgerUiFont,
-                                fontSize = 12.sp,
-                                color = if (task.reminderOffsetMinutes == offset) LedgerAccent else LedgerMuted,
-                                modifier = Modifier
-                                    .clickable { task = task.copy(reminderOffsetMinutes = offset) }
-                                    .padding(end = 12.dp, top = 4.dp, bottom = 4.dp)
-                            )
-                        }
+                        LabelOptions(
+                            options = listOf(
+                                null to "No reminder",
+                                0 to "At due time",
+                                5 to "5 min before",
+                                30 to "30 min before",
+                                60 to "1 hour before",
+                                1440 to "1 day before"
+                            ),
+                            selected = task.reminderOffsetMinutes,
+                            onSelect = { offset -> task = task.copy(reminderOffsetMinutes = offset) }
+                        )
                     }
                 }
 
@@ -248,21 +243,15 @@ class TaskEditActivity : ComponentActivity() {
                     Spacer(Modifier.height(12.dp))
                     Text("Repeat", fontFamily = LedgerUiFont, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
                     Row(modifier = Modifier.padding(top = 4.dp)) {
-                        listOf(
-                            RecurrencePreset.NONE to "None",
-                            RecurrencePreset.CALENDAR to "Every",
-                            RecurrencePreset.AFTER_COMPLETION_N_DAYS to "After completion"
-                        ).forEach { (preset, label) ->
-                            Text(
-                                label,
-                                fontFamily = LedgerUiFont,
-                                fontSize = 12.sp,
-                                color = if (recurrence.preset == preset) LedgerAccent else LedgerMuted,
-                                modifier = Modifier
-                                    .clickable { recurrence = recurrence.copy(preset = preset) }
-                                    .padding(end = 12.dp, top = 4.dp, bottom = 4.dp)
-                            )
-                        }
+                        LabelOptions(
+                            options = listOf(
+                                RecurrencePreset.NONE to "None",
+                                RecurrencePreset.CALENDAR to "Every",
+                                RecurrencePreset.AFTER_COMPLETION_N_DAYS to "After completion"
+                            ),
+                            selected = recurrence.preset,
+                            onSelect = { preset -> recurrence = recurrence.copy(preset = preset) }
+                        )
                     }
                     if (recurrence.preset == RecurrencePreset.CALENDAR) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
@@ -270,21 +259,17 @@ class TaskEditActivity : ComponentActivity() {
                             Spacer(Modifier.width(6.dp))
                             CompactNumberField(value = recurrence.n) { n -> recurrence = recurrence.copy(n = n) }
                             Spacer(Modifier.width(6.dp))
-                            listOf(
-                                RecurrenceUnit.DAY to "day(s)",
-                                RecurrenceUnit.WEEK to "week(s)",
-                                RecurrenceUnit.MONTH to "month(s)"
-                            ).forEach { (unit, label) ->
-                                Text(
-                                    label,
-                                    fontFamily = LedgerUiFont,
-                                    fontSize = 12.sp,
-                                    color = if (recurrence.unit == unit) LedgerAccent else LedgerMuted,
-                                    modifier = Modifier
-                                        .clickable { recurrence = recurrence.copy(unit = unit) }
-                                        .padding(end = 8.dp)
-                                )
-                            }
+                            LabelOptions(
+                                options = listOf(
+                                    RecurrenceUnit.DAY to "day(s)",
+                                    RecurrenceUnit.WEEK to "week(s)",
+                                    RecurrenceUnit.MONTH to "month(s)"
+                                ),
+                                selected = recurrence.unit,
+                                trailingPadding = 8.dp,
+                                verticalPadding = 0.dp,
+                                onSelect = { unit -> recurrence = recurrence.copy(unit = unit) }
+                            )
                         }
                         if (recurrence.unit == RecurrenceUnit.WEEK) {
                             Spacer(Modifier.height(4.dp))
@@ -465,6 +450,27 @@ class TaskEditActivity : ComponentActivity() {
     companion object {
         const val EXTRA_TASK_ID = "task_id"
         const val EXTRA_CREATE_AS_FOLDER = "create_as_folder"
+    }
+}
+
+@Composable
+private fun <T> LabelOptions(
+    options: List<Pair<T, String>>,
+    selected: T,
+    trailingPadding: Dp = 12.dp,
+    verticalPadding: Dp = 4.dp,
+    onSelect: (T) -> Unit
+) {
+    options.forEach { (value, label) ->
+        Text(
+            label,
+            fontFamily = LedgerUiFont,
+            fontSize = 12.sp,
+            color = if (selected == value) LedgerAccent else LedgerMuted,
+            modifier = Modifier
+                .clickable { onSelect(value) }
+                .padding(end = trailingPadding, top = verticalPadding, bottom = verticalPadding)
+        )
     }
 }
 

@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
@@ -35,8 +34,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,13 +43,12 @@ import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.ui.ConfirmDialog
 import com.kzhovn.todoapp.ui.DayOfWeekToggle
+import com.kzhovn.todoapp.ui.SelectablePill
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
-import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
 import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk
-import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerOverdue
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
 import com.kzhovn.todoapp.ui.theme.LedgerTitleFont
@@ -135,9 +131,9 @@ class ContextsActivity : ComponentActivity() {
                 OutlinedTextField(value = name, onValueChange = { name = it }, placeholder = { Text("Name") }, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
                 Row {
-                    TypeOption("Place (wifi)", type == ContextType.PLACE) { type = ContextType.PLACE }
+                    SelectablePill(label = "Place (wifi)", selected = type == ContextType.PLACE, onClick = { type = ContextType.PLACE })
                     Spacer(Modifier.width(12.dp))
-                    TypeOption("Time window", type == ContextType.TIME) { type = ContextType.TIME }
+                    SelectablePill(label = "Time window", selected = type == ContextType.TIME, onClick = { type = ContextType.TIME })
                 }
                 Spacer(Modifier.height(8.dp))
                 if (type == ContextType.PLACE) {
@@ -250,21 +246,6 @@ class ContextsActivity : ComponentActivity() {
             }
         }
     }
-}
-
-@Composable
-private fun TypeOption(label: String, selected: Boolean, onClick: () -> Unit) {
-    Text(
-        label,
-        fontFamily = LedgerUiFont,
-        fontSize = 13.sp,
-        color = if (selected) LedgerAccent else LedgerMuted,
-        modifier = Modifier
-            .clip(RoundedCornerShape(5.dp))
-            .background(if (selected) LedgerAccentSoft else Color.Transparent)
-            .clickable { onClick() }
-            .padding(horizontal = 10.dp, vertical = 6.dp)
-    )
 }
 
 @Composable
