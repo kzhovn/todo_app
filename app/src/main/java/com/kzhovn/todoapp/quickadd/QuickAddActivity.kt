@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -45,6 +44,7 @@ import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.ui.FolderPickerDialog
 import com.kzhovn.todoapp.ui.PropertyChip
 import com.kzhovn.todoapp.ui.TaskEditActivity
 import com.kzhovn.todoapp.ui.formatChipDate
@@ -52,7 +52,6 @@ import com.kzhovn.todoapp.ui.pickDate
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
 import com.kzhovn.todoapp.ui.theme.LedgerBorder
-import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerSearchBackground
 import com.kzhovn.todoapp.ui.theme.LedgerStar
@@ -182,25 +181,11 @@ class QuickAddActivity : ComponentActivity() {
             }
 
             if (showFolderPicker) {
-                AlertDialog(
-                    onDismissRequest = { showFolderPicker = false },
-                    confirmButton = {},
-                    title = { Text("Choose a folder") },
-                    text = {
-                        Column {
-                            folders.forEach { f ->
-                                Text(
-                                    f.title,
-                                    fontFamily = LedgerUiFont,
-                                    color = LedgerInk,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { folder = f; showFolderPicker = false }
-                                        .padding(vertical = 8.dp)
-                                )
-                            }
-                        }
-                    }
+                FolderPickerDialog(
+                    folders = folders,
+                    showNoFolderOption = false,
+                    onPick = { picked -> folder = picked; showFolderPicker = false },
+                    onDismiss = { showFolderPicker = false }
                 )
             }
             }

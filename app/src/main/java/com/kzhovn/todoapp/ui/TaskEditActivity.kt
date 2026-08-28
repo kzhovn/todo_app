@@ -10,7 +10,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.padding
@@ -28,10 +27,8 @@ import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -61,7 +58,6 @@ import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
-import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
 import com.kzhovn.todoapp.recurrence.RecurrenceSelection
@@ -420,39 +416,14 @@ class TaskEditActivity : ComponentActivity() {
             }
 
             if (showFolderPicker) {
-                AlertDialog(
-                    onDismissRequest = { showFolderPicker = false },
-                    confirmButton = {},
-                    title = { Text("Choose a folder") },
-                    text = {
-                        Column {
-                            Text(
-                                "No folder",
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { task = task.copy(parentId = null); showFolderPicker = false }
-                                    .padding(vertical = 8.dp)
-                            )
-                            folders.filter { !wouldCreateCycle(it.id, task.id, allById) }.forEach { f ->
-                                Text(
-                                    f.title,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { task = task.copy(parentId = f.id); showFolderPicker = false }
-                                        .padding(vertical = 8.dp)
-                                )
-                            }
-                            HorizontalDivider()
-                            Text(
-                                "+ New folder",
-                                color = LedgerAccent,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showFolderPicker = false; showNewFolderDialog = true }
-                                    .padding(vertical = 8.dp)
-                            )
-                        }
-                    }
+                FolderPickerDialog(
+                    folders = folders,
+                    excludeDescendantsOf = task.id,
+                    allById = allById,
+                    showNoFolderOption = true,
+                    onPick = { picked -> task = task.copy(parentId = picked?.id); showFolderPicker = false },
+                    onDismiss = { showFolderPicker = false },
+                    onCreateNew = { showFolderPicker = false; showNewFolderDialog = true }
                 )
             }
 
