@@ -119,10 +119,7 @@ class TaskRepository(
     // call getActiveTasksFrom directly instead of paying for a second fetch here.
     suspend fun getActiveTasks(now: Long, currentMinuteOfDay: Int, todayMask: Int): List<Task> {
         val all = taskDao.getAllOnce()
-        val contextsByTaskId = taskContextDao.getAllCrossRefs()
-            .groupBy({ it.taskId }, { it.contextId })
-            .mapValues { it.value.toSet() }
-        return getActiveTasksFrom(all, contextsByTaskId, now, currentMinuteOfDay, todayMask)
+        return getActiveTasksFrom(all, getAllTaskContexts(), now, currentMinuteOfDay, todayMask)
     }
 
     suspend fun getActiveTasksFrom(
