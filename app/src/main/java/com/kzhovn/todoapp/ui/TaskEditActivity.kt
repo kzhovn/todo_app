@@ -154,8 +154,8 @@ class TaskEditActivity : ComponentActivity() {
                     selectedContextIds = contextRepository.getContextsForTask(taskId).map { it.id }.toSet()
                     isLoaded = true
                 }
-                folders = repository.getFolders()
                 allTasks = repository.getAllTasks()
+                folders = allTasks.filter { it.type == TaskType.FOLDER }
                 allDependencyEdges = repository.getAllDependencyEdges()
                 allContexts = contextRepository.getAllContexts()
             }
