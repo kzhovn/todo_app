@@ -1,11 +1,10 @@
-package com.kzhovn.todoapp.ui
+package com.kzhovn.todoapp.data
 
-import com.kzhovn.todoapp.data.Task
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class TaskTreeTest {
+class TaskGraphTest {
     @Test
     fun `picking yourself as your own parent is a cycle`() {
         val byId = mapOf(1L to Task(id = 1, title = "A"))

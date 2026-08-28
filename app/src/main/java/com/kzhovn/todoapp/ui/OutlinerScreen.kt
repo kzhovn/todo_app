@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.data.OutlinerPreferences
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerCheckBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk

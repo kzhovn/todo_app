@@ -18,15 +18,8 @@ fun resolveEffective(
     allById: Map<Long, Task>,
     contextsByTaskId: Map<Long, Set<Long>>
 ): EffectiveTask {
-    fun <T : Any> walkUp(getValue: (Task) -> T?): T? {
-        val seen = mutableSetOf<Long>() // nothing forbids a parentId cycle; don't spin forever on one
-        var current: Task? = task
-        while (current != null && seen.add(current.id)) {
-            getValue(current)?.let { return it }
-            current = current.parentId?.let { allById[it] }
-        }
-        return null
-    }
+    fun <T : Any> walkUp(getValue: (Task) -> T?): T? =
+        walkParentChain(task.id, allById) { id -> allById[id]?.let(getValue) }
 
     return EffectiveTask(
         task = task,
