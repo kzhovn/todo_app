@@ -456,58 +456,40 @@ class TaskEditActivity : ComponentActivity() {
             }
 
             if (showNewFolderDialog) {
-                AlertDialog(
-                    onDismissRequest = { showNewFolderDialog = false },
-                    title = { Text("New folder") },
-                    text = {
-                        OutlinedTextField(
-                            value = newFolderName,
-                            onValueChange = { newFolderName = it },
-                            placeholder = { Text("Folder name") }
-                        )
+                TextInputDialog(
+                    title = "New folder",
+                    placeholder = "Folder name",
+                    confirmLabel = "Create",
+                    value = newFolderName,
+                    onValueChange = { newFolderName = it },
+                    onConfirm = {
+                        scope.launch {
+                            val newId = repository.createTask(Task(type = TaskType.FOLDER, title = newFolderName))
+                            task = task.copy(parentId = newId)
+                            folders = repository.getFolders()
+                            newFolderName = ""
+                            showNewFolderDialog = false
+                        }
                     },
-                    confirmButton = {
-                        Button(
-                            enabled = newFolderName.isNotBlank(),
-                            onClick = {
-                                scope.launch {
-                                    val newId = repository.createTask(Task(type = TaskType.FOLDER, title = newFolderName))
-                                    task = task.copy(parentId = newId)
-                                    folders = repository.getFolders()
-                                    newFolderName = ""
-                                    showNewFolderDialog = false
-                                }
-                            }
-                        ) { Text("Create") }
-                    },
-                    dismissButton = { Button(onClick = { showNewFolderDialog = false }) { Text("Cancel") } }
+                    onDismiss = { showNewFolderDialog = false }
                 )
             }
 
             if (showAddSubtaskDialog) {
-                AlertDialog(
-                    onDismissRequest = { showAddSubtaskDialog = false },
-                    title = { Text("Add subtask") },
-                    text = {
-                        OutlinedTextField(
-                            value = newSubtaskTitle,
-                            onValueChange = { newSubtaskTitle = it },
-                            placeholder = { Text("Subtask name") }
-                        )
+                TextInputDialog(
+                    title = "Add subtask",
+                    placeholder = "Subtask name",
+                    confirmLabel = "Add",
+                    value = newSubtaskTitle,
+                    onValueChange = { newSubtaskTitle = it },
+                    onConfirm = {
+                        scope.launch {
+                            repository.createTask(Task(title = newSubtaskTitle, parentId = task.id))
+                            newSubtaskTitle = ""
+                            showAddSubtaskDialog = false
+                        }
                     },
-                    confirmButton = {
-                        Button(
-                            enabled = newSubtaskTitle.isNotBlank(),
-                            onClick = {
-                                scope.launch {
-                                    repository.createTask(Task(title = newSubtaskTitle, parentId = task.id))
-                                    newSubtaskTitle = ""
-                                    showAddSubtaskDialog = false
-                                }
-                            }
-                        ) { Text("Add") }
-                    },
-                    dismissButton = { Button(onClick = { showAddSubtaskDialog = false }) { Text("Cancel") } }
+                    onDismiss = { showAddSubtaskDialog = false }
                 )
             }
             }

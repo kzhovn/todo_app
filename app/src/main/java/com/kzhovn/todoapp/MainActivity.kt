@@ -76,6 +76,7 @@ import com.kzhovn.todoapp.ui.TaskEditActivity
 import com.kzhovn.todoapp.ui.TaskListMode
 import com.kzhovn.todoapp.ui.TaskListScreen
 import com.kzhovn.todoapp.ui.TaskListViewModel
+import com.kzhovn.todoapp.ui.TextInputDialog
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
@@ -344,30 +345,21 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     addSubtaskParentId?.let { parentId ->
-                        AlertDialog(
-                            onDismissRequest = { addSubtaskParentId = null; newSubtaskTitle = "" },
-                            title = { Text("Add subtask") },
-                            text = {
-                                OutlinedTextField(
-                                    value = newSubtaskTitle,
-                                    onValueChange = { newSubtaskTitle = it },
-                                    placeholder = { Text("Subtask name") }
-                                )
+                        TextInputDialog(
+                            title = "Add subtask",
+                            placeholder = "Subtask name",
+                            confirmLabel = "Add",
+                            value = newSubtaskTitle,
+                            onValueChange = { newSubtaskTitle = it },
+                            onConfirm = {
+                                scope.launch {
+                                    repository.createTask(Task(title = newSubtaskTitle, parentId = parentId))
+                                    newSubtaskTitle = ""
+                                    addSubtaskParentId = null
+                                    viewModel.load(selectedMode)
+                                }
                             },
-                            confirmButton = {
-                                Button(
-                                    enabled = newSubtaskTitle.isNotBlank(),
-                                    onClick = {
-                                        scope.launch {
-                                            repository.createTask(Task(title = newSubtaskTitle, parentId = parentId))
-                                            newSubtaskTitle = ""
-                                            addSubtaskParentId = null
-                                            viewModel.load(selectedMode)
-                                        }
-                                    }
-                                ) { Text("Add") }
-                            },
-                            dismissButton = { Button(onClick = { addSubtaskParentId = null; newSubtaskTitle = "" }) { Text("Cancel") } }
+                            onDismiss = { addSubtaskParentId = null; newSubtaskTitle = "" }
                         )
                     }
                 }
