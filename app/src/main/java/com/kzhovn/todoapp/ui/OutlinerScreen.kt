@@ -204,7 +204,7 @@ private fun OutlinerRow(
                 )
             }
             TaskType.TASK -> {
-                TaskCheckbox(checked = task.isComplete, overdue = isOverdue(task), size = 13.dp, onCheckedChange = { onCheck(task.id) })
+                TaskCheckbox(checked = task.isComplete, overdue = isOverdue(task.isComplete, task.dueDate), size = 13.dp, onCheckedChange = { onCheck(task.id) })
                 Spacer(Modifier.width(6.dp))
                 Text(
                     task.title,

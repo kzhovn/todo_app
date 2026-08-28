@@ -1,6 +1,5 @@
 package com.kzhovn.todoapp.ui
 
-import com.kzhovn.todoapp.data.Task
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -43,28 +42,24 @@ class TaskListScreenTest {
     @Test
     fun `isOverdue is false for a complete task with a past due date`() {
         val now = millisFor(2026, Calendar.AUGUST, 25)
-        val task = Task(title = "Done", isComplete = true, dueDate = now - 1000)
-        assertFalse(isOverdue(task, now))
+        assertFalse(isOverdue(isComplete = true, dueDate = now - 1000, now = now))
     }
 
     @Test
     fun `isOverdue is true for an incomplete task with a past due date`() {
         val now = millisFor(2026, Calendar.AUGUST, 25)
-        val task = Task(title = "Late", dueDate = now - 1000)
-        assertTrue(isOverdue(task, now))
+        assertTrue(isOverdue(isComplete = false, dueDate = now - 1000, now = now))
     }
 
     @Test
     fun `isOverdue is false for an incomplete task with a future due date`() {
         val now = millisFor(2026, Calendar.AUGUST, 25)
-        val task = Task(title = "Later", dueDate = now + 1000)
-        assertFalse(isOverdue(task, now))
+        assertTrue(!isOverdue(isComplete = false, dueDate = now + 1000, now = now))
     }
 
     @Test
     fun `isOverdue is false for an incomplete task with no due date`() {
         val now = millisFor(2026, Calendar.AUGUST, 25)
-        val task = Task(title = "No due date")
-        assertFalse(isOverdue(task, now))
+        assertFalse(isOverdue(isComplete = false, dueDate = null, now = now))
     }
 }

@@ -7,6 +7,12 @@ import android.content.Intent
 import android.net.Uri
 import com.kzhovn.todoapp.data.Task
 
+// Shared by ReminderScheduler.pendingIntentFor and ReminderReceiver's content Intent — both need
+// the same Uri-identity scheme so PendingIntent equality is keyed off the full Long id, not a
+// truncated Int request code. Keeping the format in one place means it can't drift out of sync
+// between the two.
+fun taskDeepLinkUri(id: Long): Uri = Uri.parse("todoapp://task/$id")
+
 class ReminderScheduler(private val context: Context, private val alarmManager: AlarmManager) {
 
     fun schedule(task: Task, now: Long = System.currentTimeMillis()) {
@@ -39,7 +45,7 @@ class ReminderScheduler(private val context: Context, private val alarmManager: 
         // can never collide just because their ids happen to share the same low 32 bits, the way a
         // truncated Int request code alone would let them.
         val intent = Intent(context, ReminderReceiver::class.java).apply {
-            data = Uri.parse("todoapp://task/${task.id}")
+            data = taskDeepLinkUri(task.id)
             putExtra(ReminderReceiver.EXTRA_TASK_ID, task.id)
             putExtra(ReminderReceiver.EXTRA_TASK_TITLE, task.title)
         }

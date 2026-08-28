@@ -64,10 +64,7 @@ import com.kzhovn.todoapp.ui.theme.LedgerTitleFont
 import com.kzhovn.todoapp.ui.theme.LedgerToday
 import com.kzhovn.todoapp.ui.theme.LedgerTodayBg
 import com.kzhovn.todoapp.ui.theme.folderColor
-import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Date
-import java.util.Locale
 
 @Composable
 fun TaskListScreen(
@@ -123,7 +120,7 @@ private fun TaskRow(
     val contextName = effective.effectiveContextIds.firstOrNull()?.let { allContexts[it]?.name }
     // Overdue styling must track the *displayed* (effective/inherited) due date, not the task's
     // own possibly-null field, or an inherited overdue date would render in the neutral color.
-    val effectiveOverdue = !task.isComplete && effective.effectiveDueDate != null && effective.effectiveDueDate < System.currentTimeMillis()
+    val effectiveOverdue = isOverdue(task.isComplete, effective.effectiveDueDate)
     // DropdownMenu is Popup-based (SubcomposeLayout internally) and can't answer the intrinsic
     // width queries an IntrinsicSize.Min row needs from its children, so it must live outside
     // the Row below as a plain sibling rather than nested inside one of the Row's children.
@@ -226,7 +223,7 @@ private fun DueChip(dueDate: Long, overdue: Boolean) {
         isToday -> LedgerTodayBg to LedgerToday
         else -> LedgerNeutralBg to LedgerMuted
     }
-    val label = if (isToday) "Today" else SimpleDateFormat("MMM d", Locale.US).format(Date(dueDate))
+    val label = if (isToday) "Today" else formatChipDate(dueDate)
     Box(
         modifier = Modifier
             .padding(horizontal = 4.dp)
@@ -238,8 +235,8 @@ private fun DueChip(dueDate: Long, overdue: Boolean) {
     }
 }
 
-fun isOverdue(task: Task, now: Long = System.currentTimeMillis()): Boolean =
-    !task.isComplete && task.dueDate != null && task.dueDate < now
+fun isOverdue(isComplete: Boolean, dueDate: Long?, now: Long = System.currentTimeMillis()): Boolean =
+    !isComplete && dueDate != null && dueDate < now
 
 fun isSameDay(a: Long, b: Long): Boolean {
     val calA = Calendar.getInstance().apply { timeInMillis = a }

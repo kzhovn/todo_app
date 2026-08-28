@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kzhovn.todoapp.quickadd.startOfDay
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
@@ -91,11 +92,8 @@ fun pickDate(activity: Activity, currentValue: Long?, onPicked: (Long) -> Unit) 
     DatePickerDialog(
         activity,
         { _, year, month, day ->
-            val picked = Calendar.getInstance().apply {
-                set(year, month, day, 0, 0, 0)
-                set(Calendar.MILLISECOND, 0)
-            }
-            onPicked(picked.timeInMillis)
+            val picked = Calendar.getInstance().apply { set(year, month, day) }.startOfDay()
+            onPicked(picked)
         },
         cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)
     ).show()

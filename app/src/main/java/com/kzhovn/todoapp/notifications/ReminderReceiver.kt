@@ -25,7 +25,7 @@ class ReminderReceiver : BroadcastReceiver() {
         val contentIntent = PendingIntent.getActivity(
             context, 0,
             Intent(context, MainActivity::class.java).apply {
-                data = android.net.Uri.parse("todoapp://task/$taskId")
+                data = taskDeepLinkUri(taskId)
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
