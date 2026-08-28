@@ -274,6 +274,19 @@ class TaskRepositoryTest {
     }
 
     @Test
+    fun `countDescendants matches the size of getDescendants' underlying result for a task with no descendants`() = runBlocking {
+        val taskId = repository.createTask(Task(title = "Solo task"))
+        assertEquals(0, repository.countDescendants(taskId))
+    }
+
+    @Test
+    fun `countActiveDescendants excludes folders from the count`() = runBlocking {
+        val parentId = repository.createTask(Task(title = "Plan trip"))
+        repository.createTask(Task(type = TaskType.FOLDER, title = "A subfolder", parentId = parentId))
+        assertEquals(0, repository.countActiveDescendants(parentId))
+    }
+
+    @Test
     fun `completeWithDescendants completes every active descendant`() = runBlocking {
         val parentId = repository.createTask(Task(title = "Plan trip"))
         val childId = repository.createTask(Task(title = "Book flight", parentId = parentId))

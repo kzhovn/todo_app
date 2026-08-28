@@ -40,7 +40,7 @@ class TaskRepository(
         return id
     }
 
-    suspend fun countDescendants(taskId: Long): Int = taskDao.countDescendants(taskId)
+    suspend fun countDescendants(taskId: Long): Int = taskDao.getDescendants(taskId).size
 
     // Cascades: deleting a folder/task also deletes every descendant, canceling each one's
     // reminder alarm too. The confirmation dialog (TaskEditActivity) shows countDescendants()
@@ -222,7 +222,8 @@ class TaskRepository(
 
     suspend fun getAllDependencyEdges(): List<TaskDependency> = taskDao.getAllDependencies()
 
-    suspend fun countActiveDescendants(taskId: Long): Int = taskDao.countActiveDescendants(taskId)
+    suspend fun countActiveDescendants(taskId: Long): Int =
+        taskDao.getDescendants(taskId).count { it.type != TaskType.FOLDER && !it.isComplete }
 
     // Cascades completion to every active descendant first — each goes through markComplete
     // individually so a recurring descendant still spawns its own next instance.
