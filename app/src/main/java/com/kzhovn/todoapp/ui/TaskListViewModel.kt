@@ -76,20 +76,6 @@ class TaskListViewModel(
         }
     }
 
-    fun markComplete(taskId: Long, mode: TaskListMode) {
-        viewModelScope.launch {
-            repository.markComplete(taskId, clock())
-            load(mode)
-        }
-    }
-
-    fun toggleComplete(taskId: Long, mode: TaskListMode) {
-        viewModelScope.launch {
-            repository.toggleComplete(taskId, clock())
-            load(mode)
-        }
-    }
-
     fun snooze(taskId: Long, durationMillis: Long, mode: TaskListMode) {
         viewModelScope.launch {
             repository.snooze(taskId, durationMillis, clock())

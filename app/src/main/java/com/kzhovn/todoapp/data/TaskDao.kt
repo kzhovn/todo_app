@@ -77,18 +77,6 @@ interface TaskDao {
 
     @Query(
         """
-        WITH RECURSIVE descendants(id) AS (
-            SELECT id FROM tasks WHERE parentId = :folderId
-            UNION ALL
-            SELECT t.id FROM tasks t JOIN descendants d ON t.parentId = d.id
-        )
-        SELECT * FROM tasks WHERE id IN (SELECT id FROM descendants) AND type != 'FOLDER'
-        """
-    )
-    suspend fun getLeafTasksUnder(folderId: Long): List<Task>
-
-    @Query(
-        """
         SELECT * FROM tasks
         WHERE type != 'FOLDER'
           AND title LIKE '%' || :query || '%' COLLATE NOCASE

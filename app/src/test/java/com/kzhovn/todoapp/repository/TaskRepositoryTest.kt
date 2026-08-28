@@ -199,18 +199,6 @@ class TaskRepositoryTest {
     }
 
     @Test
-    fun `getTasksUnderFolder returns nested descendants but not folders`() = runBlocking {
-        val workId = repository.createTask(Task(type = TaskType.FOLDER, title = "Work"))
-        val projectId = repository.createTask(Task(type = TaskType.FOLDER, title = "Project A", parentId = workId))
-        repository.createTask(Task(title = "Write spec", parentId = projectId))
-        repository.createTask(Task(title = "Unrelated task"))
-
-        val underWork = repository.getTasksUnderFolder(workId)
-
-        assertEquals(listOf("Write spec"), underWork.map { it.title })
-    }
-
-    @Test
     fun `setDependencies assigns and reads back dependencies`() = runBlocking {
         val taskId = repository.createTask(Task(title = "Ship report"))
         val depA = repository.createTask(Task(title = "Gather data"))

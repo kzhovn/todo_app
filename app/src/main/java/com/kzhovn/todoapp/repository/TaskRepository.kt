@@ -191,19 +191,12 @@ class TaskRepository(
         reminderScheduler.schedule(task)
     }
 
-    suspend fun setSequential(folderId: Long, sequential: Boolean) {
-        val task = taskDao.getById(folderId) ?: return
-        taskDao.update(task.copy(sequential = sequential))
-    }
-
     suspend fun setDueDate(taskId: Long, dueDate: Long?) {
         val task = taskDao.getById(taskId) ?: return
         val updated = task.copy(dueDate = dueDate)
         taskDao.update(updated)
         reminderScheduler.schedule(updated)
     }
-
-    suspend fun getTasksUnderFolder(folderId: Long): List<Task> = taskDao.getLeafTasksUnder(folderId)
 
     suspend fun addDependency(taskId: Long, dependsOnTaskId: Long) =
         taskDao.insertDependency(TaskDependency(taskId, dependsOnTaskId))

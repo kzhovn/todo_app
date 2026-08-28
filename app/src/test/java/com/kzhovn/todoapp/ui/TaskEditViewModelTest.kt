@@ -90,14 +90,4 @@ class TaskEditViewModelTest {
         assertEquals(taskId, savedId)
         assertEquals("Updated", repository.getTask(taskId)?.title)
     }
-
-    @Test
-    fun `setSequential toggles a folder's sequential flag`() = runTest {
-        val folderId = repository.createTask(Task(type = TaskType.FOLDER, title = "Project"))
-
-        viewModel.setSequential(folderId, true)
-        advanceUntilIdle()
-
-        assertTrue(repository.getTask(folderId)!!.sequential)
-    }
 }

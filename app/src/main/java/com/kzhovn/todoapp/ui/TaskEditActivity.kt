@@ -268,10 +268,7 @@ class TaskEditActivity : ComponentActivity() {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                             Text("Every", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
                             Spacer(Modifier.width(6.dp))
-                            CompactNumberField(
-                                value = recurrence.n,
-                                enabled = true
-                            ) { n -> recurrence = recurrence.copy(n = n) }
+                            CompactNumberField(value = recurrence.n) { n -> recurrence = recurrence.copy(n = n) }
                             Spacer(Modifier.width(6.dp))
                             listOf(
                                 RecurrenceUnit.DAY to "day(s)",
@@ -298,10 +295,7 @@ class TaskEditActivity : ComponentActivity() {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                             Text("Repeat", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
                             Spacer(Modifier.width(6.dp))
-                            CompactNumberField(
-                                value = recurrence.n,
-                                enabled = true
-                            ) { n -> recurrence = recurrence.copy(n = n) }
+                            CompactNumberField(value = recurrence.n) { n -> recurrence = recurrence.copy(n = n) }
                             Spacer(Modifier.width(6.dp))
                             Text("days after completion", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
                         }
@@ -475,15 +469,14 @@ class TaskEditActivity : ComponentActivity() {
 }
 
 @Composable
-private fun CompactNumberField(value: Int, enabled: Boolean, onValueChange: (Int) -> Unit) {
-    var text by remember(value, enabled) { mutableStateOf(if (enabled) value.toString() else "") }
+private fun CompactNumberField(value: Int, onValueChange: (Int) -> Unit) {
+    var text by remember(value) { mutableStateOf(value.toString()) }
     BasicTextField(
         value = text,
         onValueChange = { new ->
             text = new
             new.toIntOrNull()?.takeIf { it > 0 }?.let(onValueChange)
         },
-        enabled = enabled,
         singleLine = true,
         textStyle = TextStyle(fontFamily = LedgerUiFont, fontSize = 14.sp, color = LedgerInk),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

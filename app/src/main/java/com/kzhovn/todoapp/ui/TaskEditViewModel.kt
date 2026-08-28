@@ -19,8 +19,4 @@ class TaskEditViewModel(private val repository: TaskRepository) : ViewModel() {
             onSaved(savedId)
         }
     }
-
-    fun setSequential(folderId: Long, sequential: Boolean) {
-        viewModelScope.launch { repository.setSequential(folderId, sequential) }
-    }
 }
