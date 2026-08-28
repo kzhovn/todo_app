@@ -157,4 +157,19 @@ class TaskRepositoryActiveTest {
         // has no context of its own, so it inherits the parent's and is excluded too.
         assertTrue(repository.getActiveTasks(now, 600, allDays).isEmpty())
     }
+
+    @Test
+    fun `getActiveTasksFrom filters pre-fetched data the same way getActiveTasks does`() = runBlocking {
+        repository.createTask(Task(title = "Simple task"))
+        repository.createTask(Task(title = "Future task", startDate = now + 1_000))
+
+        val all = repository.getAllTasks()
+        val contextsByTaskId = repository.getAllTaskContexts()
+
+        val fromHelper = repository.getActiveTasksFrom(all, contextsByTaskId, now, 600, allDays)
+        val fromPublicEntry = repository.getActiveTasks(now, 600, allDays)
+
+        assertEquals(fromPublicEntry.map { it.id }.toSet(), fromHelper.map { it.id }.toSet())
+        assertEquals(listOf("Simple task"), fromHelper.map { it.title })
+    }
 }

@@ -44,9 +44,9 @@ class TaskListViewModel(
             val all = refreshSubtaskCounts()
             _tasks.value = when (mode) {
                 TaskListMode.ALL -> all
-                TaskListMode.ACTIVE -> repository.getActiveTasks(now, minuteOfDay(now), dayOfWeekMask(now))
+                TaskListMode.ACTIVE -> repository.getActiveTasksFrom(all, _contextsByTaskId.value, now, minuteOfDay(now), dayOfWeekMask(now))
                 TaskListMode.DOING -> filterDoing(
-                    repository.getActiveTasks(now, minuteOfDay(now), dayOfWeekMask(now)),
+                    repository.getActiveTasksFrom(all, _contextsByTaskId.value, now, minuteOfDay(now), dayOfWeekMask(now)),
                     now
                 ) { resolveEffective(it, _allById.value, _contextsByTaskId.value).effectiveDueDate }
             }

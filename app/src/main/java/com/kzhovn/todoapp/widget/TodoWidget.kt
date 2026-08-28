@@ -50,9 +50,10 @@ class TodoWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repository = (context.applicationContext as TodoApp).repository
         val now = System.currentTimeMillis()
-        val allById = repository.getAllTasks().associateBy { it.id }
+        val allTasks = repository.getAllTasks()
+        val allById = allTasks.associateBy { it.id }
         val contextsByTaskId = repository.getAllTaskContexts()
-        val activeTasks = repository.getActiveTasks(now, minuteOfDay(now), dayOfWeekMask(now))
+        val activeTasks = repository.getActiveTasksFrom(allTasks, contextsByTaskId, now, minuteOfDay(now), dayOfWeekMask(now))
         val rows = TodoWidgetPresenter.toRows(
             filterDoing(activeTasks, now) {
                 resolveEffective(it, allById, contextsByTaskId).effectiveDueDate
