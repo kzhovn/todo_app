@@ -305,4 +305,23 @@ class TaskRepositoryTest {
 
         assertNull(repository.getTask(childId)!!.parentId)
     }
+
+    @Test
+    fun `minuteOfDay converts a timestamp to minutes since midnight`() {
+        val cal = java.util.Calendar.getInstance().apply {
+            set(2026, java.util.Calendar.AUGUST, 26, 14, 30, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        assertEquals(14 * 60 + 30, minuteOfDay(cal.timeInMillis))
+    }
+
+    @Test
+    fun `dayOfWeekMask sets exactly one bit matching Calendar's DAY_OF_WEEK`() {
+        val cal = java.util.Calendar.getInstance().apply {
+            set(2026, java.util.Calendar.AUGUST, 26, 12, 0, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        val expectedBit = 1 shl (cal.get(java.util.Calendar.DAY_OF_WEEK) - 1)
+        assertEquals(expectedBit, dayOfWeekMask(cal.timeInMillis))
+    }
 }

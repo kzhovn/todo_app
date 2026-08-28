@@ -13,6 +13,18 @@ import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
+// Shared by every caller of getActiveTasks (TaskListViewModel, TodoWidget) so app and widget
+// always agree on "now" using the same Calendar arithmetic.
+fun minuteOfDay(epochMillis: Long): Int {
+    val cal = java.util.Calendar.getInstance().apply { timeInMillis = epochMillis }
+    return cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+}
+
+fun dayOfWeekMask(epochMillis: Long): Int {
+    val cal = java.util.Calendar.getInstance().apply { timeInMillis = epochMillis }
+    return 1 shl (cal.get(java.util.Calendar.DAY_OF_WEEK) - 1)
+}
+
 class TaskRepository(
     private val taskDao: TaskDao,
     private val reminderScheduler: ReminderScheduler,

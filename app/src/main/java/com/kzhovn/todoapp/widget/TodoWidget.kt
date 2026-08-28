@@ -31,7 +31,9 @@ import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.quickadd.QuickAddActivity
+import com.kzhovn.todoapp.repository.dayOfWeekMask
 import com.kzhovn.todoapp.repository.filterDoing
+import com.kzhovn.todoapp.repository.minuteOfDay
 import com.kzhovn.todoapp.ui.TaskEditActivity
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
@@ -50,7 +52,7 @@ class TodoWidget : GlanceAppWidget() {
         val now = System.currentTimeMillis()
         val allById = repository.getAllTasks().associateBy { it.id }
         val contextsByTaskId = repository.getAllTaskContexts()
-        val activeTasks = repository.getActiveTasks(now, currentMinuteOfDay(), currentDayMask())
+        val activeTasks = repository.getActiveTasks(now, minuteOfDay(now), dayOfWeekMask(now))
         val rows = TodoWidgetPresenter.toRows(
             filterDoing(activeTasks, now) {
                 resolveEffective(it, allById, contextsByTaskId).effectiveDueDate
@@ -120,15 +122,6 @@ class TodoWidget : GlanceAppWidget() {
         }
     }
 
-    private fun currentMinuteOfDay(): Int {
-        val cal = java.util.Calendar.getInstance()
-        return cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
-    }
-
-    private fun currentDayMask(): Int {
-        val cal = java.util.Calendar.getInstance()
-        return 1 shl (cal.get(java.util.Calendar.DAY_OF_WEEK) - 1)
-    }
 }
 
 class ToggleCompleteAction : ActionCallback {

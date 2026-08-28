@@ -8,11 +8,12 @@ import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.repository.ContextRepository
 import com.kzhovn.todoapp.repository.TaskRepository
+import com.kzhovn.todoapp.repository.dayOfWeekMask
 import com.kzhovn.todoapp.repository.filterDoing
+import com.kzhovn.todoapp.repository.minuteOfDay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import java.util.Calendar
 
 enum class TaskListMode { DOING, ACTIVE, ALL }
 
@@ -134,16 +135,6 @@ class TaskListViewModel(
             repository.toggleComplete(taskId, clock())
             load(mode)
         }
-    }
-
-    private fun minuteOfDay(epochMillis: Long): Int {
-        val cal = Calendar.getInstance().apply { timeInMillis = epochMillis }
-        return cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
-    }
-
-    private fun dayOfWeekMask(epochMillis: Long): Int {
-        val cal = Calendar.getInstance().apply { timeInMillis = epochMillis }
-        return 1 shl (cal.get(Calendar.DAY_OF_WEEK) - 1)
     }
 
 }
