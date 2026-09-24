@@ -61,6 +61,7 @@ import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
+import android.widget.Toast
 import com.kzhovn.todoapp.quickadd.QuickAddActivity
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
 import com.kzhovn.todoapp.recurrence.RecurrenceSelection
@@ -109,6 +110,7 @@ class TaskEditActivity : ComponentActivity() {
             var allContexts by remember { mutableStateOf<List<TaskContext>>(emptyList()) }
             var selectedContextIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
             val allById = remember(allTasks) { allTasks.associateBy { it.id } }
+            var showDependentPicker by remember { mutableStateOf(false) }
             val focusManager = LocalFocusManager.current
 
             // ContextsActivity is launched with plain startActivity (not for a result), so
@@ -321,17 +323,30 @@ class TaskEditActivity : ComponentActivity() {
 
                 if (taskId != 0L) {
                     Spacer(Modifier.height(12.dp))
-                    Text(
-                        "+ Add subtask",
-                        color = LedgerAccent,
-                        fontSize = 12.sp,
-                        modifier = Modifier.clickable {
-                            startActivity(
-                                Intent(this@TaskEditActivity, QuickAddActivity::class.java)
-                                    .putExtra(QuickAddActivity.EXTRA_PARENT_ID, task.id)
+                    Row {
+                        Text(
+                            "+ Add subtask",
+                            color = LedgerAccent,
+                            fontSize = 12.sp,
+                            modifier = Modifier.clickable {
+                                startActivity(
+                                    Intent(this@TaskEditActivity, QuickAddActivity::class.java)
+                                        .putExtra(QuickAddActivity.EXTRA_PARENT_ID, task.id)
+                                )
+                            }
+                        )
+                        // A dependent task is one blocked until this one is done. Folders can't be completed,
+                        // so they can't be depended on.
+                        if (task.type == TaskType.TASK) {
+                            Spacer(Modifier.width(24.dp))
+                            Text(
+                                "+ Add dependent task",
+                                color = LedgerAccent,
+                                fontSize = 12.sp,
+                                modifier = Modifier.clickable { showDependentPicker = true }
                             )
                         }
-                    )
+                    }
                 }
 
                 if (task.type == TaskType.TASK) {
@@ -402,6 +417,40 @@ class TaskEditActivity : ComponentActivity() {
                         }
                     },
                     onDismiss = { showDeleteConfirm = false }
+                )
+            }
+
+            if (showDependentPicker) {
+                val candidates = remember(allTasks, allDependencyEdges, task.id) {
+                    allTasks.filter {
+                        it.id != task.id && it.type == TaskType.TASK && !it.isComplete &&
+                            allDependencyEdges.none { e -> e.taskId == it.id && e.dependsOnTaskId == task.id } &&
+                            !wouldCreateDependencyCycle(task.id, it.id, allDependencyEdges)
+                    }
+                }
+                TaskPickerDialog(
+                    title = "Add a task that waits for this one",
+                    tasks = candidates,
+                    onPick = { picked ->
+                        showDependentPicker = false
+                        scope.launch {
+                            repository.addDependency(picked.id, task.id)
+                            allDependencyEdges = repository.getAllDependencyEdges()
+                            TodoWidget().updateAll(applicationContext)
+                            Toast.makeText(this@TaskEditActivity, "“${picked.title}” now waits for this", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onCreateNew = {
+                        showDependentPicker = false
+                        // The new task goes in this task's folder by default, since dependent work usually belongs together.
+                        val folderId = task.parentId?.takeIf { allById[it]?.type == TaskType.FOLDER }
+                        startActivity(
+                            Intent(this@TaskEditActivity, QuickAddActivity::class.java)
+                                .putExtra(QuickAddActivity.EXTRA_DEPENDS_ON, task.id)
+                                .apply { folderId?.let { putExtra(QuickAddActivity.EXTRA_FOLDER_ID, it) } }
+                        )
+                    },
+                    onDismiss = { showDependentPicker = false }
                 )
             }
 

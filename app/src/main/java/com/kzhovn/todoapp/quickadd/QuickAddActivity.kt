@@ -72,6 +72,8 @@ class QuickAddActivity : ComponentActivity() {
         val repository = (application as TodoApp).repository
         val fixedParentId = intent.getLongExtra(EXTRA_PARENT_ID, 0L).takeIf { it != 0L }
         val initialFolderId = intent.getLongExtra(EXTRA_FOLDER_ID, 0L).takeIf { it != 0L }
+        // "Add dependent task": the new task waits for (depends on) this one.
+        val dependsOnId = intent.getLongExtra(EXTRA_DEPENDS_ON, 0L).takeIf { it != 0L }
         setContent {
             LedgerTheme {
             var title by remember { mutableStateOf("") }
@@ -81,11 +83,13 @@ class QuickAddActivity : ComponentActivity() {
             var folder by remember { mutableStateOf<Task?>(null) }
             var showFolderPicker by remember { mutableStateOf(false) }
             var folders by remember { mutableStateOf<List<Task>>(emptyList()) }
+            var dependsOnTitle by remember { mutableStateOf<String?>(null) }
             val focus = remember { FocusRequester() }
 
             LaunchedEffect(Unit) {
                 folders = repository.getFolders()
                 folder = folders.firstOrNull { it.id == initialFolderId }
+                dependsOnTitle = dependsOnId?.let { repository.getTask(it)?.title }
                 focus.requestFocus()
             }
 
@@ -112,7 +116,8 @@ class QuickAddActivity : ComponentActivity() {
                 if (title.isBlank()) return
                 val task = buildTask()
                 lifecycleScope.launch {
-                    repository.createTask(task)
+                    val id = repository.createTask(task)
+                    dependsOnId?.let { repository.addDependency(id, it) }
                     TodoWidget().updateAll(applicationContext)
                     if (keepOpen) {
                         Toast.makeText(this@QuickAddActivity, "Added “${task.title}”", Toast.LENGTH_SHORT).show()
@@ -132,6 +137,7 @@ class QuickAddActivity : ComponentActivity() {
                     .background(LedgerSearchBackground, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                     .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
+                dependsOnTitle?.let { Text("Waits for: $it", color = LedgerMuted, fontSize = 12.sp) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextField(
                         value = title,
@@ -181,6 +187,7 @@ class QuickAddActivity : ComponentActivity() {
                         onClick = {
                             lifecycleScope.launch {
                                 val id = repository.createTask(buildTask())
+                                dependsOnId?.let { repository.addDependency(id, it) }
                                 startActivity(
                                     Intent(this@QuickAddActivity, TaskEditActivity::class.java)
                                         .putExtra(TaskEditActivity.EXTRA_TASK_ID, id)
@@ -240,5 +247,6 @@ class QuickAddActivity : ComponentActivity() {
     companion object {
         const val EXTRA_PARENT_ID = "parent_id"
         const val EXTRA_FOLDER_ID = "folder_id"
+        const val EXTRA_DEPENDS_ON = "depends_on"
     }
 }
