@@ -22,11 +22,26 @@
         <activity android:name=".ui.TaskEditActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".sync.SyncSettingsActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".contexts.ContextsActivity" android:exported="false" android:screenOrientation="portrait" />
+        <!-- Empty taskAffinity: launched from the widget, these run in their own task, so closing
+             them returns to the home screen instead of revealing the app. -->
         <activity
             android:name=".quickadd.QuickAddActivity"
             android:exported="false"
             android:screenOrientation="portrait"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:windowSoftInputMode="adjustResize|stateAlwaysVisible"
             android:theme="@style/Theme.TodoApp.QuickAdd" />
+        <activity
+            android:name=".widget.WidgetConfigActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:taskAffinity=""
+            android:excludeFromRecents="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
         <receiver android:name=".notifications.ReminderReceiver" android:exported="false" />
         <receiver android:name=".notifications.BootReceiver" android:exported="true">
             <intent-filter>

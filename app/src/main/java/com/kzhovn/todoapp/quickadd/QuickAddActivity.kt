@@ -2,10 +2,14 @@ package com.kzhovn.todoapp.quickadd
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.Gravity
+import android.view.ViewGroup
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,16 +21,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,9 +39,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.appwidget.updateAll
@@ -50,21 +55,23 @@ import com.kzhovn.todoapp.ui.TaskEditActivity
 import com.kzhovn.todoapp.ui.formatChipDate
 import com.kzhovn.todoapp.ui.pickDate
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
-import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
 import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerSearchBackground
 import com.kzhovn.todoapp.ui.theme.LedgerStar
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
-import com.kzhovn.todoapp.ui.theme.LedgerUiFont
 import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.launch
 
+// A bottom-sheet overlay (MLO-style). Launched from the widget it runs in its own task
+// (manifest: empty taskAffinity), so closing it returns to the home screen, not the app.
 class QuickAddActivity : ComponentActivity() {
+    @OptIn(ExperimentalFoundationApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val repository = (application as TodoApp).repository
         val fixedParentId = intent.getLongExtra(EXTRA_PARENT_ID, 0L).takeIf { it != 0L }
+        val initialFolderId = intent.getLongExtra(EXTRA_FOLDER_ID, 0L).takeIf { it != 0L }
         setContent {
             LedgerTheme {
             var title by remember { mutableStateOf("") }
@@ -74,8 +81,13 @@ class QuickAddActivity : ComponentActivity() {
             var folder by remember { mutableStateOf<Task?>(null) }
             var showFolderPicker by remember { mutableStateOf(false) }
             var folders by remember { mutableStateOf<List<Task>>(emptyList()) }
+            val focus = remember { FocusRequester() }
 
-            LaunchedEffect(Unit) { folders = repository.getFolders() }
+            LaunchedEffect(Unit) {
+                folders = repository.getFolders()
+                folder = folders.firstOrNull { it.id == initialFolderId }
+                focus.requestFocus()
+            }
 
             fun buildTask(): Task {
                 val parsed = QuickAddParser.parse(title)
@@ -93,12 +105,23 @@ class QuickAddActivity : ComponentActivity() {
                 )
             }
 
-            val focusManager = LocalFocusManager.current
-            val onAdd: () -> Unit = {
+            // keepOpen: "hold to add another" saves and clears the form for the next task. The
+            // folder stays, since a burst of adds usually goes to the same place.
+            fun create(keepOpen: Boolean) {
+                if (title.isBlank()) return
+                val task = buildTask()
                 lifecycleScope.launch {
-                    repository.createTask(buildTask())
+                    repository.createTask(task)
                     TodoWidget().updateAll(applicationContext)
-                    finish()
+                    if (keepOpen) {
+                        Toast.makeText(this@QuickAddActivity, "Added “${task.title}”", Toast.LENGTH_SHORT).show()
+                    } else {
+                        finish()
+                    }
+                }
+                if (keepOpen) {
+                    title = ""; starred = false; startDate = null; dueDate = null
+                    focus.requestFocus()
                 }
             }
 
@@ -106,19 +129,17 @@ class QuickAddActivity : ComponentActivity() {
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(LedgerSearchBackground, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                    .padding(16.dp)
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextField(
                         value = title,
                         onValueChange = { title = it },
+                        placeholder = { Text("Title") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = {
-                            focusManager.clearFocus()
-                            if (title.isNotBlank()) onAdd()
-                        }),
-                        modifier = Modifier.weight(1f)
+                        keyboardActions = KeyboardActions(onDone = { create(keepOpen = false) }),
+                        modifier = Modifier.weight(1f).focusRequester(focus)
                     )
                     IconButton(onClick = { starred = !starred }) {
                         Icon(
@@ -128,7 +149,7 @@ class QuickAddActivity : ComponentActivity() {
                         )
                     }
                 }
-                Row(modifier = Modifier.padding(vertical = 12.dp)) {
+                Row(modifier = Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     PropertyChip(
                         label = "Start",
                         valueText = startDate?.let(::formatChipDate),
@@ -153,19 +174,10 @@ class QuickAddActivity : ComponentActivity() {
                             onClick = { showFolderPicker = true }
                         )
                     }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "Edit all details",
-                        fontFamily = LedgerUiFont,
-                        fontSize = 12.sp,
-                        color = LedgerMuted,
-                        textDecoration = TextDecoration.Underline,
-                        modifier = Modifier.clickable(enabled = title.isNotBlank()) {
+                    Spacer(Modifier.weight(1f))
+                    IconButton(
+                        enabled = title.isNotBlank(),
+                        onClick = {
                             lifecycleScope.launch {
                                 val id = repository.createTask(buildTask())
                                 startActivity(
@@ -175,13 +187,36 @@ class QuickAddActivity : ComponentActivity() {
                                 finish()
                             }
                         }
-                    )
-                    Button(
-                        onClick = onAdd,
-                        enabled = title.isNotBlank(),
-                        colors = ButtonDefaults.buttonColors(containerColor = LedgerAccent, contentColor = LedgerAccentInk)
                     ) {
-                        Text("Add")
+                        Icon(Icons.Filled.Edit, contentDescription = "Edit all details", tint = LedgerMuted)
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { finish() }) {
+                        Text("CANCEL", color = LedgerAccent, fontWeight = FontWeight.Bold)
+                    }
+                    // Material buttons have no long-press, hence a clickable column styled to match.
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .combinedClickable(
+                                enabled = title.isNotBlank(),
+                                onClick = { create(keepOpen = false) },
+                                onLongClick = { create(keepOpen = true) }
+                            )
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            "CREATE",
+                            color = if (title.isNotBlank()) LedgerAccent else LedgerBorder,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        Text("Hold to add another", color = LedgerMuted, fontSize = 11.sp)
                     }
                 }
             }
@@ -196,9 +231,13 @@ class QuickAddActivity : ComponentActivity() {
             }
             }
         }
+        // The dialog theme otherwise centres a narrow window; this makes it a full-width bottom sheet.
+        window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        window.setGravity(Gravity.BOTTOM)
     }
 
     companion object {
         const val EXTRA_PARENT_ID = "parent_id"
+        const val EXTRA_FOLDER_ID = "folder_id"
     }
 }

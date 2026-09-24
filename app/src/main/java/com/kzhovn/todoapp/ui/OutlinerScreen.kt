@@ -1,5 +1,13 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.ui.theme.LedgerAccent
+import com.kzhovn.todoapp.ui.theme.LedgerBackground
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import android.content.ClipData
 import android.content.ClipDescription
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -52,9 +60,7 @@ import com.kzhovn.todoapp.ui.theme.LedgerCheckBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerStar
-import com.kzhovn.todoapp.ui.theme.LedgerTitleFont
-import com.kzhovn.todoapp.ui.theme.LedgerUiFont
-import com.kzhovn.todoapp.ui.theme.folderColor
+import com.kzhovn.todoapp.ui.theme.folderColors
 import kotlinx.coroutines.launch
 
 @Composable
@@ -111,7 +117,7 @@ private fun LazyListScope.renderNodes(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun OutlinerRow(
     node: OutlinerNode,
@@ -153,74 +159,86 @@ private fun OutlinerRow(
         }
     }
 
-    Row(
-        modifier = Modifier
-            .padding(start = indent, top = 3.dp, bottom = 3.dp, end = 12.dp)
-            .then(if (isDropHover) Modifier.background(LedgerAccentSoft) else Modifier)
-            .dragAndDropSource {
-                detectDragGesturesAfterLongPress(
-                    onDragStart = {
-                        startTransfer(DragAndDropTransferData(ClipData.newPlainText("task_id", task.id.toString())))
-                    },
-                    onDrag = { _, _ -> }
-                )
+    // Swiping right adds a subtask (works whether or not the row already has children, so it
+    // doesn't compete with the fold chevron). The row always snaps back; nothing is dismissed.
+    val swipe = rememberSwipeToDismissBoxState(confirmValueChange = {
+        if (it == SwipeToDismissBoxValue.StartToEnd) onAddSubtask(task.id)
+        false
+    })
+    SwipeToDismissBox(
+        state = swipe,
+        enableDismissFromEndToStart = false,
+        backgroundContent = {
+            Row(
+                Modifier.fillMaxSize().background(LedgerAccentSoft).padding(start = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, tint = LedgerAccent)
+                Text("Subtask", color = LedgerAccent, fontSize = 14.sp)
             }
-            .dragAndDropTarget(
-                shouldStartDragAndDrop = { it.mimeTypes().contains(ClipDescription.MIMETYPE_TEXT_PLAIN) },
-                target = dropTarget
-            )
-            .clickable(enabled = hasChildren) { onToggle(task.id) },
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (hasChildren) {
-            Icon(
-                if (isCollapsed) Icons.Filled.ChevronRight else Icons.Filled.ExpandMore,
-                contentDescription = if (isCollapsed) "Expand" else "Collapse",
-                tint = LedgerMuted,
-                modifier = Modifier.width(16.dp)
-            )
-        } else {
-            Icon(
-                Icons.Filled.Add,
-                contentDescription = "Add subtask",
-                tint = LedgerMuted,
-                modifier = Modifier
-                    .width(16.dp)
-                    .clickable { onAddSubtask(task.id) }
-            )
         }
-        Spacer(Modifier.width(4.dp))
-        when (task.type) {
-            TaskType.FOLDER -> {
-                Icon(Icons.Filled.Folder, contentDescription = null, tint = folderColor(task.id), modifier = Modifier.width(14.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    task.title,
-                    fontFamily = LedgerUiFont,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = LedgerInk,
-                    modifier = Modifier.weight(1f).clickable { onEdit(task.id) }
-                )
-            }
-            TaskType.TASK -> {
-                TaskCheckbox(checked = task.isComplete, overdue = isOverdue(task.isComplete, task.dueDate), size = 13.dp, onCheckedChange = { onCheck(task.id) })
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    task.title,
-                    fontFamily = LedgerTitleFont,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    textDecoration = if (task.isComplete) TextDecoration.LineThrough else null,
-                    color = if (task.isComplete) LedgerMuted else LedgerInk,
-                    modifier = Modifier.weight(1f).clickable { onEdit(task.id) }
-                )
-                IconButton(onClick = { onStar(task.id) }) {
-                    Icon(
-                        if (task.isStarred) Icons.Filled.Star else Icons.Filled.StarBorder,
-                        contentDescription = "Star",
-                        tint = if (task.isStarred) LedgerStar else LedgerCheckBorder
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(if (isDropHover) LedgerAccentSoft else LedgerBackground)
+                .padding(start = indent, top = 3.dp, bottom = 3.dp, end = 12.dp)
+                .dragAndDropSource {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = {
+                            startTransfer(DragAndDropTransferData(ClipData.newPlainText("task_id", task.id.toString())))
+                        },
+                        onDrag = { _, _ -> }
                     )
+                }
+                .dragAndDropTarget(
+                    shouldStartDragAndDrop = { it.mimeTypes().contains(ClipDescription.MIMETYPE_TEXT_PLAIN) },
+                    target = dropTarget
+                )
+                .clickable(enabled = hasChildren) { onToggle(task.id) },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (hasChildren) {
+                Icon(
+                    if (isCollapsed) Icons.Filled.ChevronRight else Icons.Filled.ExpandMore,
+                    contentDescription = if (isCollapsed) "Expand" else "Collapse",
+                    tint = LedgerMuted,
+                    modifier = Modifier.width(16.dp)
+                )
+            } else {
+                Spacer(Modifier.width(16.dp))
+            }
+            Spacer(Modifier.width(4.dp))
+            when (task.type) {
+                TaskType.FOLDER -> {
+                    Icon(Icons.Filled.Folder, contentDescription = null, tint = remember(allById) { folderColors(allById.values)[task.id] } ?: LedgerMuted, modifier = Modifier.width(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        task.title,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = LedgerInk,
+                        modifier = Modifier.weight(1f).clickable { onEdit(task.id) }
+                    )
+                }
+                TaskType.TASK -> {
+                    TaskCheckbox(checked = task.isComplete, overdue = isOverdue(task.isComplete, task.dueDate), size = 20.dp, onCheckedChange = { onCheck(task.id) })
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        task.title,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        textDecoration = if (task.isComplete) TextDecoration.LineThrough else null,
+                        color = if (task.isComplete) LedgerMuted else LedgerInk,
+                        modifier = Modifier.weight(1f).clickable { onEdit(task.id) }
+                    )
+                    IconButton(onClick = { onStar(task.id) }) {
+                        Icon(
+                            if (task.isStarred) Icons.Filled.Star else Icons.Filled.StarBorder,
+                            contentDescription = "Star",
+                            tint = if (task.isStarred) LedgerStar else LedgerCheckBorder
+                        )
+                    }
                 }
             }
         }

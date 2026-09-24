@@ -5,26 +5,41 @@ import java.util.Calendar
 
 object QuickAddParser {
 
-    private val startFlagRegex = Regex("-s\\s+(\\S+)")
-    private val dueFlagRegex = Regex("-d\\s+(\\S+)")
+    private const val WEEKDAY = "sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:r(?:s(?:day)?)?)?|fri(?:day)?|sat(?:urday)?"
+    private const val DATE = "today|tomorrow|(?:next\\s+)?(?:$WEEKDAY)|\\d{4}-\\d{1,2}-\\d{1,2}"
+
+    // A flag takes any token (an unparseable one is dropped); the words "start"/"due" only count
+    // when followed by a recognised date, so they can still appear in ordinary titles.
+    private val flagRegex = Regex("(?<!\\S)-([sd])\\s+(\\S+)")
+    private val wordRegex = Regex("(?<!\\S)(start|due)\\s+($DATE)(?!\\S)", RegexOption.IGNORE_CASE)
 
     fun parse(input: String): Task {
-        val startDate = startFlagRegex.find(input)?.groupValues?.get(1)?.let(::parseDateKeyword)
-        val dueDate = dueFlagRegex.find(input)?.groupValues?.get(1)?.let(::parseDateKeyword)
-        val title = input
-            .replace(startFlagRegex, "")
-            .replace(dueFlagRegex, "")
-            .trim()
+        var startDate: Long? = null
+        var dueDate: Long? = null
+        val matches = flagRegex.findAll(input).map { (it.groupValues[1] == "s") to it.groupValues[2] } +
+            wordRegex.findAll(input).map { it.groupValues[1].equals("start", ignoreCase = true) to it.groupValues[2] }
+        for ((isStart, value) in matches) { // first mention of each wins
+            val date = parseDate(value)
+            if (isStart) startDate = startDate ?: date else dueDate = dueDate ?: date
+        }
+        val title = input.replace(flagRegex, "").replace(wordRegex, "").replace(Regex("\\s+"), " ").trim()
         return Task(title = title, startDate = startDate, dueDate = dueDate)
     }
 
-    private fun parseDateKeyword(value: String): Long? {
+    private fun parseDate(value: String): Long? {
+        val word = value.lowercase().removePrefix("next").trim()
         val cal = Calendar.getInstance()
-        return when (value.lowercase()) {
-            "today" -> cal.startOfDay()
-            "tomorrow" -> cal.apply { add(Calendar.DAY_OF_YEAR, 1) }.startOfDay()
+        return when {
+            word == "today" -> cal.startOfDay()
+            word == "tomorrow" -> cal.apply { add(Calendar.DAY_OF_YEAR, 1) }.startOfDay()
+            Regex(WEEKDAY).matches(word) -> {
+                val target = listOf("sun", "mon", "tue", "wed", "thu", "fri", "sat").indexOf(word.take(3)) + 1
+                // Always a future day: "due monday" said on a Monday means next week.
+                val ahead = (target - cal.get(Calendar.DAY_OF_WEEK) + 7) % 7
+                cal.apply { add(Calendar.DAY_OF_YEAR, if (ahead == 0) 7 else ahead) }.startOfDay()
+            }
             else -> runCatching {
-                val (year, month, day) = value.split("-").map { it.toInt() }
+                val (year, month, day) = word.split("-").map { it.toInt() }
                 Calendar.getInstance().apply { set(year, month - 1, day) }.startOfDay()
             }.getOrNull()
         }

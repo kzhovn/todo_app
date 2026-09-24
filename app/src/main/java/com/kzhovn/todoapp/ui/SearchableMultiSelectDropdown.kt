@@ -32,7 +32,6 @@ import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
-import com.kzhovn.todoapp.ui.theme.LedgerUiFont
 
 // Generic dropdown-based multi-select: tap the summary row to open a checkbox list, with an
 // optional search field (Depends-on needs it — task lists can get long) and an optional
@@ -66,7 +65,6 @@ fun <T> SearchableMultiSelectDropdown(
         ) {
             Text(
                 text = if (selectedLabels.isEmpty()) label else "$label: ${selectedLabels.joinToString(", ")}",
-                fontFamily = LedgerUiFont,
                 fontSize = 13.sp,
                 color = if (selectedLabels.isEmpty()) LedgerMuted else LedgerInk,
                 modifier = Modifier.weight(1f)
@@ -98,7 +96,7 @@ fun <T> SearchableMultiSelectDropdown(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Checkbox(checked = id in selectedIds, onCheckedChange = { onToggle(id) })
-                        Text(labelOf(item), fontFamily = LedgerUiFont, fontSize = 13.sp, color = LedgerInk)
+                        Text(labelOf(item), fontSize = 13.sp, color = LedgerInk)
                     }
                 }
             }
@@ -112,7 +110,7 @@ fun <T> SearchableMultiSelectDropdown(
                 ) {
                     Icon(Icons.Filled.Add, contentDescription = null, tint = LedgerAccent, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(createNewLabel, fontFamily = LedgerUiFont, fontSize = 13.sp, color = LedgerAccent)
+                    Text(createNewLabel, fontSize = 13.sp, color = LedgerAccent)
                 }
             }
         }

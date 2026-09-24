@@ -54,16 +54,15 @@ import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.theme.LedgerCheckBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk
-import com.kzhovn.todoapp.ui.theme.LedgerMonoFont
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerNeutralBg
 import com.kzhovn.todoapp.ui.theme.LedgerOverdue
 import com.kzhovn.todoapp.ui.theme.LedgerOverdueBg
 import com.kzhovn.todoapp.ui.theme.LedgerStar
-import com.kzhovn.todoapp.ui.theme.LedgerTitleFont
 import com.kzhovn.todoapp.ui.theme.LedgerToday
 import com.kzhovn.todoapp.ui.theme.LedgerTodayBg
-import com.kzhovn.todoapp.ui.theme.folderColor
+import com.kzhovn.todoapp.ui.theme.folderColors
+import com.kzhovn.todoapp.data.walkParentChain
 import java.util.Calendar
 
 @Composable
@@ -79,10 +78,13 @@ fun TaskListScreen(
     val allById by viewModel.allById.collectAsState()
     val contextsByTaskId by viewModel.contextsByTaskId.collectAsState()
     val allContexts by viewModel.allContexts.collectAsState()
+    val colors = remember(allById) { folderColors(allById.values) }
     LazyColumn {
         itemsIndexed(tasks, key = { _, task -> task.id }) { index, task ->
             val effective = remember(task, allById, contextsByTaskId) { resolveEffective(task, allById, contextsByTaskId) }
-            TaskRow(task, effective, allContexts, subtaskCounts[task.id], onCheck, onStar, onEdit, onSnooze)
+            // The bar shows the nearest folder ancestor's color, even for a subtask of a task.
+            val barColor = task.parentId?.let { walkParentChain(it, allById) { id -> colors[id] } } ?: LedgerBorder
+            TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, onCheck, onStar, onEdit, onSnooze)
             if (index < tasks.lastIndex) {
                 HorizontalDivider(color = LedgerBorder)
             }
@@ -110,12 +112,12 @@ private fun TaskRow(
     effective: EffectiveTask,
     allContexts: Map<Long, TaskContext>,
     subtasks: Pair<Int, Int>?,
+    barColor: Color,
     onCheck: (Long) -> Unit,
     onStar: (Long) -> Unit,
     onEdit: (Long) -> Unit,
     onSnooze: (Long, Long) -> Unit
 ) {
-    val barColor = task.parentId?.let { folderColor(it) } ?: LedgerBorder
     var showSnoozeMenu by remember { mutableStateOf(false) }
     val contextName = effective.effectiveContextIds.firstOrNull()?.let { allContexts[it]?.name }
     // Overdue styling must track the *displayed* (effective/inherited) due date, not the task's
@@ -135,14 +137,11 @@ private fun TaskRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(Modifier.width(3.dp).fillMaxHeight().background(barColor))
-            Spacer(Modifier.width(8.dp))
             TaskCheckbox(checked = task.isComplete, overdue = effectiveOverdue, onCheckedChange = { onCheck(task.id) })
-            Spacer(Modifier.width(8.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = task.title,
-                        fontFamily = LedgerTitleFont,
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp,
                         textDecoration = if (task.isComplete) TextDecoration.LineThrough else null,
@@ -162,7 +161,6 @@ private fun TaskRow(
                         if (subtasks != null && subtasks.second > 0) {
                             Text(
                                 text = "${subtasks.first}/${subtasks.second}",
-                                fontFamily = LedgerMonoFont,
                                 fontSize = 10.sp,
                                 color = LedgerMuted,
                                 modifier = Modifier.padding(horizontal = 4.dp)
@@ -170,7 +168,7 @@ private fun TaskRow(
                         }
                         if (contextName != null) {
                             Spacer(Modifier.weight(1f))
-                            Text("@$contextName", fontFamily = LedgerMonoFont, fontSize = 10.sp, color = LedgerMuted)
+                            Text("@$contextName", fontSize = 10.sp, color = LedgerMuted)
                         }
                     }
                 }
@@ -196,20 +194,25 @@ private const val DAY_MILLIS = 24 * HOUR_MILLIS
 private const val WEEK_MILLIS = 7 * DAY_MILLIS
 
 @Composable
-fun TaskCheckbox(checked: Boolean, overdue: Boolean, size: Dp = 16.dp, onCheckedChange: () -> Unit) {
+fun TaskCheckbox(checked: Boolean, overdue: Boolean, size: Dp = 22.dp, onCheckedChange: () -> Unit) {
     val borderColor = if (overdue) LedgerOverdue else LedgerCheckBorder
     val borderWidth = if (overdue) 2.dp else 1.5.dp
+    // The tap target is larger than the drawn circle so it's easy to hit with a thumb.
     Box(
-        modifier = Modifier
-            .size(size)
-            .clip(CircleShape)
-            .then(if (checked) Modifier.background(LedgerAccent) else Modifier)
-            .border(borderWidth, borderColor, CircleShape)
-            .clickable { onCheckedChange() },
+        modifier = Modifier.size(44.dp).clip(CircleShape).clickable { onCheckedChange() },
         contentAlignment = Alignment.Center
     ) {
-        if (checked) {
-            Icon(Icons.Filled.Check, contentDescription = "Complete", tint = Color.White, modifier = Modifier.size(size * 0.65f))
+        Box(
+            modifier = Modifier
+                .size(size)
+                .clip(CircleShape)
+                .then(if (checked) Modifier.background(LedgerAccent) else Modifier)
+                .border(borderWidth, borderColor, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            if (checked) {
+                Icon(Icons.Filled.Check, contentDescription = "Complete", tint = Color.White, modifier = Modifier.size(size * 0.65f))
+            }
         }
     }
 }
@@ -231,7 +234,7 @@ private fun DueChip(dueDate: Long, overdue: Boolean) {
             .background(bg)
             .padding(horizontal = 5.dp, vertical = 2.dp)
     ) {
-        Text(label, fontFamily = LedgerMonoFont, fontSize = 10.sp, color = fg)
+        Text(label, fontSize = 10.sp, color = fg)
     }
 }
 

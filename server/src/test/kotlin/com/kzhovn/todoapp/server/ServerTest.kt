@@ -3,6 +3,7 @@ package com.kzhovn.todoapp.server
 import com.kzhovn.todoapp.data.RecurrenceType
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.quickadd.startOfDay
 import com.kzhovn.todoapp.sync.SyncJson
 import com.kzhovn.todoapp.sync.SyncRequest
 import com.kzhovn.todoapp.sync.SyncResponse
@@ -111,6 +112,11 @@ class ServerTest {
         assertEquals(personal.id, bare.parentId)
         assertTrue(bare.isStarred)
         assertEquals(work.id, logic.parseAdd("--work: report")!!.parentId)
+
+        val due = logic.parseAdd("-- work: update bug due today")!!
+        assertEquals("update bug", due.title)
+        assertEquals(work.id, due.parentId)
+        assertEquals(java.util.Calendar.getInstance().startOfDay(), due.dueDate)
     }
 
     @Test

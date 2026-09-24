@@ -51,8 +51,6 @@ import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerOverdue
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
-import com.kzhovn.todoapp.ui.theme.LedgerTitleFont
-import com.kzhovn.todoapp.ui.theme.LedgerUiFont
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Locale
@@ -99,7 +97,7 @@ class ContextsActivity : ComponentActivity() {
             }
 
             Column(modifier = Modifier.fillMaxSize().background(LedgerBackground).padding(16.dp)) {
-                Text("Contexts", fontFamily = LedgerTitleFont, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk)
+                Text("Contexts", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk)
                 Spacer(Modifier.height(12.dp))
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(contexts, key = { it.id }) { ctx ->
@@ -109,7 +107,7 @@ class ContextsActivity : ComponentActivity() {
                         ) {
                             Text(
                                 text = if (ctx.type == ContextType.PLACE) "${ctx.name} — Wifi: ${ctx.wifiSsid}" else ctx.name,
-                                fontFamily = LedgerUiFont, fontSize = 14.sp, color = LedgerInk,
+                                fontSize = 14.sp, color = LedgerInk,
                                 modifier = Modifier.weight(1f)
                             )
                             Icon(
@@ -125,7 +123,7 @@ class ContextsActivity : ComponentActivity() {
                 Spacer(Modifier.height(12.dp))
                 Text(
                     if (editingContextId == null) "New context" else "Edit context",
-                    fontFamily = LedgerUiFont, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = LedgerInk
+                    fontWeight = FontWeight.Bold, fontSize = 14.sp, color = LedgerInk
                 )
                 Spacer(Modifier.height(4.dp))
                 OutlinedTextField(value = name, onValueChange = { name = it }, placeholder = { Text("Name") }, modifier = Modifier.fillMaxWidth())
@@ -154,7 +152,6 @@ class ContextsActivity : ComponentActivity() {
                         wifiSsidError?.let { error ->
                             Text(
                                 error,
-                                fontFamily = LedgerUiFont,
                                 fontSize = 11.sp,
                                 color = LedgerOverdue,
                                 modifier = Modifier.padding(top = 4.dp)
@@ -174,7 +171,7 @@ class ContextsActivity : ComponentActivity() {
                         Text(
                             "+ Add window",
                             color = LedgerAccent,
-                            fontFamily = LedgerUiFont, fontSize = 13.sp,
+                            fontSize = 13.sp,
                             modifier = Modifier
                                 .clickable {
                                     windows = windows + ContextTimeWindow(contextId = editingContextId ?: 0, windowStartMinute = 540, windowEndMinute = 1020)

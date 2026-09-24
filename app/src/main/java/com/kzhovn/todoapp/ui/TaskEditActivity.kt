@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -75,7 +76,6 @@ import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerOverdue
 import com.kzhovn.todoapp.ui.theme.LedgerStar
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
-import com.kzhovn.todoapp.ui.theme.LedgerUiFont
 import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.launch
 
@@ -121,21 +121,20 @@ class TaskEditActivity : ComponentActivity() {
             // Folders don't carry task-only fields/relations (a due date would keep scheduling
             // a reminder alarm; a folder can't be completed, so leaving it as someone's
             // dependency would block that task forever) — clear them on save regardless of what
-            // the (hidden, for folders) recurrence/deps/contexts UI holds.
+            // the (hidden, for folders) recurrence/deps UI holds.
             val onSave: () -> Unit = {
                 val toSave: Task
                 val dependenciesToSave: Set<Long>
-                val contextsToSave: Set<Long>
                 if (task.type == TaskType.FOLDER) {
                     toSave = task.copy(dueDate = null, recurrenceType = null, recurrenceRule = null, reminderOffsetMinutes = null)
                     dependenciesToSave = emptySet()
-                    contextsToSave = emptySet()
                 } else {
                     val (recurrenceType, recurrenceRule) = recurrence.toTaskFields()
                     toSave = task.copy(recurrenceType = recurrenceType, recurrenceRule = recurrenceRule)
                     dependenciesToSave = selectedDependencyIds
-                    contextsToSave = selectedContextIds
                 }
+                // Folders keep contexts: children inherit them (e.g. Work only active in work hours).
+                val contextsToSave = selectedContextIds
                 viewModel.save(toSave) { savedId ->
                     repository.setDependencies(savedId, dependenciesToSave)
                     contextRepository.setTaskContexts(savedId, contextsToSave)
@@ -162,6 +161,7 @@ class TaskEditActivity : ComponentActivity() {
 
             Column(
                 modifier = Modifier
+                    .fillMaxSize()
                     .background(LedgerBackground)
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
@@ -212,7 +212,7 @@ class TaskEditActivity : ComponentActivity() {
 
                 if (task.dueDate != null && task.type == TaskType.TASK) {
                     Spacer(Modifier.height(8.dp))
-                    Text("Remind me", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
+                    Text("Remind me", fontSize = 12.sp, color = LedgerMuted)
                     Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
                         LabelOptions(
                             options = listOf(
@@ -240,7 +240,7 @@ class TaskEditActivity : ComponentActivity() {
 
                 if (task.type == TaskType.TASK) {
                     Spacer(Modifier.height(12.dp))
-                    Text("Repeat", fontFamily = LedgerUiFont, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
+                    Text("Repeat", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
                     Row(modifier = Modifier.padding(top = 4.dp)) {
                         LabelOptions(
                             options = listOf(
@@ -254,7 +254,7 @@ class TaskEditActivity : ComponentActivity() {
                     }
                     if (recurrence.preset == RecurrencePreset.CALENDAR) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                            Text("Every", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
+                            Text("Every", fontSize = 12.sp, color = LedgerMuted)
                             Spacer(Modifier.width(6.dp))
                             CompactNumberField(value = recurrence.n) { n -> recurrence = recurrence.copy(n = n) }
                             Spacer(Modifier.width(6.dp))
@@ -277,15 +277,15 @@ class TaskEditActivity : ComponentActivity() {
                     }
                     if (recurrence.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                            Text("Repeat", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
+                            Text("Repeat", fontSize = 12.sp, color = LedgerMuted)
                             Spacer(Modifier.width(6.dp))
                             CompactNumberField(value = recurrence.n) { n -> recurrence = recurrence.copy(n = n) }
                             Spacer(Modifier.width(6.dp))
-                            Text("days after completion", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted)
+                            Text("days after completion", fontSize = 12.sp, color = LedgerMuted)
                         }
                     }
                     Spacer(Modifier.height(12.dp))
-                    Text("Depends on", fontFamily = LedgerUiFont, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
+                    Text("Depends on", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
                     val dependencyCandidates = remember(allTasks, allDependencyEdges, task.id) {
                         allTasks.filter {
                             it.id != task.id && it.type == TaskType.TASK && !it.isComplete &&
@@ -303,41 +303,40 @@ class TaskEditActivity : ComponentActivity() {
                         },
                         searchable = true
                     )
-                    Spacer(Modifier.height(12.dp))
-                    Text("Contexts", fontFamily = LedgerUiFont, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
-                    SearchableMultiSelectDropdown(
-                        label = "Choose contexts",
-                        items = allContexts,
-                        selectedIds = selectedContextIds,
-                        idOf = { it.id },
-                        labelOf = { it.name },
-                        onToggle = { id ->
-                            selectedContextIds = if (id in selectedContextIds) selectedContextIds - id else selectedContextIds + id
-                        },
-                        onCreateNew = { startActivity(Intent(this@TaskEditActivity, ContextsActivity::class.java)) },
-                        createNewLabel = "Create new context"
-                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Text("Contexts", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
+                SearchableMultiSelectDropdown(
+                    label = "Choose contexts",
+                    items = allContexts,
+                    selectedIds = selectedContextIds,
+                    idOf = { it.id },
+                    labelOf = { it.name },
+                    onToggle = { id ->
+                        selectedContextIds = if (id in selectedContextIds) selectedContextIds - id else selectedContextIds + id
+                    },
+                    onCreateNew = { startActivity(Intent(this@TaskEditActivity, ContextsActivity::class.java)) },
+                    createNewLabel = "Create new context"
+                )
 
-                    if (taskId != 0L) {
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            "+ Add subtask",
-                            color = LedgerAccent,
-                            fontFamily = LedgerUiFont,
-                            fontSize = 12.sp,
-                            modifier = Modifier.clickable {
-                                startActivity(
-                                    Intent(this@TaskEditActivity, QuickAddActivity::class.java)
-                                        .putExtra(QuickAddActivity.EXTRA_PARENT_ID, task.id)
-                                )
-                            }
-                        )
-                    }
+                if (taskId != 0L) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "+ Add subtask",
+                        color = LedgerAccent,
+                        fontSize = 12.sp,
+                        modifier = Modifier.clickable {
+                            startActivity(
+                                Intent(this@TaskEditActivity, QuickAddActivity::class.java)
+                                    .putExtra(QuickAddActivity.EXTRA_PARENT_ID, task.id)
+                            )
+                        }
+                    )
                 }
 
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("This is a folder", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.weight(1f))
+                    Text("This is a folder", fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.weight(1f))
                     Switch(
                         checked = task.type == TaskType.FOLDER,
                         onCheckedChange = { task = task.copy(type = if (it) TaskType.FOLDER else TaskType.TASK) }
@@ -349,7 +348,7 @@ class TaskEditActivity : ComponentActivity() {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             "Sequential (complete tasks in order)",
-                            fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted,
+                            fontSize = 12.sp, color = LedgerMuted,
                             modifier = Modifier.weight(1f)
                         )
                         Switch(checked = task.sequential, onCheckedChange = { task = task.copy(sequential = it) })
@@ -450,7 +449,6 @@ private fun <T> LabelOptions(
     options.forEach { (value, label) ->
         Text(
             label,
-            fontFamily = LedgerUiFont,
             fontSize = 12.sp,
             color = if (selected == value) LedgerAccent else LedgerMuted,
             modifier = Modifier
@@ -470,7 +468,7 @@ private fun CompactNumberField(value: Int, onValueChange: (Int) -> Unit) {
             new.toIntOrNull()?.takeIf { it > 0 }?.let(onValueChange)
         },
         singleLine = true,
-        textStyle = TextStyle(fontFamily = LedgerUiFont, fontSize = 14.sp, color = LedgerInk),
+        textStyle = TextStyle(fontSize = 14.sp, color = LedgerInk),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = Modifier
             .width(44.dp)

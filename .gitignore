@@ -9,3 +9,5 @@ local.properties
 *.iml
 .cxx/
 captures/
+bin/
+.kotlin/

@@ -28,7 +28,6 @@ import com.kzhovn.todoapp.ui.theme.LedgerBackground
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
-import com.kzhovn.todoapp.ui.theme.LedgerTitleFont
 import kotlinx.coroutines.launch
 
 class SyncSettingsActivity : ComponentActivity() {
@@ -45,7 +44,7 @@ class SyncSettingsActivity : ComponentActivity() {
                 val scope = rememberCoroutineScope()
 
                 Column(Modifier.fillMaxSize().background(LedgerBackground).padding(16.dp)) {
-                    Text("Sync", fontFamily = LedgerTitleFont, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk)
+                    Text("Sync", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk)
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(url, { url = it }, label = { Text("Server URL") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))

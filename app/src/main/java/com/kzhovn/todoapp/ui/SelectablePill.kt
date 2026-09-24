@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
-import com.kzhovn.todoapp.ui.theme.LedgerUiFont
 
 // Shared "selectable pill" shape — was ContextsActivity's private TypeOption and FilterPanel's
 // private FilterChipItem, identical apart from font size/padding, which both callers now pass
@@ -32,7 +31,6 @@ fun SelectablePill(
 ) {
     Text(
         label,
-        fontFamily = LedgerUiFont,
         fontSize = fontSize,
         color = if (selected) LedgerAccent else LedgerMuted,
         modifier = Modifier

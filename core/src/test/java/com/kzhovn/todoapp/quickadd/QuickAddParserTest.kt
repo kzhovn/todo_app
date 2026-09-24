@@ -42,4 +42,39 @@ class QuickAddParserTest {
         assertEquals("Do thing", task.title)
         assertNull(task.startDate)
     }
+
+    private fun dayOffset(date: Long?): Int {
+        val today = java.util.Calendar.getInstance().startOfDay()
+        return Math.round((date!! - today) / 86_400_000.0).toInt()
+    }
+
+    @Test
+    fun `natural due and start phrases set dates and leave the title clean`() {
+        val task = QuickAddParser.parse("update bug due today")
+        assertEquals("update bug", task.title)
+        assertEquals(0, dayOffset(task.dueDate))
+
+        val later = QuickAddParser.parse("start tomorrow draft report due 2026-10-01")
+        assertEquals("draft report", later.title)
+        assertEquals(1, dayOffset(later.startDate))
+        assertNotNull(later.dueDate)
+    }
+
+    @Test
+    fun `weekdays resolve to the next such day, never today`() {
+        val friday = QuickAddParser.parse("call bank due Fri").dueDate
+        val cal = java.util.Calendar.getInstance().apply { timeInMillis = friday!! }
+        assertEquals(java.util.Calendar.FRIDAY, cal.get(java.util.Calendar.DAY_OF_WEEK))
+        assert(dayOffset(friday) in 1..7)
+        assertEquals(friday, QuickAddParser.parse("call bank due next friday").dueDate)
+        assertEquals(friday, QuickAddParser.parse("call bank -d friday").dueDate)
+    }
+
+    @Test
+    fun `due and start without a date stay in the title`() {
+        val task = QuickAddParser.parse("pay the due bill, start today's workout")
+        assertEquals("pay the due bill, start today's workout", task.title)
+        assertNull(task.dueDate)
+        assertNull(task.startDate)
+    }
 }

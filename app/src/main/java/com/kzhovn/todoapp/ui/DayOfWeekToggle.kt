@@ -15,7 +15,6 @@ import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
-import com.kzhovn.todoapp.ui.theme.LedgerUiFont
 
 // Su=0 .. Sa=6 bitmask, shared by time-context windows and calendar recurrence.
 @Composable
@@ -27,7 +26,6 @@ fun DayOfWeekToggle(daysMask: Int, onChange: (Int) -> Unit) {
             val on = (daysMask and bit) != 0
             Text(
                 label,
-                fontFamily = LedgerUiFont,
                 fontSize = 11.sp,
                 color = if (on) LedgerAccent else LedgerMuted,
                 modifier = Modifier

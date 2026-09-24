@@ -1,6 +1,8 @@
 package com.kzhovn.todoapp.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.TaskType
 
 val LedgerBackground = Color(0xFFF0EAE0)
 val LedgerSearchBackground = Color(0xFFF7F4EE)
@@ -31,5 +33,8 @@ val LedgerFolderPalette = listOf(
     Color(0xFF8A2E6B),
 )
 
-fun folderColor(folderId: Long, palette: List<Color> = LedgerFolderPalette): Color =
-    palette[(folderId % palette.size).toInt().let { if (it < 0) it + palette.size else it }]
+// Assigned in folder creation order, so the first palette-size folders always get distinct colors
+// (hashing ids let two folders collide).
+fun folderColors(tasks: Collection<Task>, palette: List<Color> = LedgerFolderPalette): Map<Long, Color> =
+    tasks.filter { it.type == TaskType.FOLDER }.sortedBy { it.id }
+        .mapIndexed { i, folder -> folder.id to palette[i % palette.size] }.toMap()

@@ -19,7 +19,6 @@ import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
-import com.kzhovn.todoapp.ui.theme.LedgerUiFont
 
 @Composable
 fun FilterPanel(
@@ -40,7 +39,7 @@ fun FilterPanel(
         }
         Spacer(Modifier.height(6.dp))
         Row {
-            Text("Folder:", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.padding(end = 4.dp))
+            Text("Folder:", fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.padding(end = 4.dp))
             SelectablePill(label = "Any", selected = filters.folderId == null, fontSize = 12.sp, horizontalPadding = 8.dp, verticalPadding = 4.dp) { onFiltersChange(filters.copy(folderId = null)) }
             folders.forEach { f ->
                 Spacer(Modifier.width(6.dp))
@@ -49,7 +48,7 @@ fun FilterPanel(
         }
         Spacer(Modifier.height(6.dp))
         Row {
-            Text("Context:", fontFamily = LedgerUiFont, fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.padding(end = 4.dp))
+            Text("Context:", fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.padding(end = 4.dp))
             SelectablePill(label = "Any", selected = filters.contextId == null, fontSize = 12.sp, horizontalPadding = 8.dp, verticalPadding = 4.dp) { onFiltersChange(filters.copy(contextId = null)) }
             contexts.forEach { c ->
                 Spacer(Modifier.width(6.dp))

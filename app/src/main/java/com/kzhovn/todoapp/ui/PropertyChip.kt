@@ -27,7 +27,6 @@ import com.kzhovn.todoapp.quickadd.startOfDay
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
-import com.kzhovn.todoapp.ui.theme.LedgerUiFont
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -63,7 +62,6 @@ fun PropertyChip(
         }
         Text(
             text = text,
-            fontFamily = LedgerUiFont,
             fontSize = 12.sp,
             color = if (set) LedgerAccent else LedgerMuted
         )
