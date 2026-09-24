@@ -12,12 +12,11 @@ import java.util.Locale
 const val DONE = "✅"
 const val DELETE = "❌"
 const val STAR = "⭐"
-const val ADDED = "📥"
 const val NOTHING = "🎉 Nothing here 🎉"
 private const val MAX_REACTIONS = 20 // Discord's per-message limit on distinct reactions
 
 // Single-codepoint emoji only: variation-selector forms don't reliably round-trip through
-// Discord's reaction events. Must never contain DONE/DELETE/STAR/ADDED.
+// Discord's reaction events. Must never contain DONE/DELETE/STAR.
 val EMOJI_POOL: List<String> = (
     "🍎🍐🍊🍋🍌🍉🍇🍓🫐🍈🍒🍑🥭🍍🥥🥝🍅🍆🥑🥦🥬🥒🌽🥕🧄🧅🥔🍠🥐🥯🍞🥖🥨🧀🥚🍳🧈🥞🧇🥓🍗🍖🌭🍔🍟🍕" +
         "🥪🌮🌯🥗🍝🍜🍲🍛🍣🍱🥟🍤🍙🍚🍘🍥🥠🍢🍡🍧🍨🍦🥧🧁🍰🎂🍮🍭🍬🍫🍿🍩🍪🌰🥜🍯" +

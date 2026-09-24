@@ -183,7 +183,7 @@ class ServerTest {
     @Test
     fun `emoji pool is single-codepoint, distinct, and avoids the control reactions`() {
         assertEquals(EMOJI_POOL.size, EMOJI_POOL.distinct().size)
-        assertTrue(EMOJI_POOL.none { it in setOf(DONE, DELETE, STAR, ADDED) })
+        assertTrue(EMOJI_POOL.none { it in setOf(DONE, DELETE, STAR) })
         assertTrue(EMOJI_POOL.all { it.codePointCount(0, it.length) == 1 && it.codePointAt(0) > 0x2000 })
     }
 }
