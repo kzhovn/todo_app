@@ -29,27 +29,12 @@ class Store(path: String) {
         }
     }
 
-    // Called after each row a client pushed is merged (not for bot writes), so the bot can mirror
-    // app-side changes back into Discord.
-    @Volatile
-    var onSyncedChange: ((before: SyncRow?, after: SyncRow) -> Unit)? = null
-
     // Merged rows get fresh versions, so they come back in the response too — the client needs the
     // merged result, not just what it sent.
     @Synchronized
-    fun sync(request: SyncRequest): SyncResponse {
-        val changed = mutableListOf<Pair<SyncRow?, SyncRow>>()
-        val response = transaction {
-            request.changes.forEach { incoming ->
-                val before = get(incoming.table, incoming.id)
-                val after = merge(before, incoming)
-                put(after)
-                changed += before to after
-            }
-            SyncResponse(maxVersion(), since(request.cursor))
-        }
-        changed.forEach { (before, after) -> onSyncedChange?.invoke(before, after) }
-        return response
+    fun sync(request: SyncRequest): SyncResponse = transaction {
+        request.changes.forEach { put(merge(get(it.table, it.id), it)) }
+        SyncResponse(maxVersion(), since(request.cursor))
     }
 
     // A server-side edit (from the bot): stamps whichever fields changed.

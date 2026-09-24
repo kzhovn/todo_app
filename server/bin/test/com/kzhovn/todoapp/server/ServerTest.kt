@@ -103,35 +103,6 @@ class ServerTest {
     }
 
     @Test
-    fun `adds without a folder prefix land in Personal, and stay starred`() {
-        val personal = service.create(Task(type = TaskType.FOLDER, title = "Personal"))
-        val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
-
-        val bare = logic.parseAdd("-- call mom")!!
-        assertEquals(personal.id, bare.parentId)
-        assertTrue(bare.isStarred)
-        assertEquals(work.id, logic.parseAdd("--work: report")!!.parentId)
-    }
-
-    @Test
-    fun `app-side completion and deletion of a Discord task mirror onto its message`() {
-        val mirrored = mutableListOf<SourceReaction>()
-        store.onSyncedChange = { before, after -> mirrored += logic.sourceReactions(before, after) }
-        logic.onAdd(55L, "https://discord.com/channels/1/22/55", "-- call mom")
-        val id = service.tasks().single().id
-
-        fun push(change: (Task) -> Task, now: Long) {
-            val base = store.get(TASKS, id)!!
-            store.sync(SyncRequest(0, listOf(diff(TASKS, id, base, taskFields(change(base.toTask()), emptySet(), emptySet()), now)!!)))
-        }
-        push({ it.copy(isComplete = true) }, now + 10)
-        push({ it.copy(isComplete = false) }, now + 20)
-        logic.onReaction(55L, DONE, added = true) // completed from Discord itself: no mirror
-
-        assertEquals(listOf(SourceReaction(22, 55, DONE, true), SourceReaction(22, 55, DONE, false)), mirrored)
-    }
-
-    @Test
     fun `bare adds are starred, adds with a date or folder are not`() {
         service.create(Task(type = TaskType.FOLDER, title = "Work"))
 

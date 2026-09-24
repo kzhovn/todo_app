@@ -5,9 +5,6 @@ import com.kzhovn.todoapp.quickadd.QuickAddParser
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import com.kzhovn.todoapp.sync.SyncJson
-import com.kzhovn.todoapp.sync.SyncRow
-import com.kzhovn.todoapp.sync.TASKS
-import com.kzhovn.todoapp.sync.toTask
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -16,8 +13,6 @@ const val DONE = "✅"
 const val DELETE = "❌"
 const val STAR = "⭐"
 const val NOTHING = "🎉 Nothing here 🎉"
-// Adds without a `folder:` prefix land here, if a folder with this name exists.
-const val DEFAULT_FOLDER = "Personal"
 private const val MAX_REACTIONS = 20 // Discord's per-message limit on distinct reactions
 private const val MAX_CHARS = 2000 // Discord's message length limit
 
@@ -42,9 +37,6 @@ data class MessageLink(val taskId: Long? = null, val text: String? = null, val l
 
 data class ListChunk(val content: String, val emojis: List<String>, val lines: List<ListLine>)
 
-// A reaction the bot should add to (or remove from) a task's source message.
-data class SourceReaction(val channelId: Long, val messageId: Long, val emoji: String, val add: Boolean)
-
 sealed interface ReactionOutcome {
     data object None : ReactionOutcome
     data class EditList(val content: String) : ReactionOutcome
@@ -59,10 +51,9 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         if (!content.startsWith("--")) return null
         val body = content.removePrefix("--").trim()
         val prefix = body.substringBefore(':', missingDelimiterValue = "")
-        val explicitFolder = prefix.takeIf { it.isNotBlank() }?.let(service::findFolder)
-        val parsed = QuickAddParser.parse(if (explicitFolder != null) body.substringAfter(':') else body)
-        val bare = explicitFolder == null && parsed.startDate == null && parsed.dueDate == null
-        val folder = explicitFolder ?: service.findFolder(DEFAULT_FOLDER)
+        val folder = prefix.takeIf { it.isNotBlank() }?.let(service::findFolder)
+        val parsed = QuickAddParser.parse(if (folder != null) body.substringAfter(':') else body)
+        val bare = folder == null && parsed.startDate == null && parsed.dueDate == null
         return parsed.takeIf { it.title.isNotBlank() }?.copy(parentId = folder?.id, isStarred = bare)
     }
 
@@ -94,18 +85,6 @@ class BotLogic(private val service: TaskService, private val store: Store) {
     fun onDelete(messageId: Long) {
         link(messageId)?.taskId?.let(service::delete)
         store.setValue("msg:$messageId", null)
-    }
-
-    // Mirrors a completion/deletion made in the app onto the task's `--` message: ✅/❌ appear when
-    // it's completed/deleted and disappear when undone.
-    fun sourceReactions(before: SyncRow?, after: SyncRow): List<SourceReaction> {
-        if (after.table != TASKS || before == null) return emptyList()
-        val url = store.getValue("src:${after.id}") ?: return emptyList()
-        val (channelId, messageId) = url.split('/').takeLast(2).map { it.toLongOrNull() ?: return emptyList() }
-        return listOfNotNull(
-            (after.toTask().isComplete).takeIf { it != before.toTask().isComplete }?.let { SourceReaction(channelId, messageId, DONE, it) },
-            after.isDeleted.takeIf { it != before.isDeleted }?.let { SourceReaction(channelId, messageId, DELETE, it) }
-        )
     }
 
     fun onReaction(messageId: Long, emoji: String, added: Boolean): ReactionOutcome {

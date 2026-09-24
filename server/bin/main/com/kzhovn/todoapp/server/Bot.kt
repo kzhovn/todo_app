@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit
 
 // Thin JDA adapter: translates Discord events into BotLogic calls. Everything from anyone but the
 // allowlisted users is ignored. JDA runs listeners on one event thread, so BotLogic never sees concurrent events.
-class Bot private constructor(val logic: BotLogic, private val allowedUserIds: Set<Long>) : ListenerAdapter() {
+class Bot private constructor(private val logic: BotLogic, private val allowedUserIds: Set<Long>) : ListenerAdapter() {
 
     override fun onMessageReceived(event: MessageReceivedEvent) {
         if (event.author.idLong !in allowedUserIds) return
@@ -73,15 +73,6 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
                 GatewayIntent.GUILD_MESSAGES, GatewayIntent.DIRECT_MESSAGES, GatewayIntent.MESSAGE_CONTENT,
                 GatewayIntent.GUILD_MESSAGE_REACTIONS, GatewayIntent.DIRECT_MESSAGE_REACTIONS
             ).addEventListeners(bot).build()
-            // ponytail: DM channels aren't cached by createLight, so this only mirrors onto server channels.
-            store.onSyncedChange = { before, after ->
-                bot.logic.sourceReactions(before, after).forEach { r ->
-                    jda.getChannelById(MessageChannel::class.java, r.channelId)?.let { channel ->
-                        val emoji = Emoji.fromUnicode(r.emoji)
-                        (if (r.add) channel.addReactionById(r.messageId, emoji) else channel.removeReactionById(r.messageId, emoji)).queue()
-                    }
-                }
-            }
             if (digestChannelId != null && digestTime != null) {
                 scheduleDigest(LocalTime.parse(digestTime)) {
                     val doing = service.doing()
