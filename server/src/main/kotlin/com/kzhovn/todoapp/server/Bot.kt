@@ -19,11 +19,11 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 // Thin JDA adapter: translates Discord events into BotLogic calls. Everything from anyone but the
-// owner is ignored. JDA runs listeners on one event thread, so BotLogic never sees concurrent events.
-class Bot private constructor(private val logic: BotLogic, private val ownerId: Long) : ListenerAdapter() {
+// allowlisted users is ignored. JDA runs listeners on one event thread, so BotLogic never sees concurrent events.
+class Bot private constructor(private val logic: BotLogic, private val allowedUserIds: Set<Long>) : ListenerAdapter() {
 
     override fun onMessageReceived(event: MessageReceivedEvent) {
-        if (event.author.idLong != ownerId) return
+        if (event.author.idLong !in allowedUserIds) return
         val message = event.message
         val content = message.contentRaw.trim()
         if (logic.onAdd(message.idLong, message.jumpUrl, content)) return
@@ -35,7 +35,7 @@ class Bot private constructor(private val logic: BotLogic, private val ownerId: 
     }
 
     override fun onMessageUpdate(event: MessageUpdateEvent) {
-        if (event.author.idLong == ownerId) logic.onEdit(event.messageIdLong, event.message.contentRaw.trim())
+        if (event.author.idLong in allowedUserIds) logic.onEdit(event.messageIdLong, event.message.contentRaw.trim())
     }
 
     override fun onMessageDelete(event: MessageDeleteEvent) = logic.onDelete(event.messageIdLong)
@@ -45,7 +45,7 @@ class Bot private constructor(private val logic: BotLogic, private val ownerId: 
     override fun onMessageReactionRemove(event: MessageReactionRemoveEvent) = react(event, added = false)
 
     private fun react(event: GenericMessageReactionEvent, added: Boolean) {
-        if (event.userIdLong != ownerId) return
+        if (event.userIdLong !in allowedUserIds) return
         when (val outcome = logic.onReaction(event.messageIdLong, event.emoji.name, added)) {
             is ReactionOutcome.EditList ->
                 event.channel.editMessageById(event.messageIdLong, outcome.content).setSuppressEmbeds(true).queue()
@@ -66,8 +66,8 @@ class Bot private constructor(private val logic: BotLogic, private val ownerId: 
     }
 
     companion object {
-        fun start(token: String, service: TaskService, store: Store, ownerId: Long, digestChannelId: Long?, digestTime: String?): JDA {
-            val bot = Bot(BotLogic(service, store), ownerId)
+        fun start(token: String, service: TaskService, store: Store, allowedUserIds: Set<Long>, digestChannelId: Long?, digestTime: String?): JDA {
+            val bot = Bot(BotLogic(service, store), allowedUserIds)
             val jda = JDABuilder.createLight(
                 token,
                 GatewayIntent.GUILD_MESSAGES, GatewayIntent.DIRECT_MESSAGES, GatewayIntent.MESSAGE_CONTENT,
@@ -83,7 +83,7 @@ class Bot private constructor(private val logic: BotLogic, private val ownerId: 
             return jda
         }
 
-        // Recomputes the delay each day in the default (owner's) timezone, so DST shifts are handled.
+        // Recomputes the delay each day in the default (server-configured) timezone, so DST shifts are handled.
         private fun scheduleDigest(at: LocalTime, post: () -> Unit) {
             val executor = Executors.newSingleThreadScheduledExecutor()
             fun scheduleNext() {

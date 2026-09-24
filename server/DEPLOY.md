@@ -14,7 +14,8 @@ work from Cloud Shell or anywhere with the SDK installed.
    *Add Reactions*, then open the generated URL.
 4. In Discord, go to **Settings → Advanced** and enable **Developer Mode**.
    Right-click yourself and choose **Copy User ID** (this is
-   `OWNER_USER_ID`). Right-click the digest channel and choose
+   `ALLOWED_USER_IDS`; list several ids comma-separated to let others use the bot. They all share
+   one task list). Right-click the digest channel and choose
    **Copy Channel ID** (this is `DIGEST_CHANNEL_ID`). The digest channel must
    be a server channel, not a DM.
 
@@ -64,7 +65,7 @@ root before dropping to `todo`):
 ```
 API_TOKEN=...
 BOT_TOKEN=...
-OWNER_USER_ID=...
+ALLOWED_USER_IDS=...
 DIGEST_CHANNEL_ID=...
 DIGEST_TIME=08:00
 DB_PATH=/var/lib/todo/todo.db

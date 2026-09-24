@@ -29,7 +29,9 @@ fun main() {
     env["BOT_TOKEN"]?.let { botToken ->
         Bot.start(
             botToken, TaskService(store), store,
-            ownerId = env["OWNER_USER_ID"]?.toLong() ?: error("OWNER_USER_ID is required with BOT_TOKEN"),
+            // Everyone listed shares the one task list; the data model is single-user.
+            allowedUserIds = env["ALLOWED_USER_IDS"]?.split(',')?.map { it.trim().toLong() }?.toSet()
+                ?: error("ALLOWED_USER_IDS (comma-separated Discord user ids) is required with BOT_TOKEN"),
             digestChannelId = env["DIGEST_CHANNEL_ID"]?.toLong(),
             digestTime = env["DIGEST_TIME"]
         )
