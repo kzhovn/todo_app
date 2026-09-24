@@ -64,6 +64,7 @@ class QuickAddActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val repository = (application as TodoApp).repository
+        val fixedParentId = intent.getLongExtra(EXTRA_PARENT_ID, 0L).takeIf { it != 0L }
         setContent {
             LedgerTheme {
             var title by remember { mutableStateOf("") }
@@ -85,7 +86,10 @@ class QuickAddActivity : ComponentActivity() {
                     // the shorthand parser found in the title text.
                     startDate = startDate ?: parsed.startDate,
                     dueDate = dueDate ?: parsed.dueDate,
-                    parentId = folder?.id
+                    // Adding a subtask fixes the parent to the task it was launched from — the
+                    // Folder chip doesn't apply, since the subtask's position in the tree is
+                    // already decided by that relationship.
+                    parentId = fixedParentId ?: folder?.id
                 )
             }
 
@@ -140,13 +144,15 @@ class QuickAddActivity : ComponentActivity() {
                         onClick = { pickDate(this@QuickAddActivity, dueDate) { dueDate = it } },
                         showLabelWhenSet = false
                     )
-                    Spacer(Modifier.width(8.dp))
-                    PropertyChip(
-                        label = "Folder",
-                        valueText = folder?.title,
-                        icon = Icons.Filled.Folder,
-                        onClick = { showFolderPicker = true }
-                    )
+                    if (fixedParentId == null) {
+                        Spacer(Modifier.width(8.dp))
+                        PropertyChip(
+                            label = "Folder",
+                            valueText = folder?.title,
+                            icon = Icons.Filled.Folder,
+                            onClick = { showFolderPicker = true }
+                        )
+                    }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -190,5 +196,9 @@ class QuickAddActivity : ComponentActivity() {
             }
             }
         }
+    }
+
+    companion object {
+        const val EXTRA_PARENT_ID = "parent_id"
     }
 }

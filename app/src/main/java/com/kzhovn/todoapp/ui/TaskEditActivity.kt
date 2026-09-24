@@ -60,6 +60,7 @@ import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
+import com.kzhovn.todoapp.quickadd.QuickAddActivity
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
 import com.kzhovn.todoapp.recurrence.RecurrenceSelection
 import com.kzhovn.todoapp.recurrence.RecurrenceUnit
@@ -101,8 +102,6 @@ class TaskEditActivity : ComponentActivity() {
             var showFolderPicker by remember { mutableStateOf(false) }
             var showNewFolderDialog by remember { mutableStateOf(false) }
             var newFolderName by remember { mutableStateOf("") }
-            var showAddSubtaskDialog by remember { mutableStateOf(false) }
-            var newSubtaskTitle by remember { mutableStateOf("") }
             var recurrence by remember { mutableStateOf(RecurrenceSelection(RecurrencePreset.NONE)) }
             var allTasks by remember { mutableStateOf<List<Task>>(emptyList()) }
             var selectedDependencyIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
@@ -326,7 +325,12 @@ class TaskEditActivity : ComponentActivity() {
                             color = LedgerAccent,
                             fontFamily = LedgerUiFont,
                             fontSize = 12.sp,
-                            modifier = Modifier.clickable { showAddSubtaskDialog = true }
+                            modifier = Modifier.clickable {
+                                startActivity(
+                                    Intent(this@TaskEditActivity, QuickAddActivity::class.java)
+                                        .putExtra(QuickAddActivity.EXTRA_PARENT_ID, task.id)
+                                )
+                            }
                         )
                     }
                 }
@@ -423,24 +427,6 @@ class TaskEditActivity : ComponentActivity() {
                         }
                     },
                     onDismiss = { showNewFolderDialog = false }
-                )
-            }
-
-            if (showAddSubtaskDialog) {
-                TextInputDialog(
-                    title = "Add subtask",
-                    placeholder = "Subtask name",
-                    confirmLabel = "Add",
-                    value = newSubtaskTitle,
-                    onValueChange = { newSubtaskTitle = it },
-                    onConfirm = {
-                        scope.launch {
-                            repository.createTask(Task(title = newSubtaskTitle, parentId = task.id))
-                            newSubtaskTitle = ""
-                            showAddSubtaskDialog = false
-                        }
-                    },
-                    onDismiss = { showAddSubtaskDialog = false }
                 )
             }
             }

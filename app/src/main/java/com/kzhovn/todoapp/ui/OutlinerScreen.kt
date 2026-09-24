@@ -198,7 +198,7 @@ private fun OutlinerRow(
                     task.title,
                     fontFamily = LedgerUiFont,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
+                    fontSize = 14.sp,
                     color = LedgerInk,
                     modifier = Modifier.weight(1f).clickable { onEdit(task.id) }
                 )
