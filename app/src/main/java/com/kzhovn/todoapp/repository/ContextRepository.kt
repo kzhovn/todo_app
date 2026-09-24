@@ -4,9 +4,11 @@ import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskContextCrossRef
 import com.kzhovn.todoapp.data.TaskContextDao
+import com.kzhovn.todoapp.data.newId
 
 class ContextRepository(private val contextDao: TaskContextDao) {
-    suspend fun createContext(context: TaskContext): Long = contextDao.insert(context)
+    suspend fun createContext(context: TaskContext): Long =
+        contextDao.insert(if (context.id == 0L) context.copy(id = newId()) else context)
 
     suspend fun getAllContexts(): List<TaskContext> = contextDao.getAll()
 

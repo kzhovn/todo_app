@@ -44,6 +44,18 @@ class TaskRepositoryRecurrenceTest {
     }
 
     @Test
+    fun `un-completing a recurring task removes its untouched spawned instance`() = runBlocking {
+        val taskId = repository.createTask(
+            Task(title = "Take out trash", recurrenceType = RecurrenceType.AFTER_COMPLETION, recurrenceRule = "7")
+        )
+        repository.markComplete(taskId, now)
+
+        repository.toggleComplete(taskId, now)
+
+        assertEquals(listOf(taskId), repository.getAllTasks().map { it.id })
+    }
+
+    @Test
     fun `completing a recurring task spawns the next instance`() = runBlocking {
         val taskId = repository.createTask(
             Task(title = "Take out trash", recurrenceType = RecurrenceType.AFTER_COMPLETION, recurrenceRule = "7")

@@ -2,11 +2,13 @@ package com.kzhovn.todoapp.data
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 
 // One TIME context can hold several disjoint windows (e.g. 9-12 and 2-5), each independently
 // restricted to a subset of weekdays via a bitmask (bit 0 = Sunday .. bit 6 = Saturday, matching
 // java.util.Calendar.DAY_OF_WEEK - 1). windowEndMinute < windowStartMinute means the window
 // spans midnight (e.g. 22:00-06:00).
+@Serializable
 @Entity(tableName = "context_time_windows")
 data class ContextTimeWindow(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

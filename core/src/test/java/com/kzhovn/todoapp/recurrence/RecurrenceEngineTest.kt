@@ -81,4 +81,16 @@ class RecurrenceEngineTest {
         val next = RecurrenceEngine.nextInstance(task, 1_700_000_000_000L)
         assertNull(next?.dueDate)
     }
+
+    @Test
+    fun `untouchedSuccessor finds the spawned instance but not an edited one`() {
+        val completed = Task(
+            id = 1, title = "Water plants", isComplete = true, completedAt = 1_700_000_000_000L,
+            recurrenceType = RecurrenceType.AFTER_COMPLETION, recurrenceRule = "3"
+        )
+        val spawned = RecurrenceEngine.nextInstance(completed, completed.completedAt!!)!!
+
+        assertEquals(spawned, RecurrenceEngine.untouchedSuccessor(completed, listOf(completed, spawned)))
+        assertNull(RecurrenceEngine.untouchedSuccessor(completed, listOf(completed, spawned.copy(title = "Edited"))))
+    }
 }

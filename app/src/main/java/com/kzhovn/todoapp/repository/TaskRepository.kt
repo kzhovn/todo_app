@@ -1,29 +1,16 @@
 package com.kzhovn.todoapp.repository
 
-import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskContextDao
 import com.kzhovn.todoapp.data.TaskDao
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
-import com.kzhovn.todoapp.data.resolveEffective
+import com.kzhovn.todoapp.data.newId
 import com.kzhovn.todoapp.notifications.ReminderScheduler
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-
-// Shared by every caller of getActiveTasks (TaskListViewModel, TodoWidget) so app and widget
-// always agree on "now" using the same Calendar arithmetic.
-fun minuteOfDay(epochMillis: Long): Int {
-    val cal = java.util.Calendar.getInstance().apply { timeInMillis = epochMillis }
-    return cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
-}
-
-fun dayOfWeekMask(epochMillis: Long): Int {
-    val cal = java.util.Calendar.getInstance().apply { timeInMillis = epochMillis }
-    return 1 shl (cal.get(java.util.Calendar.DAY_OF_WEEK) - 1)
-}
 
 class TaskRepository(
     private val taskDao: TaskDao,
@@ -35,9 +22,10 @@ class TaskRepository(
     val lastDeleted: StateFlow<List<Task>?> = _lastDeleted
 
     suspend fun createTask(task: Task): Long {
-        val id = taskDao.insert(task)
-        reminderScheduler.schedule(task.copy(id = id))
-        return id
+        val toInsert = if (task.id == 0L) task.copy(id = newId()) else task
+        taskDao.insert(toInsert)
+        reminderScheduler.schedule(toInsert)
+        return toInsert.id
     }
 
     suspend fun countDescendants(taskId: Long): Int = taskDao.getDescendants(taskId).size
@@ -95,14 +83,18 @@ class TaskRepository(
         taskDao.update(completedTask)
         reminderScheduler.cancel(completedTask)
         RecurrenceEngine.nextInstance(completedTask, now)?.let {
-            val nextId = taskDao.insert(it)
-            reminderScheduler.schedule(it.copy(id = nextId), now)
+            taskDao.insert(it)
+            reminderScheduler.schedule(it, now)
         }
     }
 
     suspend fun toggleComplete(taskId: Long, now: Long) {
         val task = taskDao.getById(taskId) ?: return
         if (task.isComplete) {
+            RecurrenceEngine.untouchedSuccessor(task, taskDao.getAllOnce())?.let {
+                taskDao.deleteById(it.id)
+                reminderScheduler.cancel(it)
+            }
             val reopened = task.copy(isComplete = false, completedAt = null)
             taskDao.update(reopened)
             reminderScheduler.schedule(reopened, now)
@@ -111,12 +103,8 @@ class TaskRepository(
         }
     }
 
-    // Computed in Kotlin rather than SQL: effective start date and contexts are inherited from
-    // ancestors (see resolveEffective), which a single query can't express without several
-    // recursive CTEs. At this app's scale, fetching the whole graph once is cheap. This is the
-    // simple entry point for a caller that doesn't already have the task/context data in hand —
-    // TaskListViewModel and TodoWidget already fetch both for their own display needs, so they
-    // call getActiveTasksFrom directly instead of paying for a second fetch here.
+    // Entry point for callers without task/context data in hand. TaskListViewModel and TodoWidget
+    // already fetch both for display, so they call getActiveTasksFrom instead of fetching twice.
     suspend fun getActiveTasks(now: Long, currentMinuteOfDay: Int, todayMask: Int): List<Task> {
         val all = taskDao.getAllOnce()
         return getActiveTasksFrom(all, getAllTaskContexts(), now, currentMinuteOfDay, todayMask)
@@ -128,51 +116,10 @@ class TaskRepository(
         now: Long,
         currentMinuteOfDay: Int,
         todayMask: Int
-    ): List<Task> {
-        val allById = all.associateBy { it.id }
-        val allContexts = taskContextDao.getAll().associateBy { it.id }
-        val timeWindows = taskContextDao.getAllTimeWindows().groupBy { it.contextId }
-
-        val blockedByDependency = taskDao.getAllDependencies()
-            .filter { edge -> allById[edge.dependsOnTaskId]?.isComplete == false }
-            .map { it.taskId }
-            .toSet()
-
-        val childrenByParentId = all.groupBy { it.parentId }
-
-        // Under a sequential parent, only the lowest-id incomplete child is workable.
-        fun isSequentiallyBlocked(task: Task): Boolean {
-            val parent = task.parentId?.let { allById[it] } ?: return false
-            if (!parent.sequential) return false
-            val firstIncomplete = childrenByParentId[parent.id].orEmpty()
-                .filter { !it.isComplete }
-                .minByOrNull { it.id } ?: return false
-            return firstIncomplete.id != task.id
-        }
-
-        fun isContextSatisfied(contextId: Long): Boolean {
-            val ctx = allContexts[contextId] ?: return true
-            return when (ctx.type) {
-                ContextType.PLACE -> ctx.isCurrentlySatisfied
-                ContextType.TIME -> timeWindows[contextId].orEmpty().any { w ->
-                    (w.daysMask and todayMask) != 0 &&
-                        if (w.windowStartMinute <= w.windowEndMinute) {
-                            currentMinuteOfDay in w.windowStartMinute..w.windowEndMinute
-                        } else { // window spans midnight
-                            currentMinuteOfDay >= w.windowStartMinute || currentMinuteOfDay <= w.windowEndMinute
-                        }
-                }
-            }
-        }
-
-        return all.filter { task ->
-            if (task.type == TaskType.FOLDER || task.isComplete) return@filter false
-            if (task.id in blockedByDependency || isSequentiallyBlocked(task)) return@filter false
-            val effective = resolveEffective(task, allById, contextsByTaskId)
-            (effective.effectiveStartDate == null || effective.effectiveStartDate <= now) &&
-                effective.effectiveContextIds.all(::isContextSatisfied)
-        }
-    }
+    ): List<Task> = computeActiveTasks(
+        all, contextsByTaskId, taskContextDao.getAll(), taskContextDao.getAllTimeWindows(),
+        taskDao.getAllDependencies(), now, currentMinuteOfDay, todayMask
+    )
 
     suspend fun getAllTasks(): List<Task> = taskDao.getAllOnce()
 

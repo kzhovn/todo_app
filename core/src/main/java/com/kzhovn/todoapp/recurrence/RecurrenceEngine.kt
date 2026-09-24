@@ -2,6 +2,7 @@ package com.kzhovn.todoapp.recurrence
 
 import com.kzhovn.todoapp.data.RecurrenceType
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.newId
 import org.dmfs.rfc5545.recur.RecurrenceRule
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
@@ -20,7 +21,15 @@ object RecurrenceEngine {
         // original (now stale) absolute timestamp.
         val startAnchor = task.startDate ?: completedAt
         val nextDueDate = task.dueDate?.plus(nextStart - startAnchor)
-        return task.copy(id = 0, startDate = nextStart, dueDate = nextDueDate, isComplete = false, completedAt = null)
+        return task.copy(id = newId(), startDate = nextStart, dueDate = nextDueDate, isComplete = false, completedAt = null)
+    }
+
+    // The instance that completing `completed` spawned, if it still exists unedited. Un-completing
+    // removes it, so undo (e.g. un-reacting in Discord) doesn't leave a duplicate behind; an
+    // edited successor is kept because it now holds the user's work.
+    fun untouchedSuccessor(completed: Task, candidates: List<Task>): Task? {
+        val expected = nextInstance(completed, completed.completedAt ?: return null) ?: return null
+        return candidates.firstOrNull { it.id != completed.id && it.copy(id = expected.id) == expected }
     }
 
     private fun nextRRuleOccurrence(dtStart: Long, rrule: String, after: Long): Long? {

@@ -2,10 +2,12 @@ package com.kzhovn.todoapp.data
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 
 enum class TaskType { TASK, FOLDER }
 enum class RecurrenceType { RRULE, AFTER_COMPLETION }
 
+@Serializable
 @Entity(tableName = "tasks")
 data class Task(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
