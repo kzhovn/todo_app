@@ -173,12 +173,16 @@ private fun TaskRow(
                     }
                 }
             }
-            IconButton(onClick = { onStar(task.id) }) {
-                Icon(
-                    if (task.isStarred) Icons.Filled.Star else Icons.Filled.StarBorder,
-                    contentDescription = "Star",
-                    tint = if (task.isStarred) LedgerStar else LedgerCheckBorder
-                )
+            if (task.isMaybe) {
+                MaybeMark()
+            } else {
+                IconButton(onClick = { onStar(task.id) }) {
+                    Icon(
+                        if (task.isStarred) Icons.Filled.Star else Icons.Filled.StarBorder,
+                        contentDescription = "Star",
+                        tint = if (task.isStarred) LedgerStar else LedgerCheckBorder
+                    )
+                }
             }
         }
         DropdownMenu(expanded = showSnoozeMenu, onDismissRequest = { showSnoozeMenu = false }) {
@@ -192,6 +196,14 @@ private fun TaskRow(
 private const val HOUR_MILLIS = 60 * 60 * 1000L
 private const val DAY_MILLIS = 24 * HOUR_MILLIS
 private const val WEEK_MILLIS = 7 * DAY_MILLIS
+
+// Shown in the star's place: a maybe can't be starred.
+@Composable
+fun MaybeMark() {
+    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+        Text("?", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerMuted)
+    }
+}
 
 @Composable
 fun TaskCheckbox(checked: Boolean, overdue: Boolean, size: Dp = 22.dp, onCheckedChange: () -> Unit) {

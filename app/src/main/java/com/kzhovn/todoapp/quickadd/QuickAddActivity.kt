@@ -94,6 +94,7 @@ class QuickAddActivity : ComponentActivity() {
                 return Task(
                     title = parsed.title,
                     isStarred = starred,
+                    isMaybe = parsed.isMaybe,
                     // Chip values are an explicit, later user action, so they override whatever
                     // the shorthand parser found in the title text.
                     startDate = startDate ?: parsed.startDate,

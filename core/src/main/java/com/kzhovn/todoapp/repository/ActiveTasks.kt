@@ -70,7 +70,7 @@ fun computeActiveTasks(
     }
 
     return all.filter { task ->
-        if (task.type == TaskType.FOLDER || task.isComplete) return@filter false
+        if (task.type == TaskType.FOLDER || task.isComplete || task.isMaybe) return@filter false
         if (task.id in blockedByDependency || isSequentiallyBlocked(task)) return@filter false
         val effective = resolveEffective(task, allById, contextsByTaskId)
         (effective.effectiveStartDate == null || effective.effectiveStartDate <= now) &&

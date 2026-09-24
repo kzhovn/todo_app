@@ -232,12 +232,16 @@ private fun OutlinerRow(
                         color = if (task.isComplete) LedgerMuted else LedgerInk,
                         modifier = Modifier.weight(1f).clickable { onEdit(task.id) }
                     )
-                    IconButton(onClick = { onStar(task.id) }) {
-                        Icon(
-                            if (task.isStarred) Icons.Filled.Star else Icons.Filled.StarBorder,
-                            contentDescription = "Star",
-                            tint = if (task.isStarred) LedgerStar else LedgerCheckBorder
-                        )
+                    if (task.isMaybe) {
+                        MaybeMark()
+                    } else {
+                        IconButton(onClick = { onStar(task.id) }) {
+                            Icon(
+                                if (task.isStarred) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                contentDescription = "Star",
+                                tint = if (task.isStarred) LedgerStar else LedgerCheckBorder
+                            )
+                        }
                     }
                 }
             }

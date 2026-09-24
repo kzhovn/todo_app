@@ -77,4 +77,16 @@ class QuickAddParserTest {
         assertNull(task.dueDate)
         assertNull(task.startDate)
     }
+
+    @Test
+    fun `a question mark ending the title marks a maybe, one inside it does not`() {
+        val maybe = QuickAddParser.parse("update bug? due today")
+        assertEquals("update bug", maybe.title)
+        assert(maybe.isMaybe)
+        assertNotNull(maybe.dueDate)
+
+        val notMaybe = QuickAddParser.parse("update(?) bug due today")
+        assertEquals("update(?) bug", notMaybe.title)
+        assert(!notMaybe.isMaybe)
+    }
 }

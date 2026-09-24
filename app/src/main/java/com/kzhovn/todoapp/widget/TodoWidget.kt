@@ -171,15 +171,21 @@ private fun WidgetRow(row: WidgetTaskRow) {
                     )
                 )
         )
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = GlanceModifier.size(44.dp)
-                .clickable(actionRunCallback<ToggleStarAction>(actionParametersOf(taskIdKey to row.id)))
-        ) {
-            Text(
-                text = if (row.isStarred) "★" else "☆",
-                style = TextStyle(color = fixed(if (row.isStarred) LedgerStar else LedgerMuted), fontSize = 24.sp)
-            )
+        if (row.isMaybe) {
+            Box(contentAlignment = Alignment.Center, modifier = GlanceModifier.size(44.dp)) {
+                Text("?", style = TextStyle(color = fixed(LedgerMuted), fontSize = 22.sp, fontWeight = FontWeight.Bold))
+            }
+        } else {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = GlanceModifier.size(44.dp)
+                    .clickable(actionRunCallback<ToggleStarAction>(actionParametersOf(taskIdKey to row.id)))
+            ) {
+                Text(
+                    text = if (row.isStarred) "★" else "☆",
+                    style = TextStyle(color = fixed(if (row.isStarred) LedgerStar else LedgerMuted), fontSize = 24.sp)
+                )
+            }
         }
     }
 }

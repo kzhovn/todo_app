@@ -178,7 +178,7 @@ class TaskEditActivity : ComponentActivity() {
                         }),
                         modifier = Modifier.weight(1f)
                     )
-                    IconButton(onClick = { task = task.copy(isStarred = !task.isStarred) }) {
+                    IconButton(enabled = !task.isMaybe, onClick = { task = task.copy(isStarred = !task.isStarred) }) {
                         Icon(
                             if (task.isStarred) Icons.Filled.Star else Icons.Filled.StarBorder,
                             contentDescription = "Star",
@@ -332,6 +332,14 @@ class TaskEditActivity : ComponentActivity() {
                             )
                         }
                     )
+                }
+
+                if (task.type == TaskType.TASK) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Maybe (?) — hidden from Active, can't be starred", fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.weight(1f))
+                        Switch(checked = task.isMaybe, onCheckedChange = { task = task.copy(isMaybe = it).starRule() })
+                    }
                 }
 
                 Spacer(Modifier.height(12.dp))

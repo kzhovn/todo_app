@@ -54,14 +54,15 @@ sealed interface ReactionOutcome {
 class BotLogic(private val service: TaskService, private val store: Store) {
 
     // `-- text` or `--folder: text`. Returns null for messages that aren't adds. A bare add is
-    // starred so it lands in Doing; any start/due date or folder means the user placed it deliberately.
+    // starred so it lands in Doing; any start/due date or folder means the user placed it
+    // deliberately, and a trailing "?" (a maybe) is never starred.
     fun parseAdd(content: String): Task? {
         if (!content.startsWith("--")) return null
         val body = content.removePrefix("--").trim()
         val prefix = body.substringBefore(':', missingDelimiterValue = "")
         val explicitFolder = prefix.takeIf { it.isNotBlank() }?.let(service::findFolder)
         val parsed = QuickAddParser.parse(if (explicitFolder != null) body.substringAfter(':') else body)
-        val bare = explicitFolder == null && parsed.startDate == null && parsed.dueDate == null
+        val bare = explicitFolder == null && parsed.startDate == null && parsed.dueDate == null && !parsed.isMaybe
         val folder = explicitFolder ?: service.findFolder(DEFAULT_FOLDER)
         return parsed.takeIf { it.title.isNotBlank() }?.copy(parentId = folder?.id, isStarred = bare)
     }
@@ -185,7 +186,7 @@ class BotLogic(private val service: TaskService, private val store: Store) {
     }
 
     private fun describe(task: Task): String {
-        val title = task.title.take(120)
+        val title = task.title.take(120) + if (task.isMaybe) " ?" else ""
         val due = service.effectiveDueDate(task)?.let { " · due " + SimpleDateFormat("EEE d MMM", Locale.US).format(Date(it)) }.orEmpty()
         return title + due
     }

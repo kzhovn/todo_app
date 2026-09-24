@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import kotlinx.serialization.Serializable
@@ -23,5 +24,10 @@ data class Task(
     val recurrenceType: RecurrenceType? = null,
     val recurrenceRule: String? = null,
     val icon: String? = null,
-    val reminderOffsetMinutes: Int? = null
-)
+    val reminderOffsetMinutes: Int? = null,
+    // "?" in the UI: a someday-maybe, hidden from Active/Doing. Never starred (see starRule).
+    @ColumnInfo(defaultValue = "0") val isMaybe: Boolean = false
+) {
+    // The one place the maybe/star exclusion is enforced; every write path runs tasks through it.
+    fun starRule(): Task = if (isMaybe && isStarred) copy(isStarred = false) else this
+}

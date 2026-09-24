@@ -138,6 +138,25 @@ class ServerTest {
     }
 
     @Test
+    fun `a trailing question mark makes an unstarred maybe, hidden from Doing but listed in its folder`() {
+        val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
+
+        val maybe = logic.parseAdd("-- work: update bug? due today")!!
+        assertTrue(maybe.isMaybe)
+        assertFalse(maybe.isStarred)
+        assertEquals("update bug", maybe.title)
+        assertFalse(logic.parseAdd("--work: update(?) bug due today")!!.isMaybe)
+        assertFalse(logic.parseAdd("-- someday?")!!.isStarred)
+
+        logic.onAdd(1L, "u", "-- work: update bug? due today")
+        val id = service.tasks().single { it.title == "update bug" }.id
+        service.setStarred(id, true)
+        assertFalse(service.get(id)!!.isStarred)
+        assertTrue(service.doing().none { it.id == id })
+        assertTrue(logic.listChunks(service.openInFolder(work.id)).single().content.contains("update bug ?"))
+    }
+
+    @Test
     fun `bare adds are starred, adds with a date or folder are not`() {
         service.create(Task(type = TaskType.FOLDER, title = "Work"))
 

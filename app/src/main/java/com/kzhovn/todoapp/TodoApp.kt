@@ -4,6 +4,7 @@ import android.app.AlarmManager
 import android.app.Application
 import androidx.room.InvalidationTracker
 import androidx.room.Room
+import com.kzhovn.todoapp.data.MIGRATION_3_4
 import com.kzhovn.todoapp.data.TodoDatabase
 import com.kzhovn.todoapp.notifications.ReminderScheduler
 import com.kzhovn.todoapp.repository.ContextRepository
@@ -17,7 +18,7 @@ import com.kzhovn.todoapp.sync.TRACKED_TABLES
 class TodoApp : Application() {
     val database: TodoDatabase by lazy {
         Room.databaseBuilder(this, TodoDatabase::class.java, "todo.db")
-            .fallbackToDestructiveMigration()
+            .addMigrations(MIGRATION_3_4)
             .addCallback(SyncTracking)
             .build()
     }

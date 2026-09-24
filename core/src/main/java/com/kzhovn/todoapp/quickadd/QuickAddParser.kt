@@ -22,8 +22,11 @@ object QuickAddParser {
             val date = parseDate(value)
             if (isStart) startDate = startDate ?: date else dueDate = dueDate ?: date
         }
-        val title = input.replace(flagRegex, "").replace(wordRegex, "").replace(Regex("\\s+"), " ").trim()
-        return Task(title = title, startDate = startDate, dueDate = dueDate)
+        val text = input.replace(flagRegex, "").replace(wordRegex, "").replace(Regex("\\s+"), " ").trim()
+        // A "?" ending the title itself (after flags and date phrases are stripped) marks a maybe;
+        // one elsewhere, like "update(?) bug", is just part of the title.
+        val isMaybe = text.endsWith("?")
+        return Task(title = text.removeSuffix("?").trim(), startDate = startDate, dueDate = dueDate, isMaybe = isMaybe)
     }
 
     private fun parseDate(value: String): Long? {
