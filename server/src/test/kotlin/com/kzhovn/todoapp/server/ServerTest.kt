@@ -158,20 +158,37 @@ class ServerTest {
     }
 
     @Test
+    fun `source-linked lines end in their link, app lines in their reaction emoji`() {
+        logic.onAdd(1L, "https://discord.com/channels/@me/2/1", "-- call mom")
+        val app = service.create(Task(title = "Buy milk", isStarred = true, dueDate = now))
+
+        val chunk = logic.listChunks(service.doing()).single()
+        val emoji = chunk.lines.single { it.taskId == app.id }.emoji!!
+        assertEquals(listOf(emoji), chunk.emojis)
+        val lines = chunk.content.lines()
+        assertTrue("- call mom (<https://discord.com/channels/@me/2/1>)" in lines)
+        assertTrue(lines.any { Regex("- Buy milk · due \\w{3} \\d+ \\w{3} $emoji").matches(it) })
+    }
+
+    @Test
     fun `list emoji are sticky, unique, and toggling one completes and strikes its line`() {
         val a = service.create(Task(title = "A", isStarred = true))
         val b = service.create(Task(title = "B", isStarred = true))
+        logic.onAdd(1L, "u", "-- C")
 
         val chunk = logic.listChunks(service.doing()).single()
         assertEquals(2, chunk.emojis.distinct().size)
         assertEquals(chunk.emojis, logic.listChunks(service.doing()).single().emojis)
         logic.recordList(99L, chunk)
 
-        val aEmoji = chunk.lines.single { it.taskId == a.id }.emoji
+        logic.onReaction(1L, DONE, added = true)
+        val aEmoji = chunk.lines.single { it.taskId == a.id }.emoji!!
         val outcome = logic.onReaction(99L, aEmoji, added = true) as ReactionOutcome.EditList
         assertTrue(service.get(a.id)!!.isComplete)
-        assertTrue(outcome.content.contains("~~A"))
-        assertFalse(outcome.content.contains("~~B"))
+        val lines = outcome.content.lines()
+        assertTrue("- ~~A~~ $aEmoji" in lines)
+        assertTrue("- ~~C~~ (<u>)" in lines)
+        assertTrue(lines.any { it.startsWith("- B ") })
 
         logic.onReaction(99L, aEmoji, added = false)
         assertFalse(service.get(a.id)!!.isComplete)
@@ -179,9 +196,22 @@ class ServerTest {
     }
 
     @Test
-    fun `long lists split at Discord's reaction limit`() {
+    fun `long lists split at Discord's reaction limit, counting only emoji lines`() {
         repeat(25) { service.create(Task(title = "T$it", isStarred = true)) }
-        assertEquals(listOf(20, 5), logic.listChunks(service.doing()).map { it.emojis.size })
+        repeat(10) { logic.onAdd(it.toLong(), "u", "-- S$it") }
+        val chunks = logic.listChunks(service.doing())
+        assertEquals(listOf(20, 5), chunks.map { it.emojis.size })
+        assertEquals(35, chunks.sumOf { it.lines.size })
+    }
+
+    @Test
+    fun `long lists split at Discord's length limit, leaving room to strike every line`() {
+        val url = "https://discord.com/channels/123456789012345678/123456789012345678/123456789012345678"
+        repeat(30) { logic.onAdd(it.toLong(), url, "-- " + "x".repeat(120)) }
+        val chunks = logic.listChunks(service.doing())
+        assertTrue(chunks.size > 1)
+        assertEquals(30, chunks.sumOf { it.lines.size })
+        assertTrue(chunks.all { it.emojis.isEmpty() && it.content.length + 4 * it.lines.size <= 2000 })
     }
 
     @Test

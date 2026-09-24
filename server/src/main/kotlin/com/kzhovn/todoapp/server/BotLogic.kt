@@ -14,6 +14,7 @@ const val DELETE = "❌"
 const val STAR = "⭐"
 const val NOTHING = "🎉 Nothing here 🎉"
 private const val MAX_REACTIONS = 20 // Discord's per-message limit on distinct reactions
+private const val MAX_CHARS = 2000 // Discord's message length limit
 
 // Single-codepoint emoji only: variation-selector forms don't reliably round-trip through
 // Discord's reaction events. Must never contain DONE/DELETE/STAR.
@@ -25,8 +26,9 @@ val EMOJI_POOL: List<String> = (
         "🐊🐅🐆🦓🦍🦧🐘🦛🦏🐪🐫🦒🦘🐃🐂🐄🐎🐖🐏🐑🦙🐐🦌🐕🐩🐈🐓🦃🦚🦜🦢🦩🐇🦝🦨🦡🦦🦥🐁🐀🦔"
     ).codePoints().toArray().map { String(Character.toChars(it)) }
 
+// Null emoji: the task came from a `--` message, so the line links there and ✅ on it completes it.
 @Serializable
-data class ListLine(val emoji: String, val taskId: Long, val text: String)
+data class ListLine(val emoji: String? = null, val taskId: Long, val text: String)
 
 // What the bot remembers about a message: either the `--` message a task came from, or a list it
 // posted (whose emoji reactions complete tasks).
@@ -107,10 +109,24 @@ class BotLogic(private val service: TaskService, private val store: Store) {
     // Returns the chunks to post; call recordList with each posted message's id.
     fun listChunks(tasks: List<Task>): List<ListChunk> {
         if (tasks.isEmpty()) return listOf(ListChunk(NOTHING, emptyList(), emptyList()))
-        val emojis = assignEmoji(tasks)
-        return tasks.map { ListLine(emojis.getValue(it.id), it.id, describe(it)) }
-            .chunked(MAX_REACTIONS)
-            .map { lines -> ListChunk(render(lines), lines.map { it.emoji }, lines) }
+        val emojis = assignEmoji(tasks.filter { store.getValue("src:${it.id}") == null })
+        val chunks = mutableListOf<MutableList<ListLine>>()
+        var chars = 0
+        for (task in tasks) {
+            val line = ListLine(emojis[task.id], task.id, describe(task))
+            // Sized as if struck, so striking lines later can't push an edit past the limit.
+            val size = renderLine(line, done = true).length + 1
+            val current = chunks.lastOrNull()
+            val full = current == null || chars + size > MAX_CHARS ||
+                (line.emoji != null && current.count { it.emoji != null } == MAX_REACTIONS)
+            if (full) {
+                chunks += mutableListOf<ListLine>()
+                chars = 0
+            }
+            chunks.last().add(line)
+            chars += size
+        }
+        return chunks.map { lines -> ListChunk(render(lines), lines.mapNotNull { it.emoji }, lines) }
     }
 
     fun recordList(messageId: Long, chunk: ListChunk) {
@@ -138,15 +154,19 @@ class BotLogic(private val service: TaskService, private val store: Store) {
     // list message correct however many times its reactions are toggled.
     private fun render(lines: List<ListLine>): String = lines.joinToString("\n") { line ->
         val task = service.get(line.taskId)
-        val done = task == null || task.isComplete
-        "${line.emoji} " + if (done) "~~${line.text}~~" else line.text
+        renderLine(line, done = task == null || task.isComplete)
+    }
+
+    // `<>` around the link suppresses its embed, as rusabot's `- {text} ({url})` did.
+    private fun renderLine(line: ListLine, done: Boolean): String {
+        val tail = line.emoji ?: store.getValue("src:${line.taskId}")?.let { "(<$it>)" }
+        return "- " + (if (done) "~~${line.text}~~" else line.text) + tail?.let { " $it" }.orEmpty()
     }
 
     private fun describe(task: Task): String {
         val title = task.title.take(120)
         val due = service.effectiveDueDate(task)?.let { " · due " + SimpleDateFormat("EEE d MMM", Locale.US).format(Date(it)) }.orEmpty()
-        val link = store.getValue("src:${task.id}")?.let { " [↗](<$it>)" }.orEmpty()
-        return title + due + link
+        return title + due
     }
 
     // Sticky: an open task keeps its emoji across listings. New assignments take the free emoji
