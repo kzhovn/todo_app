@@ -1,0 +1,14 @@
+[Unit]
+Description=Todo sync server and Discord bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=todo
+EnvironmentFile=/etc/todo-server.env
+ExecStart=/opt/todo/server/bin/server
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
