@@ -43,6 +43,8 @@ class SyncClient(
 
     private data class Key(val table: String, val id: Long)
 
+    private class ApplyResult(val applied: List<Task>, val removed: List<Task>, val changedRows: Int)
+
     // Push dirty rows, receive the merged result plus everything else new since our cursor.
     // Returns how many rows were applied locally.
     suspend fun sync(config: SyncConfig): Int = mutex.withLock {
@@ -51,12 +53,11 @@ class SyncClient(
             SyncRequest(cursor(), dirty.mapNotNull { (key, ts) -> changeFor(key, ts) }) to dirty
         }
         val response = withContext(Dispatchers.IO) { (transport ?: ::post)(config, request) }
-        val (applied, removed) = db.withTransaction { apply(response, pushedTs) }
-        applied.forEach { if (it.isComplete) reminders.cancel(it) else reminders.schedule(it) }
-        removed.forEach(reminders::cancel)
-        val count = applied.size + removed.size
-        if (count > 0) _pulls.value++
-        count
+        val result = db.withTransaction { apply(response, pushedTs) }
+        result.applied.forEach { if (it.isComplete) reminders.cancel(it) else reminders.schedule(it) }
+        result.removed.forEach(reminders::cancel)
+        if (result.changedRows > 0) _pulls.value++
+        result.changedRows
     }
 
     fun hasDirty(): Boolean = sql.query("SELECT 1 FROM sync_dirty LIMIT 1").use { it.moveToFirst() }
@@ -70,19 +71,26 @@ class SyncClient(
         return diff(key.table, key.id, base, next, ts)
     }
 
-    private suspend fun apply(response: SyncResponse, pushedTs: Map<Key, Long>): Pair<List<Task>, List<Task>> {
+    private suspend fun apply(response: SyncResponse, pushedTs: Map<Key, Long>): ApplyResult {
         val applied = mutableListOf<Task>()
         val removed = mutableListOf<Task>()
+        var changedRows = 0
         for (row in response.rows) {
             val key = Key(row.table, row.id)
             // Edited again while the request was in flight: leave it dirty. The next push re-sends
             // those edits and gets the merged row back, so nothing from the server is lost.
             val dirtyTs = dirtyTs(key)
             if (dirtyTs != null && dirtyTs != pushedTs[key]) continue
-            when (row.table) {
-                TASKS -> applyTask(row)?.let { (task, deleted) -> if (deleted) removed += task else applied += task }
-                CONTEXTS -> applyContext(row)
-                else -> continue // a row type from a newer server; ignore
+            val local = localFields(key)
+            // Usually the echo of our own push: record it as the new base without rewriting the row.
+            val unchanged = if (row.isDeleted) local == null else local == row.fields
+            if (!unchanged) {
+                when (row.table) {
+                    TASKS -> applyTask(row)?.let { (task, deleted) -> if (deleted) removed += task else applied += task }
+                    CONTEXTS -> applyContext(row)
+                    else -> continue // a row type from a newer server; ignore
+                }
+                changedRows++
             }
             sql.execSQL("INSERT OR REPLACE INTO sync_base VALUES(?, ?, ?)", arrayOf(row.table, row.id, SyncJson.encodeToString(SyncRow.serializer(), row)))
             clearDirty(key) // our own writes above re-dirtied it
@@ -91,7 +99,7 @@ class SyncClient(
         val returned = response.rows.map { Key(it.table, it.id) }.toSet()
         pushedTs.filterKeys { it !in returned }.forEach { (key, ts) -> if (dirtyTs(key) == ts) clearDirty(key) }
         sql.execSQL("INSERT OR REPLACE INTO sync_state VALUES('cursor', ?)", arrayOf(response.cursor))
-        return applied to removed
+        return ApplyResult(applied, removed, changedRows)
     }
 
     private suspend fun applyTask(row: SyncRow): Pair<Task, Boolean>? {

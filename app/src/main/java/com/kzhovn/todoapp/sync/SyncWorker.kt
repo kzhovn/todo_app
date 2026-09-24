@@ -69,7 +69,7 @@ object SyncSettings {
 
     fun recordResult(context: Context, outcome: kotlin.Result<Int>) {
         val time = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date())
-        val text = outcome.fold({ "Last synced $time ($it changes pulled)" }, { "Sync failed at $time: ${it.message ?: it.javaClass.simpleName}" })
+        val text = outcome.fold({ "Last synced $time ($it changes received)" }, { "Sync failed at $time: ${it.message ?: it.javaClass.simpleName}" })
         prefs(context).edit().putString("status", text).apply()
     }
 }

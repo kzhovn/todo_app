@@ -63,7 +63,7 @@ class SyncClientTest {
         val taskId = repository.createTask(Task(title = "Report"))
         contexts.setTaskContexts(taskId, setOf(ctxId))
 
-        client.sync(config)
+        assertEquals("pushing only echoes our own rows back", 0, client.sync(config))
 
         assertEquals("Report", server.get(taskId)!!.title)
         assertEquals(setOf(ctxId), store.get(TASKS, taskId)!!.contextIds())
