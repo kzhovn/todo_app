@@ -43,14 +43,16 @@ sealed interface ReactionOutcome {
 
 class BotLogic(private val service: TaskService, private val store: Store) {
 
-    // `-- text` or `--folder: text`. Returns null for messages that aren't adds.
+    // `-- text` or `--folder: text`. Returns null for messages that aren't adds. A bare add is
+    // starred so it lands in Doing; any start/due date or folder means the user placed it deliberately.
     fun parseAdd(content: String): Task? {
         if (!content.startsWith("--")) return null
         val body = content.removePrefix("--").trim()
         val prefix = body.substringBefore(':', missingDelimiterValue = "")
         val folder = prefix.takeIf { it.isNotBlank() }?.let(service::findFolder)
         val parsed = QuickAddParser.parse(if (folder != null) body.substringAfter(':') else body)
-        return parsed.takeIf { it.title.isNotBlank() }?.copy(parentId = folder?.id)
+        val bare = folder == null && parsed.startDate == null && parsed.dueDate == null
+        return parsed.takeIf { it.title.isNotBlank() }?.copy(parentId = folder?.id, isStarred = bare)
     }
 
     fun onAdd(messageId: Long, jumpUrl: String, content: String): Boolean {
@@ -143,9 +145,8 @@ class BotLogic(private val service: TaskService, private val store: Store) {
     private fun describe(task: Task): String {
         val title = task.title.take(120)
         val due = service.effectiveDueDate(task)?.let { " · due " + SimpleDateFormat("EEE d MMM", Locale.US).format(Date(it)) }.orEmpty()
-        val star = if (task.isStarred) " $STAR" else ""
         val link = store.getValue("src:${task.id}")?.let { " [↗](<$it>)" }.orEmpty()
-        return title + star + due + link
+        return title + due + link
     }
 
     // Sticky: an open task keeps its emoji across listings. New assignments take the free emoji

@@ -103,8 +103,24 @@ class ServerTest {
     }
 
     @Test
+    fun `bare adds are starred, adds with a date or folder are not`() {
+        service.create(Task(type = TaskType.FOLDER, title = "Work"))
+
+        assertTrue(logic.parseAdd("-- call mom")!!.isStarred)
+        assertFalse(logic.parseAdd("-- call mom -d tomorrow")!!.isStarred)
+        assertFalse(logic.parseAdd("-- call mom -s tomorrow")!!.isStarred)
+        assertFalse(logic.parseAdd("--work: send report")!!.isStarred)
+    }
+
+    @Test
+    fun `list lines never show a star`() {
+        service.create(Task(title = "Starred", isStarred = true))
+        assertFalse(logic.listChunks(service.doing()).single().content.contains(STAR))
+    }
+
+    @Test
     fun `source-message reactions complete, delete, star, and undo`() {
-        assertTrue(logic.onAdd(1L, "https://discord.com/channels/@me/2/1", "-- call mom"))
+        assertTrue(logic.onAdd(1L, "https://discord.com/channels/@me/2/1", "-- call mom -d tomorrow"))
         val id = service.tasks().single().id
 
         logic.onReaction(1L, STAR, added = true)
