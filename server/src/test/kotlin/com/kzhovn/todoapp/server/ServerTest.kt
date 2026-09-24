@@ -166,7 +166,7 @@ class ServerTest {
         val emoji = chunk.lines.single { it.taskId == app.id }.emoji!!
         assertEquals(listOf(emoji), chunk.emojis)
         val lines = chunk.content.lines()
-        assertTrue("- call mom (<https://discord.com/channels/@me/2/1>)" in lines)
+        assertTrue("- call mom [↗](<https://discord.com/channels/@me/2/1>)" in lines)
         assertTrue(lines.any { Regex("- Buy milk · due \\w{3} \\d+ \\w{3} $emoji").matches(it) })
     }
 
@@ -187,7 +187,7 @@ class ServerTest {
         assertTrue(service.get(a.id)!!.isComplete)
         val lines = outcome.content.lines()
         assertTrue("- ~~A~~ $aEmoji" in lines)
-        assertTrue("- ~~C~~ (<u>)" in lines)
+        assertTrue("- ~~C~~ [↗](<u>)" in lines)
         assertTrue(lines.any { it.startsWith("- B ") })
 
         logic.onReaction(99L, aEmoji, added = false)

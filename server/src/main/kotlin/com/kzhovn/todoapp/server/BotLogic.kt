@@ -157,9 +157,9 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         renderLine(line, done = task == null || task.isComplete)
     }
 
-    // `<>` around the link suppresses its embed, as rusabot's `- {text} ({url})` did.
+    // A masked link keeps lines short; `<>` around the URL suppresses its embed.
     private fun renderLine(line: ListLine, done: Boolean): String {
-        val tail = line.emoji ?: store.getValue("src:${line.taskId}")?.let { "(<$it>)" }
+        val tail = line.emoji ?: store.getValue("src:${line.taskId}")?.let { "[↗](<$it>)" }
         return "- " + (if (done) "~~${line.text}~~" else line.text) + tail?.let { " $it" }.orEmpty()
     }
 
