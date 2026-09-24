@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -19,6 +20,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".ui.TaskEditActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name=".sync.SyncSettingsActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".contexts.ContextsActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity
             android:name=".quickadd.QuickAddActivity"

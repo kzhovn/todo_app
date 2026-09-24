@@ -15,6 +15,9 @@ interface TaskDao {
     @Update
     suspend fun update(task: Task)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(task: Task)
+
     @Delete
     suspend fun delete(task: Task)
 
@@ -73,6 +76,9 @@ interface TaskDao {
         dueBefore: Long?,
         contextId: Long?
     ): List<Task>
+
+    @Query("DELETE FROM task_dependencies WHERE taskId = :taskId")
+    suspend fun deleteDependenciesOf(taskId: Long)
 
     @Query("SELECT * FROM task_dependencies")
     suspend fun getAllDependencies(): List<TaskDependency>

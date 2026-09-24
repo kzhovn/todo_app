@@ -14,6 +14,9 @@ interface TaskContextDao {
     @Update
     suspend fun update(context: TaskContext)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(context: TaskContext)
+
     @Query("SELECT * FROM contexts WHERE id = :id")
     suspend fun getById(id: Long): TaskContext?
 
@@ -58,6 +61,12 @@ interface TaskContextDao {
 
     @Query("DELETE FROM contexts WHERE id = :id")
     suspend fun deleteContext(id: Long)
+
+    @Query("SELECT contextId FROM task_contexts WHERE taskId = :taskId")
+    suspend fun getContextIdsForTask(taskId: Long): List<Long>
+
+    @Query("DELETE FROM task_contexts WHERE taskId = :taskId")
+    suspend fun deleteAssignmentsForTask(taskId: Long)
 
     @Query("SELECT * FROM task_contexts")
     suspend fun getAllCrossRefs(): List<TaskContextCrossRef>

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DrawerState
@@ -67,6 +68,9 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.context.WifiContextMonitor
 import com.kzhovn.todoapp.contexts.ContextsActivity
+import com.kzhovn.todoapp.sync.SyncSettings
+import com.kzhovn.todoapp.sync.SyncSettingsActivity
+import com.kzhovn.todoapp.sync.SyncWorker
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.quickadd.QuickAddActivity
@@ -155,7 +159,8 @@ class MainActivity : ComponentActivity() {
                 }
                 onPauseOrDispose { }
             }
-            LaunchedEffect(query, filters) {
+            val pulls by app.syncClient.pulls.collectAsState()
+            LaunchedEffect(query, filters, pulls) {
                 if (query.isBlank()) viewModel.load(selectedMode) else viewModel.search(query, filters)
             }
             // Independent subscription (rather than reusing the ALL-branch collectAsState below)
@@ -199,6 +204,16 @@ class MainActivity : ComponentActivity() {
                             onClick = {
                                 searchMode = true
                                 scope.launch { drawerState.close() }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                        NavigationDrawerItem(
+                            label = { Text("Sync") },
+                            icon = { Icon(Icons.Filled.Sync, contentDescription = null) },
+                            selected = false,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                startActivity(Intent(this@MainActivity, SyncSettingsActivity::class.java))
                             },
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                         )
@@ -351,6 +366,11 @@ class MainActivity : ComponentActivity() {
             }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (SyncSettings.config(this) != null) SyncWorker.requestSoon(this, delaySeconds = 0)
     }
 
     override fun onDestroy() {
