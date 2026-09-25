@@ -1,6 +1,6 @@
 // Keyboard shortcuts (ignored while typing): n = quick add, g then d/a/t = Doing/Active/All, ? = help.
-// Plus the All tree's outliner, and small behaviours for htmx fragments, the editor's pickers and
-// the undo toast.
+// Plus the All tree's outliner, the task editor's pills, timed tasks, bulk selection, and small
+// behaviours for htmx fragments and the undo toast.
 (() => {
   let pendingG = false;
   const go = { d: "/doing", a: "/active", t: "/all" };
@@ -251,13 +251,74 @@
     if (e.detail.successful && e.detail.elt.matches("form.quickadd")) e.detail.elt.reset();
   });
 
-  // Filter a picker's checkbox list by its search box.
-  document.addEventListener("input", (e) => {
-    if (!e.target.matches("[data-filter]")) return;
-    const q = e.target.value.toLowerCase();
-    e.target.closest(".picker").querySelectorAll(".options label").forEach((l) => {
-      l.hidden = !l.textContent.toLowerCase().includes(q);
-    });
+  // --- Task editor. Pills open popovers (one at a time); their text follows the controls inside, in
+  // the same words as the phone's chips (Labels / pillDate / formatDuration in Kotlin).
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const pillDate = (date, time) => {
+    if (!date) return null;
+    const [, m, d] = date.split("-").map(Number);
+    if (!time) return `${MONTHS[m - 1]} ${d}`;
+    const [h, min] = time.split(":").map(Number);
+    return `${MONTHS[m - 1]} ${d} ${h % 12 || 12}:${String(min).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+  };
+  const duration = (m) => (m < 60 ? `${m}m` : m % 60 === 0 ? `${m / 60}h` : `${Math.floor(m / 60)}h ${m % 60}m`);
+  const repeatText = (pop) => {
+    const preset = pop.querySelector("[name=repeat]").value, n = +pop.querySelector("[name=n]").value || 1;
+    if (preset === "NONE") return null;
+    if (preset === "AFTER_COMPLETION_N_DAYS") return `${n} day${n === 1 ? "" : "s"} after completion`;
+    const unit = pop.querySelector("[name=unit]").value.toLowerCase();
+    const every = n === 1 ? `Every ${unit}` : `Every ${n} ${unit}s`;
+    const days = [...pop.querySelectorAll("[name=wd]:checked")].map((c) => c.parentElement.textContent.trim()).join(" ");
+    return unit === "week" && days ? `${every} · ${days}` : every;
+  };
+  function pillValue(pp) {
+    const pop = pp.querySelector(".pop");
+    switch (pp.dataset.kind) {
+      case "date": return pillDate(pop.querySelector("input[type=date]").value, pop.querySelector("input[type=time]").value);
+      case "select": { const s = pop.querySelector("select"); return s.value ? s.selectedOptions[0].textContent : null; }
+      case "timer": { const m = +pop.querySelector("[name=duration]").value; return m > 0 ? duration(m) : null; }
+      case "repeat": return repeatText(pop);
+    }
+    return null;
+  }
+  function refreshPill(pp) {
+    const value = pillValue(pp), summary = pp.querySelector("summary");
+    summary.classList.toggle("set", !!value);
+    summary.querySelector(".pp-text").textContent = value ?? pp.dataset.label;
+  }
+  document.addEventListener("input", (e) => { const pp = e.target.closest(".pp[data-kind]"); if (pp) refreshPill(pp); });
+  document.addEventListener("change", (e) => { const pp = e.target.closest(".pp[data-kind]"); if (pp) refreshPill(pp); });
+  document.addEventListener("click", (e) => {
+    const preset = e.target.closest(".pop .preset[data-minutes]");
+    if (preset) {
+      const pp = preset.closest(".pp");
+      pp.querySelector("[name=duration]").value = preset.dataset.minutes;
+      refreshPill(pp);
+      return;
+    }
+    const clear = e.target.closest(".pp-clear");
+    if (clear) {
+      e.preventDefault(); // don't also open the popover
+      const pp = clear.closest(".pp");
+      pp.querySelectorAll(".pop input").forEach((i) => { if (i.type === "checkbox") i.checked = false; else i.value = ""; });
+      pp.querySelectorAll(".pop select").forEach((s) => { s.selectedIndex = 0; });
+      refreshPill(pp);
+      pp.open = false;
+      return;
+    }
+    // Clicking outside an open popover closes it.
+    document.querySelectorAll(".pp[open]").forEach((pp) => { if (!pp.contains(e.target)) pp.open = false; });
+  });
+  document.addEventListener("toggle", (e) => {
+    if (e.target.matches?.(".pp") && e.target.open) document.querySelectorAll(".pp[open]").forEach((pp) => { if (pp !== e.target) pp.open = false; });
+  }, true);
+  // Enter in the (wrapping) title saves instead of adding a line; a maybe is never starred.
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && e.target.matches(".title-input")) { e.preventDefault(); e.target.form.requestSubmit(); }
+  });
+  document.addEventListener("change", (e) => {
+    const other = { maybe: "starred", starred: "maybe" }[e.target.name];
+    if (other && e.target.checked && e.target.closest(".title-box")) e.target.form.querySelector(`[name=${other}]`).checked = false;
   });
 
   // The undo toast hides a few seconds after it appears, whether swapped in or rendered with the page.

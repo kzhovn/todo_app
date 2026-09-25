@@ -1,5 +1,28 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.AcUnit
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AlternateEmail
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import com.kzhovn.todoapp.data.Labels
+import com.kzhovn.todoapp.data.formatDuration
+import com.kzhovn.todoapp.ui.theme.LedgerCheckBorder
 import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.sync.SyncJson
 import androidx.compose.material3.AlertDialog
@@ -20,7 +43,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -40,16 +62,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
@@ -92,6 +110,7 @@ import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.launch
 
 class TaskEditActivity : ComponentActivity() {
+    @OptIn(ExperimentalLayoutApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as TodoApp
@@ -136,6 +155,13 @@ class TaskEditActivity : ComponentActivity() {
             var showNewBlockerDialog by remember { mutableStateOf(false) }
             var newBlockerTitle by remember { mutableStateOf("") }
             var showSubtaskPicker by remember { mutableStateOf(false) }
+            var showPrereqPicker by remember { mutableStateOf(false) }
+            var showRemindMenu by remember { mutableStateOf(false) }
+            var showRepeatDialog by remember { mutableStateOf(false) }
+            var showTimerDialog by remember { mutableStateOf(false) }
+            var showContextMenu by remember { mutableStateOf(false) }
+            // Pinning takes effect at once (it's "what I'm doing now"), not on Save.
+            var pinned by remember { mutableStateOf(taskId != 0L && PinnedTask.pinnedId(this@TaskEditActivity) == taskId) }
             val focusManager = LocalFocusManager.current
 
             // ContextsActivity is launched with plain startActivity (not for a result), so
@@ -239,41 +265,75 @@ class TaskEditActivity : ComponentActivity() {
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
+                // Title box: pin in front, then Maybe and the star after. It wraps (up to four lines),
+                // with the icons staying level with the first line.
+                val canPin = taskId != 0L && task.type == TaskType.TASK && !task.isComplete
+                Row(
+                    verticalAlignment = Alignment.Top,
+                    modifier = Modifier.fillMaxWidth().border(1.dp, LedgerBorder, RoundedCornerShape(6.dp)).padding(horizontal = 4.dp)
+                ) {
+                    if (canPin) {
+                        IconButton(onClick = {
+                            if (pinned) PinnedTask.unpin(this@TaskEditActivity) else PinnedTask.pin(this@TaskEditActivity, task)
+                            pinned = !pinned
+                        }) {
+                            Icon(Icons.Filled.PushPin, contentDescription = Labels.PIN, tint = if (pinned) LedgerAccent else LedgerMuted, modifier = Modifier.size(20.dp))
+                        }
+                        Box(Modifier.padding(top = 10.dp).width(1.dp).height(28.dp).background(LedgerBorder))
+                    }
+                    BasicTextField(
                         value = task.title,
-                        onValueChange = { task = task.copy(title = it) },
-                        singleLine = true,
+                        onValueChange = { task = task.copy(title = it.replace("\n", " ")) },
+                        maxLines = 4,
+                        textStyle = TextStyle(fontSize = 17.sp, color = LedgerInk),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = {
                             focusManager.clearFocus()
                             if (isLoaded && task.title.isNotBlank()) onSave()
                         }),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 11.dp),
+                        decorationBox = { field ->
+                            if (task.title.isEmpty()) Text(Labels.TITLE, fontSize = 17.sp, color = LedgerMuted)
+                            field()
+                        }
                     )
-                    IconButton(enabled = !task.isMaybe, onClick = { task = task.copy(isStarred = !task.isStarred) }) {
-                        Icon(
-                            if (task.isStarred) Icons.Filled.Star else Icons.Filled.StarBorder,
-                            contentDescription = "Star",
-                            tint = if (task.isStarred) LedgerStar else LedgerMuted
-                        )
+                    if (task.type != TaskType.FOLDER) {
+                        // A maybe is never starred: turning either on turns the other off.
+                        IconButton(onClick = { task = task.copy(isMaybe = !task.isMaybe, isStarred = task.isStarred && task.isMaybe) }) {
+                            Text("?", fontWeight = FontWeight.Bold, fontSize = 19.sp, color = if (task.isMaybe) LedgerAccent else LedgerMuted)
+                        }
+                        IconButton(onClick = { task = task.copy(isStarred = !task.isStarred, isMaybe = task.isMaybe && task.isStarred) }) {
+                            Icon(
+                                if (task.isStarred) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                contentDescription = Labels.STAR,
+                                tint = if (task.isStarred) LedgerStar else LedgerMuted
+                            )
+                        }
                     }
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
                 Row {
+                    Labels.TYPES.forEach { (type, label) ->
+                        SelectablePill(label, selected = task.type == type) { task = task.copy(type = type) }
+                        Spacer(Modifier.width(8.dp))
+                    }
+                }
+
+                // Everything about when: dates, reminder, repeat, timer, and "today only".
+                Spacer(Modifier.height(12.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     PropertyChip(
-                        label = "Start",
+                        label = Labels.START,
                         valueText = task.startDate?.let(::formatChipDate),
                         icon = Icons.Filled.Event,
                         onClick = { pickDate(this@TaskEditActivity, task.startDate) { task = task.copy(startDate = it) } },
                         onClear = { task = task.copy(startDate = null) },
                         showLabelWhenSet = false
                     )
-                    Spacer(Modifier.width(8.dp))
                     if (task.type != TaskType.FOLDER) {
                         PropertyChip(
-                            label = "Due",
+                            label = Labels.DUE,
                             valueText = task.dueDate?.let(::formatChipDate),
                             icon = Icons.Filled.Flag,
                             onClick = { pickDate(this@TaskEditActivity, task.dueDate) { task = task.copy(dueDate = it) } },
@@ -281,249 +341,156 @@ class TaskEditActivity : ComponentActivity() {
                             showLabelWhenSet = false
                         )
                     }
-                }
-
-                if (task.dueDate != null && task.type == TaskType.TASK) {
-                    Spacer(Modifier.height(8.dp))
-                    Text("Remind me", fontSize = 12.sp, color = LedgerMuted)
-                    Row(modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                        LabelOptions(
-                            options = listOf(
-                                null to "No reminder",
-                                0 to "At due time",
-                                5 to "5 min before",
-                                30 to "30 min before",
-                                60 to "1 hour before",
-                                1440 to "1 day before"
-                            ),
-                            selected = task.reminderOffsetMinutes,
-                            onSelect = { offset -> task = task.copy(reminderOffsetMinutes = offset) }
-                        )
-                    }
-                }
-
-                // A timed task: its play button counts this down (TaskTimer).
-                if (task.type == TaskType.TASK) {
-                    Spacer(Modifier.height(12.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Timer", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
-                        Spacer(Modifier.width(10.dp))
-                        DurationField(task.durationMinutes) { task = task.copy(durationMinutes = it) }
-                        Spacer(Modifier.width(6.dp))
-                        Text("minutes", fontSize = 12.sp, color = LedgerMuted)
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-                PropertyChip(
-                    label = "Folder",
-                    valueText = allById[task.parentId]?.title,
-                    icon = Icons.Filled.Folder,
-                    onClick = { showFolderPicker = true },
-                    showLabelWhenSet = false
-                )
-
-                if (task.type != TaskType.FOLDER) {
-                    Spacer(Modifier.height(12.dp))
-                    Text("Repeat", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
-                    Row(modifier = Modifier.padding(top = 4.dp)) {
-                        LabelOptions(
-                            options = listOf(
-                                RecurrencePreset.NONE to "None",
-                                RecurrencePreset.CALENDAR to "Every",
-                                RecurrencePreset.AFTER_COMPLETION_N_DAYS to "After completion"
-                            ),
-                            selected = recurrence.preset,
-                            onSelect = { preset -> recurrence = recurrence.copy(preset = preset) }
-                        )
-                    }
-                    if (recurrence.preset == RecurrencePreset.CALENDAR) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                            Text("Every", fontSize = 12.sp, color = LedgerMuted)
-                            Spacer(Modifier.width(6.dp))
-                            CompactNumberField(value = recurrence.n) { n -> recurrence = recurrence.copy(n = n) }
-                            Spacer(Modifier.width(6.dp))
-                            LabelOptions(
-                                options = listOf(
-                                    RecurrenceUnit.DAY to "day(s)",
-                                    RecurrenceUnit.WEEK to "week(s)",
-                                    RecurrenceUnit.MONTH to "month(s)"
-                                ),
-                                selected = recurrence.unit,
-                                trailingPadding = 8.dp,
-                                verticalPadding = 0.dp,
-                                onSelect = { unit -> recurrence = recurrence.copy(unit = unit) }
+                    if (task.type == TaskType.TASK && task.dueDate != null) {
+                        Box {
+                            PropertyChip(
+                                label = Labels.REMIND,
+                                valueText = task.reminderOffsetMinutes?.let { offset -> Labels.REMINDERS.firstOrNull { it.first == offset }?.second },
+                                icon = Icons.Filled.Notifications,
+                                onClick = { showRemindMenu = true },
+                                onClear = { task = task.copy(reminderOffsetMinutes = null) },
+                                showLabelWhenSet = false
                             )
-                        }
-                        if (recurrence.unit == RecurrenceUnit.WEEK) {
-                            Spacer(Modifier.height(4.dp))
-                            DayOfWeekToggle(recurrence.weekdaysMask) { mask -> recurrence = recurrence.copy(weekdaysMask = mask) }
-                        }
-                    }
-                    if (recurrence.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                            Text("Repeat", fontSize = 12.sp, color = LedgerMuted)
-                            Spacer(Modifier.width(6.dp))
-                            CompactNumberField(value = recurrence.n) { n -> recurrence = recurrence.copy(n = n) }
-                            Spacer(Modifier.width(6.dp))
-                            Text("days after completion", fontSize = 12.sp, color = LedgerMuted)
-                        }
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Text("Depends on", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
-                    val dependencyCandidates = remember(allTasks, allDependencyEdges, task.id) {
-                        allTasks.filter {
-                            it.id != task.id && it.type == TaskType.TASK && !it.isComplete &&
-                                !wouldCreateDependencyCycle(it.id, task.id, allDependencyEdges)
-                        }
-                    }
-                    SearchableMultiSelectDropdown(
-                        label = "Choose tasks",
-                        items = dependencyCandidates,
-                        selectedIds = selectedDependencyIds,
-                        idOf = { it.id },
-                        labelOf = { it.title },
-                        onToggle = { id ->
-                            selectedDependencyIds = if (id in selectedDependencyIds) selectedDependencyIds - id else selectedDependencyIds + id
-                        },
-                        searchable = true,
-                        onCreateNew = { newBlockerTitle = ""; showNewBlockerDialog = true },
-                        createNewLabel = "Create new task"
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Text("Contexts", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
-                SearchableMultiSelectDropdown(
-                    label = "Choose contexts",
-                    items = allContexts,
-                    selectedIds = selectedContextIds,
-                    idOf = { it.id },
-                    labelOf = { it.name },
-                    onToggle = { id ->
-                        selectedContextIds = if (id in selectedContextIds) selectedContextIds - id else selectedContextIds + id
-                    },
-                    onCreateNew = { startActivity(Intent(this@TaskEditActivity, ContextsActivity::class.java)) },
-                    createNewLabel = "Create new context"
-                )
-
-                val subtasks = remember(allTasks, taskId) { allTasks.filter { it.parentId == taskId && taskId != 0L }.sortedWith(TaskOrder) }
-                if (subtasks.isNotEmpty() || pendingSubtasks.isNotEmpty()) {
-                    Spacer(Modifier.height(12.dp))
-                    Text("Subtasks", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
-                    subtasks.forEach { sub ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (sub.type == TaskType.TASK) {
-                                TaskCheckbox(checked = sub.isComplete, overdue = isOverdue(sub.isComplete, sub.dueDate), size = 18.dp, touchSize = 34.dp, onCheckedChange = {
-                                    scope.launch {
-                                        repository.toggleComplete(sub.id, System.currentTimeMillis())
-                                        allTasks = repository.getAllTasks()
-                                        TodoWidget().updateAll(applicationContext)
-                                    }
-                                })
-                            } else {
-                                Icon(Icons.Filled.Folder, contentDescription = null, tint = LedgerMuted, modifier = Modifier.size(34.dp).padding(8.dp))
+                            DropdownMenu(expanded = showRemindMenu, onDismissRequest = { showRemindMenu = false }) {
+                                Labels.REMINDERS.forEach { (offset, label) ->
+                                    DropdownMenuItem(text = { Text(label) }, onClick = { task = task.copy(reminderOffsetMinutes = offset); showRemindMenu = false })
+                                }
                             }
-                            Text(
-                                sub.title,
-                                fontSize = 14.sp,
-                                textDecoration = if (sub.isComplete) TextDecoration.LineThrough else null,
-                                color = if (sub.isComplete) LedgerMuted else LedgerInk,
-                                modifier = Modifier.weight(1f).clickable {
-                                    startActivity(Intent(this@TaskEditActivity, TaskEditActivity::class.java).putExtra(EXTRA_TASK_ID, sub.id))
-                                }.padding(vertical = 6.dp)
-                            )
                         }
                     }
-                }
-
-                pendingSubtasks.forEachIndexed { index, title ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(title, fontSize = 14.sp, color = LedgerInk, modifier = Modifier.weight(1f).padding(vertical = 6.dp))
-                        Text(
-                            "✕", color = LedgerMuted, fontSize = 14.sp,
-                            modifier = Modifier.clickable { pendingSubtasks = pendingSubtasks.filterIndexed { i, _ -> i != index } }.padding(8.dp)
+                    if (task.type != TaskType.FOLDER) {
+                        PropertyChip(
+                            // An imported rule the picker can't show still counts as set.
+                            label = Labels.REPEAT,
+                            valueText = Labels.repeat(recurrence) ?: task.recurrenceType?.let { "Custom" },
+                            icon = Icons.Filled.Repeat,
+                            onClick = { showRepeatDialog = true },
+                            onClear = { recurrence = RecurrenceSelection(RecurrencePreset.NONE); task = task.copy(recurrenceType = null, recurrenceRule = null) },
+                            showLabelWhenSet = false
                         )
                     }
-                }
-                if (taskId == 0L) {
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        "+ Add subtask",
-                        color = LedgerAccent,
-                        fontSize = 12.sp,
-                        modifier = Modifier.clickable { pendingSubtaskTitle = ""; showPendingSubtaskDialog = true }
-                    )
-                }
-                if (taskId != 0L) {
-                    Spacer(Modifier.height(12.dp))
-                    Row {
-                        Text(
-                            "+ Add subtask",
-                            color = LedgerAccent,
-                            fontSize = 12.sp,
-                            modifier = Modifier.clickable { showSubtaskPicker = true }
-                        )
-                        // A dependent task is one blocked until this one is done. Folders can't be completed,
-                        // so they can't be depended on (projects can: they complete as a whole).
-                        if (task.type != TaskType.FOLDER) {
-                            Spacer(Modifier.width(24.dp))
-                            Text(
-                                "+ Add dependent task",
-                                color = LedgerAccent,
-                                fontSize = 12.sp,
-                                modifier = Modifier.clickable { showDependentPicker = true }
-                            )
-                        }
-                    }
-                    if (task.type == TaskType.TASK && !task.isComplete) {
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            "Pin to notification (doing now)",
-                            color = LedgerAccent,
-                            fontSize = 12.sp,
-                            modifier = Modifier.clickable {
-                                PinnedTask.pin(this@TaskEditActivity, task)
-                                Toast.makeText(this@TaskEditActivity, "Pinned", Toast.LENGTH_SHORT).show()
-                            }
+                    if (task.type == TaskType.TASK) {
+                        PropertyChip(
+                            label = Labels.TIMER,
+                            valueText = task.durationMinutes?.let(::formatDuration),
+                            icon = Icons.Filled.Timer,
+                            onClick = { showTimerDialog = true },
+                            onClear = { task = task.copy(durationMinutes = null) },
+                            showLabelWhenSet = false
                         )
                     }
-                }
-
-                if (task.type != TaskType.FOLDER) {
-                    Spacer(Modifier.height(12.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Maybe (?)", fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.weight(1f))
-                        Switch(checked = task.isMaybe, onCheckedChange = { task = task.copy(isMaybe = it).starRule() })
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Just for today", fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.weight(1f))
-                        Switch(checked = task.expiresAt != null, onCheckedChange = { on ->
+                    if (task.type != TaskType.FOLDER) {
+                        val toggleToday = {
                             val hour = AppSettings.rolloverHour(this@TaskEditActivity)
-                            task = task.copy(expiresAt = if (on) nextRollover(System.currentTimeMillis(), hour) else null)
-                        })
+                            task = task.copy(expiresAt = if (task.expiresAt == null) nextRollover(System.currentTimeMillis(), hour) else null)
+                        }
+                        PropertyChip(
+                            label = Labels.TODAY_ONLY,
+                            valueText = Labels.TODAY_ONLY.takeIf { task.expiresAt != null },
+                            icon = Icons.Filled.AcUnit,
+                            onClick = toggleToday,
+                            onClear = toggleToday,
+                            showLabelWhenSet = false
+                        )
                     }
                 }
 
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    listOf(TaskType.TASK to "Task", TaskType.PROJECT to "Project", TaskType.FOLDER to "Folder").forEach { (type, label) ->
-                        SelectablePill(label, selected = task.type == type) { task = task.copy(type = type) }
-                        Spacer(Modifier.width(8.dp))
-                    }
-                }
-
-                // Folders and tasks alike: only the first incomplete child counts as active.
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        if (task.type == TaskType.FOLDER) "Sequential (complete tasks in order)" else "Complete subtasks in order",
-                        fontSize = 12.sp, color = LedgerMuted,
-                        modifier = Modifier.weight(1f)
+                SectionLabel(Labels.FOLDER_AND_CONTEXTS)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    PropertyChip(
+                        label = Labels.FOLDER,
+                        valueText = allById[task.parentId]?.title,
+                        icon = Icons.Filled.Folder,
+                        onClick = { showFolderPicker = true },
+                        showLabelWhenSet = false
                     )
-                    Switch(checked = task.sequential, onCheckedChange = { task = task.copy(sequential = it) })
+                    // Folders keep contexts too: their tasks inherit them (e.g. Work only in work hours).
+                    allContexts.filter { it.id in selectedContextIds }.sortedBy { it.name.lowercase() }.forEach { ctx ->
+                        PropertyChip(
+                            label = ctx.name,
+                            valueText = ctx.name,
+                            icon = Icons.Filled.AlternateEmail,
+                            onClick = {},
+                            onClear = { selectedContextIds = selectedContextIds - ctx.id },
+                            showLabelWhenSet = false
+                        )
+                    }
+                    Box {
+                        PropertyChip(label = Labels.CONTEXT, valueText = null, icon = Icons.Filled.Add, onClick = { showContextMenu = true })
+                        DropdownMenu(expanded = showContextMenu, onDismissRequest = { showContextMenu = false }) {
+                            allContexts.filter { it.id !in selectedContextIds }.sortedBy { it.name.lowercase() }.forEach { ctx ->
+                                DropdownMenuItem(text = { Text("@${ctx.name}") }, onClick = { selectedContextIds = selectedContextIds + ctx.id; showContextMenu = false })
+                            }
+                            DropdownMenuItem(
+                                text = { Text(Labels.MANAGE_CONTEXTS, color = LedgerAccent) },
+                                onClick = { showContextMenu = false; startActivity(Intent(this@TaskEditActivity, ContextsActivity::class.java)) }
+                            )
+                        }
+                    }
                 }
 
-                Spacer(Modifier.height(20.dp))
+                // Subtasks, what this task depends on (prerequisites), and what depends on it.
+                SectionLabel(Labels.RELATED_TASKS)
+                val subtasks = remember(allTasks, taskId) { allTasks.filter { it.parentId == taskId && taskId != 0L }.sortedWith(TaskOrder) }
+                val openTask = { id: Long -> startActivity(Intent(this@TaskEditActivity, TaskEditActivity::class.java).putExtra(EXTRA_TASK_ID, id)) }
+                subtasks.forEach { sub ->
+                    RelatedRow(Labels.SUBTASK, sub.title, done = sub.isComplete, onOpen = { openTask(sub.id) }) {
+                        if (sub.type == TaskType.TASK) {
+                            TaskCheckbox(checked = sub.isComplete, overdue = isOverdue(sub.isComplete, sub.dueDate), size = 18.dp, touchSize = 34.dp, onCheckedChange = {
+                                scope.launch {
+                                    repository.toggleComplete(sub.id, System.currentTimeMillis())
+                                    allTasks = repository.getAllTasks()
+                                    TodoWidget().updateAll(applicationContext)
+                                }
+                            })
+                        }
+                    }
+                }
+                pendingSubtasks.forEachIndexed { index, title ->
+                    RelatedRow(Labels.SUBTASK, title, onOpen = null) { RemoveButton { pendingSubtasks = pendingSubtasks.filterIndexed { i, _ -> i != index } } }
+                }
+                if (task.type != TaskType.FOLDER) {
+                    selectedDependencyIds.mapNotNull(allById::get).sortedBy { it.title.lowercase() }.forEach { prereq ->
+                        RelatedRow(Labels.PREREQUISITE, prereq.title, done = prereq.isComplete, onOpen = { openTask(prereq.id) }) {
+                            RemoveButton { selectedDependencyIds = selectedDependencyIds - prereq.id }
+                        }
+                    }
+                    allDependencyEdges.filter { it.dependsOnTaskId == taskId && taskId != 0L }.mapNotNull { allById[it.taskId] }.forEach { dependent ->
+                        RelatedRow(Labels.DEPENDENT, dependent.title, done = dependent.isComplete, onOpen = { openTask(dependent.id) }) {
+                            RemoveButton {
+                                scope.launch {
+                                    repository.removeDependency(dependent.id, taskId)
+                                    allDependencyEdges = repository.getAllDependencyEdges()
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Row {
+                    AddLink(Labels.ADD_SUBTASK) {
+                        if (taskId == 0L) { pendingSubtaskTitle = ""; showPendingSubtaskDialog = true } else showSubtaskPicker = true
+                    }
+                    // A folder can't be completed, so it neither waits on tasks nor has any waiting on it.
+                    if (task.type != TaskType.FOLDER) {
+                        AddLink(Labels.ADD_PREREQUISITE) { showPrereqPicker = true }
+                        if (taskId != 0L) AddLink(Labels.ADD_DEPENDENT) { showDependentPicker = true }
+                    }
+                }
+                // Folders and tasks alike: only the first incomplete child counts as active.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { task = task.copy(sequential = !task.sequential) }.padding(vertical = 4.dp)
+                ) {
+                    Checkbox(
+                        checked = task.sequential,
+                        onCheckedChange = { task = task.copy(sequential = it) },
+                        colors = CheckboxDefaults.colors(checkedColor = LedgerAccent, uncheckedColor = LedgerCheckBorder)
+                    )
+                    Text(Labels.inOrder(task.type), fontSize = 13.sp, color = LedgerMuted)
+                }
+
+                Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (taskId != 0L) {
                         IconButton(onClick = {
@@ -532,7 +499,7 @@ class TaskEditActivity : ComponentActivity() {
                                 showDeleteConfirm = true
                             }
                         }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = LedgerOverdue)
+                            Icon(Icons.Filled.Delete, contentDescription = Labels.DELETE, tint = LedgerOverdue)
                         }
                     }
                     Spacer(Modifier.weight(1f))
@@ -541,7 +508,7 @@ class TaskEditActivity : ComponentActivity() {
                         enabled = isLoaded && task.title.isNotBlank(),
                         colors = ButtonDefaults.buttonColors(containerColor = LedgerAccent, contentColor = LedgerAccentInk)
                     ) {
-                        Text("Save")
+                        Text(Labels.SAVE)
                     }
                 }
             }
@@ -656,6 +623,90 @@ class TaskEditActivity : ComponentActivity() {
                         )
                     },
                     onDismiss = { showDependentPicker = false }
+                )
+            }
+
+            if (showRepeatDialog) {
+                AlertDialog(
+                    onDismissRequest = { showRepeatDialog = false },
+                    title = { Text(Labels.REPEAT) },
+                    text = {
+                        Column {
+                            Row {
+                                LabelOptions(
+                                    options = listOf(RecurrencePreset.NONE to "None", RecurrencePreset.CALENDAR to "Every", RecurrencePreset.AFTER_COMPLETION_N_DAYS to "After completion"),
+                                    selected = recurrence.preset,
+                                    onSelect = { preset -> recurrence = recurrence.copy(preset = preset) }
+                                )
+                            }
+                            if (recurrence.preset == RecurrencePreset.CALENDAR) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                                    Text("Every", fontSize = 12.sp, color = LedgerMuted)
+                                    Spacer(Modifier.width(6.dp))
+                                    CompactNumberField(value = recurrence.n) { n -> recurrence = recurrence.copy(n = n) }
+                                    Spacer(Modifier.width(6.dp))
+                                    LabelOptions(
+                                        options = listOf(RecurrenceUnit.DAY to "day(s)", RecurrenceUnit.WEEK to "week(s)", RecurrenceUnit.MONTH to "month(s)"),
+                                        selected = recurrence.unit,
+                                        trailingPadding = 8.dp,
+                                        verticalPadding = 0.dp,
+                                        onSelect = { unit -> recurrence = recurrence.copy(unit = unit) }
+                                    )
+                                }
+                                if (recurrence.unit == RecurrenceUnit.WEEK) {
+                                    Spacer(Modifier.height(8.dp))
+                                    DayOfWeekToggle(recurrence.weekdaysMask) { mask -> recurrence = recurrence.copy(weekdaysMask = mask) }
+                                }
+                            }
+                            if (recurrence.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                                    CompactNumberField(value = recurrence.n) { n -> recurrence = recurrence.copy(n = n) }
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("days after completion", fontSize = 12.sp, color = LedgerMuted)
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = { Button(onClick = { showRepeatDialog = false }) { Text("Done") } }
+                )
+            }
+
+            if (showTimerDialog) {
+                AlertDialog(
+                    onDismissRequest = { showTimerDialog = false },
+                    title = { Text(Labels.TIMER) },
+                    text = {
+                        Column {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Labels.TIMER_PRESETS.forEach { minutes ->
+                                    SelectablePill(formatDuration(minutes), selected = task.durationMinutes == minutes) { task = task.copy(durationMinutes = minutes) }
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
+                                DurationField(task.durationMinutes) { task = task.copy(durationMinutes = it) }
+                                Spacer(Modifier.width(6.dp))
+                                Text("minutes", fontSize = 12.sp, color = LedgerMuted)
+                            }
+                        }
+                    },
+                    confirmButton = { Button(onClick = { showTimerDialog = false }) { Text("Done") } }
+                )
+            }
+
+            // + Prerequisite: an existing task this one waits on, or a new one (the blocker dialog).
+            if (showPrereqPicker) {
+                val candidates = remember(allTasks, allDependencyEdges, task.id, selectedDependencyIds) {
+                    allTasks.filter {
+                        it.id != task.id && it.type == TaskType.TASK && !it.isComplete && it.id !in selectedDependencyIds &&
+                            !wouldCreateDependencyCycle(it.id, task.id, allDependencyEdges)
+                    }
+                }
+                TaskPickerDialog(
+                    title = "Add a prerequisite",
+                    tasks = candidates,
+                    onPick = { picked -> selectedDependencyIds = selectedDependencyIds + picked.id; showPrereqPicker = false },
+                    onCreateNew = { showPrereqPicker = false; newBlockerTitle = ""; showNewBlockerDialog = true },
+                    onDismiss = { showPrereqPicker = false }
                 )
             }
 
@@ -779,6 +830,40 @@ private fun CompactNumberField(value: Int, onValueChange: (Int) -> Unit) {
             .border(1.dp, LedgerBorder, RoundedCornerShape(4.dp))
             .padding(horizontal = 8.dp, vertical = 8.dp)
     )
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(text, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
+}
+
+// One related task: what it is to this one (Subtask, Prerequisite, Dependent), its title (tap opens
+// it), and a trailing control (a checkbox or ✕).
+@Composable
+private fun RelatedRow(kind: String, title: String, done: Boolean = false, onOpen: (() -> Unit)?, trailing: @Composable () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp)) {
+        Text(kind, fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.width(84.dp))
+        Text(
+            title,
+            fontSize = 14.sp,
+            textDecoration = if (done) TextDecoration.LineThrough else null,
+            color = if (done) LedgerMuted else LedgerInk,
+            modifier = Modifier.weight(1f).then(if (onOpen != null) Modifier.clickable(onClick = onOpen) else Modifier).padding(vertical = 6.dp)
+        )
+        trailing()
+    }
+}
+
+@Composable
+private fun RemoveButton(onClick: () -> Unit) {
+    Box(Modifier.size(34.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        Icon(Icons.Filled.Close, contentDescription = "Remove", tint = LedgerMuted, modifier = Modifier.size(16.dp))
+    }
+}
+
+@Composable
+private fun AddLink(text: String, onClick: () -> Unit) {
+    Text(text, color = LedgerAccent, fontSize = 13.sp, modifier = Modifier.clickable(onClick = onClick).padding(end = 20.dp, top = 6.dp, bottom = 6.dp))
 }
 
 // Like CompactNumberField, but empty means "not timed".

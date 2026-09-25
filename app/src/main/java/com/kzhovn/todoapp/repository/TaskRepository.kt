@@ -209,6 +209,8 @@ class TaskRepository(
         reminderScheduler.schedule(updated)
     }
 
+    suspend fun removeDependency(taskId: Long, dependsOnTaskId: Long) = taskDao.removeDependency(taskId, dependsOnTaskId)
+
     suspend fun addDependency(taskId: Long, dependsOnTaskId: Long) =
         taskDao.insertDependency(TaskDependency(taskId, dependsOnTaskId))
 

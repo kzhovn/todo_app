@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.TaskType
@@ -47,7 +48,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-enum class ListMode(val label: String) { DOING("Doing"), ACTIVE("Active"), ALL("All") }
+enum class ListMode(val label: String) { DOING(Labels.DOING), ACTIVE(Labels.ACTIVE), ALL(Labels.ALL) }
 
 
 // Everything a list needs, computed once per request from the live task set. `collapsed`: the All
@@ -95,6 +96,11 @@ internal enum class Icon(val path: String) {
     REPEAT("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"),
     CHECK("M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"),
     PLAY("M8 5v14l11-7z"),
+    CALENDAR("M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"), // Event
+    FLAG("M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z"),
+    BELL("M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"), // Notifications
+    TIMER("M15 1H9v2h6V1zm-4 13h2V8h-2v6zm8.03-6.61l1.42-1.42c-.43-.51-.9-.99-1.41-1.41l-1.42 1.42C16.07 4.74 14.12 4 12 4c-4.97 0-9 4.03-9 9s4.02 9 9 9 9-4.03 9-9c0-2.12-.74-4.07-1.97-5.61zM12 20c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"),
+    SNOWFLAKE("M22 11h-4.17l3.24-3.24-1.41-1.42L15 11h-2V9l4.66-4.66-1.42-1.41L13 6.17V2h-2v4.17L7.76 2.93 6.34 4.34 11 9v2H9L4.34 6.34 2.93 7.76 6.17 11H2v2h4.17l-3.24 3.24 1.41 1.42L9 13h2v2l-4.66 4.66 1.42 1.41L11 17.83V22h2v-4.17l3.24 3.24 1.42-1.41L13 15v-2h2l4.66 4.66 1.41-1.42L17.83 13H22z"), // AcUnit
     PAUSE("M6 19h4V5H6v14zm8-14v14h4V5h-4z"),
     CHEVRON_RIGHT("M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"),
     EXPAND_MORE("M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z")
@@ -323,7 +329,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
         details(classes = "more") {
             summary { attributes["aria-label"] = "Snooze"; +"⋯" }
             div(classes = "menu") {
-                listOf("Snooze 1 hour" to "hour", "Snooze to tomorrow" to "tomorrow", "Snooze 1 week" to "week").forEach { (label, until) ->
+                listOf(Labels.SNOOZE_HOUR to "hour", Labels.SNOOZE_TOMORROW to "tomorrow", Labels.SNOOZE_WEEK to "week").forEach { (label, until) ->
                     button {
                         attributes["hx-post"] = "/tasks/${task.id}/snooze?until=$until&mode=$mode"
                         attributes["hx-target"] = "#list"
@@ -376,13 +382,13 @@ private fun FlowContent.stalledPrompt(project: Task, mode: ListMode) = div(class
         tag.attributes["hx-target"] = "#list"
         tag.attributes["hx-swap"] = "outerHTML"
     }
-    span { +"“${project.title}”: all subtasks done. Is the project complete?" }
-    button(classes = "primary") { htmx(this, "post", "/tasks/${project.id}/complete?mode=$m"); +"Complete project" }
+    span { +"${Labels.allSubtasksDone(project.title)}. ${Labels.IS_PROJECT_COMPLETE}" }
+    button(classes = "primary") { htmx(this, "post", "/tasks/${project.id}/complete?mode=$m"); +Labels.COMPLETE_PROJECT }
     form(classes = "inline") {
         htmx(this, "post", "/tasks/${project.id}/next?mode=$m")
-        textInput(name = "text") { placeholder = "Add next…"; attributes["autocomplete"] = "off" }
+        textInput(name = "text") { placeholder = "${Labels.ADD_NEXT}…"; attributes["autocomplete"] = "off" }
     }
-    button { htmx(this, "get", "/list/${mode.name.lowercase()}?later=${project.id}"); +"Later" }
+    button { htmx(this, "get", "/list/${mode.name.lowercase()}?later=${project.id}"); +Labels.LATER }
 }
 
 // Asks what to do with a task's open subtasks before completing it. `url` is the completing
@@ -391,9 +397,9 @@ fun DIV.askSubtasksToast(task: Task, open: Int, url: String, target: String, inc
     id = "toast"
     attributes["hx-swap-oob"] = "true"
     classes = setOf("show", "question")
-    span { +"Complete “${task.title}”? It has $open active subtask${if (open == 1) "" else "s"}." }
+    span { +"Complete “${task.title}”? ${Labels.activeSubtasks(open)}" }
     val sep = if ('?' in url) '&' else '?'
-    listOf("complete" to "Complete subtasks too", "promote" to "Move subtasks out").forEach { (choice, label) ->
+    listOf("complete" to Labels.COMPLETE_SUBTASKS_TOO, "promote" to Labels.MOVE_SUBTASKS_OUT).forEach { (choice, label) ->
         button {
             attributes["hx-post"] = "$url${sep}subtasks=$choice"
             attributes["hx-target"] = target

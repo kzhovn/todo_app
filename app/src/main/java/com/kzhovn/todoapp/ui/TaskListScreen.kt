@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.Labels
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import com.kzhovn.todoapp.data.formatDuration
@@ -281,11 +282,11 @@ private fun TaskRow(
                 showSnoozeMenu = false
                 onSnooze(task.id, until(System.currentTimeMillis()))
             }
-            DropdownMenuItem(text = { Text("Snooze 1 hour") }, onClick = { snooze { it + HOUR_MILLIS } })
+            DropdownMenuItem(text = { Text(Labels.SNOOZE_HOUR) }, onClick = { snooze { it + HOUR_MILLIS } })
             // "Tomorrow" starts at the day rollover (4am by default), not 24 hours from now.
-            DropdownMenuItem(text = { Text("Snooze to tomorrow") }, onClick = { snooze { nextRollover(it, AppSettings.rolloverHour(context)) } })
-            DropdownMenuItem(text = { Text("Snooze 1 week") }, onClick = { snooze { it + WEEK_MILLIS } })
-            DropdownMenuItem(text = { Text("Pin to notification") }, onClick = { showSnoozeMenu = false; PinnedTask.pin(context, task) })
+            DropdownMenuItem(text = { Text(Labels.SNOOZE_TOMORROW) }, onClick = { snooze { nextRollover(it, AppSettings.rolloverHour(context)) } })
+            DropdownMenuItem(text = { Text(Labels.SNOOZE_WEEK) }, onClick = { snooze { it + WEEK_MILLIS } })
+            DropdownMenuItem(text = { Text(Labels.PIN) }, onClick = { showSnoozeMenu = false; PinnedTask.pin(context, task) })
         }
     }
 }

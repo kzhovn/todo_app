@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp
 
+import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.text.font.FontWeight
@@ -442,16 +443,16 @@ class MainActivity : ComponentActivity() {
                     stalled.firstOrNull { it.id !in snoozedProjects }?.takeIf { nextStepFor == null }?.let { project ->
                         AlertDialog(
                             onDismissRequest = { snoozedProjects = snoozedProjects + project.id },
-                            title = { Text("“${project.title}”: all subtasks done") },
-                            text = { Text("Is the project complete?") },
+                            title = { Text(Labels.allSubtasksDone(project.title)) },
+                            text = { Text(Labels.IS_PROJECT_COMPLETE) },
                             confirmButton = {
-                                Button(onClick = { viewModel.completeProject(project.id, selectedMode) }) { Text("Complete project") }
+                                Button(onClick = { viewModel.completeProject(project.id, selectedMode) }) { Text(Labels.COMPLETE_PROJECT) }
                             },
                             dismissButton = {
                                 Row {
-                                    Button(onClick = { nextStepFor = project; nextStepTitle = "" }) { Text("Add next") }
+                                    Button(onClick = { nextStepFor = project; nextStepTitle = "" }) { Text(Labels.ADD_NEXT) }
                                     Spacer(Modifier.width(8.dp))
-                                    Button(onClick = { snoozedProjects = snoozedProjects + project.id }) { Text("Later") }
+                                    Button(onClick = { snoozedProjects = snoozedProjects + project.id }) { Text(Labels.LATER) }
                                 }
                             }
                         )
@@ -474,19 +475,19 @@ class MainActivity : ComponentActivity() {
                         AlertDialog(
                             onDismissRequest = { completeDecision = null },
                             title = { Text("Complete this task?") },
-                            text = { Text("It has $activeCount active subtask${if (activeCount == 1) "" else "s"}.") },
+                            text = { Text(Labels.activeSubtasks(activeCount)) },
                             confirmButton = {
                                 Button(onClick = {
                                     viewModel.completeWithSubtasks(taskId, selectedMode)
                                     completeDecision = null
-                                }) { Text("Complete subtasks too") }
+                                }) { Text(Labels.COMPLETE_SUBTASKS_TOO) }
                             },
                             dismissButton = {
                                 Row {
                                     Button(onClick = {
                                         viewModel.completeAndPromoteSubtasks(taskId, selectedMode)
                                         completeDecision = null
-                                    }) { Text("Move subtasks out") }
+                                    }) { Text(Labels.MOVE_SUBTASKS_OUT) }
                                     Spacer(Modifier.width(8.dp))
                                     Button(onClick = { completeDecision = null }) { Text("Cancel") }
                                 }

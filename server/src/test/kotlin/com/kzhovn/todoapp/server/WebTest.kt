@@ -382,4 +382,29 @@ class WebTest {
         })
         assertEquals(25, service.get(ticket.id)!!.durationMinutes)
     }
+
+    @Test
+    fun `related tasks add and unlink prerequisites and dependents at once`() = web {
+        val folder = service.create(Task(type = TaskType.FOLDER, title = "Work"))
+        val report = service.create(Task(title = "Write report", parentId = folder.id))
+        val vpn = service.create(Task(title = "Get VPN access"))
+        client.submitForm("/tasks/${report.id}/prerequisite", parameters { append("prerequisite", vpn.id.toString()) })
+        client.submitForm("/tasks/${report.id}/prerequisite", parameters { append("text", "Collect numbers") })
+        val numbers = service.tasks().single { it.title == "Collect numbers" }
+        assertEquals(folder.id, numbers.parentId)
+        assertEquals(setOf(vpn.id, numbers.id), service.dependsOn(report.id))
+
+        client.post("/tasks/${report.id}/prerequisite/${vpn.id}/remove")
+        assertEquals(setOf(numbers.id), service.dependsOn(report.id))
+        client.post("/tasks/${numbers.id}/dependent/${report.id}/remove")
+        assertEquals(emptySet<Long>(), service.dependsOn(report.id))
+
+        // Saving the editor leaves prerequisites alone: they're no longer part of its form.
+        service.addDependency(report.id, vpn.id)
+        createClient { followRedirects = false }.submitForm("/tasks/${report.id}", parameters {
+            append("base", taskFields(service.get(report.id)!!, emptySet(), emptySet()).toString())
+            append("title", "Write the report"); append("type", "TASK"); append("parent", folder.id.toString())
+        })
+        assertEquals(setOf(vpn.id), service.dependsOn(report.id))
+    }
 }

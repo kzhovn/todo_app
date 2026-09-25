@@ -298,6 +298,11 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun activeDescendantCount(id: Long): Int =
         (subtreeIds(id) - id).mapNotNull(::get).count { it.type != TaskType.FOLDER && !it.isComplete }
 
+    fun removeDependency(taskId: Long, dependsOnId: Long) = store.transaction {
+        val row = liveRows().firstOrNull { it.id == taskId } ?: return@transaction
+        store.write(TASKS, taskId, JsonObject(taskFields(row.toTask(), row.contextIds(), row.dependsOn() - dependsOnId) - DELETED_AT), clock())
+    }
+
     // Mirrors TaskRepository.completeWithDescendants: each goes through complete(), so a recurring
     // subtask still spawns its next instance.
     fun completeWithDescendants(id: Long) = store.transaction {

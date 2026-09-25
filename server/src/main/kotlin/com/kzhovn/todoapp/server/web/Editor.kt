@@ -1,6 +1,10 @@
 package com.kzhovn.todoapp.server.web
 
 import com.kzhovn.todoapp.data.Task
+import kotlinx.html.summary
+import kotlinx.html.details
+import com.kzhovn.todoapp.data.formatDuration
+import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.hasTime
@@ -127,15 +131,37 @@ fun Route.editorRoutes(service: TaskService) {
         call.respondList(service, call.mode(), extra = createHTML().div { id = "toast"; attributes["hx-swap-oob"] = "true" })
     }
 
+    // A new subtask (text), or an existing task moved under this one (child).
     post("/tasks/{id}/subtasks") {
         val id = call.taskId() ?: return@post
-        val parsed = QuickAddParser.parse(call.receiveParameters()["text"].orEmpty())
+        val params = call.receiveParameters()
+        params["child"]?.toLongOrNull()?.let { service.reparent(it, id) }
+        val parsed = QuickAddParser.parse(params["text"].orEmpty())
         if (parsed.title.isNotBlank() && service.get(id) != null) service.create(parsed.copy(parentId = id))
         call.respondSubtasks(service, id)
     }
-    post("/tasks/{id}/adopt") {
+    // An existing task (prerequisite), or a new one (text), that this one depends on. A new one goes in
+    // this task's folder, like a new dependent.
+    post("/tasks/{id}/prerequisite") {
         val id = call.taskId() ?: return@post
-        call.receiveParameters()["child"]?.toLongOrNull()?.let { service.reparent(it, id) }
+        val params = call.receiveParameters()
+        params["prerequisite"]?.toLongOrNull()?.let { service.addDependency(id, it) }
+        val parsed = QuickAddParser.parse(params["text"].orEmpty())
+        val task = service.get(id)
+        if (parsed.title.isNotBlank() && task != null) {
+            val folderId = task.parentId?.takeIf { service.get(it)?.type == TaskType.FOLDER }
+            service.addDependency(id, service.create(parsed.copy(parentId = folderId)).id)
+        }
+        call.respondSubtasks(service, id)
+    }
+    post("/tasks/{id}/prerequisite/{other}/remove") {
+        val id = call.taskId() ?: return@post
+        call.parameters["other"]?.toLongOrNull()?.let { service.removeDependency(id, it) }
+        call.respondSubtasks(service, id)
+    }
+    post("/tasks/{id}/dependent/{other}/remove") {
+        val id = call.taskId() ?: return@post
+        call.parameters["other"]?.toLongOrNull()?.let { service.removeDependency(it, id) }
         call.respondSubtasks(service, id)
     }
     // An existing task, or (text) a new one, that depends on this one. A new one goes in this task's
@@ -194,7 +220,7 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     val inherit = params["inherit"]
     if (changed.isNotEmpty() && inherit == null) return reshow(view.copy(ask = overriding.size to changed))
 
-    // "Depends on" → a new task: made in this task's folder, as dependent work usually belongs together.
+    // A new task's prerequisite, typed in the form: made in its folder, as related work usually belongs together.
     val blocker = QuickAddParser.parse(newDep).takeIf { it.title.isNotBlank() }?.let { parsed ->
         service.create(parsed.copy(parentId = merged.task.parentId?.takeIf { service.get(it)?.type == TaskType.FOLDER })).id
     }
@@ -213,7 +239,7 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
 }
 
 private suspend fun io.ktor.server.application.ApplicationCall.respondSubtasks(service: TaskService, id: Long) =
-    respondText(createHTML().div { subtasksSection(service, id, mode()) }, ContentType.Text.Html)
+    respondText(createHTML().div { relatedSection(service, id, mode()) }, ContentType.Text.Html)
 
 private fun Parameters.ids(name: String) = getAll(name).orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
 
@@ -237,7 +263,7 @@ private fun parseForm(p: Parameters, base: EditState, recurrence: RecurrenceSele
         expiresAt = if (p["today"] != null) base.task.expiresAt ?: nextRollover(service.now(), service.rolloverHour()) else null,
         sequential = p["sequential"] != null
     )
-    return EditState(task, p.ids("ctx"), p.ids("dep"))
+    return EditState(task, p.ids("ctx"), base.dependsOn)
 }
 
 // Normalised so that an untouched picker compares equal to the task's own rule.
@@ -286,7 +312,9 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
     val isNew = t.id == 0L
     val all = service.tasks()
     val byId = all.associateBy { it.id }
+    val formId = "editor-form"
     form(action = "/tasks/${if (isNew) "new" else t.id}?mode=${v.mode.name}", method = FormMethod.post, classes = "editor") {
+        id = formId
         hiddenInput(name = "base") { value = v.base }
         v.error?.let { p(classes = "error") { +it } }
         v.ask?.let { (count, fields) ->
@@ -298,140 +326,134 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
             }
         }
 
-        div(classes = "title-row") {
-            textInput(name = "title", classes = "title-input") { value = t.title; placeholder = "Title"; required = true }
-            label(classes = "star-toggle") {
-                attributes["title"] = "Star"
+        // The title wraps (up to four lines), with Maybe and the star inside the box by the first line.
+        // A maybe is never starred; app.js unticks the other when one is ticked.
+        div(classes = "title-box") {
+            textArea(classes = "title-input") { name = "title"; rows = "1"; placeholder = Labels.TITLE; required = true; +t.title }
+            label(classes = "flag-toggle maybe-toggle task-only") {
+                attributes["title"] = Labels.MAYBE
+                checkBoxInput(name = "maybe") { checked = t.isMaybe }
+                span { +"?" }
+            }
+            label(classes = "flag-toggle star-toggle task-only") {
+                attributes["title"] = Labels.STAR
                 checkBoxInput(name = "starred") { checked = t.isStarred }
                 icon(Icon.STAR, "on"); icon(Icon.STAR_BORDER, "off")
             }
         }
 
         div(classes = "pills") {
-            listOf(TaskType.TASK to "Task", TaskType.PROJECT to "Project", TaskType.FOLDER to "Folder").forEach { (type, label) ->
+            Labels.TYPES.forEach { (type, label) ->
                 label(classes = "pill") { radioInput(name = "type") { value = type.name; checked = t.type == type }; +label }
             }
         }
 
-        div(classes = "field-row") {
-            dateField("Start", "start", t.startDate, "")
-            dateField("Due", "due", t.dueDate, "task-only")
-        }
-
-        // Set here, rung by the phone: it schedules the alarm when this syncs to it.
-        field("Remind me", "task-only reminder") {
-            select {
-                name = "reminder"
-                listOf(null to "No reminder", 0 to "At due time", 5 to "5 min before", 30 to "30 min before", 60 to "1 hour before", 1440 to "1 day before")
-                    .forEach { (m, label) -> option { value = m?.toString().orEmpty(); selected = t.reminderOffsetMinutes == m; +label } }
-            }
-            span(classes = "hint") { +"Rings on your phone, counted back from the due date (from midnight if it has no time)." }
-        }
-
-        // A timed task: its play button counts this down (app.js on the web, TaskTimer on the phone).
-        field("Timer", "task-only reminder") {
-            numberInput(name = "duration", classes = "duration-input") {
-                value = t.durationMinutes?.toString().orEmpty(); min = "1"; placeholder = "—"
-            }
-            span(classes = "hint inline-hint") { +"minutes" }
-        }
-
-        field("Folder", "") {
-            select {
-                name = "parent"
-                option { value = ""; selected = t.parentId == null; +"No folder" }
-                byId[t.parentId]?.takeIf { it.type != TaskType.FOLDER }?.let { parent ->
-                    option { value = parent.id.toString(); selected = true; +"Subtask of “${parent.title}”" }
+        // Everything about when, as pills that open a small popover (app.js keeps their text current).
+        div(classes = "pills when") {
+            datePill(Labels.START, "start", Icon.CALENDAR, t.startDate, "")
+            datePill(Labels.DUE, "due", Icon.FLAG, t.dueDate, "task-only")
+            // Set here, rung by the phone: it schedules the alarm when this syncs to it.
+            popPill(Labels.REMIND, Icon.BELL, t.reminderOffsetMinutes?.let { m -> Labels.REMINDERS.firstOrNull { it.first == m }?.second }, "select", "task-only reminder") {
+                select {
+                    name = "reminder"
+                    Labels.REMINDERS.forEach { (m, label) -> option { value = m?.toString().orEmpty(); selected = t.reminderOffsetMinutes == m; +label } }
                 }
-                all.filter { it.type == TaskType.FOLDER && !wouldCreateCycle(it.id, t.id, byId) }
-                    .map { it to folderPath(it, byId) }.sortedBy { it.second.lowercase() }
-                    .forEach { (f, path) -> option { value = f.id.toString(); selected = f.id == t.parentId; +path } }
+                p(classes = "hint") { +"Rings on your phone, counted back from the due date (from midnight if it has no time)." }
             }
-        }
-
-        field("Repeat", "repeat task-only") {
             val r = v.recurrence
-            select {
-                name = "repeat"
-                listOf(RecurrencePreset.NONE to "None", RecurrencePreset.CALENDAR to "Every", RecurrencePreset.AFTER_COMPLETION_N_DAYS to "After completion")
-                    .forEach { (preset, label) -> option { value = preset.name; selected = r.preset == preset; +label } }
-            }
-            numberInput(name = "n", classes = "rep-n") { value = r.n.toString(); min = "1"; max = "999" }
-            select(classes = "rep-unit") {
-                name = "unit"
-                listOf(RecurrenceUnit.DAY to "day(s)", RecurrenceUnit.WEEK to "week(s)", RecurrenceUnit.MONTH to "month(s)")
-                    .forEach { (unit, label) -> option { value = unit.name; selected = r.unit == unit; +label } }
-            }
-            span(classes = "rep-after") { +"days after completion" }
-            // Monday first, like the phone's pickers; bits are Su=0..Sa=6.
-            div(classes = "rep-wd") {
-                listOf(1 to "Mo", 2 to "Tu", 3 to "We", 4 to "Th", 5 to "Fr", 6 to "Sa", 0 to "Su").forEach { (bit, label) ->
-                    label(classes = "pill") { checkBoxInput(name = "wd") { value = bit.toString(); checked = r.weekdaysMask and (1 shl bit) != 0 }; +label }
+            popPill(Labels.REPEAT, Icon.REPEAT, Labels.repeat(r) ?: t.recurrenceType?.let { "Custom" }, "repeat", "repeat task-only") {
+                select {
+                    name = "repeat"
+                    listOf(RecurrencePreset.NONE to "None", RecurrencePreset.CALENDAR to "Every", RecurrencePreset.AFTER_COMPLETION_N_DAYS to "After completion")
+                        .forEach { (preset, label) -> option { value = preset.name; selected = r.preset == preset; +label } }
                 }
-            }
-            if (t.recurrenceType != null && r.preset == RecurrencePreset.NONE) {
-                p(classes = "hint") { +"Custom rule ${t.recurrenceRule}; kept unless you change it here." }
-            }
-        }
-
-        field("Depends on", "task-only") {
-            val edges = service.dependencyEdges().filter { it.taskId != t.id }
-            val selected = v.shown.dependsOn
-            val candidates = all.filter {
-                it.id in selected || (it.id != t.id && !it.isComplete && (it.type == TaskType.TASK || it.type == TaskType.PROJECT) &&
-                    !wouldCreateDependencyCycle(it.id, t.id, edges))
-            }.sortedWith(compareBy({ it.id !in selected }, { it.title.lowercase() }))
-            textInput(name = "newDep", classes = "new-dep") { value = v.newDep; placeholder = "Create new task…"; attributes["autocomplete"] = "off" }
-            div(classes = "picker") {
-                input(type = InputType.search, classes = "filter") { placeholder = "Filter…"; attributes["data-filter"] = "" }
-                div(classes = "options") {
-                    candidates.forEach { c ->
-                        label { checkBoxInput(name = "dep") { value = c.id.toString(); checked = c.id in selected }; +c.title }
+                numberInput(name = "n", classes = "rep-n") { value = r.n.toString(); min = "1"; max = "999" }
+                select(classes = "rep-unit") {
+                    name = "unit"
+                    listOf(RecurrenceUnit.DAY to "day(s)", RecurrenceUnit.WEEK to "week(s)", RecurrenceUnit.MONTH to "month(s)")
+                        .forEach { (unit, label) -> option { value = unit.name; selected = r.unit == unit; +label } }
+                }
+                span(classes = "rep-after") { +"days after completion" }
+                div(classes = "rep-wd") {
+                    Labels.WEEKDAYS.forEach { (bit, label) ->
+                        label(classes = "pill") { checkBoxInput(name = "wd") { value = bit.toString(); checked = r.weekdaysMask and (1 shl bit) != 0 }; +label }
                     }
                 }
-            }
-        }
-
-        field("Contexts", "") {
-            val contexts = service.contexts().sortedBy { it.name.lowercase() }
-            if (contexts.isEmpty()) span(classes = "hint") { +"No contexts yet. "; a(href = "/contexts") { +"Create one" } }
-            div(classes = "pills") {
-                contexts.forEach { c ->
-                    label(classes = "pill") { checkBoxInput(name = "ctx") { value = c.id.toString(); checked = c.id in v.shown.contextIds }; +"@${c.name}" }
+                if (t.recurrenceType != null && r.preset == RecurrencePreset.NONE) {
+                    p(classes = "hint") { +"Custom rule ${t.recurrenceRule}; kept unless you change it here." }
                 }
             }
-        }
-
-        div(classes = "toggles") {
-            label(classes = "task-only") { checkBoxInput(name = "maybe") { checked = t.isMaybe }; +"Maybe (?)" }
-            label(classes = "task-only") { checkBoxInput(name = "today") { checked = t.expiresAt != null }; +"Just for today" }
-            label {
-                checkBoxInput(name = "sequential") { checked = t.sequential }
-                span(classes = "seq-task") { +"Complete subtasks in order" }
-                span(classes = "seq-folder") { +"Sequential (complete tasks in order)" }
+            // A timed task: its play button counts this down (app.js on the web, TaskTimer on the phone).
+            popPill(Labels.TIMER, Icon.TIMER, t.durationMinutes?.let(::formatDuration), "timer", "task-only reminder") {
+                div(classes = "pills") {
+                    Labels.TIMER_PRESETS.forEach { m -> button(type = ButtonType.button, classes = "pill preset") { attributes["data-minutes"] = m.toString(); +formatDuration(m) } }
+                }
+                numberInput(name = "duration", classes = "duration-input") { value = t.durationMinutes?.toString().orEmpty(); min = "1"; placeholder = "minutes" }
+                span(classes = "hint inline-hint") { +"minutes" }
+            }
+            label(classes = "pill task-only") {
+                checkBoxInput(name = "today") { checked = t.expiresAt != null }
+                icon(Icon.SNOWFLAKE, "pill-icon"); +Labels.TODAY_ONLY
             }
         }
 
-        // A new task's subtasks (it has no id for the subtask actions below the form yet).
-        if (isNew) field("Subtasks", "") {
-            textArea(classes = "new-subtasks") { name = "newSubtasks"; rows = "3"; placeholder = "One per line"; +v.newSubtasks }
+        div(classes = "field-label section") { +Labels.FOLDER_AND_CONTEXTS }
+        div(classes = "pills") {
+            val parentLabel = byId[t.parentId]?.let { p -> if (p.type == TaskType.FOLDER) folderPath(p, byId) else "Subtask of “${p.title}”" }
+            popPill(Labels.FOLDER, Icon.FOLDER, parentLabel, "select", "") {
+                select {
+                    name = "parent"
+                    option { value = ""; selected = t.parentId == null; +Labels.NO_FOLDER }
+                    byId[t.parentId]?.takeIf { it.type != TaskType.FOLDER }?.let { parent ->
+                        option { value = parent.id.toString(); selected = true; +"Subtask of “${parent.title}”" }
+                    }
+                    all.filter { it.type == TaskType.FOLDER && !wouldCreateCycle(it.id, t.id, byId) }
+                        .map { it to folderPath(it, byId) }.sortedBy { it.second.lowercase() }
+                        .forEach { (f, path) -> option { value = f.id.toString(); selected = f.id == t.parentId; +path } }
+                }
+            }
+            // Folders keep contexts too: their tasks inherit them.
+            service.contexts().sortedBy { it.name.lowercase() }.forEach { c ->
+                label(classes = "pill") { checkBoxInput(name = "ctx") { value = c.id.toString(); checked = c.id in v.shown.contextIds }; +"@${c.name}" }
+            }
+            a(href = "/contexts", classes = "pill manage") { +Labels.MANAGE_CONTEXTS }
+        }
+
+        // A new task has no id for the related-task actions yet, so its subtasks and prerequisite are
+        // typed here and created on save.
+        if (isNew) {
+            div(classes = "field-label section") { +Labels.RELATED_TASKS }
+            field(Labels.SUBTASK, "") {
+                textArea(classes = "new-subtasks") { name = "newSubtasks"; rows = "3"; placeholder = "One per line"; +v.newSubtasks }
+            }
+            field(Labels.PREREQUISITE, "task-only") {
+                textInput(name = "newDep", classes = "new-dep") { value = v.newDep; placeholder = "A new task this depends on"; attributes["autocomplete"] = "off" }
+            }
         }
 
         if (v.needFirstStep || v.firstStep.isNotEmpty()) {
-            field("First step of this project", "") { textInput(name = "firstStep") { value = v.firstStep; placeholder = "Subtask" } }
-        }
-
-        div(classes = "actions") {
-            if (!isNew) button(type = ButtonType.submit, classes = "delete") {
-                attributes["formaction"] = "/tasks/${t.id}/delete?mode=${v.mode.name}"
-                attributes["formnovalidate"] = ""
-                +"Delete"
-            }
-            a(href = v.mode.path, classes = "cancel") { +"Cancel" }
-            button(type = ButtonType.submit, classes = "primary") { +"Save" }
+            field("First step of this project", "") { textInput(name = "firstStep") { value = v.firstStep; placeholder = Labels.SUBTASK } }
         }
     }
-    if (!isNew) div { subtasksSection(service, t.id, v.mode) }
+    if (!isNew) div { relatedSection(service, t.id, v.mode) }
+    // Outside the form (so Related tasks can sit above them), tied to it by the form attribute.
+    div(classes = "editor-foot") {
+        label(classes = "in-order") {
+            checkBoxInput(name = "sequential") { checked = t.sequential; attributes["form"] = formId }
+            span(classes = "seq-task") { +Labels.inOrder(TaskType.TASK) }
+            span(classes = "seq-folder") { +Labels.inOrder(TaskType.FOLDER) }
+        }
+        div(classes = "actions") {
+            if (!isNew) button(type = ButtonType.submit, classes = "delete") {
+                attributes["form"] = formId
+                attributes["formaction"] = "/tasks/${t.id}/delete?mode=${v.mode.name}"
+                attributes["formnovalidate"] = ""
+                +Labels.DELETE
+            }
+            a(href = v.mode.path, classes = "cancel") { +"Cancel" }
+            button(type = ButtonType.submit, classes = "primary") { attributes["form"] = formId; +Labels.SAVE }
+        }
+    }
 }
 
 internal fun FlowContent.field(label: String, classes: String, content: FlowContent.() -> Unit) = div(classes = "field $classes") {
@@ -439,78 +461,98 @@ internal fun FlowContent.field(label: String, classes: String, content: FlowCont
     content()
 }
 
-private fun FlowContent.dateField(label: String, prefix: String, millis: Long?, classes: String) = field(label, classes) {
-    val at = millis?.let(::localDateTime)
-    dateInput(name = "${prefix}Date") { value = at?.toLocalDate()?.toString().orEmpty() }
-    timeInput(name = "${prefix}Time") { value = if (millis != null && hasTime(millis)) at!!.toLocalTime().withSecond(0).withNano(0).toString() else "" }
-}
+// A pill that opens a popover of controls. `value` is its text when set (else the label shows);
+// `kind` tells app.js how to re-derive that text as the controls change.
+private fun FlowContent.popPill(label: String, icon: Icon, value: String?, kind: String, classes: String, content: FlowContent.() -> Unit) =
+    details(classes = "pp $classes") {
+        attributes["data-kind"] = kind
+        attributes["data-label"] = label
+        summary(classes = if (value != null) "pill set" else "pill") {
+            icon(icon, "pill-icon")
+            span(classes = "pp-text") { +(value ?: label) }
+            span(classes = "pp-clear") { attributes["title"] = "Clear"; +"✕" }
+        }
+        div(classes = "pop") { content() }
+    }
+
+private fun FlowContent.datePill(label: String, prefix: String, icon: Icon, millis: Long?, classes: String) =
+    popPill(label, icon, millis?.let(::pillDate), "date", classes) {
+        val at = millis?.let(::localDateTime)
+        dateInput(name = "${prefix}Date") { value = at?.toLocalDate()?.toString().orEmpty() }
+        timeInput(name = "${prefix}Time") { value = if (millis != null && hasTime(millis)) at!!.toLocalTime().withSecond(0).withNano(0).toString() else "" }
+    }
+
+// The phone's chip date: "Sep 25", or "Sep 25 3:00 PM" with a time. app.js formats the same way.
+private fun pillDate(millis: Long): String =
+    java.text.SimpleDateFormat("MMM d", java.util.Locale.US).format(java.util.Date(millis)) +
+        if (hasTime(millis)) " " + java.text.SimpleDateFormat("h:mm a", java.util.Locale.US).format(java.util.Date(millis)) else ""
 
 internal fun folderPath(folder: Task, byId: Map<Long, Task>): String =
     generateSequence(folder) { byId[it.parentId]?.takeIf { p -> p.type == TaskType.FOLDER } }.map { it.title }.toList().reversed().joinToString(" / ")
 
-// Filled into a div by the caller so the fragment's root is #subtasks, which htmx swaps.
-fun DIV.subtasksSection(service: TaskService, id: Long, mode: ListMode) {
-    this.id = "subtasks"
-    classes = setOf("subtasks")
+// Related tasks: subtasks, prerequisites (what this depends on) and dependents (what depends on
+// it), each added or unlinked at once via htmx. Filled into a div by the caller so the fragment's
+// root is #related, which htmx swaps.
+fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode) {
+    this.id = "related"
+    classes = setOf("related")
     val all = service.tasks()
     val byId = all.associateBy { it.id }
     val task = byId[id] ?: return
+    val m = mode.name
     fun kotlinx.html.HTMLTag.htmx(url: String) {
         attributes["hx-post"] = url
-        attributes["hx-target"] = "#subtasks"
+        attributes["hx-target"] = "#related"
         attributes["hx-swap"] = "outerHTML"
     }
+    fun FlowContent.row(kind: String, t: Task, trailing: FlowContent.() -> Unit) = div(classes = "rel-row") {
+        span(classes = "rel-kind") { +kind }
+        a(href = "/tasks/${t.id}?mode=$m", classes = if (t.isComplete) "done" else null) { +t.title }
+        trailing()
+    }
+    fun FlowContent.unlink(url: String) = button(classes = "unlink") { htmx(url); attributes["aria-label"] = "Remove"; +"✕" }
 
-    h2 { +"Subtasks" }
+    div(classes = "field-label section") { +Labels.RELATED_TASKS }
     all.filter { it.parentId == id }.sortedWith(TaskOrder).forEach { sub ->
-        div(classes = "sub-row") {
-            when (sub.type) {
-                TaskType.TASK -> button(classes = if (sub.isComplete) "check done" else "check") {
-                    attributes["hx-post"] = "/tasks/$id/subtasks/${sub.id}/toggle?mode=${mode.name}"
-                    attributes["hx-target"] = "#subtasks"
-                    attributes["hx-swap"] = "outerHTML"
-                    attributes["aria-label"] = if (sub.isComplete) "Mark not done" else "Complete"
-                    if (sub.isComplete) icon(Icon.CHECK, "")
-                }
-                TaskType.PROJECT -> span(classes = "project") { icon(Icon.PROJECT, "") }
-                TaskType.FOLDER -> span(classes = "project") { icon(Icon.FOLDER, "folder-icon") }
+        row(Labels.SUBTASK, sub) {
+            if (sub.type == TaskType.TASK) button(classes = if (sub.isComplete) "check done" else "check") {
+                htmx("/tasks/$id/subtasks/${sub.id}/toggle?mode=$m")
+                attributes["aria-label"] = if (sub.isComplete) "Mark not done" else "Complete"
+                if (sub.isComplete) icon(Icon.CHECK, "")
             }
-            a(href = "/tasks/${sub.id}?mode=${mode.name}", classes = if (sub.isComplete) "done" else null) { +sub.title }
         }
     }
-    form(classes = "inline") {
-        htmx("/tasks/$id/subtasks?mode=${mode.name}")
-        textInput(name = "text") { placeholder = "Add a subtask…"; attributes["autocomplete"] = "off" }
-    }
-    val moveable = all.filter {
-        it.id != id && it.type != TaskType.FOLDER && !it.isComplete && it.parentId != id && !wouldCreateCycle(id, it.id, byId)
-    }.sortedBy { it.title.lowercase() }
-    if (moveable.isNotEmpty()) {
-        form(classes = "inline") {
-            htmx("/tasks/$id/adopt?mode=${mode.name}")
-            select { name = "child"; moveable.forEach { option { value = it.id.toString(); +it.title } } }
-            button(type = ButtonType.submit) { +"Add subtask" }
-        }
-    }
-
-    // A dependent waits for this task. Folders can't be completed, so nothing can wait on one.
-    if (task.type == TaskType.FOLDER) return
     val edges = service.dependencyEdges()
-    val dependents = edges.filter { it.dependsOnTaskId == id }.mapNotNull { byId[it.taskId] }
-    h2 { +"Dependent tasks" }
-    dependents.forEach { w -> div(classes = "sub-row") { a(href = "/tasks/${w.id}?mode=${mode.name}") { +w.title } } }
-    val candidates = all.filter {
-        it.id != id && it.type == TaskType.TASK && !it.isComplete && it !in dependents && !wouldCreateDependencyCycle(id, it.id, edges)
-    }.sortedBy { it.title.lowercase() }
-    form(classes = "inline") {
-        htmx("/tasks/$id/dependent?mode=${mode.name}")
-        textInput(name = "text") { placeholder = "Create new dependent task…"; attributes["autocomplete"] = "off" }
+    // A folder can't be completed, so it neither depends on tasks nor has any depending on it.
+    val prerequisites = if (task.type == TaskType.FOLDER) emptyList() else service.dependsOn(id).mapNotNull(byId::get).sortedBy { it.title.lowercase() }
+    val dependents = if (task.type == TaskType.FOLDER) emptyList() else edges.filter { it.dependsOnTaskId == id }.mapNotNull { byId[it.taskId] }
+    prerequisites.forEach { p -> row(Labels.PREREQUISITE, p) { unlink("/tasks/$id/prerequisite/${p.id}/remove?mode=$m") } }
+    dependents.forEach { d -> row(Labels.DEPENDENT, d) { unlink("/tasks/$id/dependent/${d.id}/remove?mode=$m") } }
+
+    // Each "+" opens a popover: type a new task, or pick an existing one.
+    fun FlowContent.adder(label: String, url: String, existingName: String, placeholder: String, candidates: List<Task>) = details(classes = "pp adder") {
+        summary(classes = "add-link") { +label }
+        div(classes = "pop") {
+            form(classes = "inline") {
+                htmx(url)
+                textInput(name = "text") { this.placeholder = placeholder; attributes["autocomplete"] = "off" }
+            }
+            if (candidates.isNotEmpty()) form(classes = "inline") {
+                htmx(url)
+                select { name = existingName; candidates.forEach { option { value = it.id.toString(); +it.title } } }
+                button(type = ButtonType.submit) { +"Add" }
+            }
+        }
     }
-    if (candidates.isNotEmpty()) {
-        form(classes = "inline") {
-            htmx("/tasks/$id/dependent?mode=${mode.name}")
-            select { name = "dependent"; candidates.forEach { option { value = it.id.toString(); +it.title } } }
-            button(type = ButtonType.submit) { +"Add dependent task" }
+    div(classes = "adders") {
+        adder(Labels.ADD_SUBTASK, "/tasks/$id/subtasks?mode=$m", "child", "New subtask",
+            all.filter { it.id != id && it.type != TaskType.FOLDER && !it.isComplete && it.parentId != id && !wouldCreateCycle(id, it.id, byId) }.sortedBy { it.title.lowercase() })
+        if (task.type != TaskType.FOLDER) {
+            val otherEdges = edges.filter { it.taskId != id }
+            adder(Labels.ADD_PREREQUISITE, "/tasks/$id/prerequisite?mode=$m", "prerequisite", "New task this depends on",
+                all.filter { it.id != id && it.type == TaskType.TASK && !it.isComplete && it !in prerequisites && !wouldCreateDependencyCycle(it.id, id, otherEdges) }.sortedBy { it.title.lowercase() })
+            adder(Labels.ADD_DEPENDENT, "/tasks/$id/dependent?mode=$m", "dependent", "New task that depends on this",
+                all.filter { it.id != id && it.type == TaskType.TASK && !it.isComplete && it !in dependents && !wouldCreateDependencyCycle(id, it.id, edges) }.sortedBy { it.title.lowercase() })
         }
     }
 }
