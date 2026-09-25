@@ -8,7 +8,9 @@
     <application
         android:name=".TodoApp"
         android:allowBackup="false"
-        android:label="Todo App"
+        android:label="Raspberry"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.TodoApp">
         <activity
             android:name=".MainActivity"
