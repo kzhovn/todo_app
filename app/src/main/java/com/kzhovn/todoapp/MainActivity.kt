@@ -81,7 +81,7 @@ import com.kzhovn.todoapp.context.WifiContextMonitor
 import com.kzhovn.todoapp.contexts.ContextsActivity
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.ui.BulkEditActivity
-import com.kzhovn.todoapp.ui.ReviewActivity
+import com.kzhovn.todoapp.ui.AppDrawer
 import androidx.compose.material.icons.filled.BarChart
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Checklist
@@ -124,9 +124,12 @@ class MainActivity : ComponentActivity() {
     // The widget's "open list" button says which tab to show, whether the app is starting or
     // already open (then the intent arrives via onNewIntent).
     private val requestedMode = mutableStateOf<TaskListMode?>(null)
+    // Set by another screen's drawer "Search" item.
+    private val requestedSearch = mutableStateOf(false)
 
     private fun readRequestedMode(intent: Intent?) {
         intent?.getStringExtra(EXTRA_MODE)?.let { name -> runCatching { TaskListMode.valueOf(name) }.getOrNull() }?.let { requestedMode.value = it }
+        if (intent?.getBooleanExtra(EXTRA_SEARCH, false) == true) requestedSearch.value = true
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -171,6 +174,7 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(requestedMode.value) { requestedMode.value?.let { selectedMode = it } }
             val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
             var searchMode by remember { mutableStateOf(false) }
+            LaunchedEffect(requestedSearch.value) { if (requestedSearch.value) { searchMode = true; requestedSearch.value = false } }
             var query by remember { mutableStateOf("") }
             var showFilters by remember { mutableStateOf(false) }
             var filters by remember { mutableStateOf(SearchFilters()) }
@@ -230,55 +234,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            ModalNavigationDrawer(
-                drawerState = drawerState,
-                drawerContent = {
-                    ModalDrawerSheet {
-                        NavigationDrawerItem(
-                            label = { Text("Search") },
-                            icon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                            selected = searchMode,
-                            onClick = {
-                                searchMode = true
-                                scope.launch { drawerState.close() }
-                            },
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                        )
-                        NavigationDrawerItem(
-                            label = { Text("Review") },
-                            icon = { Icon(Icons.Filled.BarChart, contentDescription = null) },
-                            selected = false,
-                            onClick = {
-                                scope.launch { drawerState.close() }
-                                startActivity(Intent(this@MainActivity, ReviewActivity::class.java))
-                            },
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                        )
-                        NavigationDrawerItem(
-                            label = { Text("Settings") },
-                            icon = { Icon(Icons.Filled.Sync, contentDescription = null) },
-                            selected = false,
-                            onClick = {
-                                scope.launch { drawerState.close() }
-                                startActivity(Intent(this@MainActivity, SyncSettingsActivity::class.java))
-                            },
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                        )
-                        NavigationDrawerItem(
-                            label = { Text("Contexts") },
-                            icon = { Icon(Icons.Filled.AlternateEmail, contentDescription = null) },
-                            selected = false,
-                            onClick = {
-                                scope.launch { drawerState.close() }
-                                startActivity(Intent(this@MainActivity, ContextsActivity::class.java))
-                            },
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                        )
-                        Spacer(Modifier.weight(1f))
-                        QuickAddKey()
-                    }
-                }
-            ) {
+            AppDrawer(drawerState, searchSelected = searchMode, onSearch = { searchMode = true }) {
             Scaffold(
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 floatingActionButton = {
@@ -513,6 +469,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_MODE = "mode"
+        const val EXTRA_SEARCH = "search"
     }
 }
 
@@ -534,40 +491,4 @@ private fun QuickAddFab(onClick: () -> Unit, onLongClick: () -> Unit) {
             Icon(Icons.Filled.Add, contentDescription = "New task")
         }
     }
-}
-
-// Cheat sheet for quick-add syntax, at the bottom of the drawer.
-@Composable
-private fun QuickAddKey() {
-    val rows = listOf(
-        "-d fri · due 3pm" to "due date (and time)",
-        "-s tomorrow · start mon 9am" to "start date",
-        "today, tomorrow, mon–sun, next fri, 2026-10-01" to "dates",
-        "5pm, 9:30am, 14:00" to "times",
-        "ends with ?" to "maybe",
-    )
-    val discord = listOf(
-        "--work: …" to "into a folder (else Personal)",
-        "--d: …" to "just for today",
-        "reply to a todo" to "it depends on the new one",
-        "✅ ❌ ⭐" to "complete / delete / star",
-    )
-    Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
-        Text("Quick add", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerMuted)
-        rows.forEach { (syntax, meaning) -> KeyRow(syntax, meaning) }
-        Spacer(Modifier.height(8.dp))
-        Text("Discord (.help for more)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerMuted)
-        discord.forEach { (syntax, meaning) -> KeyRow(syntax, meaning) }
-    }
-}
-
-@Composable
-private fun KeyRow(syntax: String, meaning: String) {
-    Text(
-        buildAnnotatedString {
-            withStyle(SpanStyle(fontFamily = FontFamily.Monospace, color = LedgerInk)) { append(syntax) }
-            append("  $meaning")
-        },
-        fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.padding(top = 2.dp)
-    )
 }

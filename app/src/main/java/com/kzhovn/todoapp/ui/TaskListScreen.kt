@@ -215,7 +215,7 @@ private fun TaskRow(
                 .padding(vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(Modifier.width(3.dp).fillMaxHeight().background(barColor))
+            Box(Modifier.width(4.dp).fillMaxHeight().background(barColor))
             if (task.type == TaskType.PROJECT) ProjectMark(36.dp)
             else TaskCheckbox(checked = task.isComplete, due = status, touchSize = 36.dp, onCheckedChange = { onCheck(task.id) })
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {

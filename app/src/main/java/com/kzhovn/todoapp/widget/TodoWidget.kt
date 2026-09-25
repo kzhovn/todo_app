@@ -193,7 +193,7 @@ class TodoWidget : GlanceAppWidget() {
 private fun WidgetRow(row: WidgetTaskRow) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
         // The folder colour bar, like the app's rows; row height is fixed by the 30dp tap boxes.
-        Box(GlanceModifier.width(3.dp).height(30.dp).background(fixed(row.barColor ?: LedgerBorder))) {}
+        Box(GlanceModifier.width(4.dp).height(30.dp).background(fixed(row.barColor ?: LedgerBorder))) {}
         Box(
             contentAlignment = Alignment.Center,
             modifier = GlanceModifier.size(width = 31.dp, height = 30.dp)

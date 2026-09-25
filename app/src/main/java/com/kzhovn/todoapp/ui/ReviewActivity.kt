@@ -1,6 +1,24 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.ui.theme.folderColors
+import com.kzhovn.todoapp.data.walkParentChain
+import com.kzhovn.todoapp.data.sectionsByTopFolder
+import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.Labels
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.clickable
+import android.content.Intent
 import android.os.Bundle
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.rememberDrawerState
+import com.kzhovn.todoapp.MainActivity
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
@@ -49,20 +67,31 @@ private const val CHART_DAYS = 14
 private const val LIST_DAYS = 30
 
 class ReviewActivity : ComponentActivity() {
+    @OptIn(ExperimentalLayoutApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as TodoApp
         setContent {
             LedgerTheme {
                 var days by remember { mutableStateOf<List<DayCompletions>>(emptyList()) }
-                var folderNames by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
+                var byId by remember { mutableStateOf<Map<Long, Task>>(emptyMap()) }
+                var colors by remember { mutableStateOf<Map<Long, Color>>(emptyMap()) }
                 LaunchedEffect(Unit) {
                     val all = app.repository.getAllTasks()
-                    folderNames = all.filter { it.type == TaskType.FOLDER }.associate { it.id to it.title }
+                    byId = all.associateBy { it.id }
+                    colors = folderColors(all)
                     days = completionsByDay(all, System.currentTimeMillis(), AppSettings.rolloverHour(app), LIST_DAYS)
                 }
+                // Grouped and coloured by top-level folder (Active's sections), each in its family colour.
+                val colorOf = { folder: Task? -> folder?.let { colors[it.id] } ?: LedgerMuted }
                 val week = days.take(7).sumOf { it.tasks.size }
 
+                AppDrawer(rememberDrawerState(DrawerValue.Closed), reviewSelected = true, onSearch = {
+                    startActivity(Intent(this@ReviewActivity, MainActivity::class.java)
+                        .putExtra(MainActivity.EXTRA_SEARCH, true)
+                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                    finish()
+                }) {
                 LazyColumn(Modifier.fillMaxSize().background(LedgerBackground).padding(horizontal = 16.dp)) {
                     item {
                         Text("Review", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk, modifier = Modifier.padding(top = 16.dp))
@@ -70,7 +99,17 @@ class ReviewActivity : ComponentActivity() {
                             "$week done in the last 7 days · ${"%.1f".format(week / 7.0)} a day",
                             fontSize = 13.sp, color = LedgerMuted, modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
                         )
-                        CompletionChart(days.take(CHART_DAYS).reversed())
+                        val chartDays = days.take(CHART_DAYS).reversed()
+                        CompletionChart(chartDays.map { day -> sectionsByTopFolder(day.tasks, byId).map { (folder, tasks) -> colorOf(folder) to tasks.size } }, chartDays)
+                        // The legend: every folder in the chart, in tree order.
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
+                            sectionsByTopFolder(chartDays.flatMap { it.tasks }, byId).forEach { (folder, _) ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(Modifier.size(8.dp).clip(CircleShape).background(colorOf(folder)))
+                                    Text(folder?.title ?: Labels.NO_FOLDER, fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.padding(start = 4.dp))
+                                }
+                            }
+                        }
                         Spacer(Modifier.height(16.dp))
                     }
                     items(days.filter { it.tasks.isNotEmpty() }, key = { it.dayStart }) { day ->
@@ -79,15 +118,25 @@ class ReviewActivity : ComponentActivity() {
                                 SimpleDateFormat("EEE, MMM d", Locale.US).format(Date(day.dayStart)) + " · ${day.tasks.size}",
                                 fontWeight = FontWeight.Bold, fontSize = 14.sp, color = LedgerInk
                             )
-                            day.tasks.forEach { task ->
-                                Row {
-                                    Text("✓ ", fontSize = 14.sp, color = LedgerAccent)
-                                    Text(task.title, fontSize = 14.sp, color = LedgerInk, modifier = Modifier.weight(1f))
-                                    task.parentId?.let(folderNames::get)?.let { Text(it, fontSize = 12.sp, color = LedgerMuted) }
+                            sectionsByTopFolder(day.tasks, byId).forEach { (folder, tasks) ->
+                                Text(folder?.title ?: Labels.NO_FOLDER, fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.padding(top = 6.dp))
+                                tasks.forEach { task ->
+                                    // The tick takes the task's own folder shade, as its row's colour bar does.
+                                    val tick = task.parentId?.let { walkParentChain(it, byId) { id -> colors[id] } } ?: LedgerMuted
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("✓ ", fontSize = 14.sp, color = tick)
+                                        Text(
+                                            task.title, fontSize = 14.sp, color = LedgerInk,
+                                            modifier = Modifier.weight(1f).clickable {
+                                                startActivity(Intent(this@ReviewActivity, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, task.id))
+                                            }.padding(vertical = 3.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
+                }
                 }
             }
         }
@@ -95,8 +144,9 @@ class ReviewActivity : ComponentActivity() {
 }
 
 // Oldest to newest, left to right, with each day's count above its bar and weekday initial below.
+// Each bar stacks its folders (colour, count) bottom-up, a small gap between segments.
 @Composable
-private fun CompletionChart(days: List<DayCompletions>) {
+private fun CompletionChart(stacks: List<List<Pair<Color, Int>>>, days: List<DayCompletions>) {
     if (days.isEmpty()) return
     val max = days.maxOf { it.tasks.size }.coerceAtLeast(1)
     Column {
@@ -107,14 +157,18 @@ private fun CompletionChart(days: List<DayCompletions>) {
             val slot = size.width / days.size
             val barWidth = slot * 0.6f
             drawLine(LedgerBorder, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 2f)
-            days.forEachIndexed { i, day ->
-                val h = size.height * day.tasks.size / max
-                drawRoundRect(
-                    color = LedgerAccent,
-                    topLeft = Offset(i * slot + (slot - barWidth) / 2, size.height - h),
-                    size = Size(barWidth, h),
-                    cornerRadius = CornerRadius(4f, 4f)
-                )
+            val gap = 2.dp.toPx()
+            stacks.forEachIndexed { i, segments ->
+                var bottom = size.height
+                segments.forEachIndexed { k, (color, count) ->
+                    val h = size.height * count / max
+                    val top = bottom - h
+                    val x = i * slot + (slot - barWidth) / 2
+                    // Only the top segment gets the rounded data end.
+                    if (k == segments.lastIndex) drawRoundRect(color, Offset(x, top), Size(barWidth, h), CornerRadius(4f, 4f))
+                    else drawRect(color, Offset(x, top + gap), Size(barWidth, h - gap))
+                    bottom = top
+                }
             }
         }
         Row(Modifier.fillMaxWidth()) {

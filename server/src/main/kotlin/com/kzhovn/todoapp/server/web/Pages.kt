@@ -4,7 +4,12 @@ import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.TaskContext
+import com.kzhovn.todoapp.data.Labels
+import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.data.folderColorsArgb
+import com.kzhovn.todoapp.data.sectionsByTopFolder
+import com.kzhovn.todoapp.data.walkParentChain
 import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.repository.BulkEdit
 import com.kzhovn.todoapp.repository.DateChange
@@ -280,21 +285,34 @@ private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode)
 
 private fun HTML.reviewPage(service: TaskService) = shellPage("Raspberry · Review", "/review") {
     val all = service.tasks()
-    val folderNames = all.filter { it.type == TaskType.FOLDER }.associate { it.id to it.title }
+    val byId = all.associateBy { it.id }
+    val colors = folderColorsArgb(all).mapValues { "#%06X".format(it.value and 0xFFFFFF) }
+    // Grouped and coloured by top-level folder, like the phone's Review.
+    val colorOf = { folder: Task? -> folder?.let { colors[it.id] } ?: "var(--muted)" }
     val days = completionsByDay(all, service.now(), service.rolloverHour(), LIST_DAYS)
     val week = days.take(7).sumOf { it.tasks.size }
     div(classes = "review") {
         h1 { +"Review" }
         p(classes = "hint") { +"$week done in the last 7 days · ${"%.1f".format(week / 7.0)} a day" }
-        completionChart(days.take(CHART_DAYS).reversed())
+        val chartDays = days.take(CHART_DAYS).reversed()
+        completionChart(chartDays.map { day -> sectionsByTopFolder(day.tasks, byId).map { (folder, tasks) -> Segment(colorOf(folder), folder?.title ?: Labels.NO_FOLDER, tasks.size) } }, chartDays)
+        div(classes = "legend") {
+            sectionsByTopFolder(chartDays.flatMap { it.tasks }, byId).forEach { (folder, _) ->
+                span { span(classes = "swatch") { style = "background: ${colorOf(folder)}" }; +(folder?.title ?: Labels.NO_FOLDER) }
+            }
+        }
         // The chart's table view, too: every completion, day by day.
         days.filter { it.tasks.isNotEmpty() }.forEach { day ->
             h2 { +"${SimpleDateFormat("EEE, MMM d", Locale.US).format(Date(day.dayStart))} · ${day.tasks.size}" }
-            day.tasks.forEach { task ->
-                div(classes = "done-row") {
-                    span(classes = "tick") { +"✓" }
-                    a(href = "/tasks/${task.id}?mode=ALL") { +task.title }
-                    task.parentId?.let(folderNames::get)?.let { span(classes = "folder-name") { +it } }
+            sectionsByTopFolder(day.tasks, byId).forEach { (folder, tasks) ->
+                div(classes = "folder-name") { +(folder?.title ?: Labels.NO_FOLDER) }
+                tasks.forEach { task ->
+                    div(classes = "done-row") {
+                        // The tick takes the task's own folder shade, as its row's colour bar does.
+                        val tick = task.parentId?.let { walkParentChain(it, byId) { id -> colors[id] } } ?: "var(--muted)"
+                        span(classes = "tick") { style = "color: $tick"; +"✓" }
+                        a(href = "/tasks/${task.id}?mode=ALL") { +task.title }
+                    }
                 }
             }
         }
@@ -302,19 +320,27 @@ private fun HTML.reviewPage(service: TaskService) = shellPage("Raspberry · Revi
     }
 }
 
-// Oldest to newest, left to right: count above each bar, weekday below, and the full date
-// on hover. Mirrors the phone's CompletionChart.
-private fun FlowContent.completionChart(days: List<DayCompletions>) {
+private class Segment(val color: String, val folder: String, val count: Int)
+
+// Oldest to newest, left to right: count above each bar, weekday below, and the date with a
+// per-folder breakdown on hover. Mirrors the phone's CompletionChart.
+private fun FlowContent.completionChart(stacks: List<List<Segment>>, days: List<DayCompletions>) {
     val max = days.maxOfOrNull { it.tasks.size }?.coerceAtLeast(1) ?: return
     div(classes = "chart") {
         attributes["role"] = "img"
         attributes["aria-label"] = "Tasks completed per day, last ${days.size} days"
-        days.forEach { day ->
+        days.zip(stacks).forEach { (day, segments) ->
             val date = SimpleDateFormat("EEE, MMM d", Locale.US).format(Date(day.dayStart))
             div(classes = "day") {
-                attributes["title"] = "$date: ${day.tasks.size} done"
+                attributes["title"] = "$date: ${day.tasks.size} done" + segments.joinToString("") { "\n${it.folder}: ${it.count}" }
                 span(classes = "count") { +(if (day.tasks.isEmpty()) "" else day.tasks.size.toString()) }
-                div(classes = "plot") { div(classes = "bar") { style = "height: ${100.0 * day.tasks.size / max}%" } }
+                div(classes = "plot") {
+                    // Segments stack bottom-up, sized by count.
+                    div(classes = "bar") {
+                        style = "height: ${100.0 * day.tasks.size / max}%"
+                        segments.forEach { div { style = "background: ${it.color}; flex: ${it.count}" } }
+                    }
+                }
                 // Two letters: the JVM, unlike Android, has no one-letter weekday pattern.
                 span(classes = "weekday") { +SimpleDateFormat("EEE", Locale.US).format(Date(day.dayStart)).take(2) }
             }
