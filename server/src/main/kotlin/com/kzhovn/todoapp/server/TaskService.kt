@@ -6,9 +6,11 @@ import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.newId
+import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
 import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
+import com.kzhovn.todoapp.repository.InheritedField
 import com.kzhovn.todoapp.repository.computeActiveTasks
 import com.kzhovn.todoapp.repository.filterDoing
 import com.kzhovn.todoapp.sync.CONTEXTS
@@ -41,6 +43,8 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         val now = clock()
         store.all(TASKS).filter { !it.isDeleted && it.toTask().isExpired(now) }.forEach { tombstone(it.id, now) }
     }
+
+    fun deletedTask(id: Long): Task? = store.get(TASKS, id)?.takeIf { it.isDeleted }?.toTask()
 
     fun tasks(): List<Task> = liveRows().map { it.toTask() }
 
@@ -101,6 +105,75 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun contexts(): List<TaskContext> = store.all(CONTEXTS).filterNot { it.isDeleted }.map { it.toContext() }
 
     fun contextIdsByTask(): Map<Long, Set<Long>> = liveRows().associate { it.id to it.contextIds() }
+
+    fun dependsOn(id: Long): Set<Long> = store.get(TASKS, id)?.dependsOn().orEmpty()
+
+    fun dependencyEdges(): List<TaskDependency> = liveRows().flatMap { row -> row.dependsOn().map { TaskDependency(row.id, it) } }
+
+    // The editor's save: the whole task plus its context and dependency sets. A parent or dependency
+    // that would make a loop, or points at nothing, is dropped rather than trusted from the form.
+    fun edit(task: Task, contextIds: Set<Long>, dependsOn: Set<Long>) = store.transaction {
+        val byId = tasks().associateBy { it.id }
+        val current = byId[task.id] ?: return@transaction
+        val parentId = task.parentId.let { p -> if (p == null || (p in byId && !wouldCreateCycle(p, task.id, byId))) p else current.parentId }
+        val folder = task.type == TaskType.FOLDER
+        val saved = task.copy(
+            parentId = parentId,
+            // Lands at the end of a new sibling list, like reparent.
+            position = if (parentId != current.parentId) null else task.position,
+            dueDate = task.dueDate.takeUnless { folder },
+            recurrenceType = task.recurrenceType.takeUnless { folder },
+            recurrenceRule = task.recurrenceRule.takeUnless { folder },
+            reminderOffsetMinutes = task.reminderOffsetMinutes.takeUnless { folder }
+        ).withRules(clock())
+        // A folder can't be completed, so it can't wait on anything.
+        val edges = dependencyEdges().filter { it.taskId != task.id }
+        val deps = if (folder) emptySet() else dependsOn.filterTo(mutableSetOf()) {
+            it != task.id && byId[it]?.type.let { t -> t == TaskType.TASK || t == TaskType.PROJECT } && !wouldCreateDependencyCycle(it, task.id, edges)
+        }
+        val contexts = contexts().map { it.id }.toSet().let { known -> contextIds.filterTo(mutableSetOf()) { it in known } }
+        store.write(TASKS, task.id, JsonObject(taskFields(saved, contexts, deps) - DELETED_AT), clock())
+    }
+
+    // Moves a task under newParentId, at the end of its children, unless that would make a loop.
+    fun reparent(id: Long, newParentId: Long) {
+        val byId = tasks().associateBy { it.id }
+        if (newParentId !in byId || wouldCreateCycle(newParentId, id, byId)) return
+        update(id) { it.copy(parentId = newParentId, position = null) }
+    }
+
+    // Subtasks that set their own value for one of these inherited fields, and so wouldn't follow
+    // a change to it on this task. Mirrors TaskRepository.descendantsOverriding.
+    fun descendantsOverriding(id: Long, fields: Set<InheritedField>): List<Task> {
+        val rows = liveRows().associateBy { it.id }
+        return (subtreeIds(id) - id).mapNotNull { rows[it] }.filter { row ->
+            val d = row.toTask()
+            fields.any { field ->
+                when (field) {
+                    InheritedField.START -> d.startDate != null
+                    InheritedField.DUE -> d.dueDate != null
+                    InheritedField.ICON -> d.icon != null
+                    InheritedField.CONTEXTS -> row.contextIds().isNotEmpty()
+                }
+            }
+        }.map { it.toTask() }
+    }
+
+    // Clears those fields on the given tasks, so they inherit from their ancestors again.
+    fun clearInherited(tasks: List<Task>, fields: Set<InheritedField>) = store.transaction {
+        for (t in tasks) {
+            val row = store.get(TASKS, t.id) ?: continue
+            val cleared = row.toTask().let {
+                it.copy(
+                    startDate = it.startDate.takeUnless { InheritedField.START in fields },
+                    dueDate = it.dueDate.takeUnless { InheritedField.DUE in fields },
+                    icon = it.icon.takeUnless { InheritedField.ICON in fields }
+                )
+            }
+            val contexts = if (InheritedField.CONTEXTS in fields) emptySet() else row.contextIds()
+            store.write(TASKS, t.id, JsonObject(taskFields(cleared, contexts, row.dependsOn()) - DELETED_AT), clock())
+        }
+    }
 
     // Makes taskId wait for dependsOnId, unless that would create a dependency loop.
     fun addDependency(taskId: Long, dependsOnId: Long) = store.transaction {

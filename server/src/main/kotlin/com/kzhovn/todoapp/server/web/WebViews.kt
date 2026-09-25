@@ -12,6 +12,7 @@ import kotlinx.html.BODY
 import kotlinx.html.DIV
 import kotlinx.html.FlowContent
 import kotlinx.html.HTML
+import kotlinx.html.MAIN
 import kotlinx.html.a
 import kotlinx.html.aside
 import kotlinx.html.body
@@ -72,16 +73,17 @@ class ListData(service: TaskService, val mode: ListMode, val now: Long = service
 }
 
 // The Material icons the phone uses (Icons.Filled.*), inlined so both clients look alike.
-private enum class Icon(val path: String) {
+internal enum class Icon(val path: String) {
     FOLDER("M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"),
     PROJECT("M22 11V3h-7v3H9V3H2v8h7V8h2v10h4v3h7v-8h-7v3h-2V8h2v3z"), // AccountTree
     SUBTASK("M19 15l-6 6-1.42-1.42L15.17 16H4V4h2v10h9.17l-3.59-3.59L13 9l6 6z"), // SubdirectoryArrowRight
     STAR("M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"),
     STAR_BORDER("M22 9.24l-7.19-.62L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.63-7.03L22 9.24zM12 15.4l-3.76 2.27 1-4.28-3.32-2.88 4.38-.38L12 6.1l1.71 4.04 4.38.38-3.32 2.88 1 4.28L12 15.4z"),
-    REPEAT("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z")
+    REPEAT("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"),
+    CHECK("M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z")
 }
 
-private fun FlowContent.icon(icon: Icon, classes: String, color: String? = null) = span(classes = "icon $classes") {
+internal fun FlowContent.icon(icon: Icon, classes: String, color: String? = null) = span(classes = "icon $classes") {
     color?.let { style = "color: $it" }
     unsafe { +"<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"${icon.path}\"/></svg>" }
 }
@@ -98,13 +100,18 @@ fun HTML.page(title: String, content: BODY.() -> Unit) {
     body { content() }
 }
 
-fun HTML.listPage(data: ListData) = page("Raspberry · ${data.mode.label}") {
+// deleted: a task just deleted from the editor, offered back with an Undo toast.
+fun HTML.listPage(data: ListData, deleted: Task? = null) = shellPage("Raspberry · ${data.mode.label}", data.mode, toast = deleted?.let { { deletedToastContents(it, data.mode) } }) {
+    div { listContents(data) }
+}
+
+fun HTML.shellPage(title: String, mode: ListMode, toast: (DIV.() -> Unit)? = null, content: MAIN.() -> Unit) = page(title) {
     div(classes = "shell") {
         aside(classes = "sidebar") {
             h1 { +"Raspberry" }
             nav {
                 ListMode.entries.forEach { m ->
-                    a(href = "/${m.name.lowercase()}", classes = if (m == data.mode) "current" else null) { +m.label }
+                    a(href = "/${m.name.lowercase()}", classes = if (m == mode) "current" else null) { +m.label }
                 }
             }
             // Same parser as the app's quick add; new tasks default to the Personal folder.
@@ -112,14 +119,14 @@ fun HTML.listPage(data: ListData) = page("Raspberry · ${data.mode.label}") {
                 attributes["hx-post"] = "/quickadd"
                 attributes["hx-target"] = "#list"
                 attributes["hx-swap"] = "outerHTML"
-                hiddenInput(name = "mode") { value = data.mode.name }
+                hiddenInput(name = "mode") { value = mode.name }
                 textInput(name = "text") { id = "quickadd"; placeholder = "Add a task… (n)"; attributes["autocomplete"] = "off" }
             }
             syntaxKey()
         }
-        main { div { listContents(data) } }
+        main { content() }
     }
-    div { id = "toast" }
+    div { id = "toast"; toast?.invoke(this) }
 }
 
 private fun FlowContent.syntaxKey() = div(classes = "key") {
@@ -155,7 +162,7 @@ private fun FlowContent.tree(data: ListData, parentId: Long?, depth: Int) {
             div(classes = "folder") {
                 style = "padding-left: ${depth * 18 + 10}px"
                 icon(Icon.FOLDER, "folder-icon", data.ownColor(item))
-                +item.title
+                a(href = "/tasks/${item.id}?mode=ALL", classes = "edit") { +item.title }
             }
         } else {
             taskRow(data, item, depth)
@@ -185,7 +192,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int) {
             div(classes = "title") {
                 // In the All tree indentation already shows nesting; flat lists need the marker.
                 if (data.mode != ListMode.ALL && data.isSubtask(task)) icon(Icon.SUBTASK, "sub")
-                +task.title
+                a(href = "/tasks/${task.id}?mode=$mode", classes = "edit") { +task.title }
                 if (task.recurrenceType != null) span(classes = "badge") { attributes["title"] = "Recurring"; icon(Icon.REPEAT, "") }
             }
             val due = data.effectiveDue(task)
@@ -233,6 +240,17 @@ private fun FlowContent.dueChip(due: Long, now: Long, overdue: Boolean) {
     val time = if (hasTime(due)) " " + SimpleDateFormat("h:mm a", Locale.US).format(Date(due)) else ""
     span(classes = "due" + when { overdue -> " overdue"; isToday -> " today"; else -> "" }) {
         +((if (isToday) "Today" else SimpleDateFormat("MMM d", Locale.US).format(Date(due))) + time)
+    }
+}
+
+fun DIV.deletedToastContents(task: Task, mode: ListMode) {
+    classes = setOf("show")
+    span { +"Deleted “${task.title}”" }
+    button {
+        attributes["hx-post"] = "/tasks/${task.id}/restore?mode=${mode.name}"
+        attributes["hx-target"] = "#list"
+        attributes["hx-swap"] = "outerHTML"
+        +"Undo"
     }
 }
 

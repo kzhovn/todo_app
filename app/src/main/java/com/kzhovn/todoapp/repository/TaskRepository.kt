@@ -304,6 +304,3 @@ data class BulkEdit(
 
 data class DateChange(val date: Long?)      // null date = clear it
 data class FolderChange(val folderId: Long?) // null folder = move to top level
-
-// The fields subtasks inherit from their parents when they don't set their own (see resolveEffective).
-enum class InheritedField(val label: String) { START("start date"), DUE("due date"), CONTEXTS("contexts"), ICON("icon") }

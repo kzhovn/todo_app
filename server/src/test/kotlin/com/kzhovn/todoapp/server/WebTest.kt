@@ -2,10 +2,13 @@ package com.kzhovn.todoapp.server
 
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.sync.taskFields
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.request.header
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.parameters
 import io.ktor.server.testing.ApplicationTestBuilder
@@ -64,5 +67,69 @@ class WebTest {
         assertTrue(projectRow.contains("class=\"project\""))
         assertFalse(projectRow.contains("class=\"check"))
         assertTrue(client.get("/doing").bodyAsText().contains("icon sub"))
+    }
+
+    @Test
+    fun `editing applies only what the form changed, keeping edits synced in meanwhile`() = web {
+        val task = service.create(Task(title = "Water plants"))
+        val base = taskFields(task, emptySet(), emptySet()).toString()
+        service.setStarred(task.id, true) // from the phone, after the editor loaded
+
+        client.submitForm("/tasks/${task.id}?mode=ALL", parameters {
+            append("base", base); append("title", "Water the plants"); append("type", "TASK")
+        })
+        val saved = service.get(task.id)!!
+        assertEquals("Water the plants", saved.title)
+        assertTrue(saved.isStarred)
+    }
+
+    @Test
+    fun `changing an inherited date asks about subtasks that set their own`() = web {
+        val parent = service.create(Task(title = "Trip"))
+        val child = service.create(Task(title = "Pack", parentId = parent.id, dueDate = 1_000_000))
+        val form = parameters {
+            append("base", taskFields(parent, emptySet(), emptySet()).toString())
+            append("title", "Trip"); append("type", "TASK"); append("dueDate", "2026-10-01")
+        }
+        assertTrue(client.submitForm("/tasks/${parent.id}", form).bodyAsText().contains("Update subtasks"))
+        assertEquals(null, service.get(parent.id)!!.dueDate)
+
+        client.submitForm("/tasks/${parent.id}", parameters { appendAll(form); append("inherit", "update") })
+        assertTrue(service.get(parent.id)!!.dueDate != null)
+        assertEquals(null, service.get(child.id)!!.dueDate)
+    }
+
+    @Test
+    fun `a project needs a first step`() = web {
+        val task = service.create(Task(title = "Wool coat"))
+        val form = parameters {
+            append("base", taskFields(task, emptySet(), emptySet()).toString())
+            append("title", "Wool coat"); append("type", "PROJECT")
+        }
+        assertTrue(client.submitForm("/tasks/${task.id}", form).bodyAsText().contains("needs a first step"))
+        client.submitForm("/tasks/${task.id}", parameters { appendAll(form); append("firstStep", "Buy wool") })
+        assertEquals(TaskType.PROJECT, service.get(task.id)!!.type)
+        assertEquals("Buy wool", service.tasks().single { it.parentId == task.id }.title)
+    }
+
+    @Test
+    fun `delete offers undo`() = web {
+        val task = service.create(Task(title = "Oops"))
+        val noRedirects = createClient { followRedirects = false }
+        val location = noRedirects.post("/tasks/${task.id}/delete?mode=ACTIVE").headers["Location"]!!
+        assertEquals(null, service.get(task.id))
+        assertTrue(client.get(location).bodyAsText().contains("Deleted “Oops”"))
+        client.post("/tasks/${task.id}/restore?mode=ACTIVE")
+        assertEquals("Oops", service.get(task.id)?.title)
+    }
+
+    @Test
+    fun `posts from other sites are refused`() = web {
+        val task = service.create(Task(title = "Keep me"))
+        assertEquals(HttpStatusCode.Forbidden, client.post("/tasks/${task.id}/delete") { header(HttpHeaders.Origin, "https://evil.example") }.status)
+        assertEquals(HttpStatusCode.Forbidden, client.post("/tasks/${task.id}/delete") { header(HttpHeaders.Origin, "null") }.status)
+        assertEquals("Keep me", service.get(task.id)?.title)
+        client.post("/tasks/${task.id}/star") { header(HttpHeaders.Origin, "http://localhost"); header(HttpHeaders.Host, "localhost") }
+        assertTrue(service.get(task.id)!!.isStarred)
     }
 }

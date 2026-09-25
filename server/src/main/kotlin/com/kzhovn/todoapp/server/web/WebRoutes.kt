@@ -29,9 +29,14 @@ fun Route.webRoutes(service: TaskService) {
 
     get("/") { call.respondRedirect("/doing") }
     ListMode.entries.forEach { mode ->
-        get("/${mode.name.lowercase()}") { call.respondHtml { listPage(ListData(service, mode)) } }
+        get("/${mode.name.lowercase()}") {
+            val deleted = call.request.queryParameters["deleted"]?.toLongOrNull()?.let(service::deletedTask)
+            call.respondHtml { listPage(ListData(service, mode), deleted) }
+        }
         get("/list/${mode.name.lowercase()}") { call.respondList(service, mode) }
     }
+
+    editorRoutes(service)
 
     post("/tasks/{id}/complete") {
         val id = call.taskId() ?: return@post
@@ -58,10 +63,10 @@ fun Route.webRoutes(service: TaskService) {
     }
 }
 
-private fun ApplicationCall.taskId() = parameters["id"]?.toLongOrNull()
+internal fun ApplicationCall.taskId() = parameters["id"]?.toLongOrNull()
 
-private fun ApplicationCall.mode() =
+internal fun ApplicationCall.mode() =
     request.queryParameters["mode"]?.let { runCatching { ListMode.valueOf(it) }.getOrNull() } ?: ListMode.DOING
 
-private suspend fun ApplicationCall.respondList(service: TaskService, mode: ListMode, extra: String? = null) =
+internal suspend fun ApplicationCall.respondList(service: TaskService, mode: ListMode, extra: String? = null) =
     respondText(createHTML().div { listContents(ListData(service, mode)) } + extra.orEmpty(), ContentType.Text.Html)

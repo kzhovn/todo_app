@@ -76,3 +76,64 @@ main { flex: 1; min-width: 0; max-width: 860px; }
   .sidebar nav { flex-direction: row; }
   .key { display: none; }
 }
+
+/* Task editor */
+.row .title a.edit, .folder a.edit { color: inherit; text-decoration: none; }
+.row .title a.edit:hover, .folder a.edit:hover { text-decoration: underline; }
+.editor { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+.editor input[type=text], .editor input[type=search], .editor input[type=date], .editor input[type=time], .editor input[type=number], .editor select, .subtasks input[type=text], .subtasks select {
+  padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit;
+}
+.title-row { display: flex; align-items: center; gap: 8px; }
+.title-input { flex: 1; font-size: 18px !important; font-weight: 600; }
+.star-toggle { cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+.star-toggle input { display: none; }
+.star-toggle .icon { width: 24px; height: 24px; }
+.star-toggle .on { color: var(--star); }
+.star-toggle .off { color: var(--check); }
+.star-toggle:has(input:checked) .off, .star-toggle:not(:has(input:checked)) .on { display: none; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { cursor: pointer; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; color: var(--muted); }
+.pill input { display: none; }
+.pill:has(input:checked) { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.field { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.field-label { width: 100%; font-size: 12px; font-weight: 700; }
+.field-row { display: flex; flex-wrap: wrap; gap: 20px; }
+.hint { font-size: 12px; color: var(--muted); margin: 0; width: 100%; }
+.error { color: var(--overdue); background: var(--overdue-bg); padding: 8px 12px; border-radius: 6px; margin: 0; }
+.ask { background: var(--today-bg); padding: 10px 12px; border-radius: 6px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ask p { margin: 0; width: 100%; }
+.rep-n { width: 64px; }
+.repeat:has(option[value="NONE"]:checked) .rep-n { display: none; }
+.repeat:not(:has(option[value="CALENDAR"]:checked)) :is(.rep-unit, .rep-wd) { display: none; }
+.repeat:not(:has(option[value="WEEK"]:checked)) .rep-wd { display: none; }
+.repeat:not(:has(option[value="AFTER_COMPLETION_N_DAYS"]:checked)) .rep-after { display: none; }
+.rep-wd { display: flex; gap: 4px; width: 100%; }
+/* Folders have no due date, repeat, dependencies or maybe (the server clears them too). */
+.editor:has(input[name=type][value=FOLDER]:checked) .task-only { display: none; }
+.picker { width: 100%; max-width: 520px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); }
+.picker .filter { width: 100%; border: 0 !important; border-bottom: 1px solid var(--border) !important; border-radius: 6px 6px 0 0 !important; }
+.picker .options { max-height: 180px; overflow-y: auto; padding: 4px 0; }
+.picker label { display: block; padding: 3px 10px; cursor: pointer; }
+.picker label:hover { background: var(--accent-soft); }
+.toggles { display: flex; flex-direction: column; gap: 6px; }
+.toggles label { cursor: pointer; }
+.actions { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+.actions .delete { color: var(--overdue); margin-right: auto; }
+.actions .cancel { color: var(--muted); text-decoration: none; }
+button.primary { background: var(--accent); color: var(--panel); padding: 7px 16px; border-radius: 6px; font-weight: 600; }
+.ask button:not(.primary) { padding: 7px 12px; border: 1px solid var(--border); border-radius: 6px; }
+.subtasks { padding: 0 24px 24px; border-top: 1px solid var(--border); }
+.subtasks h2 { font-size: 13px; margin: 16px 0 6px; }
+.sub-row { display: flex; align-items: center; gap: 8px; min-height: 34px; }
+.sub-row .check { margin-left: 0; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; }
+.sub-row .project { margin-left: 0; width: 18px; height: 18px; }
+.sub-row a { color: var(--ink); text-decoration: none; }
+.sub-row a:hover { text-decoration: underline; }
+.sub-row a.done { color: var(--muted); text-decoration: line-through; }
+.check.done { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.check.done .icon { width: 12px; height: 12px; }
+form.inline { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+form.inline input[type=text] { flex: 1; min-width: 200px; }
+form.inline select { max-width: 320px; }
+form.inline button { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }

@@ -3,6 +3,8 @@ package com.kzhovn.todoapp.server
 import com.kzhovn.todoapp.server.web.webRoutes
 import com.kzhovn.todoapp.sync.SyncJson
 import com.kzhovn.todoapp.sync.SyncRequest
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -15,12 +17,15 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.engine.sslConnector
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.request.httpMethod
+import io.ktor.server.request.path
 import io.ktor.server.request.receive
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import java.io.File
+import java.net.URI
 import java.security.KeyStore
 import java.security.MessageDigest
 
@@ -72,8 +77,18 @@ fun Application.api(store: Store, apiToken: String, service: TaskService = TaskS
     intercept(ApplicationCallPipeline.Plugins) {
         call.response.header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         call.response.header("X-Content-Type-Options", "nosniff")
-        call.response.header("Referrer-Policy", "no-referrer")
+        call.response.header("Referrer-Policy", "same-origin")
         call.response.header("Strict-Transport-Security", "max-age=31536000")
+        // Browsers attach basic-auth credentials to any site's form posts, so a web post must come
+        // from this site. They always send Origin on cross-site posts.
+        if (call.request.httpMethod == HttpMethod.Post && call.request.path() != "/sync") {
+            val origin = call.request.headers[HttpHeaders.Origin]
+            val originHost = origin?.let { runCatching { URI(it).authority }.getOrNull() ?: "" } // "null" origin: never ours
+            if (originHost != null && originHost != call.request.headers[HttpHeaders.Host]) {
+                call.respond(HttpStatusCode.Forbidden)
+                return@intercept finish()
+            }
+        }
     }
     val expected = "Bearer $apiToken".toByteArray()
     routing {

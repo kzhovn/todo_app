@@ -1,5 +1,5 @@
 // Keyboard shortcuts (ignored while typing): n = quick add, g then d/a/t = Doing/Active/All, ? = help.
-// Also hides the undo toast a few seconds after it appears.
+// Plus small behaviours for htmx fragments, the editor's pickers and the undo toast.
 (() => {
   let pendingG = false;
   const go = { d: "/doing", a: "/active", t: "/all" };
@@ -19,10 +19,24 @@
     if (e.detail.successful && e.detail.elt.matches("form.quickadd")) e.detail.elt.reset();
   });
 
+  // Filter a picker's checkbox list by its search box.
+  document.addEventListener("input", (e) => {
+    if (!e.target.matches("[data-filter]")) return;
+    const q = e.target.value.toLowerCase();
+    e.target.closest(".picker").querySelectorAll(".options label").forEach((l) => {
+      l.hidden = !l.textContent.toLowerCase().includes(q);
+    });
+  });
+
+  // The undo toast hides a few seconds after it appears, whether swapped in or rendered with the page.
   let hideTimer;
-  document.addEventListener("htmx:oobAfterSwap", (e) => {
-    if (e.detail.target.id !== "toast") return;
+  const hideSoon = (toast) => {
     clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => e.detail.target.classList.remove("show"), 6000);
+    hideTimer = setTimeout(() => toast.classList.remove("show"), 6000);
+  };
+  document.addEventListener("htmx:oobAfterSwap", (e) => { if (e.detail.target.id === "toast") hideSoon(e.detail.target); });
+  document.addEventListener("DOMContentLoaded", () => {
+    const toast = document.getElementById("toast");
+    if (toast?.classList.contains("show")) hideSoon(toast);
   });
 })();
