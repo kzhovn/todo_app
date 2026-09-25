@@ -189,7 +189,9 @@ private fun WidgetRow(row: WidgetTaskRow) {
             maxLines = 1,
             modifier = GlanceModifier
                 .defaultWeight()
-                .padding(horizontal = 2.dp)
+                // The ○ glyph sits a little below its box's centre; this nudges the title (centred in
+                // the row) down 1dp to line up with it.
+                .padding(start = 2.dp, end = 2.dp, top = 2.dp)
                 .clickable(
                     actionStartActivity<TaskEditActivity>(
                         parameters = actionParametersOf(ActionParameters.Key<Long>(TaskEditActivity.EXTRA_TASK_ID) to row.id)
