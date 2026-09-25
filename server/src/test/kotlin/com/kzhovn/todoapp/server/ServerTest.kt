@@ -253,6 +253,33 @@ class ServerTest {
     }
 
     @Test
+    fun `tasks stuck in Doing get nudged after 3 days, then every 3 days, and nudges act on them`() {
+        val day = 24L * 60 * 60 * 1000
+        val stuck = service.create(Task(title = "Taxes", isStarred = true))
+        assertTrue(logic.dueNudges().isEmpty()) // first digest to see it: clock starts
+
+        now += 3 * day
+        assertEquals(listOf("Taxes" to 3), logic.dueNudges().map { (t, d) -> t.title to d })
+        now += day
+        assertTrue(logic.dueNudges().isEmpty()) // nudged a day ago
+        now += 2 * day
+        assertEquals(1, logic.dueNudges().size)
+
+        logic.recordNudge(900L, stuck.id)
+        logic.onAdd(901L, "u", "-- gather receipts\n-- fill forms", replyToMessageId = 900L)
+        val steps = service.tasks().filter { it.parentId == stuck.id }
+        assertEquals(listOf("gather receipts", "fill forms"), steps.map { it.title })
+        assertTrue(steps.none { it.isStarred })
+
+        logic.onReaction(900L, MOVE_OUT, added = true)
+        assertFalse(service.get(stuck.id)!!.isStarred)
+        now += 3 * day
+        assertTrue(logic.dueNudges().none { it.first.id == stuck.id }) // left Doing: clock reset
+        logic.onReaction(900L, MOVE_OUT, added = false)
+        assertTrue(service.get(stuck.id)!!.isStarred)
+    }
+
+    @Test
     fun `deleting the source message soft-deletes the task`() {
         logic.onAdd(1L, "u", "-- call mom")
         logic.onDelete(1L)
@@ -333,7 +360,7 @@ class ServerTest {
     @Test
     fun `emoji pool is single-codepoint, distinct, and avoids the control reactions`() {
         assertEquals(EMOJI_POOL.size, EMOJI_POOL.distinct().size)
-        assertTrue(EMOJI_POOL.none { it in setOf(DONE, DELETE, STAR) })
+        assertTrue(EMOJI_POOL.none { it in setOf(DONE, DELETE, STAR, MOVE_OUT) })
         assertTrue(EMOJI_POOL.all { it.codePointCount(0, it.length) == 1 && it.codePointAt(0) > 0x2000 })
     }
 }

@@ -17,6 +17,9 @@ import java.util.Locale
 const val DONE = "✅"
 const val DELETE = "❌"
 const val STAR = "⭐"
+const val MOVE_OUT = "🔽" // on a nudge: unstar the task (no variation selector, so reactions match)
+private const val DAY_MS = 24L * 60 * 60 * 1000
+private const val NUDGE_AFTER = 3 * DAY_MS
 const val NOTHING = "🎉 Nothing here 🎉"
 
 val HELP = """
@@ -37,6 +40,10 @@ Editing the message updates the task; deleting it deletes the task.
 `.doing` / `.list` Doing · `.active` Active · `.rand` one random active task
 `.list work` open tasks in a folder; `.doing work` / `.active work` filter by folder
 Tap an item's emoji to complete it (un-tap to undo).
+
+**Nudges**
+With the morning digest, anything in Doing for 3+ days gets a message (again every 3 days):
+🔽 moves it out (unstars it); reply with `-- step` lines to break it into subtasks.
 """.trimIndent()
 // Adds without a `folder:` prefix land here, if a folder with this name exists.
 const val DEFAULT_FOLDER = "Personal"
@@ -62,7 +69,12 @@ data class ListLine(val emoji: String? = null, val taskId: Long, val text: Strin
 // What the bot remembers about a message: either the `--` message a task came from, or a list it
 // posted (whose emoji reactions complete tasks).
 @Serializable
-data class MessageLink(val taskId: Long? = null, val text: String? = null, val lines: List<ListLine> = emptyList())
+data class MessageLink(
+    val taskId: Long? = null,
+    val text: String? = null,
+    val lines: List<ListLine> = emptyList(),
+    val nudgeFor: Long? = null // a "stuck in Doing" nudge about this task
+)
 
 data class ListChunk(val content: String, val emojis: List<String>, val lines: List<ListLine>)
 
@@ -96,6 +108,7 @@ class BotLogic(private val service: TaskService, private val store: Store) {
     // Replying to another todo's `--` message with a new todo makes the replied-to task wait for
     // the new one ("-- hang mirror" <- reply "-- move mirror upstairs").
     fun onAdd(messageId: Long, jumpUrl: String, content: String, replyToMessageId: Long? = null): Boolean {
+        replyToMessageId?.let(::link)?.nudgeFor?.let { return breakUp(it, content) }
         val task = service.create(parseAdd(content) ?: return false)
         saveLink(messageId, MessageLink(taskId = task.id, text = content))
         store.setValue("src:${task.id}", jumpUrl)
@@ -138,8 +151,44 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         )
     }
 
+    // Replying to a nudge with `--` lines turns each into a subtask of the stuck task. They aren't
+    // starred, so breaking a task up doesn't flood Doing.
+    private fun breakUp(taskId: Long, content: String): Boolean {
+        val steps = content.lines().map { it.trim() }.mapNotNull(::parseAdd)
+        steps.forEach { service.create(it.copy(parentId = taskId, isStarred = false)) }
+        return steps.isNotEmpty()
+    }
+
+    // Run with each morning digest. A task counts as entering Doing at the first digest that sees it
+    // there (leaving resets it); it's nudged once it's been there 3 days, then every 3 days after.
+    fun dueNudges(): List<Pair<Task, Int>> = store.transaction {
+        val now = service.now()
+        val doing = service.doing().associateBy { it.id }
+        val since = store.valuesWithPrefix("doingSince:").mapKeys { it.key.removePrefix("doingSince:").toLong() }
+        since.keys.filter { it !in doing }.forEach {
+            store.setValue("doingSince:$it", null)
+            store.setValue("nudged:$it", null)
+        }
+        doing.values.mapNotNull { task ->
+            val entered = since[task.id]?.toLong() ?: now.also { store.setValue("doingSince:${task.id}", it.toString()) }
+            val lastNudge = store.getValue("nudged:${task.id}")?.toLong() ?: entered
+            if (now - lastNudge < NUDGE_AFTER) return@mapNotNull null
+            store.setValue("nudged:${task.id}", now.toString())
+            task to ((now - entered) / DAY_MS).toInt()
+        }
+    }
+
+    fun nudgeText(task: Task, days: Int) =
+        "“${task.title}” has been in Doing for $days days. React $MOVE_OUT to move it out, or reply with `-- step` lines to break it up."
+
+    fun recordNudge(messageId: Long, taskId: Long) = saveLink(messageId, MessageLink(nudgeFor = taskId))
+
     fun onReaction(messageId: Long, emoji: String, added: Boolean): ReactionOutcome {
         val link = link(messageId)
+        link?.nudgeFor?.let { stuck ->
+            if (emoji == MOVE_OUT) service.setStarred(stuck, !added) // un-reacting puts it back
+            return ReactionOutcome.None
+        }
         val sourceTask = link?.taskId
         if (sourceTask != null) {
             when (emoji) {
