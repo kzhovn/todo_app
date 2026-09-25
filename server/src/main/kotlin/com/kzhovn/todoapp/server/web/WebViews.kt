@@ -1,0 +1,247 @@
+package com.kzhovn.todoapp.server.web
+
+import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.TaskOrder
+import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.data.deadline
+import com.kzhovn.todoapp.data.hasTime
+import com.kzhovn.todoapp.data.resolveEffective
+import com.kzhovn.todoapp.data.walkParentChain
+import com.kzhovn.todoapp.server.TaskService
+import kotlinx.html.BODY
+import kotlinx.html.DIV
+import kotlinx.html.FlowContent
+import kotlinx.html.HTML
+import kotlinx.html.a
+import kotlinx.html.aside
+import kotlinx.html.body
+import kotlinx.html.button
+import kotlinx.html.classes
+import kotlinx.html.details
+import kotlinx.html.div
+import kotlinx.html.form
+import kotlinx.html.h1
+import kotlinx.html.head
+import kotlinx.html.hiddenInput
+import kotlinx.html.id
+import kotlinx.html.link
+import kotlinx.html.main
+import kotlinx.html.meta
+import kotlinx.html.nav
+import kotlinx.html.p
+import kotlinx.html.passwordInput
+import kotlinx.html.script
+import kotlinx.html.span
+import kotlinx.html.style
+import kotlinx.html.summary
+import kotlinx.html.textInput
+import kotlinx.html.title
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+
+enum class ListMode(val label: String) { DOING("Doing"), ACTIVE("Active"), ALL("All") }
+
+// The app's folder palette (LedgerFolderPalette), assigned the same way: by folder creation order.
+private val FOLDER_PALETTE = listOf("#8A4C2E", "#6B8A2E", "#2E8A4D", "#2E6B8A", "#4D2E8A", "#8A2E6B")
+
+// Everything a list needs, computed once per request from the live task set.
+class ListData(service: TaskService, val mode: ListMode, val now: Long = service.now()) {
+    val all: List<Task> = service.tasks()
+    private val byId = all.associateBy { it.id }
+    private val contextIds = service.contextIdsByTask()
+    private val contextNames = service.contexts().associate { it.id to it.name }
+    private val folderColors = all.filter { it.type == TaskType.FOLDER }.sortedBy { it.id }
+        .mapIndexed { i, f -> f.id to FOLDER_PALETTE[i % FOLDER_PALETTE.size] }.toMap()
+    private val children = all.groupBy { it.parentId }
+    val tasks: List<Task> = when (mode) {
+        ListMode.DOING -> service.doing()
+        ListMode.ACTIVE -> service.active()
+        ListMode.ALL -> emptyList() // the tree is rendered from `children`
+    }
+
+    fun effectiveDue(task: Task) = resolveEffective(task, byId, contextIds).effectiveDueDate
+    fun contextName(task: Task) = resolveEffective(task, byId, contextIds).effectiveContextIds.firstOrNull()?.let(contextNames::get)
+    fun isSubtask(task: Task) = byId[task.parentId]?.type.let { it == TaskType.TASK || it == TaskType.PROJECT }
+    fun folderColor(task: Task): String? = task.parentId?.let { parent -> walkParentChain(parent, byId) { folderColors[it] } }
+    fun ownColor(folder: Task) = folderColors[folder.id]
+    fun subtaskCounts(task: Task): Pair<Int, Int>? =
+        children[task.id].orEmpty().filter { it.type != TaskType.FOLDER }.takeIf { it.isNotEmpty() }?.let { kids -> kids.count { it.isComplete } to kids.size }
+    fun openChildren(parentId: Long?) = children[parentId].orEmpty().filter { !it.isComplete }.sortedWith(TaskOrder)
+}
+
+fun HTML.page(title: String, content: BODY.() -> Unit) {
+    head {
+        meta(charset = "utf-8")
+        meta(name = "viewport", content = "width=device-width, initial-scale=1")
+        title(title)
+        link(rel = "stylesheet", href = "/static/app.css")
+        script(src = "/static/htmx/htmx.min.js") {}
+        script(src = "/static/app.js") { defer = true }
+    }
+    body { content() }
+}
+
+fun HTML.loginPage(error: String?) = page("Raspberry · log in") {
+    main(classes = "login") {
+        h1 { +"Raspberry" }
+        form(action = "/login", method = kotlinx.html.FormMethod.post) {
+            passwordInput(name = "password") { placeholder = "Password"; autoFocus = true; attributes["autocomplete"] = "current-password" }
+            button { +"Log in" }
+        }
+        error?.let { p(classes = "error") { +it } }
+    }
+}
+
+fun HTML.listPage(data: ListData) = page("Raspberry · ${data.mode.label}") {
+    div(classes = "shell") {
+        aside(classes = "sidebar") {
+            h1 { +"Raspberry" }
+            nav {
+                ListMode.entries.forEach { m ->
+                    a(href = "/${m.name.lowercase()}", classes = if (m == data.mode) "current" else null) { +m.label }
+                }
+            }
+            // Same parser as the app's quick add; new tasks default to the Personal folder.
+            form(classes = "quickadd") {
+                attributes["hx-post"] = "/quickadd"
+                attributes["hx-target"] = "#list"
+                attributes["hx-swap"] = "outerHTML"
+                attributes["hx-on::after-request"] = "this.reset()"
+                hiddenInput(name = "mode") { value = data.mode.name }
+                textInput(name = "text") { id = "quickadd"; placeholder = "Add a task… (n)"; attributes["autocomplete"] = "off" }
+            }
+            syntaxKey()
+            form(action = "/logout", method = kotlinx.html.FormMethod.post, classes = "logout") { button { +"Log out" } }
+        }
+        main { div { listContents(data) } }
+    }
+    div { id = "toast" }
+}
+
+private fun FlowContent.syntaxKey() = div(classes = "key") {
+    listOf(
+        "-d fri · due 3pm" to "due (and time)",
+        "-s tomorrow · start mon 9am" to "start",
+        "ends with ?" to "maybe",
+        "n · g d / g a / g t · ?" to "keys"
+    ).forEach { (syntax, meaning) -> div { span(classes = "mono") { +syntax }; +" $meaning" } }
+}
+
+// Filled into a div by the caller, so a fragment response can have this div as its root (htmx
+// swaps #list for the returned #list). It re-renders itself every minute while the tab is visible
+// and when the tab regains focus, so changes from the phone or Discord show up without reloading.
+fun DIV.listContents(data: ListData) {
+    classes = setOf("list")
+    id = "list"
+    attributes["hx-get"] = "/list/${data.mode.name.lowercase()}"
+    attributes["hx-trigger"] = "every 60s[document.visibilityState==='visible'], visibilitychange[document.visibilityState==='visible'] from:document"
+    attributes["hx-swap"] = "outerHTML"
+    if (data.mode == ListMode.ALL) {
+        tree(data, parentId = null, depth = 0)
+    } else if (data.tasks.isEmpty()) {
+        p(classes = "empty") { +"Nothing here" }
+    } else {
+        data.tasks.forEach { taskRow(data, it, depth = 0) }
+    }
+}
+
+private fun FlowContent.tree(data: ListData, parentId: Long?, depth: Int) {
+    data.openChildren(parentId).forEach { item ->
+        if (item.type == TaskType.FOLDER) {
+            div(classes = "folder") {
+                style = "padding-left: ${depth * 18 + 10}px; border-left-color: ${data.ownColor(item) ?: "transparent"}"
+                +item.title
+            }
+        } else {
+            taskRow(data, item, depth)
+        }
+        tree(data, item.id, depth + 1)
+    }
+}
+
+private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int) {
+    val mode = data.mode.name
+    div(classes = "row") {
+        if (task.isBackburner(data.now)) classes = classes + "dim"
+        style = "padding-left: ${depth * 18}px; border-left-color: ${data.folderColor(task) ?: "var(--border)"}"
+        if (task.type == TaskType.PROJECT) {
+            span(classes = "project") { attributes["title"] = "Project: completes when its steps are done"; +"▣" }
+        } else {
+            val due = data.effectiveDue(task)
+            button(classes = "check") {
+                if (due != null && !task.isComplete && deadline(due) <= data.now) classes = classes + "overdue"
+                attributes["hx-post"] = "/tasks/${task.id}/complete?mode=$mode"
+                attributes["hx-target"] = "#list"
+                attributes["hx-swap"] = "outerHTML"
+                attributes["aria-label"] = "Complete"
+            }
+        }
+        div(classes = "main") {
+            div(classes = "title") {
+                // In the All tree indentation already shows nesting; flat lists need the marker.
+                if (data.mode != ListMode.ALL && data.isSubtask(task)) span(classes = "sub") { +"↳ " }
+                +task.title
+            }
+            val due = data.effectiveDue(task)
+            val counts = data.subtaskCounts(task)
+            val context = data.contextName(task)
+            if (due != null || counts != null || context != null) {
+                div(classes = "meta") {
+                    due?.let { dueChip(it, data.now, overdue = deadline(it) <= data.now) }
+                    counts?.let { (done, total) -> span { +"$done/$total" } }
+                    context?.let { span { +"@$it" } }
+                }
+            }
+        }
+        details(classes = "more") {
+            summary { attributes["aria-label"] = "Snooze"; +"⋯" }
+            div(classes = "menu") {
+                listOf("1 hour" to 60, "Tomorrow" to 24 * 60, "1 week" to 7 * 24 * 60).forEach { (label, minutes) ->
+                    button {
+                        attributes["hx-post"] = "/tasks/${task.id}/snooze?minutes=$minutes&mode=$mode"
+                        attributes["hx-target"] = "#list"
+                        attributes["hx-swap"] = "outerHTML"
+                        +"Snooze $label"
+                    }
+                }
+            }
+        }
+        if (task.isMaybe) {
+            span(classes = "maybe") { attributes["title"] = "Maybe"; +"?" }
+        } else {
+            button(classes = if (task.isStarred) "star on" else "star") {
+                attributes["hx-post"] = "/tasks/${task.id}/star?mode=$mode"
+                attributes["hx-target"] = "#list"
+                attributes["hx-swap"] = "outerHTML"
+                attributes["aria-label"] = "Star"
+                +(if (task.isStarred) "★" else "☆")
+            }
+        }
+    }
+}
+
+private fun FlowContent.dueChip(due: Long, now: Long, overdue: Boolean) {
+    val today = Calendar.getInstance().apply { timeInMillis = now }
+    val day = Calendar.getInstance().apply { timeInMillis = due }
+    val isToday = today.get(Calendar.YEAR) == day.get(Calendar.YEAR) && today.get(Calendar.DAY_OF_YEAR) == day.get(Calendar.DAY_OF_YEAR)
+    val time = if (hasTime(due)) " " + SimpleDateFormat("h:mm a", Locale.US).format(Date(due)) else ""
+    span(classes = "due" + when { overdue -> " overdue"; isToday -> " today"; else -> "" }) {
+        +((if (isToday) "Today" else SimpleDateFormat("MMM d", Locale.US).format(Date(due))) + time)
+    }
+}
+
+// Shown out-of-band after completing, with a one-click undo.
+fun DIV.undoToastContents(task: Task, mode: ListMode) {
+    id = "toast"
+    attributes["hx-swap-oob"] = "true"
+    classes = setOf("show")
+    span { +"Completed “${task.title}”" }
+    button {
+        attributes["hx-post"] = "/tasks/${task.id}/uncomplete?mode=${mode.name}"
+        attributes["hx-target"] = "#list"
+        attributes["hx-swap"] = "outerHTML"
+        +"Undo"
+    }
+}

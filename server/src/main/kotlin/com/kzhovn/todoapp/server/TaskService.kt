@@ -2,6 +2,7 @@ package com.kzhovn.todoapp.server
 
 import com.kzhovn.todoapp.data.DEFAULT_ROLLOVER_HOUR
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.newId
@@ -91,6 +92,15 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     }
 
     fun setStarred(id: Long, starred: Boolean) = update(id) { it.copy(isStarred = starred) }
+
+    fun toggleStar(id: Long) = update(id) { it.copy(isStarred = !it.isStarred) }
+
+    // Hidden from Active until then, like the app's snooze.
+    fun snooze(id: Long, durationMillis: Long) = update(id) { it.copy(startDate = clock() + durationMillis) }
+
+    fun contexts(): List<TaskContext> = store.all(CONTEXTS).filterNot { it.isDeleted }.map { it.toContext() }
+
+    fun contextIdsByTask(): Map<Long, Set<Long>> = liveRows().associate { it.id to it.contextIds() }
 
     // Makes taskId wait for dependsOnId, unless that would create a dependency loop.
     fun addDependency(taskId: Long, dependsOnId: Long) = store.transaction {
