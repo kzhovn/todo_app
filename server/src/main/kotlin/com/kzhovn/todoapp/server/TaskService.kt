@@ -100,7 +100,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun toggleStar(id: Long) = update(id) { it.copy(isStarred = !it.isStarred) }
 
     // Hidden from Active until then, like the app's snooze.
-    fun snooze(id: Long, durationMillis: Long) = update(id) { it.copy(startDate = clock() + durationMillis) }
+    fun snooze(id: Long, until: Long) = update(id) { it.copy(startDate = until) }
 
     fun contexts(): List<TaskContext> = store.all(CONTEXTS).filterNot { it.isDeleted }.map { it.toContext() }
 

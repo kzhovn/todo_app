@@ -429,7 +429,7 @@ class MainActivity : ComponentActivity() {
                             onStar = onStar,
                             onEdit = onEdit,
                             selectedIds = selectedIds,
-                            onSnooze = { id, duration -> viewModel.snooze(id, duration, selectedMode) }
+                            onSnooze = { id, until -> viewModel.snooze(id, until, selectedMode) }
                         )
                     }
                     // A project whose subtasks are all done asks what's next. "Later" only snoozes it for

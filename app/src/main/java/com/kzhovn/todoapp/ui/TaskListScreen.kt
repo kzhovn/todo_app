@@ -6,6 +6,8 @@ import com.kzhovn.todoapp.data.TaskType
 import androidx.compose.material.icons.filled.AccountTree
 import com.kzhovn.todoapp.notifications.PinnedTask
 import androidx.compose.ui.platform.LocalContext
+import com.kzhovn.todoapp.AppSettings
+import com.kzhovn.todoapp.data.nextRollover
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -208,18 +210,22 @@ private fun TaskRow(
             }
         }
         DropdownMenu(expanded = showSnoozeMenu, onDismissRequest = { showSnoozeMenu = false }) {
-            DropdownMenuItem(text = { Text("Snooze 1 hour") }, onClick = { showSnoozeMenu = false; onSnooze(task.id, HOUR_MILLIS) })
-            DropdownMenuItem(text = { Text("Snooze to tomorrow") }, onClick = { showSnoozeMenu = false; onSnooze(task.id, DAY_MILLIS) })
-            DropdownMenuItem(text = { Text("Snooze 1 week") }, onClick = { showSnoozeMenu = false; onSnooze(task.id, WEEK_MILLIS) })
             val context = LocalContext.current
+            fun snooze(until: (now: Long) -> Long) {
+                showSnoozeMenu = false
+                onSnooze(task.id, until(System.currentTimeMillis()))
+            }
+            DropdownMenuItem(text = { Text("Snooze 1 hour") }, onClick = { snooze { it + HOUR_MILLIS } })
+            // "Tomorrow" starts at the day rollover (4am by default), not 24 hours from now.
+            DropdownMenuItem(text = { Text("Snooze to tomorrow") }, onClick = { snooze { nextRollover(it, AppSettings.rolloverHour(context)) } })
+            DropdownMenuItem(text = { Text("Snooze 1 week") }, onClick = { snooze { it + WEEK_MILLIS } })
             DropdownMenuItem(text = { Text("Pin to notification") }, onClick = { showSnoozeMenu = false; PinnedTask.pin(context, task) })
         }
     }
 }
 
 private const val HOUR_MILLIS = 60 * 60 * 1000L
-private const val DAY_MILLIS = 24 * HOUR_MILLIS
-private const val WEEK_MILLIS = 7 * DAY_MILLIS
+private const val WEEK_MILLIS = 7 * 24 * HOUR_MILLIS
 
 const val BACKBURNER_ALPHA = 0.45f
 

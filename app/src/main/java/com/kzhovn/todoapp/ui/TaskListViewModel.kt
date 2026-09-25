@@ -105,9 +105,9 @@ class TaskListViewModel(
         }
     }
 
-    fun snooze(taskId: Long, durationMillis: Long, mode: TaskListMode) {
+    fun snooze(taskId: Long, until: Long, mode: TaskListMode) {
         viewModelScope.launch {
-            repository.snooze(taskId, durationMillis, clock())
+            repository.snooze(taskId, until, clock())
             load(mode)
         }
     }

@@ -132,4 +132,12 @@ class WebTest {
         client.post("/tasks/${task.id}/star") { header(HttpHeaders.Origin, "http://localhost"); header(HttpHeaders.Host, "localhost") }
         assertTrue(service.get(task.id)!!.isStarred)
     }
+
+    @Test
+    fun `snoozing to tomorrow lasts until the day rollover`() = web {
+        val task = service.create(Task(title = "Later"))
+        client.post("/tasks/${task.id}/snooze?until=tomorrow&mode=ACTIVE")
+        val start = service.get(task.id)!!.startDate!!
+        assertEquals(com.kzhovn.todoapp.data.nextRollover(service.now(), service.rolloverHour()), start)
+    }
 }

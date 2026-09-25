@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.quickadd.QuickAddParser
 import com.kzhovn.todoapp.server.TaskService
 import io.ktor.http.ContentType
@@ -16,6 +17,7 @@ import io.ktor.server.routing.post
 import kotlinx.html.div
 import kotlinx.html.stream.createHTML
 
+private const val HOUR_MS = 60 * 60 * 1000L
 private const val DEFAULT_FOLDER = "Personal" // matches the app's quick add
 
 // No login here: Caddy's basic_auth guards every web page, and Main only mounts these routes when the
@@ -47,8 +49,14 @@ fun Route.webRoutes(service: TaskService) {
     post("/tasks/{id}/uncomplete") { call.taskId()?.let(service::uncomplete); call.respondList(service, call.mode()) }
     post("/tasks/{id}/star") { call.taskId()?.let(service::toggleStar); call.respondList(service, call.mode()) }
     post("/tasks/{id}/snooze") {
-        val minutes = call.request.queryParameters["minutes"]?.toLongOrNull() ?: 60
-        call.taskId()?.let { service.snooze(it, minutes * 60_000) }
+        val now = service.now()
+        // "Tomorrow" starts at the day rollover (4am by default), not 24 hours from now.
+        val until = when (call.request.queryParameters["until"]) {
+            "tomorrow" -> nextRollover(now, service.rolloverHour())
+            "week" -> now + 7 * 24 * HOUR_MS
+            else -> now + HOUR_MS
+        }
+        call.taskId()?.let { service.snooze(it, until) }
         call.respondList(service, call.mode())
     }
     post("/quickadd") {

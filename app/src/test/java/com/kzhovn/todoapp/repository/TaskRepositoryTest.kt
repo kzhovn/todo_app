@@ -65,7 +65,7 @@ class TaskRepositoryTest {
         val taskId = repository.createTask(Task(title = "Later"))
         assertEquals(1, repository.getActiveTasks(now, 600, ContextTimeWindow.ALL_DAYS).size)
 
-        repository.snooze(taskId, durationMillis = 60_000, now = now)
+        repository.snooze(taskId, until = now + 60_000, now = now)
 
         assertTrue(repository.getActiveTasks(now, 600, ContextTimeWindow.ALL_DAYS).isEmpty())
     }

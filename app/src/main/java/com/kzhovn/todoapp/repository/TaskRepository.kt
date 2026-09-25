@@ -123,9 +123,9 @@ class TaskRepository(
         taskDao.update(task.copy(isStarred = !task.isStarred))
     }
 
-    suspend fun snooze(taskId: Long, durationMillis: Long, now: Long) {
+    suspend fun snooze(taskId: Long, until: Long, now: Long) {
         val task = taskDao.getById(taskId) ?: return
-        val updated = task.copy(startDate = now + durationMillis)
+        val updated = task.copy(startDate = until)
         taskDao.update(updated)
         reminderScheduler.schedule(updated, now)
     }

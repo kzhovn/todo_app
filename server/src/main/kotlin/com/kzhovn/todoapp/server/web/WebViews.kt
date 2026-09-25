@@ -209,9 +209,9 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int) {
         details(classes = "more") {
             summary { attributes["aria-label"] = "Snooze"; +"⋯" }
             div(classes = "menu") {
-                listOf("1 hour" to 60, "Tomorrow" to 24 * 60, "1 week" to 7 * 24 * 60).forEach { (label, minutes) ->
+                listOf("1 hour" to "hour", "Tomorrow" to "tomorrow", "1 week" to "week").forEach { (label, until) ->
                     button {
-                        attributes["hx-post"] = "/tasks/${task.id}/snooze?minutes=$minutes&mode=$mode"
+                        attributes["hx-post"] = "/tasks/${task.id}/snooze?until=$until&mode=$mode"
                         attributes["hx-target"] = "#list"
                         attributes["hx-swap"] = "outerHTML"
                         +"Snooze $label"
