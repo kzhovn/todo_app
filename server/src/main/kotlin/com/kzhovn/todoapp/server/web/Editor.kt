@@ -233,6 +233,7 @@ private fun parseForm(p: Parameters, base: EditState, recurrence: RecurrenceSele
         recurrenceType = recurrenceType,
         recurrenceRule = recurrenceRule,
         isMaybe = p["maybe"] != null,
+        durationMinutes = p["duration"]?.toIntOrNull()?.takeIf { it > 0 },
         expiresAt = if (p["today"] != null) base.task.expiresAt ?: nextRollover(service.now(), service.rolloverHour()) else null,
         sequential = p["sequential"] != null
     )
@@ -268,7 +269,8 @@ private fun merge(base: EditState, form: EditState, current: EditState): EditSta
         title = pick { it.title }, type = pick { it.type }, isStarred = pick { it.isStarred },
         startDate = pick { it.startDate }, dueDate = pick { it.dueDate }, reminderOffsetMinutes = pick { it.reminderOffsetMinutes },
         parentId = pick { it.parentId }, recurrenceType = recurrenceType, recurrenceRule = recurrenceRule,
-        isMaybe = pick { it.isMaybe }, expiresAt = pick { it.expiresAt }, sequential = pick { it.sequential }
+        isMaybe = pick { it.isMaybe }, expiresAt = pick { it.expiresAt }, sequential = pick { it.sequential },
+        durationMinutes = pick { it.durationMinutes }
     )
     return EditState(
         task,
@@ -324,6 +326,14 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
                     .forEach { (m, label) -> option { value = m?.toString().orEmpty(); selected = t.reminderOffsetMinutes == m; +label } }
             }
             span(classes = "hint") { +"Rings on your phone, counted back from the due date (from midnight if it has no time)." }
+        }
+
+        // A timed task: its play button counts this down (app.js on the web, TaskTimer on the phone).
+        field("Timer", "task-only reminder") {
+            numberInput(name = "duration", classes = "duration-input") {
+                value = t.durationMinutes?.toString().orEmpty(); min = "1"; placeholder = "—"
+            }
+            span(classes = "hint inline-hint") { +"minutes" }
         }
 
         field("Folder", "") {

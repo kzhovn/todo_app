@@ -8,7 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [Task::class, TaskDependency::class, TaskContext::class, TaskContextCrossRef::class, ContextTimeWindow::class],
-    version = 8
+    version = 9
 )
 @TypeConverters(Converters::class)
 abstract class TodoDatabase : RoomDatabase() {
@@ -42,4 +42,8 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
 // Folders get their colour slots on the next list load (TaskRepository.ensureFolderColors).
 val MIGRATION_7_8 = object : Migration(7, 8) {
     override fun migrate(db: SupportSQLiteDatabase) = db.execSQL("ALTER TABLE tasks ADD COLUMN colorIndex INTEGER")
+}
+
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) = db.execSQL("ALTER TABLE tasks ADD COLUMN durationMinutes INTEGER")
 }

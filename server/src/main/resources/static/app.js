@@ -153,6 +153,98 @@
   }, true);
   document.addEventListener("htmx:afterSwap", paintSelection);
 
+  // --- Timed tasks. One countdown at a time per browser, kept in localStorage so it survives reloads
+  // and moving between pages; the phone has its own (TaskTimer). At zero it asks whether the task is
+  // done: Done completes it (subtasks too, like the phone's), Not yet asks how much time to add.
+  const TIMER_KEY = "raspberry-timer";
+  const loadTimer = () => { try { return JSON.parse(localStorage.getItem(TIMER_KEY)); } catch { return null; } };
+  const saveTimer = (t) => {
+    try { if (t) localStorage.setItem(TIMER_KEY, JSON.stringify(t)); else localStorage.removeItem(TIMER_KEY); } catch {}
+    renderTimer();
+  };
+  const leftOf = (t) => (t.endsAt ? t.endsAt - Date.now() : t.remaining);
+  const clock = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const listMode = () => document.querySelector(".list-tools")?.dataset.mode || "DOING";
+  const baseTitle = document.title;
+
+  function renderTimer() {
+    const t = loadTimer(), bar = document.getElementById("timer");
+    document.querySelectorAll(".play").forEach((b) => b.classList.toggle("running", !!t && !t.phase && !!t.endsAt && t.id === b.dataset.taskId));
+    document.title = t?.phase ? `⏰ ${baseTitle}` : baseTitle;
+    if (!bar) return;
+    bar.hidden = !t;
+    if (!t) return;
+    if (t.phase === "ask") {
+      bar.innerHTML = `<span>Time's up: <b>${esc(t.title)}</b>. Is it done?</span><button data-timer="done" class="primary">Done</button><button data-timer="more">Not yet</button>`;
+    } else if (t.phase === "more") {
+      bar.innerHTML = `<span>How much more time?</span>` +
+        [5, 10, 15, 30, 60].map((m) => `<button data-timer="add" data-minutes="${m}">+${m < 60 ? m + "m" : "1h"}</button>`).join("") +
+        `<input type="number" min="1" placeholder="min" class="timer-custom"><button data-timer="add">Start</button>`;
+    } else {
+      bar.innerHTML = `<span class="timer-title">${esc(t.title)}</span><span class="timer-left">${clock(leftOf(t))}</span>` +
+        `<button data-timer="${t.endsAt ? "pause" : "resume"}">${t.endsAt ? "Pause" : "Resume"}</button><button data-timer="stop">Stop</button>`;
+    }
+  }
+
+  // At zero: ask, with a notification (if allowed) and a few beeps, since the tab may be in the background.
+  function timeUp(t) {
+    saveTimer({ ...t, phase: "ask" });
+    try { if (window.Notification?.permission === "granted") new Notification("Time's up", { body: t.title }); } catch {}
+    try {
+      const audio = new AudioContext();
+      [0, 0.4, 0.8].forEach((at) => {
+        const beep = audio.createOscillator();
+        beep.frequency.value = 880;
+        beep.connect(audio.destination);
+        beep.start(audio.currentTime + at);
+        beep.stop(audio.currentTime + at + 0.2);
+      });
+    } catch {}
+  }
+
+  setInterval(() => {
+    const t = loadTimer();
+    if (!t || t.phase || !t.endsAt) return;
+    if (leftOf(t) <= 0) timeUp(t);
+    else document.querySelector("#timer .timer-left")?.replaceChildren(clock(leftOf(t)));
+  }, 1000);
+  window.addEventListener("storage", (e) => { if (e.key === TIMER_KEY) renderTimer(); }); // other tabs
+  document.addEventListener("htmx:afterSwap", renderTimer); // re-marks the running row's button
+  document.addEventListener("DOMContentLoaded", renderTimer);
+
+  document.addEventListener("click", (e) => {
+    const play = e.target.closest(".play");
+    if (play && !selecting()) {
+      const t = loadTimer();
+      if (t && t.id === play.dataset.taskId && !t.phase) {
+        saveTimer(t.endsAt ? { ...t, endsAt: null, remaining: leftOf(t) } : { ...t, endsAt: Date.now() + t.remaining });
+      } else {
+        saveTimer({ id: play.dataset.taskId, title: play.dataset.title, endsAt: Date.now() + play.dataset.minutes * 60000 });
+        try { if (window.Notification?.permission === "default") Notification.requestPermission(); } catch {}
+      }
+      return;
+    }
+    const action = e.target.closest("#timer [data-timer]")?.dataset.timer;
+    if (!action) return;
+    const t = loadTimer();
+    if (!t) return;
+    if (action === "pause") saveTimer({ ...t, endsAt: null, remaining: leftOf(t) });
+    if (action === "resume") saveTimer({ ...t, endsAt: Date.now() + t.remaining });
+    if (action === "stop") saveTimer(null);
+    if (action === "more") saveTimer({ ...t, phase: "more" });
+    if (action === "add") {
+      const minutes = +(e.target.dataset.minutes || document.querySelector("#timer .timer-custom")?.value || 0);
+      if (minutes > 0) saveTimer({ id: t.id, title: t.title, endsAt: Date.now() + minutes * 60000 });
+    }
+    if (action === "done") {
+      saveTimer(null);
+      const url = `/tasks/${t.id}/complete?mode=${listMode()}&subtasks=complete`;
+      if (document.getElementById("list")) htmx.ajax("POST", url, { target: "#list", swap: "outerHTML" });
+      else fetch(url, { method: "POST" });
+    }
+  });
+
   // Clear quick add after a successful add (here rather than in an inline hx-on handler, so the
   // Content-Security-Policy can forbid inline script).
   document.addEventListener("htmx:afterRequest", (e) => {

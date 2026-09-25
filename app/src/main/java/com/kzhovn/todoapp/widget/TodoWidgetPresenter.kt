@@ -12,7 +12,8 @@ data class WidgetTaskRow(
     val isBackburner: Boolean = false,
     val parentTitle: String? = null, // a subtask's parent, shown as "Parent: subtask"
     val parentId: Long? = null,
-    val barColor: Color? = null // the nearest folder's colour, as the app's rows show it
+    val barColor: Color? = null, // the nearest folder's colour, as the app's rows show it
+    val durationMinutes: Int? = null // a timed task: the row gets a play button
 )
 
 object TodoWidgetPresenter {
@@ -28,7 +29,8 @@ object TodoWidgetPresenter {
             WidgetTaskRow(
                 it.id, it.title, it.isComplete, it.isStarred, it.isMaybe, subtaskCounts[it.id]?.takeIf { c -> c.second > 0 },
                 it.isBackburner(now), parentTitle = subtaskParentTitle(it, allById), parentId = it.parentId,
-                barColor = it.parentId?.let { parent -> walkParentChain(parent, allById) { id -> folderColors[id] } }
+                barColor = it.parentId?.let { parent -> walkParentChain(parent, allById) { id -> folderColors[id] } },
+                durationMinutes = it.durationMinutes
             )
         }
 }

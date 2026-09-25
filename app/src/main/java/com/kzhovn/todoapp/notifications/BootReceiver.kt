@@ -24,6 +24,7 @@ class BootReceiver : BroadcastReceiver() {
                     .filter { it.dueDate != null && it.reminderOffsetMinutes != null && !it.isComplete }
                     .forEach { app.repository.updateTask(it) }
                 PinnedTask.refresh(app) // ongoing notifications don't survive a reboot either
+                TaskTimer.restore(app) // nor do the timer's notification and alarm
             } finally {
                 pendingResult.finish()
             }

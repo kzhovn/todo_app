@@ -40,7 +40,9 @@ data class Task(
     val maybeSince: Long? = null,
     // Folders only: the colour slot it took (a base colour at top level, else a variant within its
     // family). Stored so a folder keeps its colour when others come and go. See folderColorsArgb.
-    val colorIndex: Int? = null
+    val colorIndex: Int? = null,
+    // A timed task ("1 hour of ticket work"): how long to spend, which its play button counts down.
+    val durationMinutes: Int? = null
 ) {
     fun isExpired(now: Long): Boolean = expiresAt != null && expiresAt <= now
 

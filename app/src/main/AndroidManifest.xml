@@ -6,6 +6,10 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Exact alarms end a task's timer on time: USE_EXACT_ALARM (timer apps) from Android 13,
+         SCHEDULE_EXACT_ALARM before that. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <application
         android:name=".TodoApp"
         android:allowBackup="false"
@@ -49,6 +53,13 @@
         </activity>
         <receiver android:name=".notifications.ReminderReceiver" android:exported="false" />
         <receiver android:name=".notifications.PinnedTaskReceiver" android:exported="false" />
+        <receiver android:name=".notifications.TaskTimerReceiver" android:exported="false" />
+        <activity
+            android:name=".notifications.TimerDoneActivity"
+            android:exported="false"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.TodoApp.QuickAdd" />
         <receiver android:name=".notifications.BootReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

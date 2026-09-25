@@ -1,5 +1,9 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import com.kzhovn.todoapp.data.formatDuration
+import com.kzhovn.todoapp.notifications.TaskTimer
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -241,7 +245,7 @@ private fun TaskRow(
                         Text("@$contextName", fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.padding(start = 6.dp))
                     }
                 }
-                if (effective.effectiveDueDate != null || (subtasks != null && subtasks.second > 0)) {
+                if (effective.effectiveDueDate != null || (subtasks != null && subtasks.second > 0) || task.durationMinutes != null) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
                         effective.effectiveDueDate?.let { due -> DueChip(due, effectiveOverdue) }
                         if (subtasks != null && subtasks.second > 0) {
@@ -252,9 +256,13 @@ private fun TaskRow(
                                 modifier = Modifier.padding(horizontal = 4.dp)
                             )
                         }
+                        task.durationMinutes?.let {
+                            Text(formatDuration(it), fontSize = 10.sp, color = LedgerMuted, modifier = Modifier.padding(horizontal = 4.dp))
+                        }
                     }
                 }
             }
+            task.durationMinutes?.let { TimerButton(task, it) }
             if (task.isMaybe) {
                 MaybeMark()
             } else {
@@ -292,6 +300,32 @@ const val BACKBURNER_ALPHA = 0.45f
 fun ProjectMark(size: Dp = 40.dp) {
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         Icon(Icons.Filled.AccountTree, contentDescription = "Project", tint = LedgerAccent, modifier = Modifier.size(size * 0.5f))
+    }
+}
+
+// A timed task's play button: starts its countdown, or pauses/resumes it if it's the running one.
+// Starting another task's timer replaces the running one (one timer at a time).
+@Composable
+fun TimerButton(task: Task, minutes: Int, size: Dp = 40.dp) {
+    val context = LocalContext.current
+    val timer by TaskTimer.state.collectAsState()
+    val mine = timer?.takeIf { it.taskId == task.id }
+    val running = mine != null && !mine.isPaused
+    IconButton(
+        onClick = {
+            when {
+                mine == null -> TaskTimer.start(context, task, minutes)
+                mine.isPaused -> TaskTimer.resume(context)
+                else -> TaskTimer.pause(context)
+            }
+        },
+        modifier = Modifier.size(size)
+    ) {
+        Icon(
+            if (running) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+            contentDescription = if (running) "Pause timer" else "Start timer",
+            tint = LedgerAccent
+        )
     }
 }
 

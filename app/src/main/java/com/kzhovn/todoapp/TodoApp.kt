@@ -9,6 +9,8 @@ import com.kzhovn.todoapp.data.MIGRATION_4_5
 import com.kzhovn.todoapp.data.MIGRATION_5_6
 import com.kzhovn.todoapp.data.MIGRATION_6_7
 import com.kzhovn.todoapp.data.MIGRATION_7_8
+import com.kzhovn.todoapp.data.MIGRATION_8_9
+import com.kzhovn.todoapp.notifications.TaskTimer
 import com.kzhovn.todoapp.data.TodoDatabase
 import com.kzhovn.todoapp.notifications.PinnedTask
 import kotlinx.coroutines.CoroutineScope
@@ -26,7 +28,7 @@ import com.kzhovn.todoapp.sync.TRACKED_TABLES
 class TodoApp : Application() {
     val database: TodoDatabase by lazy {
         Room.databaseBuilder(this, TodoDatabase::class.java, "todo.db")
-            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
             .addCallback(SyncTracking)
             .build()
     }
@@ -42,6 +44,7 @@ class TodoApp : Application() {
     override fun onCreate() {
         super.onCreate()
         if (SyncSettings.config(this) != null) SyncWorker.ensurePeriodic(this)
+        TaskTimer.restore(this)
         // Push shortly after any local edit, from any screen or the widget. Pull-applies clear
         // their own dirty marks, so they don't re-trigger this.
         database.invalidationTracker.addObserver(object : InvalidationTracker.Observer(TRACKED_TABLES) {

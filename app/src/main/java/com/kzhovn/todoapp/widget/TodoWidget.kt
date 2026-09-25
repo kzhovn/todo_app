@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.widget
 
+import com.kzhovn.todoapp.notifications.TaskTimer
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
@@ -229,6 +230,15 @@ private fun WidgetRow(row: WidgetTaskRow) {
                     )
                 )
         )
+        row.durationMinutes?.let {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = GlanceModifier.size(width = 30.dp, height = 30.dp)
+                    .clickable(actionRunCallback<StartTimerAction>(actionParametersOf(taskIdKey to row.id)))
+            ) {
+                Text("▶", style = TextStyle(color = fixed(LedgerAccent), fontSize = 16.sp))
+            }
+        }
         row.subtasks?.let { (done, total) ->
             Text("$done/$total", style = TextStyle(color = fixed(LedgerMuted), fontSize = 11.sp), maxLines = 1)
         }
@@ -248,6 +258,13 @@ private fun WidgetRow(row: WidgetTaskRow) {
                 )
             }
         }
+    }
+}
+
+class StartTimerAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val task = (context.applicationContext as TodoApp).repository.getTask(parameters[taskIdKey] ?: return) ?: return
+        task.durationMinutes?.let { TaskTimer.start(context, task, it) }
     }
 }
 

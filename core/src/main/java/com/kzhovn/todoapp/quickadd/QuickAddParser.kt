@@ -21,6 +21,16 @@ object QuickAddParser {
         RegexOption.IGNORE_CASE
     )
 
+    // A timed task leads with its duration and "of": "1 hour of ticket work", "30 minutes of research",
+    // "an hour of", "1.5 hours of", "1h 30m of". "of" is required, so a title that merely starts with a
+    // duration ("2 hours drive to Bath") isn't read as a timer.
+    private const val HOURS = "hours?|hrs?|h"
+    private const val MINUTES = "minutes?|mins?|m"
+    private val durationRegex = Regex(
+        "^(?:(\\d+(?:\\.\\d+)?|an?|half an?)\\s*(?:$HOURS)(?:\\s*(?:and\\s+)?(\\d+)\\s*(?:$MINUTES))?|(\\d+)\\s*(?:$MINUTES))\\s+of\\s+(.+)$",
+        RegexOption.IGNORE_CASE
+    )
+
     fun parse(input: String): Task {
         var startDate: Long? = null
         var dueDate: Long? = null
@@ -32,11 +42,23 @@ object QuickAddParser {
             val date = resolve(dateText, timeText)
             if (isStart) startDate = startDate ?: date else dueDate = dueDate ?: date
         }
-        val text = input.replace(flagRegex, "").replace(wordRegex, "").replace(Regex("\\s+"), " ").trim()
+        val stripped = input.replace(flagRegex, "").replace(wordRegex, "").replace(Regex("\\s+"), " ").trim()
+        val timed = durationRegex.matchEntire(stripped)
+        val durationMinutes = timed?.let { m ->
+            val hours = when (val h = m.groupValues[1].lowercase()) {
+                "" -> 0.0
+                "a", "an" -> 1.0
+                "half a", "half an" -> 0.5
+                else -> h.toDouble()
+            }
+            val minutes = (m.groupValues[2].ifEmpty { m.groupValues[3] }.ifEmpty { "0" }).toInt()
+            (hours * 60 + minutes).toInt().takeIf { it > 0 }
+        }
+        val text = if (durationMinutes != null) timed.groupValues[4].trim() else stripped
         // A "?" ending the title itself (after flags and date phrases are stripped) marks a maybe;
         // one elsewhere, like "update(?) bug", is just part of the title.
         val isMaybe = text.endsWith("?")
-        return Task(title = text.removeSuffix("?").trim(), startDate = startDate, dueDate = dueDate, isMaybe = isMaybe)
+        return Task(title = text.removeSuffix("?").trim(), startDate = startDate, dueDate = dueDate, isMaybe = isMaybe, durationMinutes = durationMinutes)
     }
 
     // A time alone ("due 5pm", "-d 17:00") means today at that time.

@@ -118,4 +118,21 @@ class QuickAddParserTest {
         assertEquals("buy 3 apples", apples.title)
         assert(!com.kzhovn.todoapp.data.hasTime(apples.dueDate!!))
     }
+
+    @Test
+    fun `a leading duration with "of" makes a timed task`() {
+        fun parsed(text: String) = QuickAddParser.parse(text).let { it.title to it.durationMinutes }
+        assertEquals("ticket work" to 60, parsed("1 hour of ticket work"))
+        assertEquals("research" to 30, parsed("30 minutes of research"))
+        assertEquals("taxes" to 90, parsed("1.5 hours of taxes"))
+        assertEquals("taxes" to 90, parsed("1h 30m of taxes"))
+        assertEquals("reading" to 60, parsed("an hour of reading"))
+        assertEquals("tidying" to 30, parsed("half an hour of tidying"))
+        assertEquals("practice" to 45, parsed("45 min of practice -d fri"))
+        // "of" is required, and only a leading duration counts.
+        assertEquals("2 hours drive to Bath" to null, parsed("2 hours drive to Bath"))
+        assertEquals("book 1 hour of massage" to null, parsed("book 1 hour of massage"))
+        val maybe = QuickAddParser.parse("20 minutes of stretching?")
+        assertEquals(Triple("stretching", 20, true), Triple(maybe.title, maybe.durationMinutes, maybe.isMaybe))
+    }
 }

@@ -6,6 +6,7 @@ import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.deadline
 import com.kzhovn.todoapp.data.hasTime
 import com.kzhovn.todoapp.data.folderColorsArgb
+import com.kzhovn.todoapp.data.formatDuration
 import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.data.sectionsByTopFolder
 import com.kzhovn.todoapp.data.stalledProjects
@@ -93,6 +94,8 @@ internal enum class Icon(val path: String) {
     STAR_BORDER("M22 9.24l-7.19-.62L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.63-7.03L22 9.24zM12 15.4l-3.76 2.27 1-4.28-3.32-2.88 4.38-.38L12 6.1l1.71 4.04 4.38.38-3.32 2.88 1 4.28L12 15.4z"),
     REPEAT("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"),
     CHECK("M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"),
+    PLAY("M8 5v14l11-7z"),
+    PAUSE("M6 19h4V5H6v14zm8-14v14h4V5h-4z"),
     CHEVRON_RIGHT("M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"),
     EXPAND_MORE("M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z")
 }
@@ -171,6 +174,8 @@ fun HTML.shellPage(title: String, current: String, listMode: ListMode? = null, t
         }
     }
     div { id = "toast"; toast?.invoke(this) }
+    // The running timed task's countdown bar (app.js fills it in).
+    div { id = "timer"; attributes["hidden"] = "" }
 }
 
 private fun FlowContent.syntaxKey() = div(classes = "key") {
@@ -295,12 +300,24 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
             val due = data.effectiveDue(task)
             val counts = data.subtaskCounts(task)
             val context = data.contextName(task)
-            if (due != null || counts != null || context != null) {
+            if (due != null || counts != null || context != null || task.durationMinutes != null) {
                 div(classes = "meta") {
                     due?.let { dueChip(it, data.now, overdue = deadline(it) <= data.now) }
                     counts?.let { (done, total) -> span { +"$done/$total" } }
+                    task.durationMinutes?.let { span { +formatDuration(it) } }
                     context?.let { span { +"@$it" } }
                 }
+            }
+        }
+        // A timed task's play button; app.js runs the countdown (one at a time, per browser).
+        task.durationMinutes?.let { minutes ->
+            button(classes = "play") {
+                attributes["data-task-id"] = task.id.toString()
+                attributes["data-minutes"] = minutes.toString()
+                attributes["data-title"] = task.title
+                attributes["aria-label"] = "Start timer"
+                icon(Icon.PLAY, "play-icon")
+                icon(Icon.PAUSE, "pause-icon")
             }
         }
         details(classes = "more") {

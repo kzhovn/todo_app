@@ -366,4 +366,20 @@ class WebTest {
         assertTrue(folded.contains("Loose end"))
         assertFalse(browser.get("/list/active").bodyAsText().contains("Fix bug")) // remembered
     }
+
+    @Test
+    fun `timed tasks come from quick add or the editor and get a play button`() = web {
+        client.submitForm("/quickadd", parameters { append("text", "1 hour of ticket work"); append("mode", "DOING") })
+        val ticket = service.tasks().single { it.title == "ticket work" }
+        assertEquals(60, ticket.durationMinutes)
+        val doing = client.get("/list/doing").bodyAsText()
+        assertTrue(doing.contains("data-minutes=\"60\""))
+        assertTrue(doing.contains(">1h<"))
+
+        createClient { followRedirects = false }.submitForm("/tasks/${ticket.id}", parameters {
+            append("base", taskFields(ticket, emptySet(), emptySet()).toString())
+            append("title", "ticket work"); append("type", "TASK"); append("duration", "25")
+        })
+        assertEquals(25, service.get(ticket.id)!!.durationMinutes)
+    }
 }

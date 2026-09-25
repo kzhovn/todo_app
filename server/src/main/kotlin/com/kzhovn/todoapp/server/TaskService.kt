@@ -176,7 +176,8 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
             dueDate = task.dueDate.takeUnless { folder },
             recurrenceType = task.recurrenceType.takeUnless { folder },
             recurrenceRule = task.recurrenceRule.takeUnless { folder },
-            reminderOffsetMinutes = task.reminderOffsetMinutes.takeUnless { folder }
+            reminderOffsetMinutes = task.reminderOffsetMinutes.takeUnless { folder },
+            durationMinutes = task.durationMinutes.takeUnless { folder }
         ).withRules(clock())
         // A folder can't be completed, so it can't wait on anything.
         val edges = dependencyEdges().filter { it.taskId != task.id }

@@ -305,6 +305,7 @@ private fun OutlinerRow(
                         color = if (task.isComplete) LedgerMuted else LedgerInk,
                         modifier = Modifier.weight(1f).clickable { onEdit(task.id) }
                     )
+                    task.durationMinutes?.let { TimerButton(task, it, 36.dp) }
                     if (task.isMaybe) {
                         MaybeMark(36.dp)
                     } else {

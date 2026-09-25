@@ -166,7 +166,7 @@ class TaskEditActivity : ComponentActivity() {
                 val toSave: Task
                 val dependenciesToSave: Set<Long>
                 if (task.type == TaskType.FOLDER) {
-                    toSave = task.copy(dueDate = null, recurrenceType = null, recurrenceRule = null, reminderOffsetMinutes = null)
+                    toSave = task.copy(dueDate = null, recurrenceType = null, recurrenceRule = null, reminderOffsetMinutes = null, durationMinutes = null)
                     dependenciesToSave = emptySet()
                 } else {
                     val (recurrenceType, recurrenceRule) =
@@ -299,6 +299,18 @@ class TaskEditActivity : ComponentActivity() {
                             selected = task.reminderOffsetMinutes,
                             onSelect = { offset -> task = task.copy(reminderOffsetMinutes = offset) }
                         )
+                    }
+                }
+
+                // A timed task: its play button counts this down (TaskTimer).
+                if (task.type == TaskType.TASK) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Timer", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
+                        Spacer(Modifier.width(10.dp))
+                        DurationField(task.durationMinutes) { task = task.copy(durationMinutes = it) }
+                        Spacer(Modifier.width(6.dp))
+                        Text("minutes", fontSize = 12.sp, color = LedgerMuted)
                     }
                 }
 
@@ -764,6 +776,26 @@ private fun CompactNumberField(value: Int, onValueChange: (Int) -> Unit) {
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = Modifier
             .width(44.dp)
+            .border(1.dp, LedgerBorder, RoundedCornerShape(4.dp))
+            .padding(horizontal = 8.dp, vertical = 8.dp)
+    )
+}
+
+// Like CompactNumberField, but empty means "not timed".
+@Composable
+private fun DurationField(value: Int?, onValueChange: (Int?) -> Unit) {
+    var text by remember(value) { mutableStateOf(value?.toString().orEmpty()) }
+    BasicTextField(
+        value = text,
+        onValueChange = { new ->
+            text = new.filter(Char::isDigit).take(4)
+            onValueChange(text.toIntOrNull()?.takeIf { it > 0 })
+        },
+        singleLine = true,
+        textStyle = TextStyle(fontSize = 14.sp, color = LedgerInk),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier
+            .width(56.dp)
             .border(1.dp, LedgerBorder, RoundedCornerShape(4.dp))
             .padding(horizontal = 8.dp, vertical = 8.dp)
     )
