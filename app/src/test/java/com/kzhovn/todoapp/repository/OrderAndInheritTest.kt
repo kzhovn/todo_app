@@ -43,9 +43,10 @@ class OrderAndInheritTest {
     @Test
     fun `moving before, after, and into another list renumbers the right siblings`() = runBlocking {
         val folder = repository.createTask(Task(type = TaskType.FOLDER, title = "F"))
-        val a = repository.createTask(Task(title = "a", parentId = folder))
-        val b = repository.createTask(Task(title = "b", parentId = folder))
+        // New tasks go on top, so this makes a, b, c.
         val c = repository.createTask(Task(title = "c", parentId = folder))
+        val b = repository.createTask(Task(title = "b", parentId = folder))
+        val a = repository.createTask(Task(title = "a", parentId = folder))
 
         repository.moveNextTo(c, a, after = false)
         assertEquals(listOf("c", "a", "b"), childrenOf(folder))

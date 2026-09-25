@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.repository
 
+import com.kzhovn.todoapp.data.newTaskPositions
 import com.kzhovn.todoapp.data.folderColorAssignments
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
@@ -27,8 +28,12 @@ class TaskRepository(
     val lastDeleted: StateFlow<List<Task>?> = _lastDeleted
 
     suspend fun createTask(task: Task): Long {
-        val toInsert = (if (task.id == 0L) task.copy(id = newId()) else task).withRules(System.currentTimeMillis())
+        val created = (if (task.id == 0L) task.copy(id = newId()) else task).withRules(System.currentTimeMillis())
+        val all = taskDao.getAllOnce()
+        val positions = newTaskPositions(all, created)
+        val toInsert = created.copy(position = positions[created.id] ?: created.position)
         taskDao.insert(toInsert)
+        all.forEach { t -> positions[t.id]?.let { taskDao.update(t.copy(position = it)) } }
         reminderScheduler.schedule(toInsert)
         return toInsert.id
     }

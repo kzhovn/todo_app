@@ -166,8 +166,8 @@ class WebTest {
     @Test
     fun `enter adds a sibling right after the task, and folding is remembered per browser`() = web {
         val folder = service.create(Task(type = TaskType.FOLDER, title = "Work"))
-        val a = service.create(Task(title = "A", parentId = folder.id))
         service.create(Task(title = "B", parentId = folder.id))
+        val a = service.create(Task(title = "A", parentId = folder.id)) // new tasks go on top
         val response = client.submitForm("/outline/${a.id}/sibling", parameters { append("text", "A2") })
         val created = service.tasks().single { it.title == "A2" }
         assertEquals(created.id.toString(), response.headers["X-Focus"])
@@ -348,6 +348,21 @@ class WebTest {
         val paint = service.tasks().single { it.title == "Buy paint" }
         assertEquals(folder.id, paint.parentId)
         assertEquals(setOf(paint.id), service.dependsOn(wall.id))
+    }
+
+    @Test
+    fun `a new task goes first in its folder, below the subfolders, but last under a task`() = web {
+        val personal = service.create(Task(type = TaskType.FOLDER, title = "Personal"))
+        service.create(Task(title = "task 1", parentId = personal.id))
+        service.create(Task(type = TaskType.FOLDER, title = "Folder 1", parentId = personal.id))
+        service.create(Task(type = TaskType.FOLDER, title = "Folder 2", parentId = personal.id))
+        service.create(Task(title = "task 2", parentId = personal.id))
+        val project = service.create(Task(title = "task 3", parentId = personal.id))
+        service.create(Task(title = "step 1", parentId = project.id))
+        service.create(Task(title = "step 2", parentId = project.id))
+        fun titles(parent: Long) = service.tasks().filter { it.parentId == parent }.sortedWith(com.kzhovn.todoapp.data.TaskOrder).map { it.title }
+        assertEquals(listOf("Folder 1", "Folder 2", "task 3", "task 2", "task 1"), titles(personal.id))
+        assertEquals(listOf("step 1", "step 2"), titles(project.id))
     }
 
     @Test

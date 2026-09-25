@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.repository.urgentFirst
 import com.kzhovn.todoapp.data.stalledProjects
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -46,7 +47,11 @@ class TaskListViewModel(
             val all = refreshSubtaskCounts()
             _tasks.value = when (mode) {
                 TaskListMode.ALL -> all
-                TaskListMode.ACTIVE -> repository.getActiveTasksFrom(all, _contextsByTaskId.value, now, minuteOfDay(now), dayOfWeekMask(now))
+                // Overdue and due today first, like Doing (each folder section keeps that order).
+                TaskListMode.ACTIVE -> urgentFirst(
+                    repository.getActiveTasksFrom(all, _contextsByTaskId.value, now, minuteOfDay(now), dayOfWeekMask(now)),
+                    now
+                ) { resolveEffective(it, _allById.value, _contextsByTaskId.value).effectiveDueDate }
                 TaskListMode.DOING -> filterDoing(
                     repository.getActiveTasksFrom(all, _contextsByTaskId.value, now, minuteOfDay(now), dayOfWeekMask(now)),
                     now

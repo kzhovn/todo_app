@@ -107,7 +107,7 @@ class TodoWidget : GlanceAppWidget() {
             }.filter { folderId == null || isUnder(it, folderId, allById) }
             val folderName = folderId?.let { allById[it]?.title }
             val effectiveDue = { t: Task -> resolveEffective(t, allById, contextsByTaskId).effectiveDueDate }
-            return TodoWidgetPresenter.toRows(tasks, subtaskCounts(allTasks), now, allById, folderColors(allTasks), effectiveDue, urgentOnTop = mode == WidgetMode.DOING) to
+            return TodoWidgetPresenter.toRows(tasks, subtaskCounts(allTasks), now, allById, folderColors(allTasks), effectiveDue, urgentOnTop = mode != WidgetMode.ALL) to
                 mode.label.uppercase() + folderName?.let { " · $it" }.orEmpty()
         }
         val initial = load()

@@ -28,7 +28,7 @@ object TodoWidgetPresenter {
         allById: Map<Long, Task> = emptyMap(),
         folderColors: Map<Long, Color> = emptyMap(),
         effectiveDue: (Task) -> Long? = { it.dueDate },
-        // Doing: what's overdue or due today on top (urgentFirst), above the folder grouping.
+        // Doing and Active: what's overdue or due today on top (urgentFirst), above the folder grouping.
         urgentOnTop: Boolean = false
     ): List<WidgetTaskRow> =
         // Grouped by top-level folder in the All tree's order (folderless last), like Active's sections.

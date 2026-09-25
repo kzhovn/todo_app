@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.repository.urgentFirst
+import com.kzhovn.todoapp.data.newTaskPositions
 import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.DEFAULT_ROLLOVER_HOUR
@@ -67,7 +69,11 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
             dependencies = rows.flatMap { row -> row.dependsOn().map { TaskDependency(row.id, it) } },
             now = clock()
         )
-        return if (folderId == null) active else active.filter { it.id in subtreeIds(folderId) }
+        val byId = rows.associate { it.id to it.toTask() }
+        val contexts = contextsByTaskId(rows)
+        return urgentFirst(if (folderId == null) active else active.filter { it.id in subtreeIds(folderId) }, clock()) {
+            resolveEffective(it, byId, contexts).effectiveDueDate
+        }
     }
 
     fun doing(folderId: Long? = null): List<Task> {
@@ -95,10 +101,15 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     fun findFolder(name: String): Task? = folders().firstOrNull { it.title.equals(name.trim(), ignoreCase = true) }
 
-    fun create(task: Task): Task {
-        val created = task.copy(id = newId()).withRules(clock())
+    // Placed like the app's createTask (see newTaskPositions).
+    fun create(task: Task): Task = store.transaction {
+        val all = tasks()
+        val new = task.copy(id = newId()).withRules(clock())
+        val positions = newTaskPositions(all, new)
+        val created = new.copy(position = positions[new.id] ?: new.position)
         store.write(TASKS, created.id, taskFields(created, emptySet(), emptySet()), clock())
-        return created
+        positions.forEach { (id, position) -> if (id != created.id) update(id) { it.copy(position = position) } }
+        created
     }
 
     fun update(id: Long, change: (Task) -> Task) {
