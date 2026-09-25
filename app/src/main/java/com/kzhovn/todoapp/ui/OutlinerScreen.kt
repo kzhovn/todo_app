@@ -70,7 +70,8 @@ fun OutlinerScreen(
     onEdit: (Long) -> Unit,
     onStar: (Long) -> Unit,
     onReparent: (Long, Long) -> Unit,
-    onAddSubtask: (Long) -> Unit
+    onAddSubtask: (Long) -> Unit,
+    selectedIds: Set<Long> = emptySet()
 ) {
     val context = LocalContext.current
     val prefs = remember { OutlinerPreferences(context) }
@@ -91,7 +92,7 @@ fun OutlinerScreen(
     }
 
     LazyColumn {
-        renderNodes(tree, depth = 0, collapsed = collapsed, onToggle = ::toggle, onCheck = onCheck, onEdit = onEdit, onStar = onStar, onReparent = onReparent, onAddSubtask = onAddSubtask, allById = allById)
+        renderNodes(tree, depth = 0, collapsed = collapsed, onToggle = ::toggle, onCheck = onCheck, onEdit = onEdit, onStar = onStar, onReparent = onReparent, onAddSubtask = onAddSubtask, allById = allById, selectedIds = selectedIds)
     }
 }
 
@@ -105,14 +106,15 @@ private fun LazyListScope.renderNodes(
     onStar: (Long) -> Unit,
     onReparent: (Long, Long) -> Unit,
     onAddSubtask: (Long) -> Unit,
-    allById: Map<Long, Task>
+    allById: Map<Long, Task>,
+    selectedIds: Set<Long>
 ) {
     nodes.forEach { node ->
         item(key = node.task.id) {
-            OutlinerRow(node, depth, node.task.id in collapsed, onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, allById)
+            OutlinerRow(node, depth, node.task.id in collapsed, onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, allById, node.task.id in selectedIds)
         }
         if (node.children.isNotEmpty() && node.task.id !in collapsed) {
-            renderNodes(node.children, depth + 1, collapsed, onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, allById)
+            renderNodes(node.children, depth + 1, collapsed, onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, allById, selectedIds)
         }
     }
 }
@@ -129,7 +131,8 @@ private fun OutlinerRow(
     onStar: (Long) -> Unit,
     onReparent: (Long, Long) -> Unit,
     onAddSubtask: (Long) -> Unit,
-    allById: Map<Long, Task>
+    allById: Map<Long, Task>,
+    selected: Boolean
 ) {
     val task = node.task
     val hasChildren = node.children.isNotEmpty()
@@ -181,7 +184,7 @@ private fun OutlinerRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(if (isDropHover) LedgerAccentSoft else LedgerBackground)
+                .background(if (isDropHover || selected) LedgerAccentSoft else LedgerBackground)
                 .padding(start = indent, top = 3.dp, bottom = 3.dp, end = 12.dp)
                 .dragAndDropSource {
                     detectDragGesturesAfterLongPress(

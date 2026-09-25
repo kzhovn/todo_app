@@ -4,9 +4,12 @@ import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskContextDao
 import com.kzhovn.todoapp.data.TaskDao
+import com.kzhovn.todoapp.data.TaskContextCrossRef
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.newId
+import com.kzhovn.todoapp.data.wouldCreateCycle
+import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
 import com.kzhovn.todoapp.notifications.ReminderScheduler
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -178,9 +181,57 @@ class TaskRepository(
         markComplete(taskId, now)
     }
 
+    // Folders are skipped: none of the bulk properties apply to them. A move or dependency that
+    // would create a cycle is skipped for that task rather than failing the whole edit.
+    suspend fun applyBulkEdit(taskIds: Collection<Long>, edit: BulkEdit) {
+        val allById = taskDao.getAllOnce().associateBy { it.id }
+        val edges = taskDao.getAllDependencies()
+        for (id in taskIds) {
+            val task = allById[id]?.takeIf { it.type == TaskType.TASK } ?: continue
+            val target = edit.moveTo?.folderId
+            val parentId = when {
+                edit.moveTo == null -> task.parentId
+                target != null && wouldCreateCycle(target, id, allById) -> task.parentId
+                else -> target
+            }
+            updateTask(
+                task.copy(
+                    isStarred = edit.starred ?: task.isStarred,
+                    isMaybe = edit.maybe ?: task.isMaybe,
+                    startDate = if (edit.startDate != null) edit.startDate.date else task.startDate,
+                    dueDate = if (edit.dueDate != null) edit.dueDate.date else task.dueDate,
+                    parentId = parentId
+                )
+            )
+            if (edit.addContextIds.isNotEmpty() || edit.removeContextIds.isNotEmpty()) {
+                val current = taskContextDao.getContextIdsForTask(id).toSet()
+                (edit.addContextIds - current).forEach { taskContextDao.assignContext(TaskContextCrossRef(id, it)) }
+                (edit.removeContextIds intersect current).forEach { taskContextDao.unassignContext(id, it) }
+            }
+            edit.dependsOnId?.takeIf { it != id && !wouldCreateDependencyCycle(it, id, edges) }
+                ?.let { taskDao.insertDependency(TaskDependency(id, it)) }
+        }
+    }
+
     // Detaches this task's direct children (only direct — any grandchildren stay nested under
     // their own now-top-level parent) so they survive as independent tasks.
     suspend fun promoteChildrenToTopLevel(taskId: Long) {
         taskDao.getChildren(taskId).forEach { child -> taskDao.update(child.copy(parentId = null)) }
     }
 }
+
+// One multi-edit applied to many tasks. Null means "leave as is"; the editable set is limited to
+// what makes sense in bulk (no title, recurrence, or folder-ness).
+data class BulkEdit(
+    val starred: Boolean? = null,
+    val maybe: Boolean? = null,
+    val startDate: DateChange? = null,
+    val dueDate: DateChange? = null,
+    val moveTo: FolderChange? = null,
+    val addContextIds: Set<Long> = emptySet(),
+    val removeContextIds: Set<Long> = emptySet(),
+    val dependsOnId: Long? = null
+)
+
+data class DateChange(val date: Long?)      // null date = clear it
+data class FolderChange(val folderId: Long?) // null folder = move to top level

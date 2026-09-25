@@ -71,7 +71,8 @@ fun TaskListScreen(
     onCheck: (Long) -> Unit,
     onStar: (Long) -> Unit,
     onEdit: (Long) -> Unit,
-    onSnooze: (Long, Long) -> Unit
+    onSnooze: (Long, Long) -> Unit,
+    selectedIds: Set<Long> = emptySet()
 ) {
     val tasks by viewModel.tasks.collectAsState()
     val subtaskCounts by viewModel.subtaskCounts.collectAsState()
@@ -84,7 +85,7 @@ fun TaskListScreen(
             val effective = remember(task, allById, contextsByTaskId) { resolveEffective(task, allById, contextsByTaskId) }
             // The bar shows the nearest folder ancestor's color, even for a subtask of a task.
             val barColor = task.parentId?.let { walkParentChain(it, allById) { id -> colors[id] } } ?: LedgerBorder
-            TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, onCheck, onStar, onEdit, onSnooze)
+            TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, task.id in selectedIds, onCheck, onStar, onEdit, onSnooze)
             if (index < tasks.lastIndex) {
                 HorizontalDivider(color = LedgerBorder)
             }
@@ -113,6 +114,7 @@ private fun TaskRow(
     allContexts: Map<Long, TaskContext>,
     subtasks: Pair<Int, Int>?,
     barColor: Color,
+    selected: Boolean,
     onCheck: (Long) -> Unit,
     onStar: (Long) -> Unit,
     onEdit: (Long) -> Unit,
@@ -126,7 +128,7 @@ private fun TaskRow(
     // DropdownMenu is Popup-based (SubcomposeLayout internally) and can't answer the intrinsic
     // width queries an IntrinsicSize.Min row needs from its children, so it must live outside
     // the Row below as a plain sibling rather than nested inside one of the Row's children.
-    Box {
+    Box(Modifier.background(if (selected) LedgerAccentSoft else Color.Transparent)) {
         Row(
             // LazyColumn measures items with unbounded height, so fillMaxHeight() alone is a no-op
             // here; the intrinsic-min pass gives the Row (and the bar Box's fillMaxHeight below) a

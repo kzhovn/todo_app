@@ -21,6 +21,7 @@
         </activity>
         <activity android:name=".ui.TaskEditActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".sync.SyncSettingsActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name=".ui.BulkEditActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".contexts.ContextsActivity" android:exported="false" android:screenOrientation="portrait" />
         <!-- Empty taskAffinity: launched from the widget, these run in their own task, so closing
              them returns to the home screen instead of revealing the app. -->

@@ -84,13 +84,13 @@ fun TextInputDialog(
     )
 }
 
-// Pick one task from a searchable list, or create a new one instead.
+// Pick one task from a searchable list, or (when onCreateNew is given) create a new one instead.
 @Composable
 fun TaskPickerDialog(
     title: String,
     tasks: List<Task>,
     onPick: (Task) -> Unit,
-    onCreateNew: () -> Unit,
+    onCreateNew: (() -> Unit)?,
     onDismiss: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
@@ -108,7 +108,7 @@ fun TaskPickerDialog(
                 }
             }
         },
-        confirmButton = { Button(onClick = onCreateNew) { Text("New task") } },
+        confirmButton = { onCreateNew?.let { Button(onClick = it) { Text("New task") } } },
         dismissButton = { Button(onClick = onDismiss) { Text("Cancel") } }
     )
 }

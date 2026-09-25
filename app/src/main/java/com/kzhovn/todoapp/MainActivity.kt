@@ -63,11 +63,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.context.WifiContextMonitor
 import com.kzhovn.todoapp.contexts.ContextsActivity
+import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.ui.BulkEditActivity
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.filled.Checklist
 import com.kzhovn.todoapp.sync.SyncSettings
 import com.kzhovn.todoapp.sync.SyncSettingsActivity
 import com.kzhovn.todoapp.sync.SyncWorker
@@ -144,6 +149,9 @@ class MainActivity : ComponentActivity() {
             var filters by remember { mutableStateOf(SearchFilters()) }
             var folders by remember { mutableStateOf<List<Task>>(emptyList()) }
             var contexts by remember { mutableStateOf<List<com.kzhovn.todoapp.data.TaskContext>>(emptyList()) }
+            // Non-null while in multi-select mode: the ids picked for a bulk edit.
+            var selection by remember { mutableStateOf<Set<Long>?>(null) }
+            BackHandler(enabled = selection != null) { selection = null }
             // Reloads on tab change AND on every resume, so returning from QuickAddActivity
             // (FAB) or TaskEditActivity (row tap) picks up whatever was just created or edited.
             LifecycleResumeEffect(selectedMode) {
@@ -264,7 +272,22 @@ class MainActivity : ComponentActivity() {
                 }
             ) {
                 Column(modifier = Modifier.background(LedgerBackground)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    selection?.let { selected ->
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 12.dp)) {
+                            IconButton(onClick = { selection = null }) {
+                                Icon(Icons.Filled.Close, contentDescription = "Cancel selection")
+                            }
+                            Text("${selected.size} selected", fontSize = 16.sp, modifier = Modifier.weight(1f))
+                            Button(enabled = selected.isNotEmpty(), onClick = {
+                                startActivity(
+                                    Intent(this@MainActivity, BulkEditActivity::class.java)
+                                        .putExtra(BulkEditActivity.EXTRA_TASK_IDS, selected.toLongArray())
+                                )
+                                selection = null
+                            }) { Text("Edit") }
+                        }
+                    }
+                    if (selection == null) Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(Icons.Filled.Menu, contentDescription = "Menu")
                         }
@@ -291,6 +314,9 @@ class MainActivity : ComponentActivity() {
                             }
                         } else {
                             Spacer(Modifier.weight(1f))
+                            IconButton(onClick = { selection = emptySet() }) {
+                                Icon(Icons.Filled.Checklist, contentDescription = "Select tasks")
+                            }
                         }
                     }
                     if (showFilters) {
@@ -305,22 +331,36 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
+                    // In select mode every tap on a row toggles its selection instead. Folders are
+                    // skipped: none of the bulk-editable properties apply to them.
+                    val toggleSelected: (Long) -> Unit = { id ->
+                        if (viewModel.allById.value[id]?.type == TaskType.TASK) {
+                            selection = selection?.let { if (id in it) it - id else it + id }
+                        }
+                    }
                     val onEdit: (Long) -> Unit = { taskId ->
-                        startActivity(Intent(this@MainActivity, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, taskId))
+                        if (selection != null) toggleSelected(taskId)
+                        else startActivity(Intent(this@MainActivity, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, taskId))
                     }
                     var completeDecision by remember { mutableStateOf<Pair<Long, Int>?>(null) }
                     val onCheck: (Long) -> Unit = { id ->
-                        viewModel.requestComplete(id, selectedMode) { taskId, activeCount ->
+                        if (selection != null) toggleSelected(id)
+                        else viewModel.requestComplete(id, selectedMode) { taskId, activeCount ->
                             completeDecision = taskId to activeCount
                         }
                     }
+                    val onStar: (Long) -> Unit = { id ->
+                        if (selection != null) toggleSelected(id) else viewModel.toggleStar(id, selectedMode)
+                    }
+                    val selectedIds = selection.orEmpty()
                     if (selectedMode == TaskListMode.ALL && query.isBlank()) {
                         val tasks by viewModel.tasks.collectAsState()
                         OutlinerScreen(
                             tasks = tasks,
                             onCheck = onCheck,
                             onEdit = onEdit,
-                            onStar = { viewModel.toggleStar(it, selectedMode) },
+                            onStar = onStar,
+                            selectedIds = selectedIds,
                             onReparent = { taskId, newParentId -> viewModel.reparent(taskId, newParentId, selectedMode) },
                             onAddSubtask = { parentId ->
                                 startActivity(
@@ -333,8 +373,9 @@ class MainActivity : ComponentActivity() {
                         TaskListScreen(
                             viewModel = viewModel,
                             onCheck = onCheck,
-                            onStar = { viewModel.toggleStar(it, selectedMode) },
+                            onStar = onStar,
                             onEdit = onEdit,
+                            selectedIds = selectedIds,
                             onSnooze = { id, duration -> viewModel.snooze(id, duration, selectedMode) }
                         )
                     }
