@@ -6,6 +6,7 @@ import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.deadline
 import com.kzhovn.todoapp.data.hasTime
 import com.kzhovn.todoapp.data.resolveEffective
+import com.kzhovn.todoapp.data.sectionsByTopFolder
 import com.kzhovn.todoapp.data.stalledProjects
 import com.kzhovn.todoapp.data.subtaskParentTitle
 import com.kzhovn.todoapp.data.walkParentChain
@@ -51,9 +52,16 @@ private val FOLDER_PALETTE = listOf("#8A4C2E", "#6B8A2E", "#2E8A4D", "#2E6B8A", 
 
 // Everything a list needs, computed once per request from the live task set. `collapsed`: the All
 // tree's folded nodes; `later`: stalled projects put off for now. Both are per browser.
-class ListData(service: TaskService, val mode: ListMode, val collapsed: Set<Long> = emptySet(), later: Set<Long> = emptySet(), val now: Long = service.now()) {
+class ListData(
+    service: TaskService,
+    val mode: ListMode,
+    val collapsed: Set<Long> = emptySet(),
+    later: Set<Long> = emptySet(),
+    val folded: Set<Long> = emptySet(), // Active's folded folder sections; 0 = no folder
+    val now: Long = service.now()
+) {
     val all: List<Task> = service.tasks()
-    private val byId = all.associateBy { it.id }
+    val byId = all.associateBy { it.id }
     private val contextIds = service.contextIdsByTask()
     private val contextNames = service.contexts().associate { it.id to it.name }
     private val folderColors = all.filter { it.type == TaskType.FOLDER }.sortedBy { it.id }
@@ -187,6 +195,25 @@ fun DIV.listContents(data: ListData) {
         tree(data, parentId = null, depth = 0)
     } else if (data.tasks.isEmpty()) {
         p(classes = "empty") { +"Nothing here" }
+    } else if (data.mode == ListMode.ACTIVE) {
+        // Foldable sections by top-level folder, like the phone's Active.
+        sectionsByTopFolder(data.tasks, data.byId).forEach { (folder, tasks) ->
+            val sectionId = folder?.id ?: 0L
+            val folded = sectionId in data.folded
+            div(classes = "section") {
+                button(classes = "section-toggle") {
+                    attributes["hx-get"] = "/list/active?fold=$sectionId"
+                    attributes["hx-target"] = "#list"
+                    attributes["hx-swap"] = "outerHTML"
+                    attributes["aria-expanded"] = (!folded).toString()
+                    icon(if (folded) Icon.CHEVRON_RIGHT else Icon.EXPAND_MORE, "chevron")
+                    if (folder != null) icon(Icon.FOLDER, "folder-icon", data.ownColor(folder))
+                    span(classes = "section-title") { +(folder?.title ?: "No folder") }
+                    span(classes = "section-count") { +tasks.size.toString() }
+                }
+            }
+            if (!folded) tasks.forEach { taskRow(data, it, depth = 0) }
+        }
     } else {
         data.tasks.forEach { taskRow(data, it, depth = 0) }
     }
@@ -257,7 +284,8 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
         div(classes = "main") {
             div(classes = "title") {
                 // In the All tree indentation already shows nesting; flat lists say "Parent: subtask".
-                if (data.mode != ListMode.ALL) data.parentTitle(task)?.let { span(classes = "parent") { +"$it: " } }
+                // The parent part opens the parent's editor, as the title opens the subtask's.
+                if (data.mode != ListMode.ALL) data.parentTitle(task)?.let { a(href = "/tasks/${task.parentId}?mode=$mode", classes = "parent") { +"$it: " } }
                 a(href = "/tasks/${task.id}?mode=$mode", classes = "edit") { +task.title }
                 if (task.recurrenceType != null) span(classes = "badge") { attributes["title"] = "Recurring"; icon(Icon.REPEAT, "") }
             }

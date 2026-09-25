@@ -194,12 +194,17 @@ private fun WidgetRow(row: WidgetTaskRow) {
         }
         // Glance text can't mix colours, so a subtask's dimmer "Parent: " is its own Text, capped so a
         // long parent name can't crowd out the subtask's own title.
+        // Tapping the parent opens the parent, as tapping the title opens the subtask.
         row.parentTitle?.let { parent ->
             Text(
                 text = (if (parent.length > 22) parent.take(21) + "…" else parent) + ":",
                 style = TextStyle(color = fixed(LedgerMuted), fontSize = 14.sp),
                 maxLines = 1,
-                modifier = GlanceModifier.padding(start = 2.dp)
+                modifier = GlanceModifier.padding(start = 2.dp).clickable(
+                    actionStartActivity<TaskEditActivity>(
+                        parameters = actionParametersOf(ActionParameters.Key<Long>(TaskEditActivity.EXTRA_TASK_ID) to (row.parentId ?: 0L))
+                    )
+                )
             )
         }
         Text(

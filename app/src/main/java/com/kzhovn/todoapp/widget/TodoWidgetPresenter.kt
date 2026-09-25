@@ -7,7 +7,8 @@ data class WidgetTaskRow(
     val id: Long, val title: String, val isComplete: Boolean, val isStarred: Boolean, val isMaybe: Boolean = false,
     val subtasks: Pair<Int, Int>? = null, // (done, total), like the app's list rows
     val isBackburner: Boolean = false,
-    val parentTitle: String? = null // a subtask's parent, shown as "Parent: subtask"
+    val parentTitle: String? = null, // a subtask's parent, shown as "Parent: subtask"
+    val parentId: Long? = null
 )
 
 object TodoWidgetPresenter {
@@ -20,7 +21,7 @@ object TodoWidgetPresenter {
         tasks.map {
             WidgetTaskRow(
                 it.id, it.title, it.isComplete, it.isStarred, it.isMaybe, subtaskCounts[it.id]?.takeIf { c -> c.second > 0 },
-                it.isBackburner(now), parentTitle = subtaskParentTitle(it, allById)
+                it.isBackburner(now), parentTitle = subtaskParentTitle(it, allById), parentId = it.parentId
             )
         }
 }

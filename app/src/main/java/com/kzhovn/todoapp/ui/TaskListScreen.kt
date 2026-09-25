@@ -2,7 +2,9 @@ package com.kzhovn.todoapp.ui
 
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.withLink
 import com.kzhovn.todoapp.data.subtaskParentTitle
 import androidx.compose.ui.draw.alpha
 import com.kzhovn.todoapp.data.TaskType
@@ -32,6 +34,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import com.kzhovn.todoapp.data.OutlinerPreferences
+import com.kzhovn.todoapp.data.sectionsByTopFolder
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -84,7 +95,9 @@ fun TaskListScreen(
     onStar: (Long) -> Unit,
     onEdit: (Long) -> Unit,
     onSnooze: (Long, Long) -> Unit,
-    selectedIds: Set<Long> = emptySet()
+    selectedIds: Set<Long> = emptySet(),
+    // Active's layout: foldable sections by top-level folder (see sectionsByTopFolder).
+    sectioned: Boolean = false
 ) {
     val tasks by viewModel.tasks.collectAsState()
     val subtaskCounts by viewModel.subtaskCounts.collectAsState()
@@ -92,16 +105,57 @@ fun TaskListScreen(
     val contextsByTaskId by viewModel.contextsByTaskId.collectAsState()
     val allContexts by viewModel.allContexts.collectAsState()
     val colors = remember(allById) { folderColors(allById.values) }
+    val context = LocalContext.current
+    val prefs = remember { OutlinerPreferences(context) }
+    val scope = rememberCoroutineScope()
+    var folded by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    LaunchedEffect(Unit) { folded = prefs.foldedSectionIds() }
+
+    @Composable
+    fun Row(task: Task, last: Boolean) {
+        val effective = remember(task, allById, contextsByTaskId) { resolveEffective(task, allById, contextsByTaskId) }
+        // The bar shows the nearest folder ancestor's color, even for a subtask of a task.
+        val barColor = task.parentId?.let { walkParentChain(it, allById) { id -> colors[id] } } ?: LedgerBorder
+        TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, task.id in selectedIds, subtaskParentTitle(task, allById), onCheck, onStar, onEdit, onSnooze)
+        if (!last) HorizontalDivider(color = LedgerBorder)
+    }
+
     LazyColumn {
-        itemsIndexed(tasks, key = { _, task -> task.id }) { index, task ->
-            val effective = remember(task, allById, contextsByTaskId) { resolveEffective(task, allById, contextsByTaskId) }
-            // The bar shows the nearest folder ancestor's color, even for a subtask of a task.
-            val barColor = task.parentId?.let { walkParentChain(it, allById) { id -> colors[id] } } ?: LedgerBorder
-            TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, task.id in selectedIds, subtaskParentTitle(task, allById), onCheck, onStar, onEdit, onSnooze)
-            if (index < tasks.lastIndex) {
-                HorizontalDivider(color = LedgerBorder)
+        if (!sectioned) {
+            itemsIndexed(tasks, key = { _, task -> task.id }) { index, task -> Row(task, last = index == tasks.lastIndex) }
+        } else {
+            sectionsByTopFolder(tasks, allById).forEach { (folder, sectionTasks) ->
+                // The folderless section folds under id 0.
+                val sectionId = folder?.id ?: 0L
+                val isFolded = sectionId in folded
+                item(key = "section-$sectionId") {
+                    SectionHeader(folder?.title ?: "No folder", folder?.let { colors[it.id] }, sectionTasks.size, isFolded) {
+                        folded = if (isFolded) folded - sectionId else folded + sectionId
+                        scope.launch { prefs.setSectionFolded(sectionId, !isFolded) }
+                    }
+                }
+                if (!isFolded) {
+                    itemsIndexed(sectionTasks, key = { _, task -> task.id }) { index, task -> Row(task, last = index == sectionTasks.lastIndex) }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String, color: Color?, count: Int, folded: Boolean, onToggle: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(start = 6.dp, end = 12.dp, top = 10.dp, bottom = 4.dp)
+    ) {
+        Icon(
+            if (folded) Icons.Filled.ChevronRight else Icons.Filled.ExpandMore,
+            contentDescription = if (folded) "Expand" else "Collapse",
+            tint = LedgerMuted, modifier = Modifier.size(18.dp)
+        )
+        if (color != null) Icon(Icons.Filled.Folder, contentDescription = null, tint = color, modifier = Modifier.padding(start = 2.dp).size(14.dp))
+        Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = LedgerMuted, modifier = Modifier.padding(start = 6.dp).weight(1f))
+        Text("$count", fontSize = 12.sp, color = LedgerMuted)
     }
 }
 
@@ -159,9 +213,14 @@ private fun TaskRow(
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        // A subtask reads "Parent: subtask", with the parent dimmer.
+                        // A subtask reads "Parent: subtask", with the parent dimmer; tapping the parent
+                        // opens the parent (a link, so the rest of the row keeps its own tap/long-press).
                         text = buildAnnotatedString {
-                            parentTitle?.let { withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal)) { append("$it: ") } }
+                            val parentId = task.parentId
+                            if (parentTitle != null && parentId != null) {
+                                val style = TextLinkStyles(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal))
+                                withLink(LinkAnnotation.Clickable("parent", style) { onEdit(parentId) }) { append("$parentTitle: ") }
+                            }
                             append(task.title)
                         },
                         fontWeight = FontWeight.Bold,

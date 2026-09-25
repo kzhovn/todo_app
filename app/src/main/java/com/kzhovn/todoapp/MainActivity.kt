@@ -429,7 +429,8 @@ class MainActivity : ComponentActivity() {
                             onStar = onStar,
                             onEdit = onEdit,
                             selectedIds = selectedIds,
-                            onSnooze = { id, until -> viewModel.snooze(id, until, selectedMode) }
+                            onSnooze = { id, until -> viewModel.snooze(id, until, selectedMode) },
+                            sectioned = selectedMode == TaskListMode.ACTIVE && !searchMode
                         )
                     }
                     // A project whose subtasks are all done asks what's next. "Later" only snoozes it for

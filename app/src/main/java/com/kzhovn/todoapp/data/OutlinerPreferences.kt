@@ -23,6 +23,19 @@ class OutlinerPreferences(private val context: Context) {
         }
     }
 
+    // Active's folded folder sections, kept apart from the All tree's folds (0 = the no-folder section).
+    private val foldedSectionsKey = stringSetPreferencesKey("folded_active_sections")
+
+    suspend fun setSectionFolded(folderId: Long, folded: Boolean) {
+        context.outlinerDataStore.edit { prefs ->
+            val current = prefs[foldedSectionsKey] ?: emptySet()
+            prefs[foldedSectionsKey] = if (folded) current + folderId.toString() else current - folderId.toString()
+        }
+    }
+
+    suspend fun foldedSectionIds(): Set<Long> =
+        context.outlinerDataStore.data.first()[foldedSectionsKey]?.mapNotNull { it.toLongOrNull() }?.toSet() ?: emptySet()
+
     suspend fun collapsedIds(): Set<Long> {
         val prefs = context.outlinerDataStore.data.first()
         return prefs[collapsedKey]?.mapNotNull { it.toLongOrNull() }?.toSet() ?: emptySet()

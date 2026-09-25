@@ -41,7 +41,8 @@ main { flex: 1; min-width: 0; max-width: 860px; }
 .project .icon { width: 20px; height: 20px; }
 .main { flex: 1; min-width: 0; }
 .title { font-weight: 600; overflow-wrap: anywhere; }
-.parent { color: var(--muted); font-weight: 400; }
+.parent { color: var(--muted); font-weight: 400; text-decoration: none; }
+.parent:hover { text-decoration: underline; }
 .badge { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; margin-left: 4px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); vertical-align: -2px; }
 .badge .icon { width: 10px; height: 10px; }
 .meta { display: flex; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 2px; align-items: center; }
@@ -221,3 +222,9 @@ body.selecting #list .row:not([data-type="TASK"]), body.selecting #list .folder 
 .tabs a { flex: 1; text-align: center; padding: 12px 8px; color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; border-bottom: 2px solid transparent; }
 .tabs a:hover { color: var(--ink); }
 .tabs a.current { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Active's folder sections */
+.section-toggle { display: flex; align-items: center; gap: 6px; width: 100%; padding: 10px 12px 4px 6px; color: var(--muted); font-weight: 600; font-size: 13px; text-align: left; }
+.section-toggle .chevron { width: 18px; height: 18px; }
+.section-title { flex: 1; }
+.section-count { font-weight: 400; font-size: 12px; }

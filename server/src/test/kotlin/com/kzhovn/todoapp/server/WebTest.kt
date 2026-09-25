@@ -66,7 +66,7 @@ class WebTest {
         val projectRow = all.substring(all.lastIndexOf("class=\"row", title), title)
         assertTrue(projectRow.contains("class=\"project\""))
         assertFalse(projectRow.contains("class=\"check"))
-        assertTrue(client.get("/doing").bodyAsText().contains("<span class=\"parent\">Wool coat: </span>"))
+        assertTrue(client.get("/doing").bodyAsText().contains("href=\"/tasks/${project.id}?mode=DOING\" class=\"parent\">Wool coat: </a>"))
     }
 
     @Test
@@ -348,5 +348,22 @@ class WebTest {
         val paint = service.tasks().single { it.title == "Buy paint" }
         assertEquals(folder.id, paint.parentId)
         assertEquals(setOf(paint.id), service.dependsOn(wall.id))
+    }
+
+    @Test
+    fun `active is sectioned by top-level folder, foldable per browser, no-folder only when needed`() = web {
+        val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
+        service.create(Task(title = "Fix bug", parentId = work.id))
+        val active = client.get("/list/active").bodyAsText()
+        assertTrue(active.contains("section-title\">Work<"))
+        assertFalse(active.contains("No folder"))
+
+        service.create(Task(title = "Loose end"))
+        val browser = createClient { install(io.ktor.client.plugins.cookies.HttpCookies) }
+        assertTrue(browser.get("/list/active").bodyAsText().contains("No folder"))
+        val folded = browser.get("/list/active?fold=${work.id}").bodyAsText()
+        assertFalse(folded.contains("Fix bug"))
+        assertTrue(folded.contains("Loose end"))
+        assertFalse(browser.get("/list/active").bodyAsText().contains("Fix bug")) // remembered
     }
 }

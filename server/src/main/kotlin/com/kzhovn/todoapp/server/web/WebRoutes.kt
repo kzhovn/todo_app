@@ -41,10 +41,12 @@ fun Route.webRoutes(service: TaskService) {
             val deleted = call.request.queryParameters["deleted"]?.toLongOrNull()?.let(service::deletedTask)
             call.respondHtml { listPage(call.listData(service, mode), deleted) }
         }
-        // ?toggle folds/unfolds an All-tree node; ?later puts off a stalled project's prompt.
+        // ?toggle folds/unfolds an All-tree node, ?fold an Active section; ?later puts off a stalled
+        // project's prompt.
         get("/list/${mode.name.lowercase()}") {
             call.request.queryParameters["toggle"]?.toLongOrNull()?.let { call.toggleIn(COLLAPSED, it) }
             call.request.queryParameters["later"]?.toLongOrNull()?.let { call.toggleIn(LATER, it) }
+            call.request.queryParameters["fold"]?.toLongOrNull()?.let { call.toggleIn(SECTIONS, it) }
             call.respondList(service, mode)
         }
     }
@@ -145,7 +147,7 @@ internal fun ApplicationCall.taskId() = parameters["id"]?.toLongOrNull()
 internal fun ApplicationCall.mode() =
     request.queryParameters["mode"]?.let { runCatching { ListMode.valueOf(it) }.getOrNull() } ?: ListMode.DOING
 
-internal fun ApplicationCall.listData(service: TaskService, mode: ListMode) = ListData(service, mode, ids(COLLAPSED), ids(LATER))
+internal fun ApplicationCall.listData(service: TaskService, mode: ListMode) = ListData(service, mode, ids(COLLAPSED), ids(LATER), ids(SECTIONS))
 
 internal suspend fun ApplicationCall.respondList(service: TaskService, mode: ListMode, extra: String? = null) =
     respondText(createHTML().div { listContents(listData(service, mode)) } + extra.orEmpty(), ContentType.Text.Html)
@@ -159,6 +161,9 @@ private class IdCookie(val name: String, val maxAge: Int?) {
 
 // Folded All-tree nodes, remembered for a year.
 private val COLLAPSED = IdCookie("collapsed", maxAge = 365 * 24 * 3600)
+
+// Active's folded folder sections, remembered for a year like the tree's folds.
+private val SECTIONS = IdCookie("sections", maxAge = 365 * 24 * 3600)
 
 // Stalled projects put off with "Later": for this browser session, like the phone's (which asks
 // again the next time the app starts).
