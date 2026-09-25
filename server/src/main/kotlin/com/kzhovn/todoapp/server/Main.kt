@@ -16,9 +16,9 @@ import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
-import com.kzhovn.todoapp.server.web.WebConfig
-import com.kzhovn.todoapp.server.web.installWebSessions
-import com.kzhovn.todoapp.server.web.signingKeyFrom
+import io.ktor.server.application.ApplicationCallPipeline
+import io.ktor.server.application.call
+import io.ktor.server.response.header
 import com.kzhovn.todoapp.server.web.webRoutes
 import java.io.File
 import java.security.KeyStore
@@ -30,11 +30,10 @@ fun main() {
     val apiToken = env["API_TOKEN"] ?: error("API_TOKEN is required")
     val port = env["PORT"]?.toInt() ?: 8443
     val service = TaskService(store)
-    val web = WebConfig(
-        password = env["WEB_PASSWORD"]?.takeIf { it.isNotBlank() },
-        signingKey = signingKeyFrom(env["SESSION_SECRET"], apiToken),
-        secureCookies = env["WEB_COOKIE_SECURE"] != "false"
-    )
+    // The web pages have no login of their own; Caddy's basic_auth provides it. So they're only
+    // served when the server listens on loopback, reachable solely through Caddy. Exposed directly,
+    // the pages don't exist (fail closed) and only the token-protected /sync is served.
+    val webEnabled = env["HOST"] in setOf("127.0.0.1", "localhost", "::1")
 
     env["BOT_TOKEN"]?.let { botToken ->
         Bot.start(
@@ -63,15 +62,22 @@ fun main() {
                 this.keyStorePath = File(keystorePath)
             }
         }
-    }) { api(store, apiToken, service, web) }.start(wait = true)
+    }) { api(store, apiToken, service, webEnabled) }.start(wait = true)
 }
 
-fun Application.api(store: Store, apiToken: String, service: TaskService = TaskService(store), web: WebConfig? = null) {
+fun Application.api(store: Store, apiToken: String, service: TaskService = TaskService(store), webEnabled: Boolean = false) {
     install(ContentNegotiation) { json(SyncJson) }
-    web?.let { installWebSessions(it) }
+    // Only this site's own scripts may run (no inline script), it can't be framed by other sites, and
+    // browsers are told to stay on https.
+    intercept(ApplicationCallPipeline.Plugins) {
+        call.response.header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+        call.response.header("X-Content-Type-Options", "nosniff")
+        call.response.header("Referrer-Policy", "no-referrer")
+        call.response.header("Strict-Transport-Security", "max-age=31536000")
+    }
     val expected = "Bearer $apiToken".toByteArray()
     routing {
-        web?.let { webRoutes(service, it) }
+        if (webEnabled) webRoutes(service)
         post("/sync") {
             val auth = call.request.headers["Authorization"].orEmpty().toByteArray()
             if (!MessageDigest.isEqual(auth, expected)) return@post call.respond(HttpStatusCode.Unauthorized)

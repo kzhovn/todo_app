@@ -29,7 +29,6 @@ import kotlinx.html.main
 import kotlinx.html.meta
 import kotlinx.html.nav
 import kotlinx.html.p
-import kotlinx.html.passwordInput
 import kotlinx.html.script
 import kotlinx.html.span
 import kotlinx.html.style
@@ -83,17 +82,6 @@ fun HTML.page(title: String, content: BODY.() -> Unit) {
     body { content() }
 }
 
-fun HTML.loginPage(error: String?) = page("Raspberry · log in") {
-    main(classes = "login") {
-        h1 { +"Raspberry" }
-        form(action = "/login", method = kotlinx.html.FormMethod.post) {
-            passwordInput(name = "password") { placeholder = "Password"; autoFocus = true; attributes["autocomplete"] = "current-password" }
-            button { +"Log in" }
-        }
-        error?.let { p(classes = "error") { +it } }
-    }
-}
-
 fun HTML.listPage(data: ListData) = page("Raspberry · ${data.mode.label}") {
     div(classes = "shell") {
         aside(classes = "sidebar") {
@@ -108,12 +96,10 @@ fun HTML.listPage(data: ListData) = page("Raspberry · ${data.mode.label}") {
                 attributes["hx-post"] = "/quickadd"
                 attributes["hx-target"] = "#list"
                 attributes["hx-swap"] = "outerHTML"
-                attributes["hx-on::after-request"] = "this.reset()"
                 hiddenInput(name = "mode") { value = data.mode.name }
                 textInput(name = "text") { id = "quickadd"; placeholder = "Add a task… (n)"; attributes["autocomplete"] = "off" }
             }
             syntaxKey()
-            form(action = "/logout", method = kotlinx.html.FormMethod.post, classes = "logout") { button { +"Log out" } }
         }
         main { div { listContents(data) } }
     }
