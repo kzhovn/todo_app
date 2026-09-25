@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.material.icons.filled.SubdirectoryArrowRight
 import androidx.compose.ui.draw.alpha
 import com.kzhovn.todoapp.data.TaskType
 import androidx.compose.material.icons.filled.AccountTree
@@ -91,7 +92,9 @@ fun TaskListScreen(
             val effective = remember(task, allById, contextsByTaskId) { resolveEffective(task, allById, contextsByTaskId) }
             // The bar shows the nearest folder ancestor's color, even for a subtask of a task.
             val barColor = task.parentId?.let { walkParentChain(it, allById) { id -> colors[id] } } ?: LedgerBorder
-            TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, task.id in selectedIds, onCheck, onStar, onEdit, onSnooze)
+            // A subtask (child of a task or project, not merely inside a folder) gets a small marker.
+            val isSubtask = allById[task.parentId]?.type.let { it == TaskType.TASK || it == TaskType.PROJECT }
+            TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, task.id in selectedIds, isSubtask, onCheck, onStar, onEdit, onSnooze)
             if (index < tasks.lastIndex) {
                 HorizontalDivider(color = LedgerBorder)
             }
@@ -121,6 +124,7 @@ private fun TaskRow(
     subtasks: Pair<Int, Int>?,
     barColor: Color,
     selected: Boolean,
+    isSubtask: Boolean,
     onCheck: (Long) -> Unit,
     onStar: (Long) -> Unit,
     onEdit: (Long) -> Unit,
@@ -151,6 +155,12 @@ private fun TaskRow(
             else TaskCheckbox(checked = task.isComplete, overdue = effectiveOverdue, onCheckedChange = { onCheck(task.id) })
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isSubtask) {
+                        Icon(
+                            Icons.Filled.SubdirectoryArrowRight, contentDescription = "Subtask", tint = LedgerMuted,
+                            modifier = Modifier.size(14.dp).padding(end = 2.dp)
+                        )
+                    }
                     Text(
                         text = task.title,
                         fontWeight = FontWeight.Bold,

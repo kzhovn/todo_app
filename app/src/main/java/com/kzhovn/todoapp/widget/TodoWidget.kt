@@ -93,7 +93,7 @@ class TodoWidget : GlanceAppWidget() {
                 else filterDoing(active, now) { resolveEffective(it, allById, contextsByTaskId).effectiveDueDate }
             }
         }.filter { folderId == null || isUnder(it, folderId, allById) }
-        val rows = TodoWidgetPresenter.toRows(tasks, subtaskCounts(allTasks))
+        val rows = TodoWidgetPresenter.toRows(tasks, subtaskCounts(allTasks), now, allById)
         val folderName = folderId?.let { allById[it]?.title }
         val header = mode.label.uppercase() + folderName?.let { " · $it" }.orEmpty()
 
@@ -179,7 +179,7 @@ private fun WidgetRow(row: WidgetTaskRow) {
             )
         }
         Text(
-            text = row.title,
+            text = if (row.isSubtask) "↳ ${row.title}" else row.title,
             // Glance has no alpha, so a backburner row is dimmed with the muted colour instead.
             style = TextStyle(color = fixed(if (row.isBackburner) LedgerMuted else LedgerInk), fontSize = 14.sp),
             maxLines = 1,
