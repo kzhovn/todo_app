@@ -22,7 +22,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         SyncSettings.recordResult(app, outcome)
         if ((outcome.getOrNull() ?: 0) > 0) TodoWidget().updateAll(app)
         // Only the periodic chain re-arms itself, so on-demand syncs never grow it.
-        if (inputData.getBoolean(KEY_PERIODIC, false)) enqueue(app, PERIODIC, 5, ExistingWorkPolicy.APPEND_OR_REPLACE)
+        if (inputData.getBoolean(KEY_PERIODIC, false)) enqueue(app, PERIODIC, PERIOD_MINUTES, ExistingWorkPolicy.APPEND_OR_REPLACE)
         return Result.success()
     }
 
@@ -30,10 +30,11 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         private const val PERIODIC = "sync-periodic"
         private const val NOW = "sync-now"
         private const val KEY_PERIODIC = "periodic"
+        private const val PERIOD_MINUTES = 2L
 
-        // PeriodicWorkRequest can't go below 15 minutes, so the 5-minute cadence is a self-renewing
+        // PeriodicWorkRequest can't go below 15 minutes, so the 2-minute cadence is a self-renewing
         // one-time chain. Doze still defers it while the phone is idle.
-        fun ensurePeriodic(context: Context) = enqueue(context, PERIODIC, 5, ExistingWorkPolicy.KEEP)
+        fun ensurePeriodic(context: Context) = enqueue(context, PERIODIC, PERIOD_MINUTES, ExistingWorkPolicy.KEEP)
 
         // REPLACE doubles as a debounce: a burst of edits collapses into one sync after the last.
         fun requestSoon(context: Context, delaySeconds: Long = 3) =
