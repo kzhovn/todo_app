@@ -1,6 +1,8 @@
 package com.kzhovn.todoapp.repository
 
+import com.kzhovn.todoapp.data.DueStatus
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.dueStatus
 
 private const val DOING_DUE_SOON_MILLIS = 2 * 24 * 60 * 60 * 1000L
 
@@ -12,7 +14,14 @@ fun filterDoing(
     tasks: List<Task>,
     now: Long,
     effectiveDueDate: (Task) -> Long? = { it.dueDate }
-): List<Task> =
-    tasks.filter { task ->
-        task.isStarred || effectiveDueDate(task)?.let { it - now < DOING_DUE_SOON_MILLIS } ?: false
-    }
+): List<Task> = urgentFirst(
+    tasks.filter { task -> task.isStarred || effectiveDueDate(task)?.let { it - now < DOING_DUE_SOON_MILLIS } ?: false },
+    now,
+    effectiveDueDate
+)
+
+// What's overdue or due today goes first, soonest first (so overdue leads); the rest keep their order.
+fun urgentFirst(tasks: List<Task>, now: Long, effectiveDueDate: (Task) -> Long?): List<Task> {
+    val (urgent, rest) = tasks.partition { t -> effectiveDueDate(t)?.let { dueStatus(it, now) != DueStatus.LATER } == true }
+    return urgent.sortedBy { effectiveDueDate(it) } + rest
+}

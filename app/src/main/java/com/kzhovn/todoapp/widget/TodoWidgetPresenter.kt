@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.widget
 
+import com.kzhovn.todoapp.repository.urgentFirst
 import com.kzhovn.todoapp.data.DueStatus
 import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.data.Task
@@ -25,16 +26,21 @@ object TodoWidgetPresenter {
         subtaskCounts: Map<Long, Pair<Int, Int>> = emptyMap(),
         now: Long = System.currentTimeMillis(),
         allById: Map<Long, Task> = emptyMap(),
-        folderColors: Map<Long, Color> = emptyMap()
+        folderColors: Map<Long, Color> = emptyMap(),
+        effectiveDue: (Task) -> Long? = { it.dueDate },
+        // Doing: what's overdue or due today on top (urgentFirst), above the folder grouping.
+        urgentOnTop: Boolean = false
     ): List<WidgetTaskRow> =
         // Grouped by top-level folder in the All tree's order (folderless last), like Active's sections.
-        sectionsByTopFolder(tasks, allById).flatMap { it.second }.map {
+        sectionsByTopFolder(tasks, allById).flatMap { it.second }
+            .let { if (urgentOnTop) urgentFirst(it, now, effectiveDue) else it }
+            .map {
             WidgetTaskRow(
                 it.id, it.title, it.isComplete, it.isStarred, it.isMaybe, subtaskCounts[it.id]?.takeIf { c -> c.second > 0 },
                 it.isBackburner(now), parentTitle = subtaskParentTitle(it, allById), parentId = it.parentId,
                 barColor = it.parentId?.let { parent -> walkParentChain(parent, allById) { id -> folderColors[id] } },
                 durationMinutes = it.durationMinutes,
-                due = it.dueDate?.takeUnless { _ -> it.isComplete }?.let { d -> dueStatus(d, now) }
+                due = effectiveDue(it)?.takeUnless { _ -> it.isComplete }?.let { d -> dueStatus(d, now) }
             )
         }
 }
