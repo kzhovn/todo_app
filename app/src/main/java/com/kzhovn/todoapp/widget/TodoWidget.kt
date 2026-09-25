@@ -1,7 +1,8 @@
 package com.kzhovn.todoapp.widget
 
-import com.kzhovn.todoapp.ui.theme.LedgerOverdue
-import com.kzhovn.todoapp.ui.theme.LedgerDueToday
+import com.kzhovn.todoapp.R
+import androidx.glance.ImageProvider
+import androidx.glance.Image
 import com.kzhovn.todoapp.data.formatDuration
 import com.kzhovn.todoapp.data.DueStatus
 import com.kzhovn.todoapp.notifications.TaskTimer
@@ -68,7 +69,6 @@ import com.kzhovn.todoapp.ui.theme.LedgerBackground
 import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
-import com.kzhovn.todoapp.ui.theme.LedgerStar
 
 val taskIdKey = ActionParameters.Key<Long>("task_id")
 
@@ -198,12 +198,18 @@ private fun WidgetRow(row: WidgetTaskRow) {
             modifier = GlanceModifier.size(width = 31.dp, height = 30.dp)
                 .clickable(actionRunCallback<ToggleCompleteAction>(actionParametersOf(taskIdKey to row.id)))
         ) {
-            // Due today: an orange ring; overdue: rust (a glyph can't carry the app's pale fill).
-            val ring = when (row.due) { DueStatus.OVERDUE -> LedgerOverdue; DueStatus.TODAY -> LedgerDueToday; else -> LedgerMuted }
-            Text(
-                text = if (row.isComplete) "✓" else "○",
-                style = TextStyle(color = fixed(if (row.isComplete) LedgerAccent else ring), fontSize = 24.sp)
-            )
+            // Due today: an orange ring with a pale orange fill; overdue: rust. Drawn as vectors, since a
+            // text glyph can only take one colour.
+            if (row.isComplete) {
+                Text("✓", style = TextStyle(color = fixed(LedgerAccent), fontSize = 24.sp))
+            } else {
+                val ring = when (row.due) {
+                    DueStatus.OVERDUE -> R.drawable.widget_check_overdue
+                    DueStatus.TODAY -> R.drawable.widget_check_today
+                    else -> R.drawable.widget_check
+                }
+                Image(ImageProvider(ring), contentDescription = "Complete", modifier = GlanceModifier.size(21.dp))
+            }
         }
         // Glance text can't mix colours, so a subtask's dimmer "Parent: " is its own Text, capped so a
         // long parent name can't crowd out the subtask's own title.
@@ -259,9 +265,10 @@ private fun WidgetRow(row: WidgetTaskRow) {
                 modifier = GlanceModifier.size(width = 31.dp, height = 30.dp)
                     .clickable(actionRunCallback<ToggleStarAction>(actionParametersOf(taskIdKey to row.id)))
             ) {
-                Text(
-                    text = if (row.isStarred) "★" else "☆",
-                    style = TextStyle(color = fixed(if (row.isStarred) LedgerStar else LedgerMuted), fontSize = 24.sp)
+                Image(
+                    ImageProvider(if (row.isStarred) R.drawable.widget_star_on else R.drawable.widget_star),
+                    contentDescription = if (row.isStarred) "Starred" else "Star",
+                    modifier = GlanceModifier.size(23.dp)
                 )
             }
         }

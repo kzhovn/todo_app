@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widget's checkbox: a ring with a pale fill of its own colour (due today / overdue), like the app's. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="22dp" android:height="22dp" android:viewportWidth="22" android:viewportHeight="22">
+    <path android:pathData="M11,1.5 A9.5,9.5 0 1,1 10.99,1.5 Z" android:fillColor="#2E96412B" android:strokeColor="#96412B" android:strokeWidth="2" />
+</vector>
