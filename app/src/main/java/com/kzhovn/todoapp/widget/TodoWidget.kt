@@ -174,12 +174,12 @@ private fun WidgetRow(row: WidgetTaskRow) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
         Box(
             contentAlignment = Alignment.Center,
-            modifier = GlanceModifier.size(width = 34.dp, height = 36.dp)
+            modifier = GlanceModifier.size(width = 34.dp, height = 30.dp)
                 .clickable(actionRunCallback<ToggleCompleteAction>(actionParametersOf(taskIdKey to row.id)))
         ) {
             Text(
                 text = if (row.isComplete) "✓" else "○",
-                style = TextStyle(color = fixed(if (row.isComplete) LedgerAccent else LedgerMuted), fontSize = 26.sp)
+                style = TextStyle(color = fixed(if (row.isComplete) LedgerAccent else LedgerMuted), fontSize = 24.sp)
             )
         }
         Text(
@@ -200,18 +200,18 @@ private fun WidgetRow(row: WidgetTaskRow) {
             Text("$done/$total", style = TextStyle(color = fixed(LedgerMuted), fontSize = 11.sp), maxLines = 1)
         }
         if (row.isMaybe) {
-            Box(contentAlignment = Alignment.Center, modifier = GlanceModifier.size(width = 34.dp, height = 36.dp)) {
+            Box(contentAlignment = Alignment.Center, modifier = GlanceModifier.size(width = 34.dp, height = 30.dp)) {
                 Text("?", style = TextStyle(color = fixed(LedgerMuted), fontSize = 22.sp, fontWeight = FontWeight.Bold))
             }
         } else {
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = GlanceModifier.size(width = 34.dp, height = 36.dp)
+                modifier = GlanceModifier.size(width = 34.dp, height = 30.dp)
                     .clickable(actionRunCallback<ToggleStarAction>(actionParametersOf(taskIdKey to row.id)))
             ) {
                 Text(
                     text = if (row.isStarred) "★" else "☆",
-                    style = TextStyle(color = fixed(if (row.isStarred) LedgerStar else LedgerMuted), fontSize = 26.sp)
+                    style = TextStyle(color = fixed(if (row.isStarred) LedgerStar else LedgerMuted), fontSize = 24.sp)
                 )
             }
         }
