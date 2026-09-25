@@ -27,4 +27,20 @@ class TodoWidgetPresenterTest {
     fun `empty task list maps to empty rows`() {
         assertEquals(emptyList<WidgetTaskRow>(), TodoWidgetPresenter.toRows(emptyList()))
     }
+
+    @Test
+    fun `rows follow the tree's top-level folder order and carry the nearest folder's colour`() {
+        val work = Task(id = 1, title = "Work", type = com.kzhovn.todoapp.data.TaskType.FOLDER, position = 2)
+        val home = Task(id = 2, title = "Home", type = com.kzhovn.todoapp.data.TaskType.FOLDER, position = 1)
+        val bug = Task(id = 10, title = "Bug", parentId = work.id)
+        val step = Task(id = 11, title = "Step", parentId = bug.id)
+        val dishes = Task(id = 12, title = "Dishes", parentId = home.id)
+        val loose = Task(id = 13, title = "Loose")
+        val byId = listOf(work, home, bug, step, dishes, loose).associateBy { it.id }
+        val colors = mapOf(work.id to androidx.compose.ui.graphics.Color.Red, home.id to androidx.compose.ui.graphics.Color.Blue)
+
+        val rows = TodoWidgetPresenter.toRows(listOf(loose, bug, step, dishes), allById = byId, folderColors = colors)
+        assertEquals(listOf("Dishes", "Bug", "Step", "Loose"), rows.map { it.title })
+        assertEquals(listOf(androidx.compose.ui.graphics.Color.Blue, androidx.compose.ui.graphics.Color.Red, androidx.compose.ui.graphics.Color.Red, null), rows.map { it.barColor })
+    }
 }

@@ -31,6 +31,8 @@ import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
+import androidx.glance.layout.height
+import androidx.glance.layout.width
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.state.GlanceStateDefinition
@@ -54,9 +56,11 @@ import com.kzhovn.todoapp.repository.filterDoing
 import com.kzhovn.todoapp.repository.minuteOfDay
 import com.kzhovn.todoapp.ui.TaskEditActivity
 import com.kzhovn.todoapp.ui.subtaskCounts
+import com.kzhovn.todoapp.ui.theme.folderColors
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
+import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerStar
@@ -97,7 +101,7 @@ class TodoWidget : GlanceAppWidget() {
                 }
             }.filter { folderId == null || isUnder(it, folderId, allById) }
             val folderName = folderId?.let { allById[it]?.title }
-            return TodoWidgetPresenter.toRows(tasks, subtaskCounts(allTasks), now, allById) to
+            return TodoWidgetPresenter.toRows(tasks, subtaskCounts(allTasks), now, allById, folderColors(allTasks)) to
                 mode.label.uppercase() + folderName?.let { " · $it" }.orEmpty()
         }
         val initial = load()
@@ -182,6 +186,8 @@ class TodoWidget : GlanceAppWidget() {
 @androidx.compose.runtime.Composable
 private fun WidgetRow(row: WidgetTaskRow) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
+        // The folder colour bar, like the app's rows; row height is fixed by the 30dp tap boxes.
+        Box(GlanceModifier.width(3.dp).height(30.dp).background(fixed(row.barColor ?: LedgerBorder))) {}
         Box(
             contentAlignment = Alignment.Center,
             modifier = GlanceModifier.size(width = 34.dp, height = 30.dp)
