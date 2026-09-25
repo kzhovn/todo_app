@@ -108,6 +108,10 @@ fun HTML.page(title: String, content: BODY.() -> Unit) {
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
         title(title)
         link(rel = "stylesheet", href = "/static/app.css")
+        // The phone app's raspberry icon, cropped as the launcher shows it.
+        link(rel = "icon", href = "/static/icon-32.png", type = "image/png") { attributes["sizes"] = "32x32" }
+        link(rel = "icon", href = "/static/icon-192.png", type = "image/png") { attributes["sizes"] = "192x192" }
+        link(rel = "apple-touch-icon", href = "/static/apple-touch-icon.png")
         script(src = "/static/htmx/htmx.min.js") {}
         script(src = "/static/app.js") { defer = true }
     }
