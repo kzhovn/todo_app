@@ -201,7 +201,8 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         val line = link?.lines?.firstOrNull { it.emoji == emoji }
         if (line != null) {
             if (added) service.complete(line.taskId) else service.uncomplete(line.taskId)
-            return ReactionOutcome.EditList(render(link.lines))
+            // The task's newest list is refreshed through listToRefresh; an older one reacted on isn't.
+            return if (newestList(line.taskId)?.second == messageId) ReactionOutcome.None else ReactionOutcome.EditList(render(link.lines))
         }
         return if (emoji == DELETE && added) ReactionOutcome.DeleteIfBotMessage else ReactionOutcome.None
     }
@@ -229,9 +230,25 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         return chunks.map { lines -> ListChunk(render(lines), lines.mapNotNull { it.emoji }, lines) }
     }
 
-    fun recordList(messageId: Long, chunk: ListChunk) {
-        if (chunk.lines.isNotEmpty()) saveLink(messageId, MessageLink(lines = chunk.lines))
+    // Also remembers it as the newest list each of its tasks appears in.
+    fun recordList(channelId: Long, messageId: Long, chunk: ListChunk) {
+        if (chunk.lines.isEmpty()) return
+        saveLink(messageId, MessageLink(lines = chunk.lines))
+        chunk.lines.forEach { store.setValue("list:${it.taskId}", "$channelId/$messageId") }
     }
+
+    // A task completed, deleted or undone from anywhere (app, web, Discord): the newest list showing
+    // it, as (channel id, message id), needs re-rendering to strike or unstrike its line.
+    fun listToRefresh(before: SyncRow?, after: SyncRow): Pair<Long, Long>? {
+        if (after.table != TASKS || before == null) return null
+        if (before.toTask().isComplete == after.toTask().isComplete && before.isDeleted == after.isDeleted) return null
+        return newestList(after.id)
+    }
+
+    fun renderList(messageId: Long): String? = link(messageId)?.lines?.takeIf { it.isNotEmpty() }?.let(::render)
+
+    private fun newestList(taskId: Long): Pair<Long, Long>? =
+        store.getValue("list:$taskId")?.split('/')?.mapNotNull { it.toLongOrNull() }?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
 
     // `.doing`, `.list`, `.active`, `.rand` with an optional folder name. Returns null for
     // non-commands, or a plain reply for errors.

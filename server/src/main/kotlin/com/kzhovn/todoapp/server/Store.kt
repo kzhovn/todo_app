@@ -34,6 +34,9 @@ class Store(path: String) {
     @Volatile
     var onSyncedChange: ((before: SyncRow?, after: SyncRow) -> Unit)? = null
 
+    // Every row change, whether synced or a server-side edit (web, bot).
+    var onChange: ((before: SyncRow?, after: SyncRow) -> Unit)? = null
+
     // Merged rows get fresh versions, so they come back in the response too — the client needs the
     // merged result, not just what it sent.
     @Synchronized
@@ -49,7 +52,10 @@ class Store(path: String) {
             }
             SyncResponse(maxVersion(), since(request.cursor))
         }
-        changed.forEach { (before, after) -> onSyncedChange?.invoke(before, after) }
+        changed.forEach { (before, after) ->
+            onSyncedChange?.invoke(before, after)
+            onChange?.invoke(before, after)
+        }
         return response
     }
 
@@ -58,7 +64,11 @@ class Store(path: String) {
     fun write(table: String, id: Long, fields: JsonObject, now: Long) {
         val current = get(table, id)
         val merged = current?.fields?.let { JsonObject(it + fields) } ?: fields
-        diff(table, id, current, merged, now)?.let { put(merge(current, it)) }
+        diff(table, id, current, merged, now)?.let {
+            val after = merge(current, it)
+            put(after)
+            onChange?.invoke(current, after)
+        }
     }
 
     @Synchronized

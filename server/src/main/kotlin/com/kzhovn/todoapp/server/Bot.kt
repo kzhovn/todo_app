@@ -15,11 +15,13 @@ import net.dv8tion.jda.api.requests.GatewayIntent
 import java.time.Duration
 import java.time.LocalTime
 import java.time.ZonedDateTime
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 // Thin JDA adapter: translates Discord events into BotLogic calls. Everything from anyone but the
-// allowlisted users is ignored. JDA runs listeners on one event thread, so BotLogic never sees concurrent events.
+// allowlisted users is ignored. JDA runs listeners on one event thread, so BotLogic never sees concurrent
+// events; list refreshes only read, from their own thread (Store serialises access).
 class Bot private constructor(val logic: BotLogic, private val allowedUserIds: Set<Long>) : ListenerAdapter() {
 
     override fun onMessageReceived(event: MessageReceivedEvent) {
@@ -60,10 +62,26 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
     private fun postList(channel: MessageChannel, tasks: List<com.kzhovn.todoapp.data.Task>) {
         logic.listChunks(tasks).forEach { chunk ->
             channel.sendMessage(chunk.content).setSuppressEmbeds(true).queue { sent ->
-                logic.recordList(sent.idLong, chunk)
+                logic.recordList(channel.idLong, sent.idLong, chunk)
                 chunk.emojis.forEach { sent.addReaction(Emoji.fromUnicode(it)).queue() }
             }
         }
+    }
+
+    // Batched and slightly delayed, so a sync completing several tasks edits each list once, after
+    // the change has committed.
+    private val refresher = Executors.newSingleThreadScheduledExecutor()
+    private val pendingRefresh = ConcurrentHashMap.newKeySet<Pair<Long, Long>>()
+
+    private fun refreshSoon(jda: JDA, list: Pair<Long, Long>) {
+        if (!pendingRefresh.add(list)) return
+        refresher.schedule({
+            pendingRefresh.remove(list)
+            runCatching {
+                val content = logic.renderList(list.second) ?: return@runCatching
+                jda.getChannelById(MessageChannel::class.java, list.first)?.editMessageById(list.second, content)?.setSuppressEmbeds(true)?.queue()
+            }.onFailure { it.printStackTrace() }
+        }, 1, TimeUnit.SECONDS)
     }
 
     companion object {
@@ -83,6 +101,7 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
                     }
                 }
             }
+            store.onChange = { before, after -> bot.logic.listToRefresh(before, after)?.let { bot.refreshSoon(jda, it) } }
             if (digestChannelId != null && digestTime != null) {
                 scheduleDigest(LocalTime.parse(digestTime)) {
                     service.purgeExpired()

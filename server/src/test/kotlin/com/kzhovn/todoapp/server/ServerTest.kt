@@ -310,13 +310,14 @@ class ServerTest {
         val chunk = logic.listChunks(service.doing()).single()
         assertEquals(2, chunk.emojis.distinct().size)
         assertEquals(chunk.emojis, logic.listChunks(service.doing()).single().emojis)
-        logic.recordList(99L, chunk)
+        logic.recordList(7L, 99L, chunk)
 
         logic.onReaction(1L, DONE, added = true)
         val aEmoji = chunk.lines.single { it.taskId == a.id }.emoji!!
-        val outcome = logic.onReaction(99L, aEmoji, added = true) as ReactionOutcome.EditList
+        // The newest list is re-rendered via listToRefresh, like a completion from anywhere else.
+        assertEquals(ReactionOutcome.None, logic.onReaction(99L, aEmoji, added = true))
         assertTrue(service.get(a.id)!!.isComplete)
-        val lines = outcome.content.lines()
+        val lines = logic.renderList(99L)!!.lines()
         assertTrue("- ~~A~~ $aEmoji" in lines)
         assertTrue("- ~~C~~ [↗](<u>)" in lines)
         assertTrue(lines.any { it.startsWith("- B ") })
@@ -362,5 +363,26 @@ class ServerTest {
         assertEquals(EMOJI_POOL.size, EMOJI_POOL.distinct().size)
         assertTrue(EMOJI_POOL.none { it in setOf(DONE, DELETE, STAR, MOVE_OUT) })
         assertTrue(EMOJI_POOL.all { it.codePointCount(0, it.length) == 1 && it.codePointAt(0) > 0x2000 })
+    }
+
+    @Test
+    fun `completing from anywhere strikes the task in the newest list showing it`() {
+        val refreshed = mutableListOf<Pair<Long, Long>>()
+        store.onChange = { before, after -> logic.listToRefresh(before, after)?.let(refreshed::add) }
+        val a = service.create(Task(title = "A", isStarred = true))
+        val older = logic.listChunks(service.doing()).single()
+        logic.recordList(7L, 98L, older)
+        val newer = logic.listChunks(service.doing()).single()
+        logic.recordList(7L, 99L, newer)
+
+        service.update(a.id) { it.copy(title = "A2") } // not a completion: nothing to strike
+        assertEquals(emptyList<Pair<Long, Long>>(), refreshed)
+        service.complete(a.id) // e.g. from the web
+        assertEquals(listOf(7L to 99L), refreshed)
+        assertTrue(logic.renderList(99L)!!.contains("~~A~~"))
+
+        // An older list reacted on is re-rendered directly instead.
+        val emoji = older.lines.single().emoji!!
+        assertTrue(logic.onReaction(98L, emoji, added = false) is ReactionOutcome.EditList)
     }
 }
