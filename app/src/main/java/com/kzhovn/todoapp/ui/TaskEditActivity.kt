@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.text.style.TextDecoration
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -120,8 +122,12 @@ class TaskEditActivity : ComponentActivity() {
 
             // ContextsActivity is launched with plain startActivity (not for a result), so
             // returning here via back needs an explicit re-pull to pick up newly created contexts.
+            // Also re-pulls tasks, so a subtask just added (or edited) from here shows up on return.
             LifecycleResumeEffect(Unit) {
-                scope.launch { allContexts = contextRepository.getAllContexts() }
+                scope.launch {
+                    allContexts = contextRepository.getAllContexts()
+                    if (taskId != 0L) allTasks = repository.getAllTasks()
+                }
                 onPauseOrDispose { }
             }
 
@@ -327,6 +333,36 @@ class TaskEditActivity : ComponentActivity() {
                     onCreateNew = { startActivity(Intent(this@TaskEditActivity, ContextsActivity::class.java)) },
                     createNewLabel = "Create new context"
                 )
+
+                val subtasks = remember(allTasks, taskId) { allTasks.filter { it.parentId == taskId && taskId != 0L } }
+                if (subtasks.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    Text("Subtasks", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
+                    subtasks.forEach { sub ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (sub.type == TaskType.TASK) {
+                                TaskCheckbox(checked = sub.isComplete, overdue = isOverdue(sub.isComplete, sub.dueDate), size = 18.dp, touchSize = 34.dp, onCheckedChange = {
+                                    scope.launch {
+                                        repository.toggleComplete(sub.id, System.currentTimeMillis())
+                                        allTasks = repository.getAllTasks()
+                                        TodoWidget().updateAll(applicationContext)
+                                    }
+                                })
+                            } else {
+                                Icon(Icons.Filled.Folder, contentDescription = null, tint = LedgerMuted, modifier = Modifier.size(34.dp).padding(8.dp))
+                            }
+                            Text(
+                                sub.title,
+                                fontSize = 14.sp,
+                                textDecoration = if (sub.isComplete) TextDecoration.LineThrough else null,
+                                color = if (sub.isComplete) LedgerMuted else LedgerInk,
+                                modifier = Modifier.weight(1f).clickable {
+                                    startActivity(Intent(this@TaskEditActivity, TaskEditActivity::class.java).putExtra(EXTRA_TASK_ID, sub.id))
+                                }.padding(vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
 
                 if (taskId != 0L) {
                     Spacer(Modifier.height(12.dp))
