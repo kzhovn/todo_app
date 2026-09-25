@@ -135,7 +135,7 @@ private fun TaskRow(
             // real height to fill, sized to the tallest child.
             modifier = Modifier
                 .height(IntrinsicSize.Min)
-                .padding(vertical = 8.dp),
+                .padding(vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(Modifier.width(3.dp).fillMaxHeight().background(barColor))
@@ -156,8 +156,13 @@ private fun TaskRow(
                         Spacer(Modifier.width(4.dp))
                         RecurrenceBadge()
                     }
+                    // On the title line rather than a second one, so a context alone doesn't make
+                    // the row taller and push the title off-centre.
+                    if (contextName != null) {
+                        Text("@$contextName", fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.padding(start = 6.dp))
+                    }
                 }
-                if (effective.effectiveDueDate != null || contextName != null || (subtasks != null && subtasks.second > 0)) {
+                if (effective.effectiveDueDate != null || (subtasks != null && subtasks.second > 0)) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
                         effective.effectiveDueDate?.let { due -> DueChip(due, effectiveOverdue) }
                         if (subtasks != null && subtasks.second > 0) {
@@ -168,17 +173,13 @@ private fun TaskRow(
                                 modifier = Modifier.padding(horizontal = 4.dp)
                             )
                         }
-                        if (contextName != null) {
-                            Spacer(Modifier.weight(1f))
-                            Text("@$contextName", fontSize = 10.sp, color = LedgerMuted)
-                        }
                     }
                 }
             }
             if (task.isMaybe) {
                 MaybeMark()
             } else {
-                IconButton(onClick = { onStar(task.id) }) {
+                IconButton(onClick = { onStar(task.id) }, modifier = Modifier.size(40.dp)) {
                     Icon(
                         if (task.isStarred) Icons.Filled.Star else Icons.Filled.StarBorder,
                         contentDescription = "Star",
@@ -201,19 +202,19 @@ private const val WEEK_MILLIS = 7 * DAY_MILLIS
 
 // Shown in the star's place: a maybe can't be starred.
 @Composable
-fun MaybeMark() {
-    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+fun MaybeMark(size: Dp = 40.dp) {
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         Text("?", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerMuted)
     }
 }
 
 @Composable
-fun TaskCheckbox(checked: Boolean, overdue: Boolean, size: Dp = 22.dp, onCheckedChange: () -> Unit) {
+fun TaskCheckbox(checked: Boolean, overdue: Boolean, size: Dp = 22.dp, touchSize: Dp = 40.dp, onCheckedChange: () -> Unit) {
     val borderColor = if (overdue) LedgerOverdue else LedgerCheckBorder
     val borderWidth = if (overdue) 2.dp else 1.5.dp
     // The tap target is larger than the drawn circle so it's easy to hit with a thumb.
     Box(
-        modifier = Modifier.size(44.dp).clip(CircleShape).clickable { onCheckedChange() },
+        modifier = Modifier.size(touchSize).clip(CircleShape).clickable { onCheckedChange() },
         contentAlignment = Alignment.Center
     ) {
         Box(

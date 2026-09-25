@@ -101,22 +101,22 @@ class TodoWidget : GlanceAppWidget() {
             .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
 
         provideContent {
-            Column(modifier = GlanceModifier.fillMaxSize().background(fixed(LedgerBackground)).padding(12.dp)) {
+            Column(modifier = GlanceModifier.fillMaxSize().background(fixed(LedgerBackground)).padding(start = 4.dp, end = 4.dp, top = 2.dp, bottom = 4.dp)) {
                 Row(
-                    modifier = GlanceModifier.fillMaxWidth().padding(bottom = 6.dp),
+                    modifier = GlanceModifier.fillMaxWidth().padding(start = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = header,
-                        style = TextStyle(color = fixed(LedgerMuted), fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                        style = TextStyle(color = fixed(LedgerMuted), fontSize = 11.sp, fontWeight = FontWeight.Bold),
                         maxLines = 1,
                         modifier = GlanceModifier.defaultWeight().clickable(actionStartActivity(configIntent))
                     )
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = GlanceModifier
-                            .size(40.dp)
-                            .cornerRadius(20.dp)
+                            .size(26.dp)
+                            .cornerRadius(13.dp)
                             .background(fixed(LedgerAccentSoft))
                             .clickable(
                                 actionStartActivity<QuickAddActivity>(
@@ -124,7 +124,7 @@ class TodoWidget : GlanceAppWidget() {
                                 )
                             )
                     ) {
-                        Text("+", style = TextStyle(color = fixed(LedgerAccent), fontSize = 24.sp, fontWeight = FontWeight.Bold))
+                        Text("+", style = TextStyle(color = fixed(LedgerAccent), fontSize = 17.sp, fontWeight = FontWeight.Bold))
                     }
                 }
                 if (rows.isEmpty()) {
@@ -144,27 +144,28 @@ class TodoWidget : GlanceAppWidget() {
         task.parentId?.let { parent -> walkParentChain(parent, allById) { id -> true.takeIf { id == folderId } } } ?: false
 }
 
-// 44dp boxes around the check and star glyphs give thumb-sized tap targets.
+// Narrow but tall boxes around the check and star glyphs: tap targets stay thumb-height while
+// leaving the width to the title, since widget space is at a premium.
 @androidx.compose.runtime.Composable
 private fun WidgetRow(row: WidgetTaskRow) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
         Box(
             contentAlignment = Alignment.Center,
-            modifier = GlanceModifier.size(44.dp)
+            modifier = GlanceModifier.size(width = 30.dp, height = 32.dp)
                 .clickable(actionRunCallback<ToggleCompleteAction>(actionParametersOf(taskIdKey to row.id)))
         ) {
             Text(
                 text = if (row.isComplete) "✓" else "○",
-                style = TextStyle(color = fixed(if (row.isComplete) LedgerAccent else LedgerMuted), fontSize = 24.sp)
+                style = TextStyle(color = fixed(if (row.isComplete) LedgerAccent else LedgerMuted), fontSize = 18.sp)
             )
         }
         Text(
             text = row.title,
-            style = TextStyle(color = fixed(LedgerInk), fontSize = 16.sp),
-            maxLines = 2,
+            style = TextStyle(color = fixed(LedgerInk), fontSize = 14.sp),
+            maxLines = 1,
             modifier = GlanceModifier
                 .defaultWeight()
-                .padding(horizontal = 4.dp)
+                .padding(horizontal = 2.dp)
                 .clickable(
                     actionStartActivity<TaskEditActivity>(
                         parameters = actionParametersOf(ActionParameters.Key<Long>(TaskEditActivity.EXTRA_TASK_ID) to row.id)
@@ -172,18 +173,18 @@ private fun WidgetRow(row: WidgetTaskRow) {
                 )
         )
         if (row.isMaybe) {
-            Box(contentAlignment = Alignment.Center, modifier = GlanceModifier.size(44.dp)) {
-                Text("?", style = TextStyle(color = fixed(LedgerMuted), fontSize = 22.sp, fontWeight = FontWeight.Bold))
+            Box(contentAlignment = Alignment.Center, modifier = GlanceModifier.size(width = 30.dp, height = 32.dp)) {
+                Text("?", style = TextStyle(color = fixed(LedgerMuted), fontSize = 16.sp, fontWeight = FontWeight.Bold))
             }
         } else {
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = GlanceModifier.size(44.dp)
+                modifier = GlanceModifier.size(width = 30.dp, height = 32.dp)
                     .clickable(actionRunCallback<ToggleStarAction>(actionParametersOf(taskIdKey to row.id)))
             ) {
                 Text(
                     text = if (row.isStarred) "★" else "☆",
-                    style = TextStyle(color = fixed(if (row.isStarred) LedgerStar else LedgerMuted), fontSize = 24.sp)
+                    style = TextStyle(color = fixed(if (row.isStarred) LedgerStar else LedgerMuted), fontSize = 18.sp)
                 )
             }
         }

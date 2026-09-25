@@ -19,6 +19,7 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -185,7 +186,7 @@ private fun OutlinerRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(if (isDropHover || selected) LedgerAccentSoft else LedgerBackground)
-                .padding(start = indent, top = 3.dp, bottom = 3.dp, end = 12.dp)
+                .padding(start = indent, top = 1.dp, bottom = 1.dp, end = 8.dp)
                 .dragAndDropSource {
                     detectDragGesturesAfterLongPress(
                         onDragStart = {
@@ -225,7 +226,7 @@ private fun OutlinerRow(
                     )
                 }
                 TaskType.TASK -> {
-                    TaskCheckbox(checked = task.isComplete, overdue = isOverdue(task.isComplete, task.dueDate), size = 20.dp, onCheckedChange = { onCheck(task.id) })
+                    TaskCheckbox(checked = task.isComplete, overdue = isOverdue(task.isComplete, task.dueDate), size = 20.dp, touchSize = 36.dp, onCheckedChange = { onCheck(task.id) })
                     Spacer(Modifier.width(6.dp))
                     Text(
                         task.title,
@@ -236,9 +237,9 @@ private fun OutlinerRow(
                         modifier = Modifier.weight(1f).clickable { onEdit(task.id) }
                     )
                     if (task.isMaybe) {
-                        MaybeMark()
+                        MaybeMark(36.dp)
                     } else {
-                        IconButton(onClick = { onStar(task.id) }) {
+                        IconButton(onClick = { onStar(task.id) }, modifier = Modifier.size(36.dp)) {
                             Icon(
                                 if (task.isStarred) Icons.Filled.Star else Icons.Filled.StarBorder,
                                 contentDescription = "Star",
