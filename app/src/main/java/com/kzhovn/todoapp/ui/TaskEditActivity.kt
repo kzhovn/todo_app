@@ -358,7 +358,7 @@ class TaskEditActivity : ComponentActivity() {
                         Switch(checked = task.isMaybe, onCheckedChange = { task = task.copy(isMaybe = it).starRule() })
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Just for today (deleted at day rollover)", fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.weight(1f))
+                        Text("Just for today", fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.weight(1f))
                         Switch(checked = task.expiresAt != null, onCheckedChange = { on ->
                             val hour = AppSettings.rolloverHour(this@TaskEditActivity)
                             task = task.copy(expiresAt = if (on) nextRollover(System.currentTimeMillis(), hour) else null)

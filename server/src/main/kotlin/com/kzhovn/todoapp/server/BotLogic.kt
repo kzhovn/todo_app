@@ -2,6 +2,7 @@ package com.kzhovn.todoapp.server
 
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.nextRollover
+import com.kzhovn.todoapp.data.hasTime
 import com.kzhovn.todoapp.quickadd.QuickAddParser
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -193,7 +194,9 @@ class BotLogic(private val service: TaskService, private val store: Store) {
 
     private fun describe(task: Task): String {
         val title = task.title.take(120) + if (task.isMaybe) " ?" else ""
-        val due = service.effectiveDueDate(task)?.let { " · due " + SimpleDateFormat("EEE d MMM", Locale.US).format(Date(it)) }.orEmpty()
+        val due = service.effectiveDueDate(task)?.let {
+            " · due " + SimpleDateFormat(if (hasTime(it)) "EEE d MMM h:mm a" else "EEE d MMM", Locale.US).format(Date(it))
+        }.orEmpty()
         return title + due
     }
 

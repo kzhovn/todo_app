@@ -25,4 +25,12 @@ class DayRolloverTest {
         assertEquals(listOf(task), computeActiveTasks(listOf(task), emptyMap(), emptyList(), emptyList(), emptyList(), at(25, 3, 59)))
         assertTrue(computeActiveTasks(listOf(task), emptyMap(), emptyList(), emptyList(), emptyList(), at(25, 4)).isEmpty())
     }
+
+    @Test
+    fun `a date-only due date passes at the end of its day, a timed one at its time`() {
+        val dateOnly = at(24, 0)
+        assertEquals(at(25, 0), deadline(dateOnly))
+        assertEquals(at(24, 17), deadline(at(24, 17)))
+        assertTrue(!hasTime(dateOnly) && hasTime(at(24, 17)))
+    }
 }

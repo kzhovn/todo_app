@@ -1,5 +1,10 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.hasTime
+import com.kzhovn.todoapp.data.atTime
+import java.text.DateFormat
+import android.content.DialogInterface
+import android.app.TimePickerDialog
 import android.app.Activity
 import android.app.DatePickerDialog
 import androidx.compose.foundation.background
@@ -82,16 +87,34 @@ fun PropertyChip(
     }
 }
 
-fun formatChipDate(epochMillis: Long): String = SimpleDateFormat("MMM d", Locale.US).format(Date(epochMillis))
+fun formatChipDate(epochMillis: Long): String =
+    SimpleDateFormat("MMM d", Locale.US).format(Date(epochMillis)) + formatTimeSuffix(epochMillis)
 
-fun pickDate(activity: Activity, currentValue: Long?, onPicked: (Long) -> Unit) {
+// " 5:00 PM" when the value has a time, "" for a date-only value.
+fun formatTimeSuffix(epochMillis: Long): String =
+    if (hasTime(epochMillis)) " " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(epochMillis)) else ""
+
+// Date first, then an optional time: dismissing the time dialog (or "No time") keeps the value
+// date-only, or keeps its existing time if it had one.
+fun pickDate(activity: Activity, currentValue: Long?, withTime: Boolean = true, onPicked: (Long) -> Unit) {
     val cal = Calendar.getInstance()
     if (currentValue != null) cal.timeInMillis = currentValue
+    val existingTime = currentValue?.takeIf(::hasTime)
     DatePickerDialog(
         activity,
         { _, year, month, day ->
             val picked = Calendar.getInstance().apply { set(year, month, day) }.startOfDay()
-            onPicked(picked)
+            onPicked(existingTime?.let { atTime(picked, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE)) } ?: picked)
+            if (!withTime) return@DatePickerDialog
+            TimePickerDialog(
+                activity,
+                { _, hour, minute -> onPicked(atTime(picked, hour, minute)) },
+                if (existingTime != null) cal.get(Calendar.HOUR_OF_DAY) else 9,
+                if (existingTime != null) cal.get(Calendar.MINUTE) else 0,
+                android.text.format.DateFormat.is24HourFormat(activity)
+            ).apply {
+                setButton(DialogInterface.BUTTON_NEUTRAL, "No time") { _, _ -> onPicked(picked) }
+            }.show()
         },
         cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)
     ).show()

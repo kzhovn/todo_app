@@ -62,7 +62,7 @@ fun FilterPanel(
                 label = "Due after",
                 valueText = filters.dueAfter?.let(::formatChipDate),
                 icon = Icons.Filled.Event,
-                onClick = { pickDate(activity, filters.dueAfter) { onFiltersChange(filters.copy(dueAfter = it)) } },
+                onClick = { pickDate(activity, filters.dueAfter, withTime = false) { onFiltersChange(filters.copy(dueAfter = it)) } },
                 onClear = { onFiltersChange(filters.copy(dueAfter = null)) }
             )
             Spacer(Modifier.width(8.dp))
@@ -70,7 +70,7 @@ fun FilterPanel(
                 label = "Due before",
                 valueText = filters.dueBefore?.let(::formatChipDate),
                 icon = Icons.Filled.Flag,
-                onClick = { pickDate(activity, filters.dueBefore) { onFiltersChange(filters.copy(dueBefore = it)) } },
+                onClick = { pickDate(activity, filters.dueBefore, withTime = false) { onFiltersChange(filters.copy(dueBefore = it)) } },
                 onClear = { onFiltersChange(filters.copy(dueBefore = null)) }
             )
         }

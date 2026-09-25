@@ -63,6 +63,7 @@ import com.kzhovn.todoapp.ui.theme.LedgerToday
 import com.kzhovn.todoapp.ui.theme.LedgerTodayBg
 import com.kzhovn.todoapp.ui.theme.folderColors
 import com.kzhovn.todoapp.data.walkParentChain
+import com.kzhovn.todoapp.data.deadline
 import java.util.Calendar
 
 @Composable
@@ -241,7 +242,7 @@ private fun DueChip(dueDate: Long, overdue: Boolean) {
         isToday -> LedgerTodayBg to LedgerToday
         else -> LedgerNeutralBg to LedgerMuted
     }
-    val label = if (isToday) "Today" else formatChipDate(dueDate)
+    val label = if (isToday) "Today" + formatTimeSuffix(dueDate) else formatChipDate(dueDate)
     Box(
         modifier = Modifier
             .padding(horizontal = 4.dp)
@@ -253,8 +254,9 @@ private fun DueChip(dueDate: Long, overdue: Boolean) {
     }
 }
 
+// Past its time if it has one, otherwise past the end of its day.
 fun isOverdue(isComplete: Boolean, dueDate: Long?, now: Long = System.currentTimeMillis()): Boolean =
-    !isComplete && dueDate != null && dueDate < now
+    !isComplete && dueDate != null && deadline(dueDate) <= now
 
 fun isSameDay(a: Long, b: Long): Boolean {
     val calA = Calendar.getInstance().apply { timeInMillis = a }

@@ -137,7 +137,7 @@ private fun OutlinerRow(
 ) {
     val task = node.task
     val hasChildren = node.children.isNotEmpty()
-    val indent = (8 + depth * 13).dp
+    val indent = (8 + depth * 18).dp
     var isDropHover by remember { mutableStateOf(false) }
 
     val dropTarget = remember(task.id, allById) {

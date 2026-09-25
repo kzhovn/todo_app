@@ -89,4 +89,33 @@ class QuickAddParserTest {
         assertEquals("update(?) bug", notMaybe.title)
         assert(!notMaybe.isMaybe)
     }
+
+    private fun hourMinute(ms: Long?) = java.util.Calendar.getInstance().apply { timeInMillis = ms!! }
+        .let { it.get(java.util.Calendar.HOUR_OF_DAY) to it.get(java.util.Calendar.MINUTE) }
+
+    @Test
+    fun `times attach to dates in words and flags`() {
+        val task = QuickAddParser.parse("call dentist due today 5pm")
+        assertEquals("call dentist", task.title)
+        assertEquals(0, dayOffset(com.kzhovn.todoapp.data.atTime(task.dueDate!!, 0, 0)))
+        assertEquals(17 to 0, hourMinute(task.dueDate))
+
+        assertEquals(9 to 30, hourMinute(QuickAddParser.parse("x due fri at 9:30am").dueDate))
+        assertEquals(14 to 0, hourMinute(QuickAddParser.parse("x -d tomorrow 14:00").dueDate))
+        assertEquals(1, dayOffset(QuickAddParser.parse("x -d tomorrow 14:00").dueDate?.let { com.kzhovn.todoapp.data.atTime(it, 0, 0) }))
+        assertEquals(0 to 0, hourMinute(QuickAddParser.parse("x due 12am").dueDate))
+        assertEquals(12 to 15, hourMinute(QuickAddParser.parse("x start 12:15pm").startDate))
+    }
+
+    @Test
+    fun `a time alone means today, and bare numbers stay in the title`() {
+        val task = QuickAddParser.parse("pick up kids due 3pm")
+        assertEquals("pick up kids", task.title)
+        assertEquals(0, dayOffset(com.kzhovn.todoapp.data.atTime(task.dueDate!!, 0, 0)))
+        assertEquals(15 to 0, hourMinute(task.dueDate))
+
+        val apples = QuickAddParser.parse("buy 3 apples due today")
+        assertEquals("buy 3 apples", apples.title)
+        assert(!com.kzhovn.todoapp.data.hasTime(apples.dueDate!!))
+    }
 }

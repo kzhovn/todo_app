@@ -232,7 +232,7 @@ class ServerTest {
     @Test
     fun `source-linked lines end in their link, app lines in their reaction emoji`() {
         logic.onAdd(1L, "https://discord.com/channels/@me/2/1", "-- call mom")
-        val app = service.create(Task(title = "Buy milk", isStarred = true, dueDate = now))
+        val app = service.create(Task(title = "Buy milk", isStarred = true, dueDate = com.kzhovn.todoapp.data.atTime(now, 0, 0)))
 
         val chunk = logic.listChunks(service.doing()).single()
         val emoji = chunk.lines.single { it.taskId == app.id }.emoji!!
@@ -240,6 +240,8 @@ class ServerTest {
         val lines = chunk.content.lines()
         assertTrue("- call mom [↗](<https://discord.com/channels/@me/2/1>)" in lines)
         assertTrue(lines.any { Regex("- Buy milk · due \\w{3} \\d+ \\w{3} $emoji").matches(it) })
+        val timed = service.create(Task(title = "Dentist", dueDate = com.kzhovn.todoapp.data.atTime(now, 17, 0)))
+        assertTrue(logic.listChunks(listOf(timed)).single().content.contains("5:00 PM"))
     }
 
     @Test
