@@ -215,7 +215,7 @@ private fun parseBulk(p: Parameters): BulkEdit {
         moveTo = when (val folder = p["folder"]) { null, "", "keep" -> null; "top" -> FolderChange(null); else -> folder.toLongOrNull()?.let(::FolderChange) },
         addContextIds = ids("addCtx"),
         removeContextIds = ids("removeCtx") - ids("addCtx"),
-        dependsOnId = p["waitFor"]?.toLongOrNull()
+        dependsOnId = p["dependsOn"]?.toLongOrNull()
     )
 }
 
@@ -251,8 +251,8 @@ private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode)
         field("Folder", "") {
             select {
                 name = "folder"
-                option { value = "keep"; +"Keep each task's folder" }
-                option { value = "top"; +"Top level (no folder)" }
+                option { value = "keep"; +"Keep" }
+                option { value = "top"; +"Top level" }
                 all.filter { it.type == TaskType.FOLDER }.map { it to folderPath(it, byId) }.sortedBy { it.second.lowercase() }
                     .forEach { (f, path) -> option { value = f.id.toString(); +path } }
             }
@@ -261,9 +261,9 @@ private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode)
             contextPills("Add contexts", "addCtx")
             contextPills("Remove contexts", "removeCtx")
         }
-        field("Wait for", "") {
+        field("Depends on", "") {
             select {
-                name = "waitFor"
+                name = "dependsOn"
                 option { value = ""; +"Nothing new" }
                 all.filter { it.type == TaskType.TASK && !it.isComplete && it.id !in ids }.sortedBy { it.title.lowercase() }
                     .forEach { option { value = it.id.toString(); +it.title } }
@@ -349,7 +349,7 @@ private fun parseContextForm(p: Parameters): ContextForm {
 }
 
 private fun describe(context: TaskContext, windows: List<ContextTimeWindow>): String = when (context.type) {
-    ContextType.PLACE -> "on wifi “${context.wifiSsid}”"
+    ContextType.PLACE -> "Wifi: ${context.wifiSsid}"
     ContextType.TIME -> windows.joinToString(", ") { w ->
         val days = if (w.daysMask == ContextTimeWindow.ALL_DAYS) "every day"
         else WEEKDAYS.filter { (bit, _) -> w.daysMask and (1 shl bit) != 0 }.joinToString(" ") { it.second }

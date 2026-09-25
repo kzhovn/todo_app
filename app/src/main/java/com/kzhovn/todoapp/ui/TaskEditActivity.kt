@@ -622,7 +622,7 @@ class TaskEditActivity : ComponentActivity() {
                     }
                 }
                 TaskPickerDialog(
-                    title = "Add a task that waits for this one",
+                    title = "Add a dependent task",
                     tasks = candidates,
                     onPick = { picked ->
                         showDependentPicker = false
@@ -630,7 +630,7 @@ class TaskEditActivity : ComponentActivity() {
                             repository.addDependency(picked.id, task.id)
                             allDependencyEdges = repository.getAllDependencyEdges()
                             TodoWidget().updateAll(applicationContext)
-                            Toast.makeText(this@TaskEditActivity, "“${picked.title}” now waits for this", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@TaskEditActivity, "“${picked.title}” now depends on this", Toast.LENGTH_SHORT).show()
                         }
                     },
                     onCreateNew = {
@@ -666,7 +666,7 @@ class TaskEditActivity : ComponentActivity() {
             // dependent work usually belongs together) and ticked; the dependency itself saves with the task.
             if (showNewBlockerDialog) {
                 TextInputDialog(
-                    title = "New task this waits for",
+                    title = "New task this depends on",
                     placeholder = "Task",
                     confirmLabel = "Add",
                     value = newBlockerTitle,

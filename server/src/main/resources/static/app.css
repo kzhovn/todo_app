@@ -213,3 +213,5 @@ body.selecting #list .row:not([data-type="TASK"]), body.selecting #list .folder 
 
 .new-dep { width: 100%; max-width: 520px; }
 .new-subtasks { width: 100%; max-width: 520px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
+.editor:has(input[name=type][value=FOLDER]:checked) .seq-task,
+.editor:not(:has(input[name=type][value=FOLDER]:checked)) .seq-folder { display: none; }

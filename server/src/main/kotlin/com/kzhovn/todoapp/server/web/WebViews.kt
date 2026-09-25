@@ -269,12 +269,12 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
         details(classes = "more") {
             summary { attributes["aria-label"] = "Snooze"; +"⋯" }
             div(classes = "menu") {
-                listOf("1 hour" to "hour", "Tomorrow" to "tomorrow", "1 week" to "week").forEach { (label, until) ->
+                listOf("Snooze 1 hour" to "hour", "Snooze to tomorrow" to "tomorrow", "Snooze 1 week" to "week").forEach { (label, until) ->
                     button {
                         attributes["hx-post"] = "/tasks/${task.id}/snooze?until=$until&mode=$mode"
                         attributes["hx-target"] = "#list"
                         attributes["hx-swap"] = "outerHTML"
-                        +"Snooze $label"
+                        +label
                     }
                 }
             }
@@ -322,11 +322,11 @@ private fun FlowContent.stalledPrompt(project: Task, mode: ListMode) = div(class
         tag.attributes["hx-target"] = "#list"
         tag.attributes["hx-swap"] = "outerHTML"
     }
-    span { +"“${project.title}”: all steps done. Is the project complete?" }
+    span { +"“${project.title}”: all subtasks done. Is the project complete?" }
     button(classes = "primary") { htmx(this, "post", "/tasks/${project.id}/complete?mode=$m"); +"Complete project" }
     form(classes = "inline") {
         htmx(this, "post", "/tasks/${project.id}/next?mode=$m")
-        textInput(name = "text") { placeholder = "Or add the next step…"; attributes["autocomplete"] = "off" }
+        textInput(name = "text") { placeholder = "Add next…"; attributes["autocomplete"] = "off" }
     }
     button { htmx(this, "get", "/list/${mode.name.lowercase()}?later=${project.id}"); +"Later" }
 }
@@ -337,9 +337,9 @@ fun DIV.askSubtasksToast(task: Task, open: Int, url: String, target: String, inc
     id = "toast"
     attributes["hx-swap-oob"] = "true"
     classes = setOf("show", "question")
-    span { +"“${task.title}” has $open open subtask${if (open == 1) "" else "s"}." }
+    span { +"Complete “${task.title}”? It has $open active subtask${if (open == 1) "" else "s"}." }
     val sep = if ('?' in url) '&' else '?'
-    listOf("complete" to "Complete them too", "promote" to "Move them out").forEach { (choice, label) ->
+    listOf("complete" to "Complete subtasks too", "promote" to "Move subtasks out").forEach { (choice, label) ->
         button {
             attributes["hx-post"] = "$url${sep}subtasks=$choice"
             attributes["hx-target"] = target

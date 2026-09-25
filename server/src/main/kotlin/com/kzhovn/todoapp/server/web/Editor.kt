@@ -96,7 +96,7 @@ private data class EditorView(
     val needFirstStep: Boolean = false,
     val firstStep: String = "",
     val newSubtasks: String = "", // a new task's subtasks, one per line, created with it
-    val newDep: String = "" // a new task for this one to wait for
+    val newDep: String = "" // a new task this one depends on
 )
 
 fun Route.editorRoutes(service: TaskService) {
@@ -138,7 +138,7 @@ fun Route.editorRoutes(service: TaskService) {
         call.receiveParameters()["child"]?.toLongOrNull()?.let { service.reparent(it, id) }
         call.respondSubtasks(service, id)
     }
-    // An existing task, or (text) a new one, that waits for this one. A new one goes in this task's
+    // An existing task, or (text) a new one, that depends on this one. A new one goes in this task's
     // folder, like the phone's, since dependent work usually belongs together.
     post("/tasks/{id}/dependent") {
         val id = call.taskId() ?: return@post
@@ -343,7 +343,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
             val r = v.recurrence
             select {
                 name = "repeat"
-                listOf(RecurrencePreset.NONE to "Doesn't repeat", RecurrencePreset.CALENDAR to "Every", RecurrencePreset.AFTER_COMPLETION_N_DAYS to "After completion, wait")
+                listOf(RecurrencePreset.NONE to "None", RecurrencePreset.CALENDAR to "Every", RecurrencePreset.AFTER_COMPLETION_N_DAYS to "After completion")
                     .forEach { (preset, label) -> option { value = preset.name; selected = r.preset == preset; +label } }
             }
             numberInput(name = "n", classes = "rep-n") { value = r.n.toString(); min = "1"; max = "999" }
@@ -352,7 +352,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
                 listOf(RecurrenceUnit.DAY to "day(s)", RecurrenceUnit.WEEK to "week(s)", RecurrenceUnit.MONTH to "month(s)")
                     .forEach { (unit, label) -> option { value = unit.name; selected = r.unit == unit; +label } }
             }
-            span(classes = "rep-after") { +"day(s)" }
+            span(classes = "rep-after") { +"days after completion" }
             // Monday first, like the phone's pickers; bits are Su=0..Sa=6.
             div(classes = "rep-wd") {
                 listOf(1 to "Mo", 2 to "Tu", 3 to "We", 4 to "Th", 5 to "Fr", 6 to "Sa", 0 to "Su").forEach { (bit, label) ->
@@ -371,7 +371,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
                 it.id in selected || (it.id != t.id && !it.isComplete && (it.type == TaskType.TASK || it.type == TaskType.PROJECT) &&
                     !wouldCreateDependencyCycle(it.id, t.id, edges))
             }.sortedWith(compareBy({ it.id !in selected }, { it.title.lowercase() }))
-            textInput(name = "newDep", classes = "new-dep") { value = v.newDep; placeholder = "Or a new task this waits for…"; attributes["autocomplete"] = "off" }
+            textInput(name = "newDep", classes = "new-dep") { value = v.newDep; placeholder = "Create new task…"; attributes["autocomplete"] = "off" }
             div(classes = "picker") {
                 input(type = InputType.search, classes = "filter") { placeholder = "Filter…"; attributes["data-filter"] = "" }
                 div(classes = "options") {
@@ -395,7 +395,11 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
         div(classes = "toggles") {
             label(classes = "task-only") { checkBoxInput(name = "maybe") { checked = t.isMaybe }; +"Maybe (?)" }
             label(classes = "task-only") { checkBoxInput(name = "today") { checked = t.expiresAt != null }; +"Just for today" }
-            label { checkBoxInput(name = "sequential") { checked = t.sequential }; +"Complete subtasks in order" }
+            label {
+                checkBoxInput(name = "sequential") { checked = t.sequential }
+                span(classes = "seq-task") { +"Complete subtasks in order" }
+                span(classes = "seq-folder") { +"Sequential (complete tasks in order)" }
+            }
         }
 
         // A new task's subtasks (it has no id for the subtask actions below the form yet).
@@ -475,28 +479,28 @@ fun DIV.subtasksSection(service: TaskService, id: Long, mode: ListMode) {
         form(classes = "inline") {
             htmx("/tasks/$id/adopt?mode=${mode.name}")
             select { name = "child"; moveable.forEach { option { value = it.id.toString(); +it.title } } }
-            button(type = ButtonType.submit) { +"Move here as a subtask" }
+            button(type = ButtonType.submit) { +"Add subtask" }
         }
     }
 
     // A dependent waits for this task. Folders can't be completed, so nothing can wait on one.
     if (task.type == TaskType.FOLDER) return
     val edges = service.dependencyEdges()
-    val waiting = edges.filter { it.dependsOnTaskId == id }.mapNotNull { byId[it.taskId] }
-    h2 { +"Waiting for this" }
-    waiting.forEach { w -> div(classes = "sub-row") { a(href = "/tasks/${w.id}?mode=${mode.name}") { +w.title } } }
+    val dependents = edges.filter { it.dependsOnTaskId == id }.mapNotNull { byId[it.taskId] }
+    h2 { +"Dependent tasks" }
+    dependents.forEach { w -> div(classes = "sub-row") { a(href = "/tasks/${w.id}?mode=${mode.name}") { +w.title } } }
     val candidates = all.filter {
-        it.id != id && it.type == TaskType.TASK && !it.isComplete && it !in waiting && !wouldCreateDependencyCycle(id, it.id, edges)
+        it.id != id && it.type == TaskType.TASK && !it.isComplete && it !in dependents && !wouldCreateDependencyCycle(id, it.id, edges)
     }.sortedBy { it.title.lowercase() }
     form(classes = "inline") {
         htmx("/tasks/$id/dependent?mode=${mode.name}")
-        textInput(name = "text") { placeholder = "A new task that waits for this…"; attributes["autocomplete"] = "off" }
+        textInput(name = "text") { placeholder = "Create new dependent task…"; attributes["autocomplete"] = "off" }
     }
     if (candidates.isNotEmpty()) {
         form(classes = "inline") {
             htmx("/tasks/$id/dependent?mode=${mode.name}")
             select { name = "dependent"; candidates.forEach { option { value = it.id.toString(); +it.title } } }
-            button(type = ButtonType.submit) { +"Make it wait for this" }
+            button(type = ButtonType.submit) { +"Add dependent task" }
         }
     }
 }

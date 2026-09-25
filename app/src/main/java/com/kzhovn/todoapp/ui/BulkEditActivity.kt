@@ -99,7 +99,7 @@ class BulkEditActivity : ComponentActivity() {
                         idOf = { it.id }, labelOf = { it.name },
                         onToggle = { id -> edit = edit.copy(removeContextIds = edit.removeContextIds.toggle(id), addContextIds = edit.addContextIds - id) }
                     )
-                    Section("Wait for") {
+                    Section("Depends on") {
                         Choice("Nothing new", edit.dependsOnId == null) { edit = edit.copy(dependsOnId = null) }
                         val blocker = edit.dependsOnId?.let { byId[it]?.title }
                         Choice(blocker ?: "Choose task…", blocker != null) { showDependencyPicker = true }
@@ -126,7 +126,7 @@ class BulkEditActivity : ComponentActivity() {
                 }
                 if (showDependencyPicker) {
                     TaskPickerDialog(
-                        title = "All selected tasks wait for…",
+                        title = "All selected tasks depend on…",
                         tasks = allTasks.filter { it.type == TaskType.TASK && !it.isComplete && it.id !in taskIds },
                         onPick = { edit = edit.copy(dependsOnId = it.id); showDependencyPicker = false },
                         onCreateNew = null,

@@ -233,7 +233,7 @@ class WebTest {
         val folder = service.create(Task(type = TaskType.FOLDER, title = "Personal"))
         val trip = service.create(Task(title = "Plan trip", parentId = folder.id))
         val hotel = service.create(Task(title = "Book hotel", parentId = trip.id))
-        assertTrue(client.post("/tasks/${trip.id}/complete?mode=ALL").bodyAsText().contains("1 open subtask"))
+        assertTrue(client.post("/tasks/${trip.id}/complete?mode=ALL").bodyAsText().contains("1 active subtask"))
         assertFalse(service.get(trip.id)!!.isComplete)
 
         client.post("/tasks/${trip.id}/complete?mode=ALL&subtasks=promote")
@@ -249,18 +249,18 @@ class WebTest {
     }
 
     @Test
-    fun `a project with all steps done is asked about until completed, extended or put off`() = web {
+    fun `a project with all subtasks done is asked about until completed, extended or put off`() = web {
         val project = service.create(Task(type = TaskType.PROJECT, title = "Wool coat"))
         service.create(Task(title = "Cut fabric", parentId = project.id, isComplete = true))
-        assertTrue(client.get("/list/active").bodyAsText().contains("“Wool coat”: all steps done"))
+        assertTrue(client.get("/list/active").bodyAsText().contains("“Wool coat”: all subtasks done"))
 
         client.submitForm("/tasks/${project.id}/next?mode=ACTIVE", parameters { append("text", "Sew lining") })
-        assertFalse(client.get("/list/active").bodyAsText().contains("all steps done"))
+        assertFalse(client.get("/list/active").bodyAsText().contains("all subtasks done"))
 
         service.complete(service.tasks().single { it.title == "Sew lining" }.id)
         val browser = createClient { install(io.ktor.client.plugins.cookies.HttpCookies) }
-        assertFalse(browser.get("/list/active?later=${project.id}").bodyAsText().contains("all steps done"))
-        assertFalse(browser.get("/list/active").bodyAsText().contains("all steps done")) // for this session
+        assertFalse(browser.get("/list/active?later=${project.id}").bodyAsText().contains("all subtasks done"))
+        assertFalse(browser.get("/list/active").bodyAsText().contains("all subtasks done")) // for this session
     }
 
     @Test
@@ -293,7 +293,7 @@ class WebTest {
         client.submitForm("/bulk?mode=DOING", parameters {
             listOf(a, b, folder).forEach { append("id", it.id.toString()) }
             append("star", "unstar"); append("maybe", "keep"); append("dueClear", "on")
-            append("folder", work.id.toString()); append("addCtx", office.id.toString()); append("waitFor", blocker.id.toString())
+            append("folder", work.id.toString()); append("addCtx", office.id.toString()); append("dependsOn", blocker.id.toString())
         })
         listOf(a, b).map { service.get(it.id)!! }.forEach {
             assertFalse(it.isStarred)

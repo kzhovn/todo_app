@@ -72,7 +72,7 @@ class QuickAddActivity : ComponentActivity() {
         val repository = (application as TodoApp).repository
         val fixedParentId = intent.getLongExtra(EXTRA_PARENT_ID, 0L).takeIf { it != 0L }
         val initialFolderId = intent.getLongExtra(EXTRA_FOLDER_ID, 0L).takeIf { it != 0L }
-        // "Add dependent task": the new task waits for (depends on) this one.
+        // "Add dependent task": the new task depends on this one.
         val dependsOnId = intent.getLongExtra(EXTRA_DEPENDS_ON, 0L).takeIf { it != 0L }
         val startStarred = intent.getBooleanExtra(EXTRA_STARRED, false)
         setContent {
@@ -140,7 +140,7 @@ class QuickAddActivity : ComponentActivity() {
                     .background(LedgerSearchBackground, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                     .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                dependsOnTitle?.let { Text("Waits for: $it", color = LedgerMuted, fontSize = 12.sp) }
+                dependsOnTitle?.let { Text("Depends on: $it", color = LedgerMuted, fontSize = 12.sp) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextField(
                         value = title,

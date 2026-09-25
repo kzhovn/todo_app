@@ -30,7 +30,7 @@ val HELP = """
 `-- x -d fri` / `due fri 5pm` / `due 3pm` due date and time
 `-- x -s tomorrow` / `start mon 9am` start date
 `-- x?` a maybe (hidden from Active, never starred)
-Reply to a todo with a todo: the first waits for the new one.
+Reply to a todo with a todo: the first depends on the new one.
 
 **On a todo's message**
 ✅ complete · ❌ delete · ⭐ star (remove the reaction to undo)

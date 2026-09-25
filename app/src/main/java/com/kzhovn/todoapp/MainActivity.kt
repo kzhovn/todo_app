@@ -547,7 +547,7 @@ private fun QuickAddKey() {
     val discord = listOf(
         "--work: …" to "into a folder (else Personal)",
         "--d: …" to "just for today",
-        "reply to a todo" to "it waits for the new one",
+        "reply to a todo" to "it depends on the new one",
         "✅ ❌ ⭐" to "complete / delete / star",
     )
     Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
