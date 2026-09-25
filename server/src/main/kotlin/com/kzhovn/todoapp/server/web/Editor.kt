@@ -100,7 +100,8 @@ private data class EditorView(
     val needFirstStep: Boolean = false,
     val firstStep: String = "",
     val newSubtasks: String = "", // a new task's subtasks, one per line, created with it
-    val newDep: String = "" // a new task this one depends on
+    val newDep: String = "", // a new task this one depends on
+    val newDependent: String = "" // a new task that depends on this one
 )
 
 fun Route.editorRoutes(service: TaskService) {
@@ -199,7 +200,8 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     val firstStep = params["firstStep"]?.trim().orEmpty()
     val newSubtasks = params["newSubtasks"].orEmpty().lines().map { it.trim() }.filter { it.isNotEmpty() }
     val newDep = params["newDep"]?.trim().orEmpty()
-    val view = EditorView(mode, form, recurrence, base.encode(), firstStep = firstStep, newSubtasks = params["newSubtasks"].orEmpty(), newDep = newDep)
+    val newDependent = params["newDependent"]?.trim().orEmpty()
+    val view = EditorView(mode, form, recurrence, base.encode(), firstStep = firstStep, newSubtasks = params["newSubtasks"].orEmpty(), newDep = newDep, newDependent = newDependent)
     suspend fun reshow(v: EditorView) = call.respondHtml { editorPage(service, v) }
 
     if (form.task.title.isBlank()) return reshow(view.copy(error = "A title is required."))
@@ -220,10 +222,11 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     val inherit = params["inherit"]
     if (changed.isNotEmpty() && inherit == null) return reshow(view.copy(ask = overriding.size to changed))
 
-    // A new task's prerequisite, typed in the form: made in its folder, as related work usually belongs together.
-    val blocker = QuickAddParser.parse(newDep).takeIf { it.title.isNotBlank() }?.let { parsed ->
-        service.create(parsed.copy(parentId = merged.task.parentId?.takeIf { service.get(it)?.type == TaskType.FOLDER })).id
-    }
+    // A new task's prerequisite and dependent, typed in the form: made in its folder, as related work
+    // usually belongs together.
+    val folderId = merged.task.parentId?.takeIf { service.get(it)?.type == TaskType.FOLDER }
+    fun createTyped(text: String) = QuickAddParser.parse(text).takeIf { it.title.isNotBlank() }?.let { service.create(it.copy(parentId = folderId)).id }
+    val blocker = createTyped(newDep)
     val dependsOn = merged.dependsOn + listOfNotNull(blocker)
     val savedId = if (id == null) {
         // Created first, then edited, so contexts and dependencies go through edit()'s checks.
@@ -235,6 +238,7 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     if (inherit == "update") service.clearInherited(overriding, changed)
     if (needsFirstStep) service.create(Task(title = firstStep, parentId = savedId))
     newSubtasks.forEach { service.create(QuickAddParser.parse(it).copy(parentId = savedId)) }
+    createTyped(newDependent)?.let { service.addDependency(it, savedId) }
     call.respondRedirect(mode.path)
 }
 
@@ -419,8 +423,8 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
             a(href = "/contexts", classes = "pill manage") { +Labels.MANAGE_CONTEXTS }
         }
 
-        // A new task has no id for the related-task actions yet, so its subtasks and prerequisite are
-        // typed here and created on save.
+        // A new task has no id for the related-task actions yet, so its subtasks, prerequisite and
+        // dependent are typed here and created on save.
         if (isNew) {
             div(classes = "field-label section") { +Labels.RELATED_TASKS }
             field(Labels.SUBTASK, "") {
@@ -428,6 +432,9 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
             }
             field(Labels.PREREQUISITE, "task-only") {
                 textInput(name = "newDep", classes = "new-dep") { value = v.newDep; placeholder = "A new task this depends on"; attributes["autocomplete"] = "off" }
+            }
+            field(Labels.DEPENDENT, "task-only") {
+                textInput(name = "newDependent", classes = "new-dep") { value = v.newDependent; placeholder = "A new task that depends on this"; attributes["autocomplete"] = "off" }
             }
         }
 

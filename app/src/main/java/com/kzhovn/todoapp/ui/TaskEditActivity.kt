@@ -150,6 +150,12 @@ class TaskEditActivity : ComponentActivity() {
             var pendingSubtasks by remember { mutableStateOf<List<String>>(emptyList()) }
             var showPendingSubtaskDialog by remember { mutableStateOf(false) }
             var pendingSubtaskTitle by remember { mutableStateOf("") }
+            // A new task's other related tasks, linked on save (it has no id until then).
+            var pendingChildIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+            var pendingDependentIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+            var pendingDependents by remember { mutableStateOf<List<String>>(emptyList()) }
+            var showPendingDependentDialog by remember { mutableStateOf(false) }
+            var pendingDependentTitle by remember { mutableStateOf("") }
             var showNewBlockerDialog by remember { mutableStateOf(false) }
             var newBlockerTitle by remember { mutableStateOf("") }
             var showSubtaskPicker by remember { mutableStateOf(false) }
@@ -158,7 +164,7 @@ class TaskEditActivity : ComponentActivity() {
             var showRepeatDialog by remember { mutableStateOf(false) }
             var showTimerDialog by remember { mutableStateOf(false) }
             var showContextMenu by remember { mutableStateOf(false) }
-            // Pinning takes effect at once (it's "what I'm doing now"), not on Save.
+            // Pinning takes effect at once (it's "what I'm doing now"), not on Save; a new task's, on save.
             var pinned by remember { mutableStateOf(taskId != 0L && PinnedTask.pinnedId(this@TaskEditActivity) == taskId) }
             val focusManager = LocalFocusManager.current
 
@@ -206,13 +212,19 @@ class TaskEditActivity : ComponentActivity() {
                     repository.clearInherited(clearOn, fields)
                     firstSubtask?.let { repository.createTask(Task(title = it, parentId = savedId)) }
                     pendingSubtasks.forEach { repository.createTask(QuickAddParser.parse(it).copy(parentId = savedId)) }
+                    pendingChildIds.forEach { repository.reparent(it, savedId) }
+                    pendingDependentIds.forEach { repository.addDependency(it, savedId) }
+                    // New dependents go in this task's folder, as related work usually belongs together.
+                    val folderId = toSave.parentId?.takeIf { id -> allTasks.any { it.id == id && it.type == TaskType.FOLDER } }
+                    pendingDependents.forEach { repository.addDependency(repository.createTask(QuickAddParser.parse(it).copy(parentId = folderId)), savedId) }
+                    if (taskId == 0L && pinned) PinnedTask.pin(this@TaskEditActivity, toSave.copy(id = savedId))
                     TodoWidget().updateAll(applicationContext)
                     finish()
                 }
             }
 
             val onSave: () -> Unit = {
-                val hasSubtasks = pendingSubtasks.isNotEmpty() || allTasks.any { it.parentId == taskId && taskId != 0L }
+                val hasSubtasks = pendingSubtasks.isNotEmpty() || pendingChildIds.isNotEmpty() || allTasks.any { it.parentId == taskId && taskId != 0L }
                 if (task.type == TaskType.PROJECT && !hasSubtasks) {
                     firstSubtaskTitle = ""
                     askFirstSubtask = true
@@ -265,14 +277,14 @@ class TaskEditActivity : ComponentActivity() {
             ) {
                 // Title box: pin in front, then Maybe and the star after. It wraps (up to four lines),
                 // with the icons staying level with the first line.
-                val canPin = taskId != 0L && task.type == TaskType.TASK && !task.isComplete
+                val canPin = task.type == TaskType.TASK && !task.isComplete
                 Row(
                     verticalAlignment = Alignment.Top,
                     modifier = Modifier.fillMaxWidth().border(1.dp, LedgerBorder, RoundedCornerShape(6.dp)).padding(horizontal = 4.dp)
                 ) {
                     if (canPin) {
                         IconButton(onClick = {
-                            if (pinned) PinnedTask.unpin(this@TaskEditActivity) else PinnedTask.pin(this@TaskEditActivity, task)
+                            if (taskId != 0L) { if (pinned) PinnedTask.unpin(this@TaskEditActivity) else PinnedTask.pin(this@TaskEditActivity, task) }
                             pinned = !pinned
                         }) {
                             Icon(Icons.Filled.PushPin, contentDescription = Labels.PIN, tint = if (pinned) LedgerAccent else LedgerMuted, modifier = Modifier.size(20.dp))
@@ -443,11 +455,20 @@ class TaskEditActivity : ComponentActivity() {
                 pendingSubtasks.forEachIndexed { index, title ->
                     RelatedRow(Labels.SUBTASK, title, onOpen = null) { RemoveButton { pendingSubtasks = pendingSubtasks.filterIndexed { i, _ -> i != index } } }
                 }
+                pendingChildIds.mapNotNull(allById::get).forEach { child ->
+                    RelatedRow(Labels.SUBTASK, child.title, onOpen = { openTask(child.id) }) { RemoveButton { pendingChildIds = pendingChildIds - child.id } }
+                }
                 if (task.type != TaskType.FOLDER) {
                     selectedDependencyIds.mapNotNull(allById::get).sortedBy { it.title.lowercase() }.forEach { prereq ->
                         RelatedRow(Labels.PREREQUISITE, prereq.title, done = prereq.isComplete, onOpen = { openTask(prereq.id) }) {
                             RemoveButton { selectedDependencyIds = selectedDependencyIds - prereq.id }
                         }
+                    }
+                    pendingDependentIds.mapNotNull(allById::get).forEach { dependent ->
+                        RelatedRow(Labels.DEPENDENT, dependent.title, onOpen = { openTask(dependent.id) }) { RemoveButton { pendingDependentIds = pendingDependentIds - dependent.id } }
+                    }
+                    pendingDependents.forEachIndexed { index, title ->
+                        RelatedRow(Labels.DEPENDENT, title, onOpen = null) { RemoveButton { pendingDependents = pendingDependents.filterIndexed { i, _ -> i != index } } }
                     }
                     allDependencyEdges.filter { it.dependsOnTaskId == taskId && taskId != 0L }.mapNotNull { allById[it.taskId] }.forEach { dependent ->
                         RelatedRow(Labels.DEPENDENT, dependent.title, done = dependent.isComplete, onOpen = { openTask(dependent.id) }) {
@@ -462,13 +483,11 @@ class TaskEditActivity : ComponentActivity() {
                 }
                 Spacer(Modifier.height(6.dp))
                 Row {
-                    AddLink(Labels.ADD_SUBTASK) {
-                        if (taskId == 0L) { pendingSubtaskTitle = ""; showPendingSubtaskDialog = true } else showSubtaskPicker = true
-                    }
+                    AddLink(Labels.ADD_SUBTASK) { showSubtaskPicker = true }
                     // A folder can't be completed, so it neither waits on tasks nor has any waiting on it.
                     if (task.type != TaskType.FOLDER) {
                         AddLink(Labels.ADD_PREREQUISITE) { showPrereqPicker = true }
-                        if (taskId != 0L) AddLink(Labels.ADD_DEPENDENT) { showDependentPicker = true }
+                        AddLink(Labels.ADD_DEPENDENT) { showDependentPicker = true }
                     }
                 }
                 // Folders and tasks alike: only the first incomplete child counts as active.
@@ -486,15 +505,13 @@ class TaskEditActivity : ComponentActivity() {
 
                 Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (taskId != 0L) {
-                        IconButton(onClick = {
-                            scope.launch {
-                                descendantCount = repository.countDescendants(task.id)
-                                showDeleteConfirm = true
-                            }
-                        }) {
-                            Icon(Icons.Filled.Delete, contentDescription = Labels.DELETE, tint = LedgerOverdue)
+                    IconButton(onClick = {
+                        scope.launch {
+                            descendantCount = if (taskId == 0L) 0 else repository.countDescendants(task.id)
+                            showDeleteConfirm = true
                         }
+                    }) {
+                        Icon(Icons.Filled.Delete, contentDescription = Labels.DELETE, tint = LedgerOverdue)
                     }
                     Spacer(Modifier.weight(1f))
                     Button(
@@ -516,7 +533,8 @@ class TaskEditActivity : ComponentActivity() {
                     confirmLabel = "Delete",
                     onConfirm = {
                         showDeleteConfirm = false
-                        scope.launch {
+                        // A new task isn't saved yet: deleting it just discards it.
+                        if (taskId == 0L) finish() else scope.launch {
                             repository.deleteTask(task)
                             TodoWidget().updateAll(applicationContext)
                             finish()
@@ -560,7 +578,7 @@ class TaskEditActivity : ComponentActivity() {
                 // Existing tasks can be moved under this one (anything but its own ancestors), or a new one created.
                 val candidates = remember(allTasks, task.id) {
                     allTasks.filter {
-                        it.id != task.id && it.type != TaskType.FOLDER && !it.isComplete && it.parentId != task.id &&
+                        it.id != task.id && it.type != TaskType.FOLDER && !it.isComplete && (task.id == 0L || it.parentId != task.id) && it.id !in pendingChildIds &&
                             !wouldCreateCycle(task.id, it.id, allById)
                     }
                 }
@@ -569,7 +587,8 @@ class TaskEditActivity : ComponentActivity() {
                     tasks = candidates,
                     onPick = { picked ->
                         showSubtaskPicker = false
-                        scope.launch {
+                        if (taskId == 0L) pendingChildIds = pendingChildIds + picked.id
+                        else scope.launch {
                             repository.reparent(picked.id, task.id)
                             allTasks = repository.getAllTasks()
                             TodoWidget().updateAll(applicationContext)
@@ -577,7 +596,8 @@ class TaskEditActivity : ComponentActivity() {
                     },
                     onCreateNew = {
                         showSubtaskPicker = false
-                        startActivity(
+                        if (taskId == 0L) { pendingSubtaskTitle = ""; showPendingSubtaskDialog = true }
+                        else startActivity(
                             Intent(this@TaskEditActivity, QuickAddActivity::class.java)
                                 .putExtra(QuickAddActivity.EXTRA_PARENT_ID, task.id)
                         )
@@ -590,7 +610,7 @@ class TaskEditActivity : ComponentActivity() {
                 val candidates = remember(allTasks, allDependencyEdges, task.id) {
                     allTasks.filter {
                         it.id != task.id && it.type == TaskType.TASK && !it.isComplete &&
-                            allDependencyEdges.none { e -> e.taskId == it.id && e.dependsOnTaskId == task.id } &&
+                            (task.id == 0L || allDependencyEdges.none { e -> e.taskId == it.id && e.dependsOnTaskId == task.id }) && it.id !in pendingDependentIds &&
                             !wouldCreateDependencyCycle(task.id, it.id, allDependencyEdges)
                     }
                 }
@@ -599,7 +619,8 @@ class TaskEditActivity : ComponentActivity() {
                     tasks = candidates,
                     onPick = { picked ->
                         showDependentPicker = false
-                        scope.launch {
+                        if (taskId == 0L) pendingDependentIds = pendingDependentIds + picked.id
+                        else scope.launch {
                             repository.addDependency(picked.id, task.id)
                             allDependencyEdges = repository.getAllDependencyEdges()
                             TodoWidget().updateAll(applicationContext)
@@ -608,6 +629,7 @@ class TaskEditActivity : ComponentActivity() {
                     },
                     onCreateNew = {
                         showDependentPicker = false
+                        if (taskId == 0L) { pendingDependentTitle = ""; showPendingDependentDialog = true; return@TaskPickerDialog }
                         // The new task goes in this task's folder by default, since dependent work usually belongs together.
                         val folderId = task.parentId?.takeIf { allById[it]?.type == TaskType.FOLDER }
                         startActivity(
@@ -701,6 +723,21 @@ class TaskEditActivity : ComponentActivity() {
                     onPick = { picked -> selectedDependencyIds = selectedDependencyIds + picked.id; showPrereqPicker = false },
                     onCreateNew = { showPrereqPicker = false; newBlockerTitle = ""; showNewBlockerDialog = true },
                     onDismiss = { showPrereqPicker = false }
+                )
+            }
+
+            if (showPendingDependentDialog) {
+                TextInputDialog(
+                    title = "Add a dependent task",
+                    placeholder = Labels.DEPENDENT,
+                    confirmLabel = "Add",
+                    value = pendingDependentTitle,
+                    onValueChange = { pendingDependentTitle = it },
+                    onConfirm = {
+                        pendingDependentTitle.trim().takeIf { it.isNotEmpty() }?.let { pendingDependents = pendingDependents + it }
+                        showPendingDependentDialog = false
+                    },
+                    onDismiss = { showPendingDependentDialog = false }
                 )
             }
 

@@ -366,6 +366,18 @@ class WebTest {
     }
 
     @Test
+    fun `a new task can be saved with a new dependent, made in its folder`() = web {
+        val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
+        client.submitForm("/tasks/new", parameters {
+            append("title", "Write draft"); append("type", "TASK"); append("parent", work.id.toString()); append("newDependent", "Send draft")
+        })
+        val draft = service.tasks().single { it.title == "Write draft" }
+        val send = service.tasks().single { it.title == "Send draft" }
+        assertEquals(work.id, send.parentId)
+        assertEquals(setOf(draft.id), service.dependsOn(send.id))
+    }
+
+    @Test
     fun `active is sectioned by top-level folder, foldable per browser, no-folder only when needed`() = web {
         val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
         service.create(Task(title = "Fix bug", parentId = work.id))
