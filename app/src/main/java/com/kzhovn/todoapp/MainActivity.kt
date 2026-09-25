@@ -71,6 +71,8 @@ import com.kzhovn.todoapp.context.WifiContextMonitor
 import com.kzhovn.todoapp.contexts.ContextsActivity
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.ui.BulkEditActivity
+import com.kzhovn.todoapp.ui.ReviewActivity
+import androidx.compose.material.icons.filled.BarChart
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Checklist
 import com.kzhovn.todoapp.sync.SyncSettings
@@ -227,6 +229,16 @@ class MainActivity : ComponentActivity() {
                             onClick = {
                                 searchMode = true
                                 scope.launch { drawerState.close() }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                        NavigationDrawerItem(
+                            label = { Text("Review") },
+                            icon = { Icon(Icons.Filled.BarChart, contentDescription = null) },
+                            selected = false,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                startActivity(Intent(this@MainActivity, ReviewActivity::class.java))
                             },
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                         )

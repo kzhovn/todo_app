@@ -7,6 +7,10 @@ import androidx.room.Room
 import com.kzhovn.todoapp.data.MIGRATION_3_4
 import com.kzhovn.todoapp.data.MIGRATION_4_5
 import com.kzhovn.todoapp.data.TodoDatabase
+import com.kzhovn.todoapp.notifications.PinnedTask
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import com.kzhovn.todoapp.notifications.ReminderScheduler
 import com.kzhovn.todoapp.repository.ContextRepository
 import com.kzhovn.todoapp.repository.TaskRepository
@@ -40,6 +44,7 @@ class TodoApp : Application() {
         database.invalidationTracker.addObserver(object : InvalidationTracker.Observer(TRACKED_TABLES) {
             override fun onInvalidated(tables: Set<String>) {
                 if (SyncSettings.config(this@TodoApp) != null && syncClient.hasDirty()) SyncWorker.requestSoon(this@TodoApp)
+                if (PinnedTask.pinnedId(this@TodoApp) != null) CoroutineScope(Dispatchers.IO).launch { PinnedTask.refresh(this@TodoApp) }
             }
         })
     }

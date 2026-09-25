@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.notifications.PinnedTask
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -193,6 +195,8 @@ private fun TaskRow(
             DropdownMenuItem(text = { Text("Snooze 1 hour") }, onClick = { showSnoozeMenu = false; onSnooze(task.id, HOUR_MILLIS) })
             DropdownMenuItem(text = { Text("Snooze to tomorrow") }, onClick = { showSnoozeMenu = false; onSnooze(task.id, DAY_MILLIS) })
             DropdownMenuItem(text = { Text("Snooze 1 week") }, onClick = { showSnoozeMenu = false; onSnooze(task.id, WEEK_MILLIS) })
+            val context = LocalContext.current
+            DropdownMenuItem(text = { Text("Pin to notification") }, onClick = { showSnoozeMenu = false; PinnedTask.pin(context, task) })
         }
     }
 }

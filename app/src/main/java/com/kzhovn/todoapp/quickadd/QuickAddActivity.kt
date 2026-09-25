@@ -88,7 +88,9 @@ class QuickAddActivity : ComponentActivity() {
 
             LaunchedEffect(Unit) {
                 folders = repository.getFolders()
-                folder = folders.firstOrNull { it.id == initialFolderId }
+                // With no folder asked for, new tasks land in Personal (if it exists), as Discord adds do.
+                folder = if (initialFolderId != null) folders.firstOrNull { it.id == initialFolderId }
+                else folders.firstOrNull { it.title.trim().equals(DEFAULT_FOLDER, ignoreCase = true) }
                 dependsOnTitle = dependsOnId?.let { repository.getTask(it)?.title }
                 focus.requestFocus()
             }
@@ -248,5 +250,6 @@ class QuickAddActivity : ComponentActivity() {
         const val EXTRA_PARENT_ID = "parent_id"
         const val EXTRA_FOLDER_ID = "folder_id"
         const val EXTRA_DEPENDS_ON = "depends_on"
+        const val DEFAULT_FOLDER = "Personal"
     }
 }

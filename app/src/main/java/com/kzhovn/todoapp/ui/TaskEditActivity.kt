@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.notifications.PinnedTask
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.text.style.TextDecoration
 import android.content.Intent
@@ -390,6 +391,18 @@ class TaskEditActivity : ComponentActivity() {
                             )
                         }
                     }
+                    if (task.type == TaskType.TASK && !task.isComplete) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            "Pin to notification (doing now)",
+                            color = LedgerAccent,
+                            fontSize = 12.sp,
+                            modifier = Modifier.clickable {
+                                PinnedTask.pin(this@TaskEditActivity, task)
+                                Toast.makeText(this@TaskEditActivity, "Pinned", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
                 }
 
                 if (task.type == TaskType.TASK) {
@@ -416,16 +429,15 @@ class TaskEditActivity : ComponentActivity() {
                     )
                 }
 
-                if (task.type == TaskType.FOLDER) {
-                    Spacer(Modifier.height(12.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "Sequential (complete tasks in order)",
-                            fontSize = 12.sp, color = LedgerMuted,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Switch(checked = task.sequential, onCheckedChange = { task = task.copy(sequential = it) })
-                    }
+                // Folders and tasks alike: only the first incomplete child counts as active.
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (task.type == TaskType.FOLDER) "Sequential (complete tasks in order)" else "Complete subtasks in order",
+                        fontSize = 12.sp, color = LedgerMuted,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(checked = task.sequential, onCheckedChange = { task = task.copy(sequential = it) })
                 }
 
                 Spacer(Modifier.height(20.dp))
