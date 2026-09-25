@@ -163,14 +163,22 @@
     renderTimer();
   };
   const leftOf = (t) => (t.endsAt ? t.endsAt - Date.now() : t.remaining);
-  const clock = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+  const clock = (ms) => {
+    const s = Math.max(0, Math.ceil(ms / 1000)), mm = String(Math.floor(s / 60) % 60).padStart(2, "0"), ss = String(s % 60).padStart(2, "0");
+    return s >= 3600 ? `${Math.floor(s / 3600)}:${mm}:${ss}` : `${Math.floor(s / 60)}:${ss}`;
+  };
   const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const listMode = () => document.querySelector(".list-tools")?.dataset.mode || "DOING";
   const baseTitle = document.title;
 
   function renderTimer() {
     const t = loadTimer(), bar = document.getElementById("timer");
-    document.querySelectorAll(".play").forEach((b) => b.classList.toggle("running", !!t && !t.phase && !!t.endsAt && t.id === b.dataset.taskId));
+    // A row's timer pill shows its length ("1h"), or the time left while this task's timer is on.
+    document.querySelectorAll(".play").forEach((b) => {
+      const mine = !!t && !t.phase && t.id === b.dataset.taskId;
+      b.classList.toggle("running", mine && !!t.endsAt);
+      b.querySelector(".play-time").textContent = mine ? clock(leftOf(t)) : duration(+b.dataset.minutes);
+    });
     document.title = t?.phase ? `⏰ ${baseTitle}` : baseTitle;
     if (!bar) return;
     bar.hidden = !t;
@@ -207,7 +215,7 @@
     const t = loadTimer();
     if (!t || t.phase || !t.endsAt) return;
     if (leftOf(t) <= 0) timeUp(t);
-    else document.querySelector("#timer .timer-left")?.replaceChildren(clock(leftOf(t)));
+    else document.querySelectorAll("#timer .timer-left, .play.running .play-time").forEach((el) => el.replaceChildren(clock(leftOf(t))));
   }, 1000);
   window.addEventListener("storage", (e) => { if (e.key === TIMER_KEY) renderTimer(); }); // other tabs
   document.addEventListener("htmx:afterSwap", renderTimer); // re-marks the running row's button

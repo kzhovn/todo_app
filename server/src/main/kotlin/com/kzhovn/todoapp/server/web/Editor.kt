@@ -338,7 +338,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
             label(classes = "flag-toggle star-toggle task-only") {
                 attributes["title"] = Labels.STAR
                 checkBoxInput(name = "starred") { checked = t.isStarred }
-                icon(Icon.STAR, "on"); icon(Icon.STAR_BORDER, "off")
+                icon(Icon.STAR, "")
             }
         }
 

@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.widget
 
+import com.kzhovn.todoapp.data.DueStatus
+import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.data.Task
 import androidx.compose.ui.graphics.Color
 import com.kzhovn.todoapp.data.sectionsByTopFolder
@@ -13,7 +15,8 @@ data class WidgetTaskRow(
     val parentTitle: String? = null, // a subtask's parent, shown as "Parent: subtask"
     val parentId: Long? = null,
     val barColor: Color? = null, // the nearest folder's colour, as the app's rows show it
-    val durationMinutes: Int? = null // a timed task: the row gets a play button
+    val durationMinutes: Int? = null, // a timed task: the row gets a play button with its length
+    val due: DueStatus? = null // colours the checkbox ring
 )
 
 object TodoWidgetPresenter {
@@ -30,7 +33,8 @@ object TodoWidgetPresenter {
                 it.id, it.title, it.isComplete, it.isStarred, it.isMaybe, subtaskCounts[it.id]?.takeIf { c -> c.second > 0 },
                 it.isBackburner(now), parentTitle = subtaskParentTitle(it, allById), parentId = it.parentId,
                 barColor = it.parentId?.let { parent -> walkParentChain(parent, allById) { id -> folderColors[id] } },
-                durationMinutes = it.durationMinutes
+                durationMinutes = it.durationMinutes,
+                due = it.dueDate?.takeUnless { _ -> it.isComplete }?.let { d -> dueStatus(d, now) }
             )
         }
 }

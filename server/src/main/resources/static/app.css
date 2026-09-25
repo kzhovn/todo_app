@@ -1,13 +1,13 @@
 /* Ledger palette from the Android app (ui/theme/Color.kt), with a dark variant. */
 :root {
   --bg: #F0EAE0; --panel: #F7F4EE; --ink: #2B2318; --muted: #8A7A5C; --border: #DED5C1;
-  --accent: #2B4C7E; --accent-soft: #DFE6EF; --star: #B8862F; --check: #B5A98C;
+  --accent: #2B4C7E; --accent-soft: #DFE6EF; --star: #C9A01E; --check: #B5A98C; --due-today: #C98A1A; --due-today-text: #A86F0C;
   --today: #93650C; --today-bg: #EEDFB8; --overdue: #96412B; --overdue-bg: #EEDACE; --chip: #E9E2D2;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #1E1B16; --panel: #26221C; --ink: #ECE4D6; --muted: #A8997C; --border: #3A342A;
-    --accent: #8FB0E3; --accent-soft: #2A3445; --star: #D9A54A; --check: #6E6552;
+    --accent: #8FB0E3; --accent-soft: #2A3445; --star: #D9B43A; --check: #6E6552; --due-today: #E0A33A; --due-today-text: #E6B45A;
     --today: #E2B252; --today-bg: #3D331D; --overdue: #E08A71; --overdue-bg: #3F2A22; --chip: #2E2922;
   }
 }
@@ -32,24 +32,27 @@ main { flex: 1; min-width: 0; max-width: 860px; }
 .icon { display: inline-flex; }
 .icon svg { width: 100%; height: 100%; }
 .folder-icon { width: 14px; height: 14px; color: var(--muted); }
-.row { display: flex; align-items: center; gap: 8px; min-height: 40px; padding-right: 8px; border-left: 3px solid var(--border); border-bottom: 1px solid var(--border); }
+.row { display: flex; align-items: center; gap: 6px; min-height: 40px; padding-right: 4px; border-left: 3px solid var(--border); border-bottom: 1px solid var(--border); }
 .row.dim { opacity: .45; }
-.check { width: 22px; height: 22px; margin-left: 10px; border-radius: 50%; border: 1.5px solid var(--check); flex-shrink: 0; }
+.check { width: 22px; height: 22px; margin-left: 6px; border-radius: 50%; border: 1.5px solid var(--check); flex-shrink: 0; }
 .check:hover { background: var(--accent-soft); }
-.check.overdue { border: 2px solid var(--overdue); }
+.check.overdue { border: 2px solid var(--overdue); background: color-mix(in srgb, var(--overdue) 18%, transparent); }
+.check.today { border: 2px solid var(--due-today); background: color-mix(in srgb, var(--due-today) 18%, transparent); }
 .project { width: 22px; height: 22px; margin-left: 10px; display: flex; align-items: center; justify-content: center; color: var(--accent); flex-shrink: 0; }
 .project .icon { width: 20px; height: 20px; }
 .main { flex: 1; min-width: 0; }
-.title { font-weight: 600; overflow-wrap: anywhere; }
+.title { font-weight: 500; overflow-wrap: anywhere; padding: 8px 0; }
+.tail { font-weight: 400; font-size: 12px; color: var(--muted); }
+.tail.due.today { color: var(--due-today-text); }
+.tail.due.overdue { color: var(--overdue); }
 .parent { color: var(--muted); font-weight: 400; text-decoration: none; }
 .parent:hover { text-decoration: underline; }
 .badge { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; margin-left: 4px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); vertical-align: -2px; }
 .badge .icon { width: 10px; height: 10px; }
 .meta { display: flex; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 2px; align-items: center; }
-.due { padding: 1px 6px; border-radius: 4px; background: var(--chip); font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
-.due.today { background: var(--today-bg); color: var(--today); }
-.due.overdue { background: var(--overdue-bg); color: var(--overdue); }
-.star { color: var(--check); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+.star { color: var(--check); width: 30px; height: 32px; display: flex; align-items: center; justify-content: center; }
+.star svg path { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
+.star.on svg path { fill: color-mix(in srgb, var(--star) 28%, transparent); }
 .star .icon { width: 24px; height: 24px; }
 .star.on { color: var(--star); }
 .maybe { font-weight: 700; color: var(--muted); width: 32px; text-align: center; }
@@ -81,10 +84,10 @@ main { flex: 1; min-width: 0; max-width: 860px; }
 }
 .star-toggle { cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
 .star-toggle input { display: none; }
-.star-toggle .icon { width: 24px; height: 24px; }
-.star-toggle .on { color: var(--star); }
-.star-toggle .off { color: var(--check); }
-.star-toggle:has(input:checked) .off, .star-toggle:not(:has(input:checked)) .on { display: none; }
+.star-toggle .icon { width: 24px; height: 24px; color: var(--check); }
+.star-toggle svg path { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
+.star-toggle:has(input:checked) .icon { color: var(--star); }
+.star-toggle:has(input:checked) svg path { fill: color-mix(in srgb, var(--star) 28%, transparent); }
 .pills { display: flex; flex-wrap: wrap; gap: 6px; }
 .pill { cursor: pointer; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; color: var(--muted); }
 .pill input { display: none; }
@@ -210,8 +213,10 @@ body.selecting #list .row:not([data-type="TASK"]), body.selecting #list .folder 
 .section-count { font-weight: 400; font-size: 12px; }
 
 /* Timed tasks */
-.play { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: var(--accent); flex-shrink: 0; }
-.play .icon { width: 22px; height: 22px; }
+.play { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; color: var(--accent); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px 2px 4px; font-size: 12px; font-weight: 500; }
+.play .icon { width: 16px; height: 16px; }
+.play.running { background: var(--accent-soft); border-color: var(--accent-soft); }
+.play-time { font-variant-numeric: tabular-nums; }
 .play .pause-icon, .play.running .play-icon { display: none; }
 .play.running .pause-icon { display: inline-flex; }
 #timer { position: fixed; right: 16px; bottom: 16px; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; max-width: calc(100vw - 32px); padding: 10px 14px; border-radius: 10px; background: var(--panel); border: 1px solid var(--border); box-shadow: 0 6px 20px #0003; }

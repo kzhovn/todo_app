@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.dueStatus
 import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.gestures.scrollBy
@@ -39,8 +40,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -68,10 +67,8 @@ import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
-import com.kzhovn.todoapp.ui.theme.LedgerCheckBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
-import com.kzhovn.todoapp.ui.theme.LedgerStar
 import com.kzhovn.todoapp.ui.theme.folderColors
 import kotlinx.coroutines.launch
 
@@ -295,7 +292,7 @@ private fun OutlinerRow(
                 }
                 TaskType.TASK, TaskType.PROJECT -> {
                     if (task.type == TaskType.PROJECT) ProjectMark(36.dp)
-                    else TaskCheckbox(checked = task.isComplete, overdue = isOverdue(task.isComplete, task.dueDate), size = 20.dp, touchSize = 36.dp, onCheckedChange = { onCheck(task.id) })
+                    else TaskCheckbox(checked = task.isComplete, due = task.dueDate?.takeUnless { task.isComplete }?.let { dueStatus(it, System.currentTimeMillis()) }, size = 20.dp, touchSize = 36.dp, onCheckedChange = { onCheck(task.id) })
                     Spacer(Modifier.width(6.dp))
                     Text(
                         task.title,
@@ -305,17 +302,11 @@ private fun OutlinerRow(
                         color = if (task.isComplete) LedgerMuted else LedgerInk,
                         modifier = Modifier.weight(1f).clickable { onEdit(task.id) }
                     )
-                    task.durationMinutes?.let { TimerButton(task, it, 36.dp) }
+                    task.durationMinutes?.let { TimerButton(task, it) }
                     if (task.isMaybe) {
                         MaybeMark(36.dp)
                     } else {
-                        IconButton(onClick = { onStar(task.id) }, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                if (task.isStarred) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                contentDescription = "Star",
-                                tint = if (task.isStarred) LedgerStar else LedgerCheckBorder
-                            )
-                        }
+                        IconButton(onClick = { onStar(task.id) }, modifier = Modifier.size(36.dp)) { StarIcon(task.isStarred) }
                     }
                 }
             }

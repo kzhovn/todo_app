@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.dueStatus
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Arrangement
@@ -56,8 +57,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -104,7 +103,6 @@ import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerOverdue
-import com.kzhovn.todoapp.ui.theme.LedgerStar
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
 import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.launch
@@ -303,11 +301,7 @@ class TaskEditActivity : ComponentActivity() {
                             Text("?", fontWeight = FontWeight.Bold, fontSize = 19.sp, color = if (task.isMaybe) LedgerAccent else LedgerMuted)
                         }
                         IconButton(onClick = { task = task.copy(isStarred = !task.isStarred, isMaybe = task.isMaybe && task.isStarred) }) {
-                            Icon(
-                                if (task.isStarred) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                contentDescription = Labels.STAR,
-                                tint = if (task.isStarred) LedgerStar else LedgerMuted
-                            )
+                            StarIcon(task.isStarred)
                         }
                     }
                 }
@@ -436,7 +430,7 @@ class TaskEditActivity : ComponentActivity() {
                 subtasks.forEach { sub ->
                     RelatedRow(Labels.SUBTASK, sub.title, done = sub.isComplete, onOpen = { openTask(sub.id) }) {
                         if (sub.type == TaskType.TASK) {
-                            TaskCheckbox(checked = sub.isComplete, overdue = isOverdue(sub.isComplete, sub.dueDate), size = 18.dp, touchSize = 34.dp, onCheckedChange = {
+                            TaskCheckbox(checked = sub.isComplete, due = sub.dueDate?.takeUnless { sub.isComplete }?.let { dueStatus(it, System.currentTimeMillis()) }, size = 18.dp, touchSize = 34.dp, onCheckedChange = {
                                 scope.launch {
                                     repository.toggleComplete(sub.id, System.currentTimeMillis())
                                     allTasks = repository.getAllTasks()

@@ -1,5 +1,9 @@
 package com.kzhovn.todoapp.widget
 
+import com.kzhovn.todoapp.ui.theme.LedgerOverdue
+import com.kzhovn.todoapp.ui.theme.LedgerDueToday
+import com.kzhovn.todoapp.data.formatDuration
+import com.kzhovn.todoapp.data.DueStatus
 import com.kzhovn.todoapp.notifications.TaskTimer
 import android.appwidget.AppWidgetManager
 import android.content.Context
@@ -191,12 +195,14 @@ private fun WidgetRow(row: WidgetTaskRow) {
         Box(GlanceModifier.width(3.dp).height(30.dp).background(fixed(row.barColor ?: LedgerBorder))) {}
         Box(
             contentAlignment = Alignment.Center,
-            modifier = GlanceModifier.size(width = 34.dp, height = 30.dp)
+            modifier = GlanceModifier.size(width = 31.dp, height = 30.dp)
                 .clickable(actionRunCallback<ToggleCompleteAction>(actionParametersOf(taskIdKey to row.id)))
         ) {
+            // Due today: an orange ring; overdue: rust (a glyph can't carry the app's pale fill).
+            val ring = when (row.due) { DueStatus.OVERDUE -> LedgerOverdue; DueStatus.TODAY -> LedgerDueToday; else -> LedgerMuted }
             Text(
                 text = if (row.isComplete) "✓" else "○",
-                style = TextStyle(color = fixed(if (row.isComplete) LedgerAccent else LedgerMuted), fontSize = 24.sp)
+                style = TextStyle(color = fixed(if (row.isComplete) LedgerAccent else ring), fontSize = 24.sp)
             )
         }
         // Glance text can't mix colours, so a subtask's dimmer "Parent: " is its own Text, capped so a
@@ -217,7 +223,7 @@ private fun WidgetRow(row: WidgetTaskRow) {
         Text(
             text = row.title,
             // Glance has no alpha, so a backburner row is dimmed with the muted colour instead.
-            style = TextStyle(color = fixed(if (row.isBackburner) LedgerMuted else LedgerInk), fontSize = 14.sp),
+            style = TextStyle(color = fixed(if (row.isBackburner) LedgerMuted else LedgerInk), fontSize = 14.sp, fontWeight = FontWeight.Medium),
             maxLines = 1,
             modifier = GlanceModifier
                 .defaultWeight()
@@ -230,13 +236,14 @@ private fun WidgetRow(row: WidgetTaskRow) {
                     )
                 )
         )
-        row.durationMinutes?.let {
+        // "▶ 1h", like the app's timer pill.
+        row.durationMinutes?.let { minutes ->
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = GlanceModifier.size(width = 30.dp, height = 30.dp)
+                modifier = GlanceModifier.height(30.dp).padding(horizontal = 4.dp)
                     .clickable(actionRunCallback<StartTimerAction>(actionParametersOf(taskIdKey to row.id)))
             ) {
-                Text("▶", style = TextStyle(color = fixed(LedgerAccent), fontSize = 16.sp))
+                Text("▶ ${formatDuration(minutes)}", style = TextStyle(color = fixed(LedgerAccent), fontSize = 12.sp, fontWeight = FontWeight.Medium))
             }
         }
         row.subtasks?.let { (done, total) ->
@@ -249,7 +256,7 @@ private fun WidgetRow(row: WidgetTaskRow) {
         } else {
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = GlanceModifier.size(width = 34.dp, height = 30.dp)
+                modifier = GlanceModifier.size(width = 31.dp, height = 30.dp)
                     .clickable(actionRunCallback<ToggleStarAction>(actionParametersOf(taskIdKey to row.id)))
             ) {
                 Text(

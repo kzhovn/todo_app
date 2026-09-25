@@ -1,5 +1,13 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.DueStatus
+import com.kzhovn.todoapp.data.dueStatus
+import com.kzhovn.todoapp.data.dueText
+import com.kzhovn.todoapp.ui.theme.LedgerDueToday
+import com.kzhovn.todoapp.ui.theme.LedgerDueTodayText
+import androidx.compose.runtime.mutableLongStateOf
+import kotlinx.coroutines.delay
+import androidx.compose.ui.text.withStyle
 import com.kzhovn.todoapp.data.Labels
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -24,7 +32,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -55,7 +62,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -82,12 +88,8 @@ import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.theme.LedgerCheckBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
-import com.kzhovn.todoapp.ui.theme.LedgerNeutralBg
 import com.kzhovn.todoapp.ui.theme.LedgerOverdue
-import com.kzhovn.todoapp.ui.theme.LedgerOverdueBg
 import com.kzhovn.todoapp.ui.theme.LedgerStar
-import com.kzhovn.todoapp.ui.theme.LedgerToday
-import com.kzhovn.todoapp.ui.theme.LedgerTodayBg
 import com.kzhovn.todoapp.ui.theme.folderColors
 import com.kzhovn.todoapp.data.walkParentChain
 import com.kzhovn.todoapp.data.deadline
@@ -193,10 +195,11 @@ private fun TaskRow(
     onSnooze: (Long, Long) -> Unit
 ) {
     var showSnoozeMenu by remember { mutableStateOf(false) }
-    val contextName = effective.effectiveContextIds.firstOrNull()?.let { allContexts[it]?.name }
-    // Overdue styling must track the *displayed* (effective/inherited) due date, not the task's
-    // own possibly-null field, or an inherited overdue date would render in the neutral color.
-    val effectiveOverdue = isOverdue(task.isComplete, effective.effectiveDueDate)
+    // Due styling tracks the *displayed* (effective/inherited) due date, not the task's own
+    // possibly-null field, or an inherited due date would render in the neutral colour.
+    val now = System.currentTimeMillis()
+    val due = effective.effectiveDueDate?.takeUnless { task.isComplete }
+    val status = due?.let { dueStatus(it, now) }
     // DropdownMenu is Popup-based (SubcomposeLayout internally) and can't answer the intrinsic
     // width queries an IntrinsicSize.Min row needs from its children, so it must live outside
     // the Row below as a plain sibling rather than nested inside one of the Row's children.
@@ -213,10 +216,9 @@ private fun TaskRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(Modifier.width(3.dp).fillMaxHeight().background(barColor))
-            if (task.type == TaskType.PROJECT) ProjectMark()
-            else TaskCheckbox(checked = task.isComplete, overdue = effectiveOverdue, onCheckedChange = { onCheck(task.id) })
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            if (task.type == TaskType.PROJECT) ProjectMark(36.dp)
+            else TaskCheckbox(checked = task.isComplete, due = status, touchSize = 36.dp, onCheckedChange = { onCheck(task.id) })
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
                     Text(
                         // A subtask reads "Parent: subtask", with the parent dimmer; tapping the parent
                         // opens the parent (a link, so the rest of the row keeps its own tap/long-press).
@@ -227,8 +229,16 @@ private fun TaskRow(
                                 withLink(LinkAnnotation.Clickable("parent", style) { onEdit(parentId) }) { append("$parentTitle: ") }
                             }
                             append(task.title)
+                            // One line with the title (it wraps along), in the due colour.
+                            if (due != null) {
+                                val color = when (status) { DueStatus.OVERDUE -> LedgerOverdue; DueStatus.TODAY -> LedgerDueTodayText; else -> LedgerMuted }
+                                withStyle(SpanStyle(color = color, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · ${dueText(due, now)}") }
+                            }
+                            if (subtasks != null && subtasks.second > 0) {
+                                withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · ${subtasks.first}/${subtasks.second}") }
+                            }
                         },
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Medium,
                         fontSize = 16.sp,
                         textDecoration = if (task.isComplete) TextDecoration.LineThrough else null,
                         color = if (task.isComplete) LedgerMuted else LedgerInk,
@@ -240,39 +250,13 @@ private fun TaskRow(
                         Spacer(Modifier.width(4.dp))
                         RecurrenceBadge()
                     }
-                    // On the title line rather than a second one, so a context alone doesn't make
-                    // the row taller and push the title off-centre.
-                    if (contextName != null) {
-                        Text("@$contextName", fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.padding(start = 6.dp))
-                    }
-                }
-                if (effective.effectiveDueDate != null || (subtasks != null && subtasks.second > 0) || task.durationMinutes != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-                        effective.effectiveDueDate?.let { due -> DueChip(due, effectiveOverdue) }
-                        if (subtasks != null && subtasks.second > 0) {
-                            Text(
-                                text = "${subtasks.first}/${subtasks.second}",
-                                fontSize = 10.sp,
-                                color = LedgerMuted,
-                                modifier = Modifier.padding(horizontal = 4.dp)
-                            )
-                        }
-                        task.durationMinutes?.let {
-                            Text(formatDuration(it), fontSize = 10.sp, color = LedgerMuted, modifier = Modifier.padding(horizontal = 4.dp))
-                        }
-                    }
-                }
             }
             task.durationMinutes?.let { TimerButton(task, it) }
             if (task.isMaybe) {
-                MaybeMark()
+                MaybeMark(34.dp)
             } else {
-                IconButton(onClick = { onStar(task.id) }, modifier = Modifier.size(40.dp)) {
-                    Icon(
-                        if (task.isStarred) Icons.Filled.Star else Icons.Filled.StarBorder,
-                        contentDescription = "Star",
-                        tint = if (task.isStarred) LedgerStar else LedgerCheckBorder
-                    )
+                Box(Modifier.size(34.dp).clip(CircleShape).clickable { onStar(task.id) }, contentAlignment = Alignment.Center) {
+                    StarIcon(task.isStarred)
                 }
             }
         }
@@ -307,26 +291,51 @@ fun ProjectMark(size: Dp = 40.dp) {
 // A timed task's play button: starts its countdown, or pauses/resumes it if it's the running one.
 // Starting another task's timer replaces the running one (one timer at a time).
 @Composable
-fun TimerButton(task: Task, minutes: Int, size: Dp = 40.dp) {
+fun TimerButton(task: Task, minutes: Int) {
     val context = LocalContext.current
     val timer by TaskTimer.state.collectAsState()
     val mine = timer?.takeIf { it.taskId == task.id }
     val running = mine != null && !mine.isPaused
-    IconButton(
-        onClick = {
-            when {
-                mine == null -> TaskTimer.start(context, task, minutes)
-                mine.isPaused -> TaskTimer.resume(context)
-                else -> TaskTimer.pause(context)
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    if (running) LaunchedEffect(mine) { while (true) { now = System.currentTimeMillis(); delay(1000) } }
+    // "▶ 1h" until started, then the time left ("⏸ 18:42" running, "▶ 18:42" paused).
+    val text = mine?.let { countdown(it.remaining(now)) } ?: formatDuration(minutes)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .padding(horizontal = 2.dp)
+            .clip(RoundedCornerShape(50))
+            .then(if (running) Modifier.background(LedgerAccentSoft) else Modifier.border(1.dp, LedgerBorder, RoundedCornerShape(50)))
+            .clickable {
+                when {
+                    mine == null -> TaskTimer.start(context, task, minutes)
+                    mine.isPaused -> TaskTimer.resume(context)
+                    else -> TaskTimer.pause(context)
+                }
             }
-        },
-        modifier = Modifier.size(size)
+            .padding(start = 4.dp, end = 7.dp, top = 3.dp, bottom = 3.dp)
     ) {
         Icon(
             if (running) Icons.Filled.Pause else Icons.Filled.PlayArrow,
             contentDescription = if (running) "Pause timer" else "Start timer",
-            tint = LedgerAccent
+            tint = LedgerAccent,
+            modifier = Modifier.size(16.dp)
         )
+        Text(text, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = LedgerAccent)
+    }
+}
+
+private fun countdown(millis: Long): String {
+    val s = (millis.coerceAtLeast(0) + 999) / 1000
+    return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
+}
+
+// Starred: a gold outline over a pale gold fill, like the due checkboxes; unstarred: a grey outline.
+@Composable
+fun StarIcon(starred: Boolean, size: Dp = 24.dp) {
+    Box(contentAlignment = Alignment.Center) {
+        if (starred) Icon(Icons.Filled.Star, contentDescription = null, tint = LedgerStar.copy(alpha = 0.28f), modifier = Modifier.size(size))
+        Icon(Icons.Filled.StarBorder, contentDescription = if (starred) "Starred" else "Star", tint = if (starred) LedgerStar else LedgerCheckBorder, modifier = Modifier.size(size))
     }
 }
 
@@ -339,9 +348,11 @@ fun MaybeMark(size: Dp = 40.dp) {
 }
 
 @Composable
-fun TaskCheckbox(checked: Boolean, overdue: Boolean, size: Dp = 22.dp, touchSize: Dp = 40.dp, onCheckedChange: () -> Unit) {
-    val borderColor = if (overdue) LedgerOverdue else LedgerCheckBorder
-    val borderWidth = if (overdue) 2.dp else 1.5.dp
+fun TaskCheckbox(checked: Boolean, due: DueStatus?, size: Dp = 22.dp, touchSize: Dp = 40.dp, onCheckedChange: () -> Unit) {
+    // Due today: an orange ring; overdue: rust. Each with a pale fill of its own colour.
+    val ring = when (due) { DueStatus.OVERDUE -> LedgerOverdue; DueStatus.TODAY -> LedgerDueToday; else -> null }
+    val borderColor = ring ?: LedgerCheckBorder
+    val borderWidth = if (ring != null) 2.dp else 1.5.dp
     // The tap target is larger than the drawn circle so it's easy to hit with a thumb.
     Box(
         modifier = Modifier.size(touchSize).clip(CircleShape).clickable { onCheckedChange() },
@@ -351,7 +362,7 @@ fun TaskCheckbox(checked: Boolean, overdue: Boolean, size: Dp = 22.dp, touchSize
             modifier = Modifier
                 .size(size)
                 .clip(CircleShape)
-                .then(if (checked) Modifier.background(LedgerAccent) else Modifier)
+                .then(if (checked) Modifier.background(LedgerAccent) else if (ring != null) Modifier.background(ring.copy(alpha = 0.18f)) else Modifier)
                 .border(borderWidth, borderColor, CircleShape),
             contentAlignment = Alignment.Center
         ) {
@@ -362,34 +373,3 @@ fun TaskCheckbox(checked: Boolean, overdue: Boolean, size: Dp = 22.dp, touchSize
     }
 }
 
-@Composable
-private fun DueChip(dueDate: Long, overdue: Boolean) {
-    val now = System.currentTimeMillis()
-    val isToday = isSameDay(dueDate, now)
-    val (bg, fg) = when {
-        overdue -> LedgerOverdueBg to LedgerOverdue
-        isToday -> LedgerTodayBg to LedgerToday
-        else -> LedgerNeutralBg to LedgerMuted
-    }
-    val label = if (isToday) "Today" + formatTimeSuffix(dueDate) else formatChipDate(dueDate)
-    Box(
-        modifier = Modifier
-            .padding(horizontal = 4.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(bg)
-            .padding(horizontal = 5.dp, vertical = 2.dp)
-    ) {
-        Text(label, fontSize = 10.sp, color = fg)
-    }
-}
-
-// Past its time if it has one, otherwise past the end of its day.
-fun isOverdue(isComplete: Boolean, dueDate: Long?, now: Long = System.currentTimeMillis()): Boolean =
-    !isComplete && dueDate != null && deadline(dueDate) <= now
-
-fun isSameDay(a: Long, b: Long): Boolean {
-    val calA = Calendar.getInstance().apply { timeInMillis = a }
-    val calB = Calendar.getInstance().apply { timeInMillis = b }
-    return calA.get(Calendar.YEAR) == calB.get(Calendar.YEAR) &&
-        calA.get(Calendar.DAY_OF_YEAR) == calB.get(Calendar.DAY_OF_YEAR)
-}

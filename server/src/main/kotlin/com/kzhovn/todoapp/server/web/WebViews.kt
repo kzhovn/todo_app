@@ -6,6 +6,9 @@ import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.deadline
 import com.kzhovn.todoapp.data.hasTime
+import com.kzhovn.todoapp.data.DueStatus
+import com.kzhovn.todoapp.data.dueStatus
+import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.data.folderColorsArgb
 import com.kzhovn.todoapp.data.formatDuration
 import com.kzhovn.todoapp.data.resolveEffective
@@ -64,7 +67,6 @@ class ListData(
     val all: List<Task> = service.tasks()
     val byId = all.associateBy { it.id }
     private val contextIds = service.contextIdsByTask()
-    private val contextNames = service.contexts().associate { it.id to it.name }
     // The same colour families as the app (folderColorsArgb in :core).
     private val folderColors = folderColorsArgb(all).mapValues { "#%06X".format(it.value and 0xFFFFFF) }
     private val children = all.groupBy { it.parentId }
@@ -75,7 +77,6 @@ class ListData(
     }
 
     fun effectiveDue(task: Task) = resolveEffective(task, byId, contextIds).effectiveDueDate
-    fun contextName(task: Task) = resolveEffective(task, byId, contextIds).effectiveContextIds.firstOrNull()?.let(contextNames::get)
     fun parentTitle(task: Task) = subtaskParentTitle(task, byId)
     fun folderColor(task: Task): String? = task.parentId?.let { parent -> walkParentChain(parent, byId) { folderColors[it] } }
     fun ownColor(folder: Task) = folderColors[folder.id]
@@ -92,7 +93,6 @@ internal enum class Icon(val path: String) {
     FOLDER("M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"),
     PROJECT("M22 11V3h-7v3H9V3H2v8h7V8h2v10h4v3h7v-8h-7v3h-2V8h2v3z"), // AccountTree
     STAR("M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"),
-    STAR_BORDER("M22 9.24l-7.19-.62L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.63-7.03L22 9.24zM12 15.4l-3.76 2.27 1-4.28-3.32-2.88 4.38-.38L12 6.1l1.71 4.04 4.38.38-3.32 2.88 1 4.28L12 15.4z"),
     REPEAT("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"),
     CHECK("M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"),
     PLAY("M8 5v14l11-7z"),
@@ -283,12 +283,14 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
         if (task.isBackburner(data.now)) classes = classes + "dim"
         style = "padding-left: ${depth * 18}px; border-left-color: ${data.folderColor(task) ?: "var(--border)"}"
         outlineNode?.invoke(this)
+        val due = data.effectiveDue(task)?.takeUnless { task.isComplete }
+        val status = due?.let { dueStatus(it, data.now) }
         if (task.type == TaskType.PROJECT) {
             span(classes = "project") { attributes["title"] = "Project: completes when its steps are done"; icon(Icon.PROJECT, "") }
         } else {
-            val due = data.effectiveDue(task)
             button(classes = "check") {
-                if (due != null && !task.isComplete && deadline(due) <= data.now) classes = classes + "overdue"
+                // Due today: an orange ring; overdue: rust. Each with a pale fill of its own colour.
+                when (status) { DueStatus.OVERDUE -> classes = classes + "overdue"; DueStatus.TODAY -> classes = classes + "today"; else -> {} }
                 attributes["hx-post"] = "/tasks/${task.id}/complete?mode=$mode"
                 attributes["hx-target"] = "#list"
                 attributes["hx-swap"] = "outerHTML"
@@ -301,21 +303,14 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                 // The parent part opens the parent's editor, as the title opens the subtask's.
                 if (data.mode != ListMode.ALL) data.parentTitle(task)?.let { a(href = "/tasks/${task.parentId}?mode=$mode", classes = "parent") { +"$it: " } }
                 a(href = "/tasks/${task.id}?mode=$mode", classes = "edit") { +task.title }
+                // On the title's line, wrapping along with it.
+                due?.let { dueTail(it, status!!, data.now) }
+                data.subtaskCounts(task)?.let { (done, total) -> span(classes = "tail") { +" · $done/$total" } }
                 if (task.recurrenceType != null) span(classes = "badge") { attributes["title"] = "Recurring"; icon(Icon.REPEAT, "") }
             }
-            val due = data.effectiveDue(task)
-            val counts = data.subtaskCounts(task)
-            val context = data.contextName(task)
-            if (due != null || counts != null || context != null || task.durationMinutes != null) {
-                div(classes = "meta") {
-                    due?.let { dueChip(it, data.now, overdue = deadline(it) <= data.now) }
-                    counts?.let { (done, total) -> span { +"$done/$total" } }
-                    task.durationMinutes?.let { span { +formatDuration(it) } }
-                    context?.let { span { +"@$it" } }
-                }
-            }
         }
-        // A timed task's play button; app.js runs the countdown (one at a time, per browser).
+        // A timed task's play button, "▶ 1h"; app.js runs the countdown (one at a time, per browser)
+        // and shows the time left on it.
         task.durationMinutes?.let { minutes ->
             button(classes = "play") {
                 attributes["data-task-id"] = task.id.toString()
@@ -324,6 +319,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                 attributes["aria-label"] = "Start timer"
                 icon(Icon.PLAY, "play-icon")
                 icon(Icon.PAUSE, "pause-icon")
+                span(classes = "play-time") { +formatDuration(minutes) }
             }
         }
         details(classes = "more") {
@@ -347,20 +343,16 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                 attributes["hx-target"] = "#list"
                 attributes["hx-swap"] = "outerHTML"
                 attributes["aria-label"] = "Star"
-                icon(if (task.isStarred) Icon.STAR else Icon.STAR_BORDER, "")
+                // Starred: a gold outline over a pale gold fill (CSS), like the due checkboxes.
+                icon(Icon.STAR, "")
             }
         }
     }
 }
 
-internal fun FlowContent.dueChip(due: Long, now: Long, overdue: Boolean) {
-    val today = Calendar.getInstance().apply { timeInMillis = now }
-    val day = Calendar.getInstance().apply { timeInMillis = due }
-    val isToday = today.get(Calendar.YEAR) == day.get(Calendar.YEAR) && today.get(Calendar.DAY_OF_YEAR) == day.get(Calendar.DAY_OF_YEAR)
-    val time = if (hasTime(due)) " " + SimpleDateFormat("h:mm a", Locale.US).format(Date(due)) else ""
-    span(classes = "due" + when { overdue -> " overdue"; isToday -> " today"; else -> "" }) {
-        +((if (isToday) "Today" else SimpleDateFormat("MMM d", Locale.US).format(Date(due))) + time)
-    }
+// "· due today" after a title, in the due colour (see DueStatus); the same words as the app's rows.
+internal fun FlowContent.dueTail(due: Long, status: DueStatus, now: Long) = span(classes = "tail due " + status.name.lowercase()) {
+    +" · ${dueText(due, now)}"
 }
 
 fun DIV.deletedToastContents(task: Task, mode: ListMode) {

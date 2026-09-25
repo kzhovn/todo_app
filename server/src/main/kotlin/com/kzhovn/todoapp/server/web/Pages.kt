@@ -5,7 +5,7 @@ import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskType
-import com.kzhovn.todoapp.data.deadline
+import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.repository.BulkEdit
 import com.kzhovn.todoapp.repository.DateChange
 import com.kzhovn.todoapp.repository.DayCompletions
@@ -191,7 +191,7 @@ private fun DIV.searchResults(service: TaskService, p: Parameters) {
             } else span(classes = "project") { icon(Icon.PROJECT, "") }
             a(href = "/tasks/${task.id}?mode=ALL", classes = if (task.isComplete) "done" else null) { +task.title }
             div(classes = "meta") {
-                task.dueDate?.let { dueChip(it, now, overdue = !task.isComplete && deadline(it) <= now) }
+                task.dueDate?.takeUnless { task.isComplete }?.let { dueTail(it, dueStatus(it, now), now) }
                 byId[task.parentId]?.let { span { +(if (it.type == TaskType.FOLDER) it.title else "↳ ${it.title}") } }
                 contextIds[task.id].orEmpty().mapNotNull(contextNames::get).forEach { span { +"@$it" } }
                 if (task.isStarred) span(classes = "starred") { +"★" }

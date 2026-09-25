@@ -14,13 +14,13 @@ val LedgerAccent = Color(0xFF2B4C7E)
 val LedgerAccentInk = Color(0xFFFFFFFF)
 val LedgerAccentSoft = Color(0xFFDFE6EF)
 
-val LedgerStar = Color(0xFFB8862F)
+// Gold, clearly apart from the due-today orange.
+val LedgerStar = Color(0xFFC9A01E)
+// A task due today: its checkbox ring, and its "due …" text (darker, to read as text).
+val LedgerDueToday = Color(0xFFC98A1A)
+val LedgerDueTodayText = Color(0xFFA86F0C)
 
-val LedgerToday = Color(0xFF93650C)
-val LedgerTodayBg = Color(0xFFEEDFB8)
 val LedgerOverdue = Color(0xFF96412B)
-val LedgerOverdueBg = Color(0xFFEEDACE)
-val LedgerNeutralBg = Color(0xFFE9E2D2)
 
 val LedgerCheckBorder = Color(0xFFB5A98C)
 

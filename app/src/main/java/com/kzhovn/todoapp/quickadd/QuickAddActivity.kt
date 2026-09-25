@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.quickadd
 
+import com.kzhovn.todoapp.ui.StarIcon
 import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
@@ -24,9 +25,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,7 +56,6 @@ import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerSearchBackground
-import com.kzhovn.todoapp.ui.theme.LedgerStar
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
 import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.launch
@@ -153,11 +150,7 @@ class QuickAddActivity : ComponentActivity() {
                         modifier = Modifier.weight(1f).focusRequester(focus)
                     )
                     IconButton(onClick = { starred = !starred }) {
-                        Icon(
-                            if (starred) Icons.Filled.Star else Icons.Filled.StarBorder,
-                            contentDescription = "Star",
-                            tint = if (starred) LedgerStar else LedgerBorder
-                        )
+                        StarIcon(starred)
                     }
                 }
                 Row(modifier = Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
