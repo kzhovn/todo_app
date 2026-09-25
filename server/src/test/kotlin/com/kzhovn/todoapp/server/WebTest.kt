@@ -355,7 +355,7 @@ class WebTest {
         val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
         service.create(Task(title = "Fix bug", parentId = work.id))
         val active = client.get("/list/active").bodyAsText()
-        assertTrue(active.contains("section-title\">Work<"))
+        assertTrue(active.contains("<b>Work</b> · 1"))
         assertFalse(active.contains("No folder"))
 
         service.create(Task(title = "Loose end"))

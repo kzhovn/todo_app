@@ -25,6 +25,7 @@ import kotlinx.html.MAIN
 import kotlinx.html.a
 import kotlinx.html.aside
 import kotlinx.html.body
+import kotlinx.html.b
 import kotlinx.html.button
 import kotlinx.html.classes
 import kotlinx.html.details
@@ -220,10 +221,12 @@ fun DIV.listContents(data: ListData) {
                     attributes["hx-target"] = "#list"
                     attributes["hx-swap"] = "outerHTML"
                     attributes["aria-expanded"] = (!folded).toString()
+                    // A divider: "Work · 5" centered between two rules in the folder's colour.
+                    folder?.let { data.ownColor(it) }?.let { style = "--rule: $it" }
                     icon(if (folded) Icon.CHEVRON_RIGHT else Icon.EXPAND_MORE, "chevron")
-                    if (folder != null) icon(Icon.FOLDER, "folder-icon", data.ownColor(folder))
-                    span(classes = "section-title") { +(folder?.title ?: "No folder") }
-                    span(classes = "section-count") { +tasks.size.toString() }
+                    span(classes = "rule")
+                    span(classes = "section-title") { b { +(folder?.title ?: Labels.NO_FOLDER) }; +" · ${tasks.size}" }
+                    span(classes = "rule")
                 }
             }
             if (!folded) tasks.forEach { taskRow(data, it, depth = 0) }

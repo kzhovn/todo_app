@@ -48,7 +48,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
@@ -149,20 +148,28 @@ fun TaskListScreen(
     }
 }
 
+// A divider: "Work · 5" centered between two rules in the folder's colour.
 @Composable
 private fun SectionHeader(title: String, color: Color?, count: Int, folded: Boolean, onToggle: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(start = 6.dp, end = 12.dp, top = 10.dp, bottom = 4.dp)
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(start = 6.dp, end = 14.dp, top = 12.dp, bottom = 6.dp)
     ) {
         Icon(
             if (folded) Icons.Filled.ChevronRight else Icons.Filled.ExpandMore,
             contentDescription = if (folded) "Expand" else "Collapse",
-            tint = LedgerMuted, modifier = Modifier.size(18.dp)
+            tint = LedgerMuted, modifier = Modifier.padding(end = 6.dp).size(16.dp)
         )
-        if (color != null) Icon(Icons.Filled.Folder, contentDescription = null, tint = color, modifier = Modifier.padding(start = 2.dp).size(14.dp))
-        Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = LedgerMuted, modifier = Modifier.padding(start = 6.dp).weight(1f))
-        Text("$count", fontSize = 12.sp, color = LedgerMuted)
+        val rule = Modifier.weight(1f).height(1.dp).background((color ?: LedgerMuted).copy(alpha = 0.55f))
+        Box(rule)
+        Text(
+            buildAnnotatedString {
+                withStyle(SpanStyle(fontWeight = FontWeight.Medium)) { append(title) }
+                append(" · $count")
+            },
+            fontSize = 12.sp, color = LedgerMuted, maxLines = 1, modifier = Modifier.padding(horizontal = 10.dp)
+        )
+        Box(rule)
     }
 }
 
