@@ -59,6 +59,7 @@ import kotlinx.html.radioInput
 import kotlinx.html.select
 import kotlinx.html.span
 import kotlinx.html.stream.createHTML
+import kotlinx.html.textArea
 import kotlinx.html.textInput
 import kotlinx.html.timeInput
 import kotlinx.serialization.json.jsonObject
@@ -93,7 +94,9 @@ private data class EditorView(
     // Subtasks with their own value for changed inherited fields: "update them too?"
     val ask: Pair<Int, Set<InheritedField>>? = null,
     val needFirstStep: Boolean = false,
-    val firstStep: String = ""
+    val firstStep: String = "",
+    val newSubtasks: String = "", // a new task's subtasks, one per line, created with it
+    val newDep: String = "" // a new task for this one to wait for
 )
 
 fun Route.editorRoutes(service: TaskService) {
@@ -168,12 +171,17 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     val recurrence = parseRecurrence(params)
     val form = parseForm(params, base, recurrence, service)
     val firstStep = params["firstStep"]?.trim().orEmpty()
-    val view = EditorView(mode, form, recurrence, base.encode(), firstStep = firstStep)
+    val newSubtasks = params["newSubtasks"].orEmpty().lines().map { it.trim() }.filter { it.isNotEmpty() }
+    val newDep = params["newDep"]?.trim().orEmpty()
+    val view = EditorView(mode, form, recurrence, base.encode(), firstStep = firstStep, newSubtasks = params["newSubtasks"].orEmpty(), newDep = newDep)
     suspend fun reshow(v: EditorView) = call.respondHtml { editorPage(service, v) }
 
     if (form.task.title.isBlank()) return reshow(view.copy(error = "A title is required."))
     val merged = merge(base, form, current ?: base)
-    val needsFirstStep = merged.task.type == TaskType.PROJECT && (id == null || service.tasks().none { it.parentId == id })
+    // A project needs a step, asked only when it's saved without one, like the phone.
+    val isProject = merged.task.type == TaskType.PROJECT
+    if (id == null && isProject && newSubtasks.isEmpty()) return reshow(view.copy(error = "A project needs a first step: add a subtask."))
+    val needsFirstStep = id != null && isProject && service.tasks().none { it.parentId == id }
     if (needsFirstStep && firstStep.isBlank()) {
         return reshow(view.copy(needFirstStep = true, error = "A project needs a first step."))
     }
@@ -186,15 +194,21 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     val inherit = params["inherit"]
     if (changed.isNotEmpty() && inherit == null) return reshow(view.copy(ask = overriding.size to changed))
 
+    // "Depends on" → a new task: made in this task's folder, as dependent work usually belongs together.
+    val blocker = QuickAddParser.parse(newDep).takeIf { it.title.isNotBlank() }?.let { parsed ->
+        service.create(parsed.copy(parentId = merged.task.parentId?.takeIf { service.get(it)?.type == TaskType.FOLDER })).id
+    }
+    val dependsOn = merged.dependsOn + listOfNotNull(blocker)
     val savedId = if (id == null) {
         // Created first, then edited, so contexts and dependencies go through edit()'s checks.
-        service.create(merged.task).id.also { service.edit(merged.task.copy(id = it), merged.contextIds, merged.dependsOn) }
+        service.create(merged.task).id.also { service.edit(merged.task.copy(id = it), merged.contextIds, dependsOn) }
     } else {
-        service.edit(merged.task, merged.contextIds, merged.dependsOn)
+        service.edit(merged.task, merged.contextIds, dependsOn)
         id
     }
     if (inherit == "update") service.clearInherited(overriding, changed)
     if (needsFirstStep) service.create(Task(title = firstStep, parentId = savedId))
+    newSubtasks.forEach { service.create(QuickAddParser.parse(it).copy(parentId = savedId)) }
     call.respondRedirect(mode.path)
 }
 
@@ -357,6 +371,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
                 it.id in selected || (it.id != t.id && !it.isComplete && (it.type == TaskType.TASK || it.type == TaskType.PROJECT) &&
                     !wouldCreateDependencyCycle(it.id, t.id, edges))
             }.sortedWith(compareBy({ it.id !in selected }, { it.title.lowercase() }))
+            textInput(name = "newDep", classes = "new-dep") { value = v.newDep; placeholder = "Or a new task this waits for…"; attributes["autocomplete"] = "off" }
             div(classes = "picker") {
                 input(type = InputType.search, classes = "filter") { placeholder = "Filter…"; attributes["data-filter"] = "" }
                 div(classes = "options") {
@@ -381,6 +396,11 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
             label(classes = "task-only") { checkBoxInput(name = "maybe") { checked = t.isMaybe }; +"Maybe (?)" }
             label(classes = "task-only") { checkBoxInput(name = "today") { checked = t.expiresAt != null }; +"Just for today" }
             label { checkBoxInput(name = "sequential") { checked = t.sequential }; +"Complete subtasks in order" }
+        }
+
+        // A new task's subtasks (it has no id for the subtask actions below the form yet).
+        if (isNew) field("Subtasks", "") {
+            textArea(classes = "new-subtasks") { name = "newSubtasks"; rows = "3"; placeholder = "One per line"; +v.newSubtasks }
         }
 
         if (v.needFirstStep || v.firstStep.isNotEmpty()) {

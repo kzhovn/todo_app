@@ -73,6 +73,7 @@ import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.AppSettings
 import android.widget.Toast
 import com.kzhovn.todoapp.quickadd.QuickAddActivity
+import com.kzhovn.todoapp.quickadd.QuickAddParser
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
 import com.kzhovn.todoapp.recurrence.RecurrenceSelection
 import com.kzhovn.todoapp.recurrence.RecurrenceUnit
@@ -128,6 +129,12 @@ class TaskEditActivity : ComponentActivity() {
             var selectedContextIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
             val allById = remember(allTasks) { allTasks.associateBy { it.id } }
             var showDependentPicker by remember { mutableStateOf(false) }
+            // A new, unsaved task can't have children yet: its subtasks wait here and are created on save.
+            var pendingSubtasks by remember { mutableStateOf<List<String>>(emptyList()) }
+            var showPendingSubtaskDialog by remember { mutableStateOf(false) }
+            var pendingSubtaskTitle by remember { mutableStateOf("") }
+            var showNewBlockerDialog by remember { mutableStateOf(false) }
+            var newBlockerTitle by remember { mutableStateOf("") }
             var showSubtaskPicker by remember { mutableStateOf(false) }
             val focusManager = LocalFocusManager.current
 
@@ -174,13 +181,14 @@ class TaskEditActivity : ComponentActivity() {
                     contextRepository.setTaskContexts(savedId, contextsToSave)
                     repository.clearInherited(clearOn, fields)
                     firstSubtask?.let { repository.createTask(Task(title = it, parentId = savedId)) }
+                    pendingSubtasks.forEach { repository.createTask(QuickAddParser.parse(it).copy(parentId = savedId)) }
                     TodoWidget().updateAll(applicationContext)
                     finish()
                 }
             }
 
             val onSave: () -> Unit = {
-                val hasSubtasks = allTasks.any { it.parentId == taskId && taskId != 0L }
+                val hasSubtasks = pendingSubtasks.isNotEmpty() || allTasks.any { it.parentId == taskId && taskId != 0L }
                 if (task.type == TaskType.PROJECT && !hasSubtasks) {
                     firstSubtaskTitle = ""
                     askFirstSubtask = true
@@ -366,7 +374,9 @@ class TaskEditActivity : ComponentActivity() {
                         onToggle = { id ->
                             selectedDependencyIds = if (id in selectedDependencyIds) selectedDependencyIds - id else selectedDependencyIds + id
                         },
-                        searchable = true
+                        searchable = true,
+                        onCreateNew = { newBlockerTitle = ""; showNewBlockerDialog = true },
+                        createNewLabel = "Create new task"
                     )
                 }
                 Spacer(Modifier.height(12.dp))
@@ -385,7 +395,7 @@ class TaskEditActivity : ComponentActivity() {
                 )
 
                 val subtasks = remember(allTasks, taskId) { allTasks.filter { it.parentId == taskId && taskId != 0L }.sortedWith(TaskOrder) }
-                if (subtasks.isNotEmpty()) {
+                if (subtasks.isNotEmpty() || pendingSubtasks.isNotEmpty()) {
                     Spacer(Modifier.height(12.dp))
                     Text("Subtasks", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
                     subtasks.forEach { sub ->
@@ -414,6 +424,24 @@ class TaskEditActivity : ComponentActivity() {
                     }
                 }
 
+                pendingSubtasks.forEachIndexed { index, title ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(title, fontSize = 14.sp, color = LedgerInk, modifier = Modifier.weight(1f).padding(vertical = 6.dp))
+                        Text(
+                            "✕", color = LedgerMuted, fontSize = 14.sp,
+                            modifier = Modifier.clickable { pendingSubtasks = pendingSubtasks.filterIndexed { i, _ -> i != index } }.padding(8.dp)
+                        )
+                    }
+                }
+                if (taskId == 0L) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "+ Add subtask",
+                        color = LedgerAccent,
+                        fontSize = 12.sp,
+                        modifier = Modifier.clickable { pendingSubtaskTitle = ""; showPendingSubtaskDialog = true }
+                    )
+                }
                 if (taskId != 0L) {
                     Spacer(Modifier.height(12.dp))
                     Row {
@@ -616,6 +644,44 @@ class TaskEditActivity : ComponentActivity() {
                         )
                     },
                     onDismiss = { showDependentPicker = false }
+                )
+            }
+
+            if (showPendingSubtaskDialog) {
+                TextInputDialog(
+                    title = "Add a subtask",
+                    placeholder = "Subtask",
+                    confirmLabel = "Add",
+                    value = pendingSubtaskTitle,
+                    onValueChange = { pendingSubtaskTitle = it },
+                    onConfirm = {
+                        pendingSubtaskTitle.trim().takeIf { it.isNotEmpty() }?.let { pendingSubtasks = pendingSubtasks + it }
+                        showPendingSubtaskDialog = false
+                    },
+                    onDismiss = { showPendingSubtaskDialog = false }
+                )
+            }
+
+            // "Depends on" → Create new: the blocker is created right away (in this task's folder, as
+            // dependent work usually belongs together) and ticked; the dependency itself saves with the task.
+            if (showNewBlockerDialog) {
+                TextInputDialog(
+                    title = "New task this waits for",
+                    placeholder = "Task",
+                    confirmLabel = "Add",
+                    value = newBlockerTitle,
+                    onValueChange = { newBlockerTitle = it },
+                    onConfirm = {
+                        showNewBlockerDialog = false
+                        val parsed = QuickAddParser.parse(newBlockerTitle)
+                        if (parsed.title.isNotBlank()) scope.launch {
+                            val folderId = task.parentId?.takeIf { allById[it]?.type == TaskType.FOLDER }
+                            val id = repository.createTask(parsed.copy(parentId = folderId))
+                            selectedDependencyIds = selectedDependencyIds + id
+                            allTasks = repository.getAllTasks()
+                        }
+                    },
+                    onDismiss = { showNewBlockerDialog = false }
                 )
             }
 

@@ -1,6 +1,9 @@
 package com.kzhovn.todoapp.ui
 
-import androidx.compose.material.icons.filled.SubdirectoryArrowRight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import com.kzhovn.todoapp.data.subtaskParentTitle
 import androidx.compose.ui.draw.alpha
 import com.kzhovn.todoapp.data.TaskType
 import androidx.compose.material.icons.filled.AccountTree
@@ -94,9 +97,7 @@ fun TaskListScreen(
             val effective = remember(task, allById, contextsByTaskId) { resolveEffective(task, allById, contextsByTaskId) }
             // The bar shows the nearest folder ancestor's color, even for a subtask of a task.
             val barColor = task.parentId?.let { walkParentChain(it, allById) { id -> colors[id] } } ?: LedgerBorder
-            // A subtask (child of a task or project, not merely inside a folder) gets a small marker.
-            val isSubtask = allById[task.parentId]?.type.let { it == TaskType.TASK || it == TaskType.PROJECT }
-            TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, task.id in selectedIds, isSubtask, onCheck, onStar, onEdit, onSnooze)
+            TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, task.id in selectedIds, subtaskParentTitle(task, allById), onCheck, onStar, onEdit, onSnooze)
             if (index < tasks.lastIndex) {
                 HorizontalDivider(color = LedgerBorder)
             }
@@ -126,7 +127,7 @@ private fun TaskRow(
     subtasks: Pair<Int, Int>?,
     barColor: Color,
     selected: Boolean,
-    isSubtask: Boolean,
+    parentTitle: String?,
     onCheck: (Long) -> Unit,
     onStar: (Long) -> Unit,
     onEdit: (Long) -> Unit,
@@ -157,14 +158,12 @@ private fun TaskRow(
             else TaskCheckbox(checked = task.isComplete, overdue = effectiveOverdue, onCheckedChange = { onCheck(task.id) })
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (isSubtask) {
-                        Icon(
-                            Icons.Filled.SubdirectoryArrowRight, contentDescription = "Subtask", tint = LedgerMuted,
-                            modifier = Modifier.size(14.dp).padding(end = 2.dp)
-                        )
-                    }
                     Text(
-                        text = task.title,
+                        // A subtask reads "Parent: subtask", with the parent dimmer.
+                        text = buildAnnotatedString {
+                            parentTitle?.let { withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal)) { append("$it: ") } }
+                            append(task.title)
+                        },
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp,
                         textDecoration = if (task.isComplete) TextDecoration.LineThrough else null,

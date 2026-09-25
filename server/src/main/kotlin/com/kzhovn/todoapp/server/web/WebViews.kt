@@ -7,6 +7,7 @@ import com.kzhovn.todoapp.data.deadline
 import com.kzhovn.todoapp.data.hasTime
 import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.data.stalledProjects
+import com.kzhovn.todoapp.data.subtaskParentTitle
 import com.kzhovn.todoapp.data.walkParentChain
 import com.kzhovn.todoapp.server.TaskService
 import kotlinx.html.BODY
@@ -66,7 +67,7 @@ class ListData(service: TaskService, val mode: ListMode, val collapsed: Set<Long
 
     fun effectiveDue(task: Task) = resolveEffective(task, byId, contextIds).effectiveDueDate
     fun contextName(task: Task) = resolveEffective(task, byId, contextIds).effectiveContextIds.firstOrNull()?.let(contextNames::get)
-    fun isSubtask(task: Task) = byId[task.parentId]?.type.let { it == TaskType.TASK || it == TaskType.PROJECT }
+    fun parentTitle(task: Task) = subtaskParentTitle(task, byId)
     fun folderColor(task: Task): String? = task.parentId?.let { parent -> walkParentChain(parent, byId) { folderColors[it] } }
     fun ownColor(folder: Task) = folderColors[folder.id]
     fun subtaskCounts(task: Task): Pair<Int, Int>? =
@@ -81,7 +82,6 @@ class ListData(service: TaskService, val mode: ListMode, val collapsed: Set<Long
 internal enum class Icon(val path: String) {
     FOLDER("M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"),
     PROJECT("M22 11V3h-7v3H9V3H2v8h7V8h2v10h4v3h7v-8h-7v3h-2V8h2v3z"), // AccountTree
-    SUBTASK("M19 15l-6 6-1.42-1.42L15.17 16H4V4h2v10h9.17l-3.59-3.59L13 9l6 6z"), // SubdirectoryArrowRight
     STAR("M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"),
     STAR_BORDER("M22 9.24l-7.19-.62L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.63-7.03L22 9.24zM12 15.4l-3.76 2.27 1-4.28-3.32-2.88 4.38-.38L12 6.1l1.71 4.04 4.38.38-3.32 2.88 1 4.28L12 15.4z"),
     REPEAT("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"),
@@ -250,8 +250,8 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
         }
         div(classes = "main") {
             div(classes = "title") {
-                // In the All tree indentation already shows nesting; flat lists need the marker.
-                if (data.mode != ListMode.ALL && data.isSubtask(task)) icon(Icon.SUBTASK, "sub")
+                // In the All tree indentation already shows nesting; flat lists say "Parent: subtask".
+                if (data.mode != ListMode.ALL) data.parentTitle(task)?.let { span(classes = "parent") { +"$it: " } }
                 a(href = "/tasks/${task.id}?mode=$mode", classes = "edit") { +task.title }
                 if (task.recurrenceType != null) span(classes = "badge") { attributes["title"] = "Recurring"; icon(Icon.REPEAT, "") }
             }

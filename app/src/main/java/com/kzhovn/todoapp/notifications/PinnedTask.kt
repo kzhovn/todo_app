@@ -21,7 +21,11 @@ import kotlinx.coroutines.launch
 // The pinned id is persisted so the notification can be restored after a reboot, and refresh()
 // drops it once the task is completed or deleted anywhere (app, widget, sync, Discord).
 object PinnedTask {
-    private const val CHANNEL_ID = "doing"
+    // Channel importance can't change once created, so raising it meant a new channel; the old,
+    // low-importance "doing" one is deleted. Low importance counts as "silent", which Pixels hide
+    // from the lock screen.
+    private const val CHANNEL_ID = "doing_pinned"
+    private const val OLD_CHANNEL_ID = "doing"
     private const val NOTIFICATION_ID = 7001
     const val ACTION_COMPLETE = "com.kzhovn.todoapp.PINNED_COMPLETE"
     const val ACTION_UNPIN = "com.kzhovn.todoapp.PINNED_UNPIN"
@@ -52,9 +56,15 @@ object PinnedTask {
     private fun show(context: Context, task: Task) {
         val manager = manager(context)
         if (manager.getNotificationChannel(CHANNEL_ID) == null) {
+            manager.deleteNotificationChannel(OLD_CHANNEL_ID)
+            // High importance (shown on the lock screen and as a heads-up), but without sound or
+            // vibration: pinning is something you just did, not an alert.
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Doing (pinned task)", NotificationManager.IMPORTANCE_LOW).apply {
+                NotificationChannel(CHANNEL_ID, "Doing (pinned task)", NotificationManager.IMPORTANCE_HIGH).apply {
                     lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+                    setSound(null, null)
+                    enableVibration(false)
+                    setShowBadge(false)
                 }
             )
         }
@@ -72,9 +82,17 @@ object PinnedTask {
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(task.title)
             .setContentText("Doing now")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("Doing now"))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_MAX) // pre-Oreo stand-in for channel importance
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setShowWhen(false)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            // Android 16's "promoted ongoing" (Live Update): pinned to the top of the lock screen and
+            // a status-bar chip. Set by key since compileSdk predates the constant; older versions
+            // ignore it. Needs POST_PROMOTED_NOTIFICATIONS in the manifest.
+            .addExtras(android.os.Bundle().apply { putBoolean("android.requestPromotedOngoing", true) })
             .setContentIntent(open)
             // Broadcast actions (not activities) run without unlocking, so Complete works on the lock screen.
             .addAction(0, "Complete", action(ACTION_COMPLETE, 1))

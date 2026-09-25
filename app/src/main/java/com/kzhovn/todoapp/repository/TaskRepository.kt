@@ -184,6 +184,8 @@ class TaskRepository(
 
     suspend fun getAllTasks(): List<Task> = taskDao.getAllOnce()
 
+    fun taskChanges() = taskDao.observeAll()
+
     suspend fun getAllTaskContexts(): Map<Long, Set<Long>> =
         taskContextDao.getAllCrossRefs().groupBy({ it.taskId }, { it.contextId }).mapValues { it.value.toSet() }
 

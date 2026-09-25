@@ -42,6 +42,10 @@ interface TaskDao {
     @Query("SELECT * FROM tasks")
     suspend fun getAllOnce(): List<Task>
 
+    // Emits on every change to the tasks table (see TodoWidget).
+    @Query("SELECT * FROM tasks")
+    fun observeAll(): kotlinx.coroutines.flow.Flow<List<Task>>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertDependency(dependency: TaskDependency)
 

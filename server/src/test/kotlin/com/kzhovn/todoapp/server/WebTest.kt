@@ -66,7 +66,7 @@ class WebTest {
         val projectRow = all.substring(all.lastIndexOf("class=\"row", title), title)
         assertTrue(projectRow.contains("class=\"project\""))
         assertFalse(projectRow.contains("class=\"check"))
-        assertTrue(client.get("/doing").bodyAsText().contains("icon sub"))
+        assertTrue(client.get("/doing").bodyAsText().contains("<span class=\"parent\">Wool coat: </span>"))
     }
 
     @Test
@@ -276,10 +276,10 @@ class WebTest {
         val project = parameters { append("base", blank(TaskType.PROJECT)); append("title", "Wool coat"); append("type", "PROJECT"); append("starred", "on") }
         assertTrue(client.submitForm("/tasks/new", project).bodyAsText().contains("needs a first step"))
         assertEquals(null, service.tasks().firstOrNull { it.title == "Wool coat" })
-        noRedirects.submitForm("/tasks/new", parameters { appendAll(project); append("firstStep", "Buy wool") })
+        noRedirects.submitForm("/tasks/new", parameters { appendAll(project); append("newSubtasks", "Buy wool\n\nCut fabric") })
         val coat = service.tasks().single { it.title == "Wool coat" }
         assertTrue(coat.isStarred)
-        assertEquals(coat.id, service.tasks().single { it.title == "Buy wool" }.parentId)
+        assertEquals(listOf("Buy wool", "Cut fabric"), service.tasks().filter { it.parentId == coat.id }.map { it.title }.sorted())
     }
 
     @Test
@@ -335,5 +335,18 @@ class WebTest {
             append("title", "Dentist"); append("type", "TASK"); append("dueDate", "2026-10-01"); append("dueTime", "15:00"); append("reminder", "30")
         })
         assertEquals(30, service.get(task.id)!!.reminderOffsetMinutes)
+    }
+
+    @Test
+    fun `depends on can create the task to wait for, in the same folder`() = web {
+        val folder = service.create(Task(type = TaskType.FOLDER, title = "Home"))
+        val wall = service.create(Task(title = "Paint the wall", parentId = folder.id))
+        createClient { followRedirects = false }.submitForm("/tasks/${wall.id}", parameters {
+            append("base", taskFields(wall, emptySet(), emptySet()).toString())
+            append("title", "Paint the wall"); append("type", "TASK"); append("parent", folder.id.toString()); append("newDep", "Buy paint")
+        })
+        val paint = service.tasks().single { it.title == "Buy paint" }
+        assertEquals(folder.id, paint.parentId)
+        assertEquals(setOf(paint.id), service.dependsOn(wall.id))
     }
 }

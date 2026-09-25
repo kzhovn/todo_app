@@ -38,7 +38,9 @@ import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.map
 import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.MainActivity
 import com.kzhovn.todoapp.TodoApp
@@ -80,22 +82,29 @@ class TodoWidget : GlanceAppWidget() {
         val folderId = prefs[WIDGET_FOLDER_KEY]
 
         val repository = (context.applicationContext as TodoApp).repository
-        val now = System.currentTimeMillis()
-        repository.purgeExpired(now)
-        val allTasks = repository.getAllTasks()
-        val allById = allTasks.associateBy { it.id }
-        val contextsByTaskId = repository.getAllTaskContexts()
-        val tasks = when (mode) {
-            WidgetMode.ALL -> allTasks.filter { it.type == TaskType.TASK && !it.isComplete }
-            else -> {
-                val active = repository.getActiveTasksFrom(allTasks, contextsByTaskId, now, minuteOfDay(now), dayOfWeekMask(now))
-                if (mode == WidgetMode.ACTIVE) active
-                else filterDoing(active, now) { resolveEffective(it, allById, contextsByTaskId).effectiveDueDate }
-            }
-        }.filter { folderId == null || isUnder(it, folderId, allById) }
-        val rows = TodoWidgetPresenter.toRows(tasks, subtaskCounts(allTasks), now, allById)
-        val folderName = folderId?.let { allById[it]?.title }
-        val header = mode.label.uppercase() + folderName?.let { " · $it" }.orEmpty()
+        suspend fun load(): Pair<List<WidgetTaskRow>, String> {
+            val now = System.currentTimeMillis()
+            repository.purgeExpired(now)
+            val allTasks = repository.getAllTasks()
+            val allById = allTasks.associateBy { it.id }
+            val contextsByTaskId = repository.getAllTaskContexts()
+            val tasks = when (mode) {
+                WidgetMode.ALL -> allTasks.filter { it.type == TaskType.TASK && !it.isComplete }
+                else -> {
+                    val active = repository.getActiveTasksFrom(allTasks, contextsByTaskId, now, minuteOfDay(now), dayOfWeekMask(now))
+                    if (mode == WidgetMode.ACTIVE) active
+                    else filterDoing(active, now) { resolveEffective(it, allById, contextsByTaskId).effectiveDueDate }
+                }
+            }.filter { folderId == null || isUnder(it, folderId, allById) }
+            val folderName = folderId?.let { allById[it]?.title }
+            return TodoWidgetPresenter.toRows(tasks, subtaskCounts(allTasks), now, allById) to
+                mode.label.uppercase() + folderName?.let { " · $it" }.orEmpty()
+        }
+        val initial = load()
+        // Reloaded whenever the tasks table changes. A widget's session outlives a single update(),
+        // which only recomposes it, so data loaded once would still show the list from before a
+        // task was added through this very widget.
+        val updates = repository.taskChanges().map { load() }
 
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
         // The data Uri keeps each widget's PendingIntent distinct, so every widget opens its own settings.
@@ -111,6 +120,7 @@ class TodoWidget : GlanceAppWidget() {
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 
         provideContent {
+            val (rows, header) = updates.collectAsState(initial).value
             Column(modifier = GlanceModifier.fillMaxSize().background(fixed(LedgerBackground)).padding(start = 4.dp, end = 4.dp, top = 2.dp, bottom = 4.dp)) {
                 Row(
                     modifier = GlanceModifier.fillMaxWidth().padding(start = 6.dp),
@@ -182,8 +192,18 @@ private fun WidgetRow(row: WidgetTaskRow) {
                 style = TextStyle(color = fixed(if (row.isComplete) LedgerAccent else LedgerMuted), fontSize = 24.sp)
             )
         }
+        // Glance text can't mix colours, so a subtask's dimmer "Parent: " is its own Text, capped so a
+        // long parent name can't crowd out the subtask's own title.
+        row.parentTitle?.let { parent ->
+            Text(
+                text = (if (parent.length > 22) parent.take(21) + "…" else parent) + ":",
+                style = TextStyle(color = fixed(LedgerMuted), fontSize = 14.sp),
+                maxLines = 1,
+                modifier = GlanceModifier.padding(start = 2.dp)
+            )
+        }
         Text(
-            text = if (row.isSubtask) "↳ ${row.title}" else row.title,
+            text = row.title,
             // Glance has no alpha, so a backburner row is dimmed with the muted colour instead.
             style = TextStyle(color = fixed(if (row.isBackburner) LedgerMuted else LedgerInk), fontSize = 14.sp),
             maxLines = 1,
