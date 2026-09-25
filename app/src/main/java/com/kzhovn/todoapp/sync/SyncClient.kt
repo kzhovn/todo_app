@@ -25,7 +25,7 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManagerFactory
 
-data class SyncConfig(val url: String, val token: String)
+data class SyncConfig(val url: String, val token: String, val rolloverHour: Int? = null)
 
 class SyncClient(
     private val context: Context,
@@ -50,7 +50,7 @@ class SyncClient(
     suspend fun sync(config: SyncConfig): Int = mutex.withLock {
         val (request, pushedTs) = db.withTransaction {
             val dirty = readDirty()
-            SyncRequest(cursor(), dirty.mapNotNull { (key, ts) -> changeFor(key, ts) }) to dirty
+            SyncRequest(cursor(), dirty.mapNotNull { (key, ts) -> changeFor(key, ts) }, config.rolloverHour) to dirty
         }
         val response = withContext(Dispatchers.IO) { (transport ?: ::post)(config, request) }
         val result = db.withTransaction { apply(response, pushedTs) }

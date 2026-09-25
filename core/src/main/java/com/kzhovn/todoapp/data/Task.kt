@@ -26,8 +26,13 @@ data class Task(
     val icon: String? = null,
     val reminderOffsetMinutes: Int? = null,
     // "?" in the UI: a someday-maybe, hidden from Active/Doing. Never starred (see starRule).
-    @ColumnInfo(defaultValue = "0") val isMaybe: Boolean = false
+    @ColumnInfo(defaultValue = "0") val isMaybe: Boolean = false,
+    // Set for "just for today" tasks: the day rollover after creation. Past it, the task is hidden
+    // and then deleted (unlike ordinary completed tasks, which are kept forever).
+    val expiresAt: Long? = null
 ) {
+    fun isExpired(now: Long): Boolean = expiresAt != null && expiresAt <= now
+
     // The one place the maybe/star exclusion is enforced; every write path runs tasks through it.
     fun starRule(): Task = if (isMaybe && isStarred) copy(isStarred = false) else this
 }

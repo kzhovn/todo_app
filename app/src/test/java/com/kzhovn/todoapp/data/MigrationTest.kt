@@ -22,7 +22,7 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 class MigrationTest {
     @Test
-    fun `v3 database migrates to v4 keeping its tasks`() {
+    fun `v3 database migrates to the current version keeping its tasks`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val file = context.getDatabasePath("migration-test.db").apply { parentFile?.mkdirs(); delete() }
         val schema = Json.parseToJsonElement(File("schemas/com.kzhovn.todoapp.data.TodoDatabase/3.json").readText())
@@ -40,12 +40,13 @@ class MigrationTest {
         }
 
         val room = Room.databaseBuilder(context, TodoDatabase::class.java, file.path)
-            .addMigrations(MIGRATION_3_4).allowMainThreadQueries().build()
+            .addMigrations(MIGRATION_3_4, MIGRATION_4_5).allowMainThreadQueries().build()
         val task = runBlocking { room.taskDao().getById(1) }!!
         room.close()
 
         assertEquals("kept", task.title)
         assertTrue(task.isStarred)
         assertFalse(task.isMaybe)
+        assertEquals(null, task.expiresAt)
     }
 }

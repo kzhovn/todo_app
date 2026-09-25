@@ -10,6 +10,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.kzhovn.todoapp.AppSettings
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.widget.TodoWidget
 import java.util.concurrent.TimeUnit
@@ -18,6 +19,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     override suspend fun doWork(): Result {
         val app = applicationContext as TodoApp
         val config = SyncSettings.config(app) ?: return Result.success()
+        app.repository.purgeExpired(System.currentTimeMillis())
         val outcome = runCatching { app.syncClient.sync(config) }
         SyncSettings.recordResult(app, outcome)
         if ((outcome.getOrNull() ?: 0) > 0) TodoWidget().updateAll(app)
@@ -60,7 +62,7 @@ object SyncSettings {
         val prefs = prefs(context)
         val url = prefs.getString("url", null)?.takeIf { it.isNotBlank() } ?: return null
         val token = prefs.getString("token", null)?.takeIf { it.isNotBlank() } ?: return null
-        return SyncConfig(url, token)
+        return SyncConfig(url, token, AppSettings.rolloverHour(context))
     }
 
     fun save(context: Context, url: String, token: String) =

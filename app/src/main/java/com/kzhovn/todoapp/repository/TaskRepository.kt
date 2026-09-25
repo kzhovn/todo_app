@@ -213,6 +213,17 @@ class TaskRepository(
         }
     }
 
+    // Deletes "just for today" tasks (and anything under them) once their day has rolled over.
+    // Bypasses deleteTask so it doesn't offer an undo for something the user didn't just do.
+    suspend fun purgeExpired(now: Long) {
+        taskDao.getAllOnce().filter { it.isExpired(now) }.forEach { task ->
+            (taskDao.getDescendants(task.id) + task).forEach {
+                taskDao.deleteById(it.id)
+                reminderScheduler.cancel(it)
+            }
+        }
+    }
+
     // Detaches this task's direct children (only direct — any grandchildren stay nested under
     // their own now-top-level parent) so they survive as independent tasks.
     suspend fun promoteChildrenToTopLevel(taskId: Long) {

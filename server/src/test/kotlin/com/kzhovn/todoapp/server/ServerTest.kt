@@ -157,6 +157,24 @@ class ServerTest {
     }
 
     @Test
+    fun `--d adds expire at the rollover the phone reported, then disappear and get purged`() {
+        store.sync(SyncRequest(0, emptyList(), rolloverHour = 6))
+        val personal = service.create(Task(type = TaskType.FOLDER, title = "Personal"))
+
+        logic.onAdd(1L, "u", "--d: shower")
+        val task = service.tasks().single { it.title == "shower" }
+        assertEquals(com.kzhovn.todoapp.data.nextRollover(now, 6), task.expiresAt)
+        assertEquals(personal.id, task.parentId)
+        assertTrue(task.isStarred)
+        assertNull(logic.parseAdd("-- d is for dog")!!.expiresAt)
+
+        now = task.expiresAt!!
+        assertNull(service.get(task.id))
+        assertTrue(logic.command(".doing")!!.getOrThrow().isEmpty())
+        assertTrue(store.get(TASKS, task.id)!!.isDeleted)
+    }
+
+    @Test
     fun `bare adds are starred, adds with a date or folder are not`() {
         service.create(Task(type = TaskType.FOLDER, title = "Work"))
 

@@ -61,6 +61,8 @@ import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
+import com.kzhovn.todoapp.data.nextRollover
+import com.kzhovn.todoapp.AppSettings
 import android.widget.Toast
 import com.kzhovn.todoapp.quickadd.QuickAddActivity
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
@@ -354,6 +356,13 @@ class TaskEditActivity : ComponentActivity() {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Maybe (?)", fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.weight(1f))
                         Switch(checked = task.isMaybe, onCheckedChange = { task = task.copy(isMaybe = it).starRule() })
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Just for today (deleted at day rollover)", fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.weight(1f))
+                        Switch(checked = task.expiresAt != null, onCheckedChange = { on ->
+                            val hour = AppSettings.rolloverHour(this@TaskEditActivity)
+                            task = task.copy(expiresAt = if (on) nextRollover(System.currentTimeMillis(), hour) else null)
+                        })
                     }
                 }
 

@@ -1,6 +1,9 @@
 package com.kzhovn.todoapp.sync
 
+import android.app.TimePickerDialog
 import android.os.Bundle
+import androidx.compose.foundation.clickable
+import com.kzhovn.todoapp.AppSettings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -44,7 +47,25 @@ class SyncSettingsActivity : ComponentActivity() {
                 val scope = rememberCoroutineScope()
 
                 Column(Modifier.fillMaxSize().background(LedgerBackground).padding(16.dp)) {
-                    Text("Sync", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk)
+                    Text("Settings", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk)
+                    Spacer(Modifier.height(12.dp))
+                    var rolloverHour by remember { mutableStateOf(AppSettings.rolloverHour(app)) }
+                    Text(
+                        "Day rolls over at ${"%02d".format(rolloverHour)}:00",
+                        color = LedgerInk,
+                        fontSize = 15.sp,
+                        modifier = Modifier.clickable {
+                            TimePickerDialog(this@SyncSettingsActivity, { _, hour, _ ->
+                                rolloverHour = hour
+                                AppSettings.setRolloverHour(app, hour)
+                                // The server needs it too, for Discord's "--d:" tasks.
+                                if (SyncSettings.config(app) != null) SyncWorker.requestSoon(app)
+                            }, rolloverHour, 0, true).show()
+                        }
+                    )
+                    Text("\"Just for today\" tasks are deleted at this time.", color = LedgerMuted, fontSize = 12.sp)
+                    Spacer(Modifier.height(20.dp))
+                    Text("Sync", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = LedgerInk)
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(url, { url = it }, label = { Text("Server URL") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))

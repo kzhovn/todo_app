@@ -37,8 +37,9 @@ data class SyncRow(
     val deletedAt: Long? get() = fields[DELETED_AT]?.takeIf { it != JsonNull }?.jsonPrimitive?.long
 }
 
+// rolloverHour carries the phone's day-rollover setting so the bot's "--d:" tasks use the same day.
 @Serializable
-data class SyncRequest(val cursor: Long, val changes: List<SyncRow>)
+data class SyncRequest(val cursor: Long, val changes: List<SyncRow>, val rolloverHour: Int? = null)
 
 @Serializable
 data class SyncResponse(val cursor: Long, val rows: List<SyncRow>)

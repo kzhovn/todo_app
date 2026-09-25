@@ -40,6 +40,7 @@ class Store(path: String) {
     fun sync(request: SyncRequest): SyncResponse {
         val changed = mutableListOf<Pair<SyncRow?, SyncRow>>()
         val response = transaction {
+            request.rolloverHour?.let { setValue(ROLLOVER_HOUR_KEY, it.toString()) }
             request.changes.forEach { incoming ->
                 val before = get(incoming.table, incoming.id)
                 val after = merge(before, incoming)
@@ -133,7 +134,8 @@ class Store(path: String) {
         clocks = SyncJson.decodeFromString(clockSerializer, getString("clocks"))
     )
 
-    private companion object {
-        val clockSerializer = MapSerializer(String.serializer(), Long.serializer())
+    companion object {
+        const val ROLLOVER_HOUR_KEY = "rolloverHour"
+        private val clockSerializer = MapSerializer(String.serializer(), Long.serializer())
     }
 }

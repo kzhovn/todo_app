@@ -84,6 +84,7 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
             }
             if (digestChannelId != null && digestTime != null) {
                 scheduleDigest(LocalTime.parse(digestTime)) {
+                    service.purgeExpired()
                     val doing = service.doing()
                     val channel = jda.getChannelById(MessageChannel::class.java, digestChannelId)
                     if (doing.isNotEmpty() && channel != null) bot.postList(channel, doing)

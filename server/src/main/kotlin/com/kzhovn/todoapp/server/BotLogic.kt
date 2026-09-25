@@ -1,6 +1,7 @@
 package com.kzhovn.todoapp.server
 
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.quickadd.QuickAddParser
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -18,6 +19,8 @@ const val STAR = "⭐"
 const val NOTHING = "🎉 Nothing here 🎉"
 // Adds without a `folder:` prefix land here, if a folder with this name exists.
 const val DEFAULT_FOLDER = "Personal"
+// `--d: shower` (or rusabot's `--daily:`) makes a task that expires at the next day rollover.
+private val DAILY_PREFIXES = setOf("d", "daily")
 private const val MAX_REACTIONS = 20 // Discord's per-message limit on distinct reactions
 private const val MAX_CHARS = 2000 // Discord's message length limit
 
@@ -60,11 +63,13 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         if (!content.startsWith("--")) return null
         val body = content.removePrefix("--").trim()
         val prefix = body.substringBefore(':', missingDelimiterValue = "")
-        val explicitFolder = prefix.takeIf { it.isNotBlank() }?.let(service::findFolder)
-        val parsed = QuickAddParser.parse(if (explicitFolder != null) body.substringAfter(':') else body)
+        val daily = prefix.trim().lowercase() in DAILY_PREFIXES
+        val explicitFolder = if (daily) null else prefix.takeIf { it.isNotBlank() }?.let(service::findFolder)
+        val parsed = QuickAddParser.parse(if (daily || explicitFolder != null) body.substringAfter(':') else body)
         val bare = explicitFolder == null && parsed.startDate == null && parsed.dueDate == null && !parsed.isMaybe
         val folder = explicitFolder ?: service.findFolder(DEFAULT_FOLDER)
-        return parsed.takeIf { it.title.isNotBlank() }?.copy(parentId = folder?.id, isStarred = bare)
+        val expiresAt = if (daily) nextRollover(service.now(), service.rolloverHour()) else null
+        return parsed.takeIf { it.title.isNotBlank() }?.copy(parentId = folder?.id, isStarred = bare, expiresAt = expiresAt)
     }
 
     fun onAdd(messageId: Long, jumpUrl: String, content: String): Boolean {
@@ -160,6 +165,7 @@ class BotLogic(private val service: TaskService, private val store: Store) {
     fun command(content: String): Result<List<Task>>? {
         val name = content.substringBefore(' ').lowercase()
         if (name !in setOf(".doing", ".list", ".active", ".rand")) return null
+        service.purgeExpired()
         val arg = content.substringAfter(' ', "").trim()
         val folder = if (arg.isEmpty()) null else service.findFolder(arg)
             ?: return Result.failure(IllegalArgumentException("No folder named \"$arg\"."))

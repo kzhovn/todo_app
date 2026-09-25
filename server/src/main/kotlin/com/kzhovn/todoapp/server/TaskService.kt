@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.data.DEFAULT_ROLLOVER_HOUR
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
@@ -26,7 +27,18 @@ import kotlinx.serialization.json.JsonPrimitive
 // rules (recurrence, active/doing, inheritance) come from :core so both sides agree.
 class TaskService(private val store: Store, private val clock: () -> Long = System::currentTimeMillis) {
 
-    fun get(id: Long): Task? = store.get(TASKS, id)?.takeUnless { it.isDeleted }?.toTask()
+    fun now(): Long = clock()
+
+    fun rolloverHour(): Int = store.getValue(Store.ROLLOVER_HOUR_KEY)?.toIntOrNull() ?: DEFAULT_ROLLOVER_HOUR
+
+    fun get(id: Long): Task? = store.get(TASKS, id)?.takeUnless { it.isDeleted }?.toTask()?.takeUnless { it.isExpired(clock()) }
+
+    // Deletes "just for today" tasks whose day is over, so the phone drops them too even if it was
+    // offline at rollover. Reads already hide them; this makes it permanent.
+    fun purgeExpired() = store.transaction {
+        val now = clock()
+        store.all(TASKS).filter { !it.isDeleted && it.toTask().isExpired(now) }.forEach { tombstone(it.id, now) }
+    }
 
     fun tasks(): List<Task> = liveRows().map { it.toTask() }
 
@@ -121,7 +133,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     private fun writeTask(task: Task, row: SyncRow) =
         store.write(TASKS, task.id, JsonObject(taskFields(task, row.contextIds(), row.dependsOn()) - DELETED_AT), clock())
 
-    private fun liveRows(): List<SyncRow> = store.all(TASKS).filterNot { it.isDeleted }
+    private fun liveRows(): List<SyncRow> = clock().let { now -> store.all(TASKS).filterNot { it.isDeleted || it.toTask().isExpired(now) } }
 
     private fun contextsByTaskId(rows: List<SyncRow>) = rows.associate { it.id to it.contextIds() }
 

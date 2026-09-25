@@ -40,6 +40,7 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kzhovn.todoapp.MainActivity
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
@@ -79,6 +80,7 @@ class TodoWidget : GlanceAppWidget() {
 
         val repository = (context.applicationContext as TodoApp).repository
         val now = System.currentTimeMillis()
+        repository.purgeExpired(now)
         val allTasks = repository.getAllTasks()
         val allById = allTasks.associateBy { it.id }
         val contextsByTaskId = repository.getAllTaskContexts()
@@ -100,6 +102,13 @@ class TodoWidget : GlanceAppWidget() {
             .setData(Uri.parse("todowidget://config/$appWidgetId"))
             .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
 
+        // CLEAR_TOP|SINGLE_TOP reuses a running app screen (delivered to onNewIntent) instead of just
+        // bringing it forward on whatever tab it was showing.
+        val openListIntent = Intent(context, MainActivity::class.java)
+            .setData(Uri.parse("todowidget://open/$appWidgetId"))
+            .putExtra(MainActivity.EXTRA_MODE, mode.name)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+
         provideContent {
             Column(modifier = GlanceModifier.fillMaxSize().background(fixed(LedgerBackground)).padding(start = 4.dp, end = 4.dp, top = 2.dp, bottom = 4.dp)) {
                 Row(
@@ -112,6 +121,15 @@ class TodoWidget : GlanceAppWidget() {
                         maxLines = 1,
                         modifier = GlanceModifier.defaultWeight().clickable(actionStartActivity(configIntent))
                     )
+                    // Opens the app on the same list; the widget's modes match the app's tabs by name.
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = GlanceModifier
+                            .size(32.dp)
+                            .clickable(actionStartActivity(openListIntent))
+                    ) {
+                        Text("☰", style = TextStyle(color = fixed(LedgerAccent), fontSize = 20.sp, fontWeight = FontWeight.Bold))
+                    }
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = GlanceModifier

@@ -41,6 +41,7 @@ class TaskListViewModel(
     fun load(mode: TaskListMode) {
         viewModelScope.launch {
             val now = clock()
+            repository.purgeExpired(now)
             val all = refreshSubtaskCounts()
             _tasks.value = when (mode) {
                 TaskListMode.ALL -> all

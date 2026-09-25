@@ -109,8 +109,22 @@ class MainActivity : ComponentActivity() {
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
+    // The widget's "open list" button says which tab to show, whether the app is starting or
+    // already open (then the intent arrives via onNewIntent).
+    private val requestedMode = mutableStateOf<TaskListMode?>(null)
+
+    private fun readRequestedMode(intent: Intent?) {
+        intent?.getStringExtra(EXTRA_MODE)?.let { name -> runCatching { TaskListMode.valueOf(name) }.getOrNull() }?.let { requestedMode.value = it }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        readRequestedMode(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        readRequestedMode(intent)
         val app = application as TodoApp
         val repository = app.repository
         val contextRepository = app.contextRepository
@@ -141,7 +155,8 @@ class MainActivity : ComponentActivity() {
             val viewModel = remember { TaskListViewModel(repository, contextRepository) }
             val scope = rememberCoroutineScope()
             val snackbarHostState = remember { SnackbarHostState() }
-            var selectedMode by remember { mutableStateOf(TaskListMode.DOING) }
+            var selectedMode by remember { mutableStateOf(requestedMode.value ?: TaskListMode.DOING) }
+            LaunchedEffect(requestedMode.value) { requestedMode.value?.let { selectedMode = it } }
             val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
             var searchMode by remember { mutableStateOf(false) }
             var query by remember { mutableStateOf("") }
@@ -216,7 +231,7 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                         )
                         NavigationDrawerItem(
-                            label = { Text("Sync") },
+                            label = { Text("Settings") },
                             icon = { Icon(Icons.Filled.Sync, contentDescription = null) },
                             selected = false,
                             onClick = {
@@ -417,6 +432,10 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         if (wifiMonitorStarted) wifiContextMonitor.stop()
+    }
+
+    companion object {
+        const val EXTRA_MODE = "mode"
     }
 }
 
