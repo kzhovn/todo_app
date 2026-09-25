@@ -352,7 +352,7 @@ class TaskEditActivity : ComponentActivity() {
                 if (task.type == TaskType.TASK) {
                     Spacer(Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Maybe (?) — hidden from Active, can't be starred", fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.weight(1f))
+                        Text("Maybe (?)", fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.weight(1f))
                         Switch(checked = task.isMaybe, onCheckedChange = { task = task.copy(isMaybe = it).starRule() })
                     }
                 }
