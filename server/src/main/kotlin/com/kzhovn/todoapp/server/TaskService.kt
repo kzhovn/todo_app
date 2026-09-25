@@ -91,20 +91,29 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     fun setStarred(id: Long, starred: Boolean) = update(id) { it.copy(isStarred = starred) }
 
-    // Mirrors TaskRepository.markComplete: the spawned instance starts with no contexts/dependencies.
+    // Mirrors TaskRepository.markComplete: the next instance keeps the task's contexts (not its
+    // dependencies) and gets fresh copies of its subtasks.
     fun complete(id: Long) = store.transaction {
         val now = clock()
         val task = get(id)?.takeUnless { it.isComplete } ?: return@transaction
         val completed = task.copy(isComplete = true, completedAt = now)
         update(id) { completed }
-        RecurrenceEngine.nextInstance(completed, now)?.let {
-            store.write(TASKS, it.id, taskFields(it, emptySet(), emptySet()), now)
+        RecurrenceEngine.nextInstance(completed, now)?.let { next ->
+            val rows = liveRows().associateBy { it.id }
+            val descendants = (subtreeIds(id) - id).mapNotNull { rows[it]?.toTask() }
+            val copies = listOf(id to next) + RecurrenceEngine.successorSubtasks(completed, next, descendants)
+            for ((originalId, copy) in copies) {
+                store.write(TASKS, copy.id, taskFields(copy, rows[originalId]?.contextIds().orEmpty(), emptySet()), now)
+            }
         }
     }
 
     fun uncomplete(id: Long) = store.transaction {
         val task = get(id)?.takeIf { it.isComplete } ?: return@transaction
-        RecurrenceEngine.untouchedSuccessor(task, tasks())?.let { tombstone(it.id, clock()) }
+        RecurrenceEngine.untouchedSuccessor(task, tasks())?.let { successor ->
+            val now = clock()
+            subtreeIds(successor.id).forEach { tombstone(it, now) }
+        }
         update(id) { it.copy(isComplete = false, completedAt = null) }
     }
 

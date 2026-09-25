@@ -32,6 +32,25 @@ object RecurrenceEngine {
         return candidates.firstOrNull { it.id != completed.id && it.copy(id = expected.id) == expected }
     }
 
+    // Fresh, uncompleted copies of a recurring task's subtasks for its next instance (MLO's
+    // "uncomplete subtasks"), with their dates shifted as far as the parent's start moved. Returns
+    // (original id, copy) pairs so callers can carry contexts over. Recurring subtasks are left out:
+    // they already spawn their own next instances.
+    fun successorSubtasks(completed: Task, next: Task, descendants: List<Task>): List<Pair<Long, Task>> {
+        val shift = (next.startDate ?: return emptyList()) - (completed.startDate ?: completed.completedAt ?: return emptyList())
+        val newIds = mutableMapOf(completed.id to next.id)
+        return descendants.sortedBy { it.id }.mapNotNull { sub ->
+            val parent = newIds[sub.parentId] ?: return@mapNotNull null
+            if (sub.recurrenceType != null) return@mapNotNull null
+            val copy = sub.copy(
+                id = newId(), parentId = parent, isComplete = false, completedAt = null,
+                startDate = sub.startDate?.plus(shift), dueDate = sub.dueDate?.plus(shift)
+            )
+            newIds[sub.id] = copy.id
+            sub.id to copy
+        }
+    }
+
     private fun nextRRuleOccurrence(dtStart: Long, rrule: String, after: Long): Long? {
         val recurrenceRule = RecurrenceRule(rrule)
         val iterator = recurrenceRule.iterator(dtStart, TimeZone.getDefault())

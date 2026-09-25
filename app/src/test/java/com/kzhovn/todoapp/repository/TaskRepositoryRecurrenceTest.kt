@@ -44,6 +44,26 @@ class TaskRepositoryRecurrenceTest {
     }
 
     @Test
+    fun `the next instance keeps contexts and re-creates subtasks, and undo removes them all`() = runBlocking {
+        val contexts = ContextRepository(db.taskContextDao())
+        val home = contexts.createContext(com.kzhovn.todoapp.data.TaskContext(name = "Home", type = com.kzhovn.todoapp.data.ContextType.PLACE))
+        val parent = repository.createTask(Task(title = "Review", recurrenceType = RecurrenceType.AFTER_COMPLETION, recurrenceRule = "30"))
+        contexts.setTaskContexts(parent, setOf(home))
+        repository.createTask(Task(title = "Move money", parentId = parent))
+
+        repository.completeWithDescendants(parent, now)
+
+        val next = repository.getAllTasks().single { it.title == "Review" && !it.isComplete }
+        assertEquals(setOf(home), contexts.getContextsForTask(next.id).map { it.id }.toSet())
+        val subCopy = repository.getAllTasks().single { it.parentId == next.id }
+        assertEquals("Move money", subCopy.title)
+        assertTrue(!subCopy.isComplete)
+
+        repository.toggleComplete(parent, now)
+        assertEquals(2, repository.getAllTasks().size)
+    }
+
+    @Test
     fun `un-completing a recurring task removes its untouched spawned instance`() = runBlocking {
         val taskId = repository.createTask(
             Task(title = "Take out trash", recurrenceType = RecurrenceType.AFTER_COMPLETION, recurrenceRule = "7")

@@ -85,18 +85,26 @@ class TaskRepository(
         val completedTask = task.copy(isComplete = true, completedAt = now)
         taskDao.update(completedTask)
         reminderScheduler.cancel(completedTask)
-        RecurrenceEngine.nextInstance(completedTask, now)?.let {
-            taskDao.insert(it)
-            reminderScheduler.schedule(it, now)
+        // The next instance keeps the task's contexts and gets fresh copies of its subtasks.
+        RecurrenceEngine.nextInstance(completedTask, now)?.let { next ->
+            val copies = listOf(taskId to next) +
+                RecurrenceEngine.successorSubtasks(completedTask, next, taskDao.getDescendants(taskId))
+            for ((originalId, copy) in copies) {
+                taskDao.insert(copy)
+                taskContextDao.getContextIdsForTask(originalId).forEach { taskContextDao.assignContext(TaskContextCrossRef(copy.id, it)) }
+                reminderScheduler.schedule(copy, now)
+            }
         }
     }
 
     suspend fun toggleComplete(taskId: Long, now: Long) {
         val task = taskDao.getById(taskId) ?: return
         if (task.isComplete) {
-            RecurrenceEngine.untouchedSuccessor(task, taskDao.getAllOnce())?.let {
-                taskDao.deleteById(it.id)
-                reminderScheduler.cancel(it)
+            RecurrenceEngine.untouchedSuccessor(task, taskDao.getAllOnce())?.let { successor ->
+                (taskDao.getDescendants(successor.id) + successor).forEach {
+                    taskDao.deleteById(it.id)
+                    reminderScheduler.cancel(it)
+                }
             }
             val reopened = task.copy(isComplete = false, completedAt = null)
             taskDao.update(reopened)

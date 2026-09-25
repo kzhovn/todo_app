@@ -106,6 +106,9 @@ class TaskEditActivity : ComponentActivity() {
             var showNewFolderDialog by remember { mutableStateOf(false) }
             var newFolderName by remember { mutableStateOf("") }
             var recurrence by remember { mutableStateOf(RecurrenceSelection(RecurrencePreset.NONE)) }
+            // The picker only knows simple rules; an imported one like "monthly on the second-to-last
+            // day" displays approximately, so it's only rewritten if the user actually changes it.
+            var loadedRecurrence by remember { mutableStateOf<RecurrenceSelection?>(null) }
             var allTasks by remember { mutableStateOf<List<Task>>(emptyList()) }
             var selectedDependencyIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
             var allDependencyEdges by remember { mutableStateOf<List<TaskDependency>>(emptyList()) }
@@ -133,7 +136,8 @@ class TaskEditActivity : ComponentActivity() {
                     toSave = task.copy(dueDate = null, recurrenceType = null, recurrenceRule = null, reminderOffsetMinutes = null)
                     dependenciesToSave = emptySet()
                 } else {
-                    val (recurrenceType, recurrenceRule) = recurrence.toTaskFields()
+                    val (recurrenceType, recurrenceRule) =
+                        if (recurrence == loadedRecurrence) task.recurrenceType to task.recurrenceRule else recurrence.toTaskFields()
                     toSave = task.copy(recurrenceType = recurrenceType, recurrenceRule = recurrenceRule)
                     dependenciesToSave = selectedDependencyIds
                 }
@@ -152,6 +156,7 @@ class TaskEditActivity : ComponentActivity() {
                     viewModel.load(taskId)?.let { loaded ->
                         task = loaded
                         recurrence = recurrenceSelectionFromTask(loaded.recurrenceType, loaded.recurrenceRule)
+                        loadedRecurrence = recurrence
                     }
                     selectedDependencyIds = repository.getDependencyIds(taskId)
                     selectedContextIds = contextRepository.getContextsForTask(taskId).map { it.id }.toSet()

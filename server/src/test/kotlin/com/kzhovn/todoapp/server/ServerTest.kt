@@ -78,6 +78,20 @@ class ServerTest {
     }
 
     @Test
+    fun `completing a recurring task re-creates its subtasks under the next instance`() {
+        val review = service.create(Task(title = "Review", recurrenceType = RecurrenceType.AFTER_COMPLETION, recurrenceRule = "30"))
+        service.create(Task(title = "Move money", parentId = review.id))
+
+        service.complete(review.id)
+        val next = service.tasks().single { it.title == "Review" && !it.isComplete }
+        assertEquals(listOf("Move money"), service.tasks().filter { it.parentId == next.id }.map { it.title })
+
+        service.uncomplete(review.id)
+        assertEquals(setOf("Review", "Move money"), service.tasks().map { it.title }.toSet())
+        assertEquals(2, service.tasks().size)
+    }
+
+    @Test
     fun `delete takes the subtree down together and restore brings back only that batch`() {
         val parent = service.create(Task(title = "Project"))
         val child = service.create(Task(title = "Step", parentId = parent.id))

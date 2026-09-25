@@ -93,4 +93,26 @@ class RecurrenceEngineTest {
         assertEquals(spawned, RecurrenceEngine.untouchedSuccessor(completed, listOf(completed, spawned)))
         assertNull(RecurrenceEngine.untouchedSuccessor(completed, listOf(completed, spawned.copy(title = "Edited"))))
     }
+
+    @Test
+    fun `subtasks are re-created uncompleted under the next instance, dates shifted, nesting kept`() {
+        val day = TimeUnit.DAYS.toMillis(1)
+        val completed = Task(
+            id = 1, title = "Review", startDate = 10 * day, isComplete = true, completedAt = 12 * day,
+            recurrenceType = RecurrenceType.AFTER_COMPLETION, recurrenceRule = "30"
+        )
+        val next = RecurrenceEngine.nextInstance(completed, 12 * day)!!
+        val sub = Task(id = 2, title = "Move money", parentId = 1, startDate = 11 * day, isComplete = true, completedAt = 11 * day)
+        val subSub = Task(id = 3, title = "Check balance", parentId = 2)
+        val recurringSub = Task(id = 4, title = "Own schedule", parentId = 1, recurrenceType = RecurrenceType.AFTER_COMPLETION, recurrenceRule = "1")
+
+        val copies = RecurrenceEngine.successorSubtasks(completed, next, listOf(subSub, recurringSub, sub))
+
+        assertEquals(listOf(2L, 3L), copies.map { it.first })
+        val (subCopy, subSubCopy) = copies.map { it.second }
+        assertEquals(next.id, subCopy.parentId)
+        assertEquals(subCopy.id, subSubCopy.parentId)
+        assert(!subCopy.isComplete)
+        assertEquals(11 * day + (next.startDate!! - 10 * day), subCopy.startDate)
+    }
 }
