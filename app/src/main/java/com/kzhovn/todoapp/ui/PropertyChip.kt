@@ -117,5 +117,5 @@ fun pickDate(activity: Activity, currentValue: Long?, withTime: Boolean = true, 
             }.show()
         },
         cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)
-    ).show()
+    ).apply { datePicker.firstDayOfWeek = Calendar.MONDAY }.show()
 }
