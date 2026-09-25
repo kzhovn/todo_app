@@ -326,4 +326,14 @@ class WebTest {
         assertEquals(folder.id, wall.parentId)
         assertEquals(setOf(paint.id), service.dependsOn(wall.id))
     }
+
+    @Test
+    fun `a reminder set on the web is saved on the task, for the phone to schedule`() = web {
+        val task = service.create(Task(title = "Dentist"))
+        createClient { followRedirects = false }.submitForm("/tasks/${task.id}", parameters {
+            append("base", taskFields(task, emptySet(), emptySet()).toString())
+            append("title", "Dentist"); append("type", "TASK"); append("dueDate", "2026-10-01"); append("dueTime", "15:00"); append("reminder", "30")
+        })
+        assertEquals(30, service.get(task.id)!!.reminderOffsetMinutes)
+    }
 }

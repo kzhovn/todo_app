@@ -105,6 +105,8 @@ main { flex: 1; min-width: 0; max-width: 860px; }
 .rep-wd { display: flex; gap: 4px; width: 100%; }
 /* Folders have no due date, repeat, dependencies or maybe (the server clears them too). */
 .editor:has(input[name=type][value=FOLDER]:checked) .task-only { display: none; }
+/* Like the phone, reminders are for tasks: a project completes when its steps do. */
+.editor:has(input[name=type][value=PROJECT]:checked) .reminder { display: none; }
 .picker { width: 100%; max-width: 520px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); }
 .picker .filter { width: 100%; border: 0 !important; border-bottom: 1px solid var(--border) !important; border-radius: 6px 6px 0 0 !important; }
 .picker .options { max-height: 180px; overflow-y: auto; padding: 4px 0; }

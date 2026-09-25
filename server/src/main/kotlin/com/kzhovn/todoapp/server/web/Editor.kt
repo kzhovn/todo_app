@@ -302,12 +302,14 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
             dateField("Due", "due", t.dueDate, "task-only")
         }
 
-        field("Remind me", "task-only") {
+        // Set here, rung by the phone: it schedules the alarm when this syncs to it.
+        field("Remind me", "task-only reminder") {
             select {
                 name = "reminder"
                 listOf(null to "No reminder", 0 to "At due time", 5 to "5 min before", 30 to "30 min before", 60 to "1 hour before", 1440 to "1 day before")
                     .forEach { (m, label) -> option { value = m?.toString().orEmpty(); selected = t.reminderOffsetMinutes == m; +label } }
             }
+            span(classes = "hint") { +"Rings on your phone, counted back from the due date (from midnight if it has no time)." }
         }
 
         field("Folder", "") {
