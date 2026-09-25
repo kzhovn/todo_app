@@ -18,6 +18,26 @@ const val DONE = "✅"
 const val DELETE = "❌"
 const val STAR = "⭐"
 const val NOTHING = "🎉 Nothing here 🎉"
+
+val HELP = """
+**Adding**
+`-- call mom` a task (starred, in Personal)
+`--work: send report` into the folder Work
+`--d: shower` just for today (gone at day rollover)
+`-- x -d fri` / `due fri 5pm` / `due 3pm` due date and time
+`-- x -s tomorrow` / `start mon 9am` start date
+`-- x?` a maybe (hidden from Active, never starred)
+Reply to a todo with a todo: the first waits for the new one.
+
+**On a todo's message**
+✅ complete · ❌ delete · ⭐ star (remove the reaction to undo)
+Editing the message updates the task; deleting it deletes the task.
+
+**Lists**
+`.doing` / `.list` Doing · `.active` Active · `.rand` one random active task
+`.list work` open tasks in a folder; `.doing work` / `.active work` filter by folder
+Tap an item's emoji to complete it (un-tap to undo).
+""".trimIndent()
 // Adds without a `folder:` prefix land here, if a folder with this name exists.
 const val DEFAULT_FOLDER = "Personal"
 // `--d: shower` (or rusabot's `--daily:`) makes a task that expires at the next day rollover.

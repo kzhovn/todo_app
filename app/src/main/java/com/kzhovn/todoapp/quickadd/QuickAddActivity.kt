@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Folder
@@ -49,6 +48,7 @@ import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.sync.SyncJson
 import com.kzhovn.todoapp.ui.FolderPickerDialog
 import com.kzhovn.todoapp.ui.PropertyChip
 import com.kzhovn.todoapp.ui.TaskEditActivity
@@ -183,31 +183,23 @@ class QuickAddActivity : ComponentActivity() {
                             onClick = { showFolderPicker = true }
                         )
                     }
-                    Spacer(Modifier.weight(1f))
-                    IconButton(
-                        enabled = title.isNotBlank(),
-                        onClick = {
-                            lifecycleScope.launch {
-                                val id = repository.createTask(buildTask())
-                                dependsOnId?.let { repository.addDependency(id, it) }
-                                startActivity(
-                                    Intent(this@QuickAddActivity, TaskEditActivity::class.java)
-                                        .putExtra(TaskEditActivity.EXTRA_TASK_ID, id)
-                                )
-                                finish()
-                            }
-                        }
-                    ) {
-                        Icon(Icons.Filled.Edit, contentDescription = "Edit all details", tint = LedgerMuted)
-                    }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = { finish() }) {
-                        Text("CANCEL", color = LedgerAccent, fontWeight = FontWeight.Bold)
+                    // Opens the full editor on an unsaved draft of what's typed so far; backing out of
+                    // the editor leaves nothing behind.
+                    TextButton(onClick = {
+                        startActivity(
+                            Intent(this@QuickAddActivity, TaskEditActivity::class.java)
+                                .putExtra(TaskEditActivity.EXTRA_DRAFT, SyncJson.encodeToString(Task.serializer(), buildTask()))
+                                .apply { dependsOnId?.let { putExtra(TaskEditActivity.EXTRA_DRAFT_DEPENDS_ON, it) } }
+                        )
+                        finish()
+                    }) {
+                        Text("EDIT ALL DETAILS", color = LedgerAccent, fontWeight = FontWeight.Bold)
                     }
                     // Material buttons have no long-press, hence a clickable column styled to match.
                     Column(

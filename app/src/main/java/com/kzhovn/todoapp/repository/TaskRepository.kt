@@ -26,7 +26,7 @@ class TaskRepository(
     val lastDeleted: StateFlow<List<Task>?> = _lastDeleted
 
     suspend fun createTask(task: Task): Long {
-        val toInsert = (if (task.id == 0L) task.copy(id = newId()) else task).starRule()
+        val toInsert = (if (task.id == 0L) task.copy(id = newId()) else task).withRules(System.currentTimeMillis())
         taskDao.insert(toInsert)
         reminderScheduler.schedule(toInsert)
         return toInsert.id
@@ -192,7 +192,7 @@ class TaskRepository(
     suspend fun getTask(taskId: Long): Task? = taskDao.getById(taskId)
 
     suspend fun updateTask(task: Task) {
-        taskDao.update(task.starRule())
+        taskDao.update(task.withRules(System.currentTimeMillis()))
         reminderScheduler.schedule(task)
     }
 

@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.wouldCreateCycle
+import com.kzhovn.todoapp.sync.SyncJson
 import androidx.compose.material3.AlertDialog
 import com.kzhovn.todoapp.repository.InheritedField
 import com.kzhovn.todoapp.data.TaskOrder
@@ -126,6 +128,7 @@ class TaskEditActivity : ComponentActivity() {
             var selectedContextIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
             val allById = remember(allTasks) { allTasks.associateBy { it.id } }
             var showDependentPicker by remember { mutableStateOf(false) }
+            var showSubtaskPicker by remember { mutableStateOf(false) }
             val focusManager = LocalFocusManager.current
 
             // ContextsActivity is launched with plain startActivity (not for a result), so
@@ -199,6 +202,10 @@ class TaskEditActivity : ComponentActivity() {
             }
 
             LaunchedEffect(taskId) {
+                if (taskId == 0L) {
+                    intent.getStringExtra(EXTRA_DRAFT)?.let { task = SyncJson.decodeFromString(Task.serializer(), it) }
+                    intent.getLongExtra(EXTRA_DRAFT_DEPENDS_ON, 0L).takeIf { it != 0L }?.let { selectedDependencyIds = setOf(it) }
+                }
                 if (taskId != 0L) {
                     viewModel.load(taskId)?.let { loaded ->
                         task = loaded
@@ -414,12 +421,7 @@ class TaskEditActivity : ComponentActivity() {
                             "+ Add subtask",
                             color = LedgerAccent,
                             fontSize = 12.sp,
-                            modifier = Modifier.clickable {
-                                startActivity(
-                                    Intent(this@TaskEditActivity, QuickAddActivity::class.java)
-                                        .putExtra(QuickAddActivity.EXTRA_PARENT_ID, task.id)
-                                )
-                            }
+                            modifier = Modifier.clickable { showSubtaskPicker = true }
                         )
                         // A dependent task is one blocked until this one is done. Folders can't be completed,
                         // so they can't be depended on (projects can: they complete as a whole).
@@ -553,6 +555,36 @@ class TaskEditActivity : ComponentActivity() {
                 )
             }
 
+            if (showSubtaskPicker) {
+                // Existing tasks can be moved under this one (anything but its own ancestors), or a new one created.
+                val candidates = remember(allTasks, task.id) {
+                    allTasks.filter {
+                        it.id != task.id && it.type != TaskType.FOLDER && !it.isComplete && it.parentId != task.id &&
+                            !wouldCreateCycle(task.id, it.id, allById)
+                    }
+                }
+                TaskPickerDialog(
+                    title = "Add a subtask",
+                    tasks = candidates,
+                    onPick = { picked ->
+                        showSubtaskPicker = false
+                        scope.launch {
+                            repository.reparent(picked.id, task.id)
+                            allTasks = repository.getAllTasks()
+                            TodoWidget().updateAll(applicationContext)
+                        }
+                    },
+                    onCreateNew = {
+                        showSubtaskPicker = false
+                        startActivity(
+                            Intent(this@TaskEditActivity, QuickAddActivity::class.java)
+                                .putExtra(QuickAddActivity.EXTRA_PARENT_ID, task.id)
+                        )
+                    },
+                    onDismiss = { showSubtaskPicker = false }
+                )
+            }
+
             if (showDependentPicker) {
                 val candidates = remember(allTasks, allDependencyEdges, task.id) {
                     allTasks.filter {
@@ -626,6 +658,9 @@ class TaskEditActivity : ComponentActivity() {
         const val EXTRA_TASK_ID = "task_id"
         const val EXTRA_CREATE_AS_FOLDER = "create_as_folder"
         const val EXTRA_CREATE_AS_PROJECT = "create_as_project"
+        // An unsaved new task (Task JSON) to start from, e.g. quick add's "Edit all details".
+        const val EXTRA_DRAFT = "draft"
+        const val EXTRA_DRAFT_DEPENDS_ON = "draft_depends_on"
     }
 }
 

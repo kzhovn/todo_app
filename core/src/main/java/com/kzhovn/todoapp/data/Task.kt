@@ -10,6 +10,8 @@ import kotlinx.serialization.Serializable
 enum class TaskType { TASK, FOLDER, PROJECT }
 enum class RecurrenceType { RRULE, AFTER_COMPLETION }
 
+const val BACKBURNER_AFTER = 30L * 24 * 60 * 60 * 1000
+
 @Serializable
 @Entity(tableName = "tasks")
 data class Task(
@@ -33,10 +35,24 @@ data class Task(
     // and then deleted (unlike ordinary completed tasks, which are kept forever).
     val expiresAt: Long? = null,
     // Manual order among siblings (1, 2, 3... after a reorder); null sorts by creation. See TaskOrder.
-    val position: Long? = null
+    val position: Long? = null,
+    // When it became a maybe; a maybe older than BACKBURNER_AFTER is shown dimmed. See withRules.
+    val maybeSince: Long? = null
 ) {
     fun isExpired(now: Long): Boolean = expiresAt != null && expiresAt <= now
 
     // The one place the maybe/star exclusion is enforced; every write path runs tasks through it.
     fun starRule(): Task = if (isMaybe && isStarred) copy(isStarred = false) else this
+
+    // starRule plus maybeSince bookkeeping; applied on every local write (app and server).
+    fun withRules(now: Long): Task = starRule().let {
+        when {
+            it.isMaybe && it.maybeSince == null -> it.copy(maybeSince = now)
+            !it.isMaybe && it.maybeSince != null -> it.copy(maybeSince = null)
+            else -> it
+        }
+    }
+
+    // A maybe left alone for a month drifts to the back burner: still listed, but dimmed.
+    fun isBackburner(now: Long): Boolean = isMaybe && maybeSince != null && now - maybeSince >= BACKBURNER_AFTER
 }

@@ -1,5 +1,10 @@
 package com.kzhovn.todoapp.ui
 
+import kotlinx.coroutines.delay
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -99,8 +104,30 @@ fun OutlinerScreen(
         scope.launch { prefs.setCollapsed(folderId, nowCollapsed) }
     }
 
-    LazyColumn {
-        renderNodes(tree, depth = 0, collapsed = collapsed, onToggle = ::toggle, onCheck = onCheck, onEdit = onEdit, onStar = onStar, onReparent = onReparent, onAddSubtask = onAddSubtask, onMove = onMove, allById = allById, selectedIds = selectedIds)
+    // Dragging near (or past) the list's top/bottom edge scrolls it slowly, so a task can be carried
+    // beyond what's on screen. Rows report the drag position; it keeps scrolling once the finger leaves
+    // the list (no row reports there) until the drag moves back inside or ends.
+    val listState = rememberLazyListState()
+    var listBounds by remember { mutableStateOf(Rect.Zero) }
+    var scrollDirection by remember { mutableStateOf(0) }
+    val edge = with(LocalDensity.current) { 56.dp.toPx() }
+    val onDragAt: (Float?) -> Unit = { y ->
+        scrollDirection = when {
+            y == null -> 0
+            y < listBounds.top + edge -> -1
+            y > listBounds.bottom - edge -> 1
+            else -> 0
+        }
+    }
+    LaunchedEffect(scrollDirection) {
+        while (scrollDirection != 0) {
+            listState.scrollBy(scrollDirection * 14f)
+            delay(16)
+        }
+    }
+
+    LazyColumn(state = listState, modifier = Modifier.onGloballyPositioned { listBounds = it.boundsInRoot() }) {
+        renderNodes(tree, depth = 0, collapsed = collapsed, onToggle = ::toggle, onCheck = onCheck, onEdit = onEdit, onStar = onStar, onReparent = onReparent, onAddSubtask = onAddSubtask, onMove = onMove, onDragAt = onDragAt, allById = allById, selectedIds = selectedIds)
     }
 }
 
@@ -115,15 +142,16 @@ private fun LazyListScope.renderNodes(
     onReparent: (Long, Long) -> Unit,
     onAddSubtask: (Long) -> Unit,
     onMove: (Long, Long, Boolean) -> Unit,
+    onDragAt: (Float?) -> Unit,
     allById: Map<Long, Task>,
     selectedIds: Set<Long>
 ) {
     nodes.forEach { node ->
         item(key = node.task.id) {
-            OutlinerRow(node, depth, node.task.id in collapsed, onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, allById, node.task.id in selectedIds)
+            OutlinerRow(node, depth, node.task.id in collapsed, onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, allById, node.task.id in selectedIds)
         }
         if (node.children.isNotEmpty() && node.task.id !in collapsed) {
-            renderNodes(node.children, depth + 1, collapsed, onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, allById, selectedIds)
+            renderNodes(node.children, depth + 1, collapsed, onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, allById, selectedIds)
         }
     }
 }
@@ -141,6 +169,7 @@ private fun OutlinerRow(
     onReparent: (Long, Long) -> Unit,
     onAddSubtask: (Long) -> Unit,
     onMove: (Long, Long, Boolean) -> Unit,
+    onDragAt: (Float?) -> Unit,
     allById: Map<Long, Task>,
     selected: Boolean
 ) {
@@ -165,14 +194,15 @@ private fun OutlinerRow(
                 }
             }
 
-            override fun onEntered(event: DragAndDropEvent) { dropZone = zoneOf(event) }
-            override fun onMoved(event: DragAndDropEvent) { dropZone = zoneOf(event) }
+            override fun onEntered(event: DragAndDropEvent) { dropZone = zoneOf(event); onDragAt(event.toAndroidDragEvent().y) }
+            override fun onMoved(event: DragAndDropEvent) { dropZone = zoneOf(event); onDragAt(event.toAndroidDragEvent().y) }
             override fun onExited(event: DragAndDropEvent) { dropZone = null }
-            override fun onEnded(event: DragAndDropEvent) { dropZone = null }
+            override fun onEnded(event: DragAndDropEvent) { dropZone = null; onDragAt(null) }
 
             override fun onDrop(event: DragAndDropEvent): Boolean {
                 val zone = zoneOf(event)
                 dropZone = null
+                onDragAt(null)
                 val draggedId = event.toAndroidDragEvent().clipData
                     ?.takeIf { it.itemCount > 0 }
                     ?.getItemAt(0)?.text?.toString()?.toLongOrNull()
@@ -214,6 +244,7 @@ private fun OutlinerRow(
                 .fillMaxWidth()
                 .onGloballyPositioned { rowBounds = it.boundsInRoot() }
                 .background(if (dropZone == DropZone.INTO || selected) LedgerAccentSoft else LedgerBackground)
+                .alpha(if (task.isBackburner(System.currentTimeMillis())) BACKBURNER_ALPHA else 1f)
                 .drawWithContent {
                     drawContent()
                     val line = 3.dp.toPx()

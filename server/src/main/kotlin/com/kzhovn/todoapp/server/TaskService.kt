@@ -80,14 +80,14 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun findFolder(name: String): Task? = folders().firstOrNull { it.title.equals(name.trim(), ignoreCase = true) }
 
     fun create(task: Task): Task {
-        val created = task.copy(id = newId()).starRule()
+        val created = task.copy(id = newId()).withRules(clock())
         store.write(TASKS, created.id, taskFields(created, emptySet(), emptySet()), clock())
         return created
     }
 
     fun update(id: Long, change: (Task) -> Task) {
         val row = store.get(TASKS, id)?.takeUnless { it.isDeleted } ?: return
-        writeTask(change(row.toTask()).starRule(), row)
+        writeTask(change(row.toTask()).withRules(clock()), row)
     }
 
     fun setStarred(id: Long, starred: Boolean) = update(id) { it.copy(isStarred = starred) }

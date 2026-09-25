@@ -180,7 +180,8 @@ private fun WidgetRow(row: WidgetTaskRow) {
         }
         Text(
             text = row.title,
-            style = TextStyle(color = fixed(LedgerInk), fontSize = 14.sp),
+            // Glance has no alpha, so a backburner row is dimmed with the muted colour instead.
+            style = TextStyle(color = fixed(if (row.isBackburner) LedgerMuted else LedgerInk), fontSize = 14.sp),
             maxLines = 1,
             modifier = GlanceModifier
                 .defaultWeight()

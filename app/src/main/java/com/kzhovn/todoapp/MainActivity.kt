@@ -1,5 +1,12 @@
 package com.kzhovn.todoapp
 
+import com.kzhovn.todoapp.ui.theme.LedgerInk
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import com.kzhovn.todoapp.ui.TextInputDialog
 import androidx.compose.material.icons.filled.AccountTree
 import android.Manifest
@@ -264,6 +271,8 @@ class MainActivity : ComponentActivity() {
                             },
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                         )
+                        Spacer(Modifier.weight(1f))
+                        QuickAddKey()
                     }
                 }
             ) {
@@ -520,4 +529,40 @@ private fun QuickAddFab(onClick: () -> Unit, onLongClick: () -> Unit) {
             Icon(Icons.Filled.Add, contentDescription = "New task")
         }
     }
+}
+
+// Cheat sheet for quick-add syntax, at the bottom of the drawer.
+@Composable
+private fun QuickAddKey() {
+    val rows = listOf(
+        "-d fri · due 3pm" to "due date (and time)",
+        "-s tomorrow · start mon 9am" to "start date",
+        "today, tomorrow, mon–sun, next fri, 2026-10-01" to "dates",
+        "5pm, 9:30am, 14:00" to "times",
+        "ends with ?" to "maybe",
+    )
+    val discord = listOf(
+        "--work: …" to "into a folder (else Personal)",
+        "--d: …" to "just for today",
+        "reply to a todo" to "it waits for the new one",
+        "✅ ❌ ⭐" to "complete / delete / star",
+    )
+    Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
+        Text("Quick add", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerMuted)
+        rows.forEach { (syntax, meaning) -> KeyRow(syntax, meaning) }
+        Spacer(Modifier.height(8.dp))
+        Text("Discord (.help for more)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerMuted)
+        discord.forEach { (syntax, meaning) -> KeyRow(syntax, meaning) }
+    }
+}
+
+@Composable
+private fun KeyRow(syntax: String, meaning: String) {
+    Text(
+        buildAnnotatedString {
+            withStyle(SpanStyle(fontFamily = FontFamily.Monospace, color = LedgerInk)) { append(syntax) }
+            append("  $meaning")
+        },
+        fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.padding(top = 2.dp)
+    )
 }

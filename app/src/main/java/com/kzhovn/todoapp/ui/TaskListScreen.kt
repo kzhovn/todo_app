@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.ui.draw.alpha
 import com.kzhovn.todoapp.data.TaskType
 import androidx.compose.material.icons.filled.AccountTree
 import com.kzhovn.todoapp.notifications.PinnedTask
@@ -133,7 +134,9 @@ private fun TaskRow(
     // DropdownMenu is Popup-based (SubcomposeLayout internally) and can't answer the intrinsic
     // width queries an IntrinsicSize.Min row needs from its children, so it must live outside
     // the Row below as a plain sibling rather than nested inside one of the Row's children.
-    Box(Modifier.background(if (selected) LedgerAccentSoft else Color.Transparent)) {
+    // A month-old maybe is dimmed (backburner) but stays listed.
+    val dim = if (task.isBackburner(System.currentTimeMillis())) BACKBURNER_ALPHA else 1f
+    Box(Modifier.background(if (selected) LedgerAccentSoft else Color.Transparent).alpha(dim)) {
         Row(
             // LazyColumn measures items with unbounded height, so fillMaxHeight() alone is a no-op
             // here; the intrinsic-min pass gives the Row (and the bar Box's fillMaxHeight below) a
@@ -207,6 +210,8 @@ private fun TaskRow(
 private const val HOUR_MILLIS = 60 * 60 * 1000L
 private const val DAY_MILLIS = 24 * HOUR_MILLIS
 private const val WEEK_MILLIS = 7 * DAY_MILLIS
+
+const val BACKBURNER_ALPHA = 0.45f
 
 // Shown in the checkbox's place: a project is completed as a whole, not ticked off directly.
 @Composable

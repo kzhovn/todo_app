@@ -27,6 +27,7 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
         val message = event.message
         val content = message.contentRaw.trim()
         if (logic.onAdd(message.idLong, message.jumpUrl, content, message.messageReference?.messageIdLong)) return
+        if (content.equals(".help", ignoreCase = true)) return event.channel.sendMessage(HELP).queue()
         val result = logic.command(content) ?: return
         result.fold(
             onSuccess = { postList(event.channel, it) },

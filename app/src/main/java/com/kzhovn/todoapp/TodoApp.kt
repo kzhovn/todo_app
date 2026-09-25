@@ -7,6 +7,7 @@ import androidx.room.Room
 import com.kzhovn.todoapp.data.MIGRATION_3_4
 import com.kzhovn.todoapp.data.MIGRATION_4_5
 import com.kzhovn.todoapp.data.MIGRATION_5_6
+import com.kzhovn.todoapp.data.MIGRATION_6_7
 import com.kzhovn.todoapp.data.TodoDatabase
 import com.kzhovn.todoapp.notifications.PinnedTask
 import kotlinx.coroutines.CoroutineScope
@@ -24,7 +25,7 @@ import com.kzhovn.todoapp.sync.TRACKED_TABLES
 class TodoApp : Application() {
     val database: TodoDatabase by lazy {
         Room.databaseBuilder(this, TodoDatabase::class.java, "todo.db")
-            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
             .addCallback(SyncTracking)
             .build()
     }
