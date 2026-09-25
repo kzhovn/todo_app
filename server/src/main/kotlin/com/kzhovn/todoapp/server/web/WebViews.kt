@@ -47,8 +47,9 @@ enum class ListMode(val label: String) { DOING("Doing"), ACTIVE("Active"), ALL("
 // The app's folder palette (LedgerFolderPalette), assigned the same way: by folder creation order.
 private val FOLDER_PALETTE = listOf("#8A4C2E", "#6B8A2E", "#2E8A4D", "#2E6B8A", "#4D2E8A", "#8A2E6B")
 
-// Everything a list needs, computed once per request from the live task set.
-class ListData(service: TaskService, val mode: ListMode, val now: Long = service.now()) {
+// Everything a list needs, computed once per request from the live task set. `collapsed`: the All
+// tree's folded nodes, remembered per browser.
+class ListData(service: TaskService, val mode: ListMode, val collapsed: Set<Long> = emptySet(), val now: Long = service.now()) {
     val all: List<Task> = service.tasks()
     private val byId = all.associateBy { it.id }
     private val contextIds = service.contextIdsByTask()
@@ -80,7 +81,9 @@ internal enum class Icon(val path: String) {
     STAR("M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"),
     STAR_BORDER("M22 9.24l-7.19-.62L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.63-7.03L22 9.24zM12 15.4l-3.76 2.27 1-4.28-3.32-2.88 4.38-.38L12 6.1l1.71 4.04 4.38.38-3.32 2.88 1 4.28L12 15.4z"),
     REPEAT("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"),
-    CHECK("M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z")
+    CHECK("M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"),
+    CHEVRON_RIGHT("M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"),
+    EXPAND_MORE("M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z")
 }
 
 internal fun FlowContent.icon(icon: Icon, classes: String, color: String? = null) = span(classes = "icon $classes") {
@@ -142,7 +145,7 @@ private fun FlowContent.syntaxKey() = div(classes = "key") {
 // swaps #list for the returned #list). It re-renders itself every minute while the tab is visible
 // and when the tab regains focus, so changes from the phone or Discord show up without reloading.
 fun DIV.listContents(data: ListData) {
-    classes = setOf("list")
+    classes = if (data.mode == ListMode.ALL) setOf("list", "outline") else setOf("list")
     id = "list"
     attributes["hx-get"] = "/list/${data.mode.name.lowercase()}"
     attributes["hx-trigger"] = "every 60s[document.visibilityState==='visible'], visibilitychange[document.visibilityState==='visible'] from:document"
@@ -156,26 +159,54 @@ fun DIV.listContents(data: ListData) {
     }
 }
 
+// The All tree, as flat rows in outline order (app.js's keys and drag work off data-*).
 private fun FlowContent.tree(data: ListData, parentId: Long?, depth: Int) {
     data.openChildren(parentId).forEach { item ->
+        val hasChildren = data.openChildren(item.id).isNotEmpty()
+        val collapsed = hasChildren && item.id in data.collapsed
+        val node: DIV.() -> Unit = {
+            classes = classes + "node"
+            attributes["tabindex"] = "0"
+            attributes["draggable"] = "true"
+            attributes["data-id"] = item.id.toString()
+            attributes["data-parent"] = item.parentId?.toString().orEmpty()
+            attributes["data-depth"] = depth.toString()
+            attributes["data-kind"] = item.type.name.lowercase()
+            if (hasChildren) attributes["data-collapsed"] = collapsed.toString()
+            chevron(item.id, hasChildren, collapsed)
+        }
         if (item.type == TaskType.FOLDER) {
             div(classes = "folder") {
-                style = "padding-left: ${depth * 18 + 10}px"
+                style = "padding-left: ${depth * 18}px"
+                node()
                 icon(Icon.FOLDER, "folder-icon", data.ownColor(item))
                 a(href = "/tasks/${item.id}?mode=ALL", classes = "edit") { +item.title }
             }
         } else {
-            taskRow(data, item, depth)
+            taskRow(data, item, depth, node)
         }
-        tree(data, item.id, depth + 1)
+        if (!collapsed) tree(data, item.id, depth + 1)
     }
 }
 
-private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int) {
+private fun FlowContent.chevron(id: Long, hasChildren: Boolean, collapsed: Boolean) {
+    if (!hasChildren) return span(classes = "chevron") {}
+    button(classes = "chevron") {
+        attributes["hx-get"] = "/list/all?toggle=$id"
+        attributes["hx-target"] = "#list"
+        attributes["hx-swap"] = "outerHTML"
+        attributes["tabindex"] = "-1"
+        attributes["aria-label"] = if (collapsed) "Expand" else "Collapse"
+        icon(if (collapsed) Icon.CHEVRON_RIGHT else Icon.EXPAND_MORE, "")
+    }
+}
+
+private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineNode: (DIV.() -> Unit)? = null) {
     val mode = data.mode.name
     div(classes = "row") {
         if (task.isBackburner(data.now)) classes = classes + "dim"
         style = "padding-left: ${depth * 18}px; border-left-color: ${data.folderColor(task) ?: "var(--border)"}"
+        outlineNode?.invoke(this)
         if (task.type == TaskType.PROJECT) {
             span(classes = "project") { attributes["title"] = "Project: completes when its steps are done"; icon(Icon.PROJECT, "") }
         } else {

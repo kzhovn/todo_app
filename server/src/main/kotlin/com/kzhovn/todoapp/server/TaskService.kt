@@ -4,6 +4,7 @@ import com.kzhovn.todoapp.data.DEFAULT_ROLLOVER_HOUR
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskDependency
+import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.newId
 import com.kzhovn.todoapp.data.wouldCreateCycle
@@ -140,6 +141,47 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         val byId = tasks().associateBy { it.id }
         if (newParentId !in byId || wouldCreateCycle(newParentId, id, byId)) return
         update(id) { it.copy(parentId = newParentId, position = null) }
+    }
+
+    // Moves a task right before/after anchorId, under the anchor's parent, and renumbers that sibling
+    // list 1..n. Mirrors TaskRepository.moveNextTo: renumbering never runs out of room between
+    // neighbours, and rewrites only a few rows at one user's scale.
+    fun moveNextTo(id: Long, anchorId: Long, after: Boolean) = store.transaction {
+        val all = tasks()
+        val byId = all.associateBy { it.id }
+        val task = byId[id] ?: return@transaction
+        val anchor = byId[anchorId]?.takeIf { it.id != id } ?: return@transaction
+        val parentId = anchor.parentId
+        if (parentId != null && wouldCreateCycle(parentId, id, byId)) return@transaction
+        val siblings = all.filter { it.parentId == parentId && it.id != id }.sortedWith(TaskOrder).toMutableList()
+        siblings.add(siblings.indexOf(anchor) + if (after) 1 else 0, task.copy(parentId = parentId))
+        siblings.forEachIndexed { index, sibling ->
+            val position = index + 1L
+            if (sibling.position != position || sibling.id == id) update(sibling.id) { it.copy(parentId = parentId, position = position) }
+        }
+    }
+
+    // The outliner's moves, among the open siblings the tree shows (completed ones are hidden there).
+    private fun openSiblings(task: Task) = tasks().filter { it.parentId == task.parentId && !it.isComplete }.sortedWith(TaskOrder)
+
+    // Tab: becomes the last child of the sibling above it.
+    fun indent(id: Long) {
+        val task = get(id) ?: return
+        val siblings = openSiblings(task)
+        siblings.getOrNull(siblings.indexOf(task) - 1)?.let { reparent(id, it.id) }
+    }
+
+    // Shift-Tab: becomes the sibling right after its parent.
+    fun outdent(id: Long) {
+        val parentId = get(id)?.parentId ?: return
+        moveNextTo(id, parentId, after = true)
+    }
+
+    // Alt-Up/Down: swaps places with the sibling above/below.
+    fun moveAmongSiblings(id: Long, down: Boolean) {
+        val task = get(id) ?: return
+        val siblings = openSiblings(task)
+        siblings.getOrNull(siblings.indexOf(task) + if (down) 1 else -1)?.let { moveNextTo(id, it.id, after = down) }
     }
 
     // Subtasks that set their own value for one of these inherited fields, and so wouldn't follow

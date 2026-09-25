@@ -140,4 +140,43 @@ class WebTest {
         val start = service.get(task.id)!!.startDate!!
         assertEquals(com.kzhovn.todoapp.data.nextRollover(service.now(), service.rolloverHour()), start)
     }
+
+    @Test
+    fun `outliner moves tasks like the phone's outliner`() = web {
+        val folder = service.create(Task(type = TaskType.FOLDER, title = "Work"))
+        val a = service.create(Task(title = "A", parentId = folder.id))
+        val b = service.create(Task(title = "B", parentId = folder.id))
+        fun order() = service.tasks().filter { it.parentId == folder.id }.sortedWith(com.kzhovn.todoapp.data.TaskOrder).map { it.title }
+
+        client.post("/outline/${b.id}/up")
+        assertEquals(listOf("B", "A"), order())
+        client.post("/outline/${a.id}/indent") // under B, the sibling above
+        assertEquals(b.id, service.get(a.id)!!.parentId)
+        client.post("/outline/${a.id}/outdent") // back, right after B
+        assertEquals(listOf("B", "A"), order())
+        client.submitForm("/outline/${a.id}/move", parameters { append("target", b.id.toString()); append("zone", "before") })
+        assertEquals(listOf("A", "B"), order())
+        client.submitForm("/outline/${b.id}/move", parameters { append("target", a.id.toString()); append("zone", "into") })
+        assertEquals(a.id, service.get(b.id)!!.parentId)
+        // A folder can't be moved into its own subtree.
+        client.submitForm("/outline/${folder.id}/move", parameters { append("target", a.id.toString()); append("zone", "into") })
+        assertEquals(null, service.get(folder.id)!!.parentId)
+    }
+
+    @Test
+    fun `enter adds a sibling right after the task, and folding is remembered per browser`() = web {
+        val folder = service.create(Task(type = TaskType.FOLDER, title = "Work"))
+        val a = service.create(Task(title = "A", parentId = folder.id))
+        service.create(Task(title = "B", parentId = folder.id))
+        val response = client.submitForm("/outline/${a.id}/sibling", parameters { append("text", "A2") })
+        val created = service.tasks().single { it.title == "A2" }
+        assertEquals(created.id.toString(), response.headers["X-Focus"])
+        assertEquals(listOf("A", "A2", "B"), service.tasks().filter { it.parentId == folder.id }.sortedWith(com.kzhovn.todoapp.data.TaskOrder).map { it.title })
+
+        val browser = createClient { install(io.ktor.client.plugins.cookies.HttpCookies) }
+        assertFalse(browser.get("/list/all?toggle=${folder.id}").bodyAsText().contains(">A2<"))
+        assertFalse(browser.get("/list/all").bodyAsText().contains(">A2<")) // still folded
+        assertTrue(client.get("/list/all").bodyAsText().contains(">A2<")) // another browser isn't
+        assertTrue(browser.get("/list/all?toggle=${folder.id}").bodyAsText().contains(">A2<"))
+    }
 }

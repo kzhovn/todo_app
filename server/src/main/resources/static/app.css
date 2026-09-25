@@ -137,3 +137,15 @@ form.inline { display: flex; gap: 8px; align-items: center; margin-top: 8px; fle
 form.inline input[type=text] { flex: 1; min-width: 200px; }
 form.inline select { max-width: 320px; }
 form.inline button { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+
+/* All-tree outliner */
+.chevron { width: 20px; height: 20px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); margin-left: 4px; }
+.chevron .icon { width: 18px; height: 18px; }
+.outline .row .check, .outline .row .project { margin-left: 2px; }
+.outline .folder { padding-top: 8px; padding-bottom: 4px; gap: 4px; }
+.node { cursor: default; }
+.node:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
+.node[data-drop="before"] { box-shadow: inset 0 3px 0 var(--accent); }
+.node[data-drop="after"] { box-shadow: inset 0 -3px 0 var(--accent); }
+.node[data-drop="into"] { background: var(--accent-soft); }
+.outline-new { display: block; width: calc(100% - 60px); margin: 4px 0; padding: 6px 8px; border: 1px solid var(--accent); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
