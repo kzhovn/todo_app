@@ -115,8 +115,8 @@ class TodoWidget : GlanceAppWidget() {
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = GlanceModifier
-                            .size(26.dp)
-                            .cornerRadius(13.dp)
+                            .size(32.dp)
+                            .cornerRadius(16.dp)
                             .background(fixed(LedgerAccentSoft))
                             .clickable(
                                 actionStartActivity<QuickAddActivity>(
@@ -124,7 +124,7 @@ class TodoWidget : GlanceAppWidget() {
                                 )
                             )
                     ) {
-                        Text("+", style = TextStyle(color = fixed(LedgerAccent), fontSize = 17.sp, fontWeight = FontWeight.Bold))
+                        Text("+", style = TextStyle(color = fixed(LedgerAccent), fontSize = 24.sp, fontWeight = FontWeight.Bold))
                     }
                 }
                 if (rows.isEmpty()) {
@@ -144,19 +144,19 @@ class TodoWidget : GlanceAppWidget() {
         task.parentId?.let { parent -> walkParentChain(parent, allById) { id -> true.takeIf { id == folderId } } } ?: false
 }
 
-// Narrow but tall boxes around the check and star glyphs: tap targets stay thumb-height while
-// leaving the width to the title, since widget space is at a premium.
+// The check/star glyphs are large (they're what you tap) but their boxes hug them, so the
+// buttons stay easy to hit without adding whitespace around the title.
 @androidx.compose.runtime.Composable
 private fun WidgetRow(row: WidgetTaskRow) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
         Box(
             contentAlignment = Alignment.Center,
-            modifier = GlanceModifier.size(width = 30.dp, height = 32.dp)
+            modifier = GlanceModifier.size(width = 34.dp, height = 36.dp)
                 .clickable(actionRunCallback<ToggleCompleteAction>(actionParametersOf(taskIdKey to row.id)))
         ) {
             Text(
                 text = if (row.isComplete) "✓" else "○",
-                style = TextStyle(color = fixed(if (row.isComplete) LedgerAccent else LedgerMuted), fontSize = 18.sp)
+                style = TextStyle(color = fixed(if (row.isComplete) LedgerAccent else LedgerMuted), fontSize = 26.sp)
             )
         }
         Text(
@@ -173,18 +173,18 @@ private fun WidgetRow(row: WidgetTaskRow) {
                 )
         )
         if (row.isMaybe) {
-            Box(contentAlignment = Alignment.Center, modifier = GlanceModifier.size(width = 30.dp, height = 32.dp)) {
-                Text("?", style = TextStyle(color = fixed(LedgerMuted), fontSize = 16.sp, fontWeight = FontWeight.Bold))
+            Box(contentAlignment = Alignment.Center, modifier = GlanceModifier.size(width = 34.dp, height = 36.dp)) {
+                Text("?", style = TextStyle(color = fixed(LedgerMuted), fontSize = 22.sp, fontWeight = FontWeight.Bold))
             }
         } else {
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = GlanceModifier.size(width = 30.dp, height = 32.dp)
+                modifier = GlanceModifier.size(width = 34.dp, height = 36.dp)
                     .clickable(actionRunCallback<ToggleStarAction>(actionParametersOf(taskIdKey to row.id)))
             ) {
                 Text(
                     text = if (row.isStarred) "★" else "☆",
-                    style = TextStyle(color = fixed(if (row.isStarred) LedgerStar else LedgerMuted), fontSize = 18.sp)
+                    style = TextStyle(color = fixed(if (row.isStarred) LedgerStar else LedgerMuted), fontSize = 26.sp)
                 )
             }
         }
