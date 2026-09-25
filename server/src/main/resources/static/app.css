@@ -28,21 +28,28 @@ main { flex: 1; min-width: 0; max-width: 860px; }
 
 .list { padding: 8px 0; }
 .empty { color: var(--muted); padding: 24px; }
-.folder { font-weight: 600; color: var(--muted); padding: 10px 12px 4px; border-left: 3px solid transparent; }
+.folder { font-weight: 600; color: var(--muted); padding: 10px 12px 4px; display: flex; align-items: center; gap: 6px; }
+.icon { display: inline-flex; }
+.icon svg { width: 100%; height: 100%; }
+.folder-icon { width: 14px; height: 14px; color: var(--muted); }
 .row { display: flex; align-items: center; gap: 8px; min-height: 40px; padding-right: 8px; border-left: 3px solid var(--border); border-bottom: 1px solid var(--border); }
 .row.dim { opacity: .45; }
 .check { width: 22px; height: 22px; margin-left: 10px; border-radius: 50%; border: 1.5px solid var(--check); flex-shrink: 0; }
 .check:hover { background: var(--accent-soft); }
 .check.overdue { border: 2px solid var(--overdue); }
-.project { width: 22px; margin-left: 10px; text-align: center; color: var(--accent); flex-shrink: 0; }
+.project { width: 22px; height: 22px; margin-left: 10px; display: flex; align-items: center; justify-content: center; color: var(--accent); flex-shrink: 0; }
+.project .icon { width: 20px; height: 20px; }
 .main { flex: 1; min-width: 0; }
 .title { font-weight: 600; overflow-wrap: anywhere; }
-.sub { color: var(--muted); font-weight: 400; }
+.sub { width: 14px; height: 14px; margin-right: 2px; color: var(--muted); vertical-align: -2px; }
+.badge { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; margin-left: 4px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); vertical-align: -2px; }
+.badge .icon { width: 10px; height: 10px; }
 .meta { display: flex; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 2px; align-items: center; }
 .due { padding: 1px 6px; border-radius: 4px; background: var(--chip); font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
 .due.today { background: var(--today-bg); color: var(--today); }
 .due.overdue { background: var(--overdue-bg); color: var(--overdue); }
-.star { font-size: 20px; color: var(--check); width: 32px; }
+.star { color: var(--check); width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+.star .icon { width: 24px; height: 24px; }
 .star.on { color: var(--star); }
 .maybe { font-weight: 700; color: var(--muted); width: 32px; text-align: center; }
 .more { position: relative; }

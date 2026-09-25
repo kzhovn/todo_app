@@ -35,6 +35,7 @@ import kotlinx.html.style
 import kotlinx.html.summary
 import kotlinx.html.textInput
 import kotlinx.html.title
+import kotlinx.html.unsafe
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -68,6 +69,21 @@ class ListData(service: TaskService, val mode: ListMode, val now: Long = service
     fun subtaskCounts(task: Task): Pair<Int, Int>? =
         children[task.id].orEmpty().filter { it.type != TaskType.FOLDER }.takeIf { it.isNotEmpty() }?.let { kids -> kids.count { it.isComplete } to kids.size }
     fun openChildren(parentId: Long?) = children[parentId].orEmpty().filter { !it.isComplete }.sortedWith(TaskOrder)
+}
+
+// The Material icons the phone uses (Icons.Filled.*), inlined so both clients look alike.
+private enum class Icon(val path: String) {
+    FOLDER("M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"),
+    PROJECT("M22 11V3h-7v3H9V3H2v8h7V8h2v10h4v3h7v-8h-7v3h-2V8h2v3z"), // AccountTree
+    SUBTASK("M19 15l-6 6-1.42-1.42L15.17 16H4V4h2v10h9.17l-3.59-3.59L13 9l6 6z"), // SubdirectoryArrowRight
+    STAR("M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"),
+    STAR_BORDER("M22 9.24l-7.19-.62L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21 12 17.27 18.18 21l-1.63-7.03L22 9.24zM12 15.4l-3.76 2.27 1-4.28-3.32-2.88 4.38-.38L12 6.1l1.71 4.04 4.38.38-3.32 2.88 1 4.28L12 15.4z"),
+    REPEAT("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z")
+}
+
+private fun FlowContent.icon(icon: Icon, classes: String, color: String? = null) = span(classes = "icon $classes") {
+    color?.let { style = "color: $it" }
+    unsafe { +"<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"${icon.path}\"/></svg>" }
 }
 
 fun HTML.page(title: String, content: BODY.() -> Unit) {
@@ -137,7 +153,8 @@ private fun FlowContent.tree(data: ListData, parentId: Long?, depth: Int) {
     data.openChildren(parentId).forEach { item ->
         if (item.type == TaskType.FOLDER) {
             div(classes = "folder") {
-                style = "padding-left: ${depth * 18 + 10}px; border-left-color: ${data.ownColor(item) ?: "transparent"}"
+                style = "padding-left: ${depth * 18 + 10}px"
+                icon(Icon.FOLDER, "folder-icon", data.ownColor(item))
                 +item.title
             }
         } else {
@@ -153,7 +170,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int) {
         if (task.isBackburner(data.now)) classes = classes + "dim"
         style = "padding-left: ${depth * 18}px; border-left-color: ${data.folderColor(task) ?: "var(--border)"}"
         if (task.type == TaskType.PROJECT) {
-            span(classes = "project") { attributes["title"] = "Project: completes when its steps are done"; +"▣" }
+            span(classes = "project") { attributes["title"] = "Project: completes when its steps are done"; icon(Icon.PROJECT, "") }
         } else {
             val due = data.effectiveDue(task)
             button(classes = "check") {
@@ -167,8 +184,9 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int) {
         div(classes = "main") {
             div(classes = "title") {
                 // In the All tree indentation already shows nesting; flat lists need the marker.
-                if (data.mode != ListMode.ALL && data.isSubtask(task)) span(classes = "sub") { +"↳ " }
+                if (data.mode != ListMode.ALL && data.isSubtask(task)) icon(Icon.SUBTASK, "sub")
                 +task.title
+                if (task.recurrenceType != null) span(classes = "badge") { attributes["title"] = "Recurring"; icon(Icon.REPEAT, "") }
             }
             val due = data.effectiveDue(task)
             val counts = data.subtaskCounts(task)
@@ -202,7 +220,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int) {
                 attributes["hx-target"] = "#list"
                 attributes["hx-swap"] = "outerHTML"
                 attributes["aria-label"] = "Star"
-                +(if (task.isStarred) "★" else "☆")
+                icon(if (task.isStarred) Icon.STAR else Icon.STAR_BORDER, "")
             }
         }
     }

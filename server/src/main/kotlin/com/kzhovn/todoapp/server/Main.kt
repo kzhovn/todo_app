@@ -1,10 +1,13 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.server.web.webRoutes
 import com.kzhovn.todoapp.sync.SyncJson
 import com.kzhovn.todoapp.sync.SyncRequest
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationCallPipeline
+import io.ktor.server.application.call
 import io.ktor.server.application.install
 import io.ktor.server.engine.applicationEnvironment
 import io.ktor.server.engine.connector
@@ -13,13 +16,10 @@ import io.ktor.server.engine.sslConnector
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.request.receive
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
-import io.ktor.server.application.ApplicationCallPipeline
-import io.ktor.server.application.call
-import io.ktor.server.response.header
-import com.kzhovn.todoapp.server.web.webRoutes
 import java.io.File
 import java.security.KeyStore
 import java.security.MessageDigest

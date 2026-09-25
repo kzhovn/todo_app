@@ -63,6 +63,6 @@ class WebTest {
         val projectRow = all.substring(all.lastIndexOf("class=\"row", title), title)
         assertTrue(projectRow.contains("class=\"project\""))
         assertFalse(projectRow.contains("class=\"check"))
-        assertTrue(client.get("/doing").bodyAsText().contains("↳"))
+        assertTrue(client.get("/doing").bodyAsText().contains("icon sub"))
     }
 }
