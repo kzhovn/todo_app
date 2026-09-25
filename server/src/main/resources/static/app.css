@@ -215,3 +215,9 @@ body.selecting #list .row:not([data-type="TASK"]), body.selecting #list .folder 
 .new-subtasks { width: 100%; max-width: 520px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
 .editor:has(input[name=type][value=FOLDER]:checked) .seq-task,
 .editor:not(:has(input[name=type][value=FOLDER]:checked)) .seq-folder { display: none; }
+
+/* Doing / Active / All as top tabs, like the phone's tab row */
+.tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--panel); position: sticky; top: 0; z-index: 4; }
+.tabs a { flex: 1; text-align: center; padding: 12px 8px; color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; border-bottom: 2px solid transparent; }
+.tabs a:hover { color: var(--ink); }
+.tabs a.current { color: var(--accent); border-bottom-color: var(--accent); }

@@ -127,8 +127,9 @@ fun HTML.shellPage(title: String, current: String, listMode: ListMode? = null, t
     div(classes = "shell") {
         aside(classes = "sidebar") {
             h1 { +"Raspberry" }
+            // The phone's menu: the lists themselves are tabs above the content, as in the app.
             nav {
-                (ListMode.entries.map { it.path to it.label } + listOf("/search" to "Search", "/review" to "Review", "/contexts" to "Contexts"))
+                listOf("/search" to "Search", "/review" to "Review", "/contexts" to "Contexts")
                     .forEach { (path, label) -> a(href = path, classes = if (path == current) "current" else null) { +label } }
             }
             // Same parser as the app's quick add; new tasks default to the Personal folder.
@@ -151,7 +152,12 @@ fun HTML.shellPage(title: String, current: String, listMode: ListMode? = null, t
             }
             syntaxKey()
         }
-        main { content() }
+        main {
+            nav(classes = "tabs") {
+                ListMode.entries.forEach { m -> a(href = m.path, classes = if (m.path == current) "current" else null) { +m.label } }
+            }
+            content()
+        }
     }
     div { id = "toast"; toast?.invoke(this) }
 }
