@@ -180,8 +180,8 @@ class MainActivity : ComponentActivity() {
             BackHandler(enabled = selection != null) { selection = null }
             // Reloads on tab change AND on every resume, so returning from QuickAddActivity
             // (FAB) or TaskEditActivity (row tap) picks up whatever was just created or edited.
-            LifecycleResumeEffect(selectedMode) {
-                viewModel.load(selectedMode)
+            LifecycleResumeEffect(selectedMode, searchMode, query, filters) {
+                if (searchMode) viewModel.search(query, filters) else viewModel.load(selectedMode)
                 onPauseOrDispose { }
             }
             // FAB long-press can create a folder/context without leaving this activity, so
@@ -194,8 +194,10 @@ class MainActivity : ComponentActivity() {
                 onPauseOrDispose { }
             }
             val pulls by app.syncClient.pulls.collectAsState()
-            LaunchedEffect(query, filters, pulls) {
-                if (query.isBlank()) viewModel.load(selectedMode) else viewModel.search(query, filters)
+            // In search mode the filters apply even with an empty query (then it's "every task matching
+            // the filters"); the tabs only drive the list outside search.
+            LaunchedEffect(searchMode, query, filters, pulls) {
+                if (searchMode) viewModel.search(query, filters) else viewModel.load(selectedMode)
             }
             // Independent subscription (rather than reusing the ALL-branch collectAsState below)
             // so the widget refreshes no matter which tab is active. Every mutation method routes
@@ -221,7 +223,7 @@ class MainActivity : ComponentActivity() {
                 if (result == SnackbarResult.ActionPerformed) {
                     repository.undoDelete(deleted)
                     TodoWidget().updateAll(applicationContext)
-                    if (query.isBlank()) viewModel.load(selectedMode) else viewModel.search(query, filters)
+                    if (searchMode) viewModel.search(query, filters) else viewModel.load(selectedMode)
                 } else {
                     repository.clearLastDeleted()
                 }
@@ -344,7 +346,8 @@ class MainActivity : ComponentActivity() {
                             OutlinedTextField(
                                 value = query,
                                 onValueChange = { query = it },
-                                label = { Text("Search") },
+                                placeholder = { Text("Search") },
+                                singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
                             IconButton(onClick = { showFilters = !showFilters }) {
@@ -371,7 +374,7 @@ class MainActivity : ComponentActivity() {
                     if (showFilters) {
                         FilterPanel(filters = filters, folders = folders, contexts = contexts, onFiltersChange = { filters = it })
                     }
-                    TabRow(selectedTabIndex = TaskListMode.entries.indexOf(selectedMode)) {
+                    if (!searchMode) TabRow(selectedTabIndex = TaskListMode.entries.indexOf(selectedMode)) {
                         TaskListMode.entries.forEach { mode ->
                             Tab(
                                 selected = mode == selectedMode,
@@ -402,7 +405,7 @@ class MainActivity : ComponentActivity() {
                         if (selection != null) toggleSelected(id) else viewModel.toggleStar(id, selectedMode)
                     }
                     val selectedIds = selection.orEmpty()
-                    if (selectedMode == TaskListMode.ALL && query.isBlank()) {
+                    if (selectedMode == TaskListMode.ALL && !searchMode) {
                         val tasks by viewModel.tasks.collectAsState()
                         OutlinerScreen(
                             tasks = tasks,
