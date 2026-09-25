@@ -138,8 +138,12 @@ class TodoWidget : GlanceAppWidget() {
                             .cornerRadius(16.dp)
                             .background(fixed(LedgerAccentSoft))
                             .clickable(
+                                // From a Doing widget, new tasks start starred so they show up right there.
                                 actionStartActivity<QuickAddActivity>(
-                                    actionParametersOf(ActionParameters.Key<Long>(QuickAddActivity.EXTRA_FOLDER_ID) to (folderId ?: 0L))
+                                    actionParametersOf(
+                                        ActionParameters.Key<Long>(QuickAddActivity.EXTRA_FOLDER_ID) to (folderId ?: 0L),
+                                        ActionParameters.Key<Boolean>(QuickAddActivity.EXTRA_STARRED) to (mode == WidgetMode.DOING)
+                                    )
                                 )
                             )
                     ) {

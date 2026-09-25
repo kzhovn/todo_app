@@ -74,10 +74,11 @@ class QuickAddActivity : ComponentActivity() {
         val initialFolderId = intent.getLongExtra(EXTRA_FOLDER_ID, 0L).takeIf { it != 0L }
         // "Add dependent task": the new task waits for (depends on) this one.
         val dependsOnId = intent.getLongExtra(EXTRA_DEPENDS_ON, 0L).takeIf { it != 0L }
+        val startStarred = intent.getBooleanExtra(EXTRA_STARRED, false)
         setContent {
             LedgerTheme {
             var title by remember { mutableStateOf("") }
-            var starred by remember { mutableStateOf(false) }
+            var starred by remember { mutableStateOf(startStarred) }
             var startDate by remember { mutableStateOf<Long?>(null) }
             var dueDate by remember { mutableStateOf<Long?>(null) }
             var folder by remember { mutableStateOf<Task?>(null) }
@@ -128,7 +129,7 @@ class QuickAddActivity : ComponentActivity() {
                     }
                 }
                 if (keepOpen) {
-                    title = ""; starred = false; startDate = null; dueDate = null
+                    title = ""; starred = startStarred; startDate = null; dueDate = null
                     focus.requestFocus()
                 }
             }
@@ -243,5 +244,6 @@ class QuickAddActivity : ComponentActivity() {
         const val EXTRA_FOLDER_ID = "folder_id"
         const val EXTRA_DEPENDS_ON = "depends_on"
         const val DEFAULT_FOLDER = "Personal"
+        const val EXTRA_STARRED = "starred"
     }
 }
