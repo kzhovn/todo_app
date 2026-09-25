@@ -89,6 +89,7 @@ class TaskListViewModel(
     }
 
     private suspend fun refreshSubtaskCounts(): List<Task> {
+        repository.ensureFolderColors()
         val all = repository.getAllTasks()
         _stalledProjects.value = stalledProjects(all)
         _subtaskCounts.value = subtaskCounts(all)

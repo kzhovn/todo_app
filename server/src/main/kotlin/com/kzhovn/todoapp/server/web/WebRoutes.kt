@@ -147,7 +147,10 @@ internal fun ApplicationCall.taskId() = parameters["id"]?.toLongOrNull()
 internal fun ApplicationCall.mode() =
     request.queryParameters["mode"]?.let { runCatching { ListMode.valueOf(it) }.getOrNull() } ?: ListMode.DOING
 
-internal fun ApplicationCall.listData(service: TaskService, mode: ListMode) = ListData(service, mode, ids(COLLAPSED), ids(LATER), ids(SECTIONS))
+internal fun ApplicationCall.listData(service: TaskService, mode: ListMode): ListData {
+    service.ensureFolderColors()
+    return ListData(service, mode, ids(COLLAPSED), ids(LATER), ids(SECTIONS))
+}
 
 internal suspend fun ApplicationCall.respondList(service: TaskService, mode: ListMode, extra: String? = null) =
     respondText(createHTML().div { listContents(listData(service, mode)) } + extra.orEmpty(), ContentType.Text.Html)

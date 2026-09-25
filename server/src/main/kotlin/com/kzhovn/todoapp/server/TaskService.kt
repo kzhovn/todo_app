@@ -14,6 +14,7 @@ import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
 import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
+import com.kzhovn.todoapp.data.folderColorAssignments
 import com.kzhovn.todoapp.data.stalledProjects
 import com.kzhovn.todoapp.repository.BulkEdit
 import com.kzhovn.todoapp.repository.InheritedField
@@ -88,6 +89,9 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     }
 
     fun folders(): List<Task> = tasks().filter { it.type == TaskType.FOLDER }
+
+    // Stores colour slots for folders without one (see folderColorAssignments), like the app does.
+    fun ensureFolderColors() = folderColorAssignments(tasks()).forEach { t -> update(t.id) { it.copy(colorIndex = t.colorIndex) } }
 
     fun findFolder(name: String): Task? = folders().firstOrNull { it.title.equals(name.trim(), ignoreCase = true) }
 

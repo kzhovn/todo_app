@@ -5,6 +5,7 @@ import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.deadline
 import com.kzhovn.todoapp.data.hasTime
+import com.kzhovn.todoapp.data.folderColorsArgb
 import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.data.sectionsByTopFolder
 import com.kzhovn.todoapp.data.stalledProjects
@@ -47,8 +48,6 @@ import java.util.Locale
 
 enum class ListMode(val label: String) { DOING("Doing"), ACTIVE("Active"), ALL("All") }
 
-// The app's folder palette (LedgerFolderPalette), assigned the same way: by folder creation order.
-private val FOLDER_PALETTE = listOf("#8A4C2E", "#6B8A2E", "#2E8A4D", "#2E6B8A", "#4D2E8A", "#8A2E6B")
 
 // Everything a list needs, computed once per request from the live task set. `collapsed`: the All
 // tree's folded nodes; `later`: stalled projects put off for now. Both are per browser.
@@ -64,8 +63,8 @@ class ListData(
     val byId = all.associateBy { it.id }
     private val contextIds = service.contextIdsByTask()
     private val contextNames = service.contexts().associate { it.id to it.name }
-    private val folderColors = all.filter { it.type == TaskType.FOLDER }.sortedBy { it.id }
-        .mapIndexed { i, f -> f.id to FOLDER_PALETTE[i % FOLDER_PALETTE.size] }.toMap()
+    // The same colour families as the app (folderColorsArgb in :core).
+    private val folderColors = folderColorsArgb(all).mapValues { "#%06X".format(it.value and 0xFFFFFF) }
     private val children = all.groupBy { it.parentId }
     val tasks: List<Task> = when (mode) {
         ListMode.DOING -> service.doing()

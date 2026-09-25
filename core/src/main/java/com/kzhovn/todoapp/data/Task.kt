@@ -37,7 +37,10 @@ data class Task(
     // Manual order among siblings (1, 2, 3... after a reorder); null sorts by creation. See TaskOrder.
     val position: Long? = null,
     // When it became a maybe; a maybe older than BACKBURNER_AFTER is shown dimmed. See withRules.
-    val maybeSince: Long? = null
+    val maybeSince: Long? = null,
+    // Folders only: the colour slot it took (a base colour at top level, else a variant within its
+    // family). Stored so a folder keeps its colour when others come and go. See folderColorsArgb.
+    val colorIndex: Int? = null
 ) {
     fun isExpired(now: Long): Boolean = expiresAt != null && expiresAt <= now
 

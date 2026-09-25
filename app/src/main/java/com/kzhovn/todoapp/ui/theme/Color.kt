@@ -2,7 +2,7 @@ package com.kzhovn.todoapp.ui.theme
 
 import androidx.compose.ui.graphics.Color
 import com.kzhovn.todoapp.data.Task
-import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.data.folderColorsArgb
 
 val LedgerBackground = Color(0xFFF0EAE0)
 val LedgerSearchBackground = Color(0xFFF7F4EE)
@@ -24,17 +24,5 @@ val LedgerNeutralBg = Color(0xFFE9E2D2)
 
 val LedgerCheckBorder = Color(0xFFB5A98C)
 
-val LedgerFolderPalette = listOf(
-    Color(0xFF8A4C2E),
-    Color(0xFF6B8A2E),
-    Color(0xFF2E8A4D),
-    Color(0xFF2E6B8A),
-    Color(0xFF4D2E8A),
-    Color(0xFF8A2E6B),
-)
-
-// Assigned in folder creation order, so the first palette-size folders always get distinct colors
-// (hashing ids let two folders collide).
-fun folderColors(tasks: Collection<Task>, palette: List<Color> = LedgerFolderPalette): Map<Long, Color> =
-    tasks.filter { it.type == TaskType.FOLDER }.sortedBy { it.id }
-        .mapIndexed { i, folder -> folder.id to palette[i % palette.size] }.toMap()
+// Families of colours per top-level folder; see folderColorsArgb in :core (shared with the web).
+fun folderColors(tasks: Collection<Task>): Map<Long, Color> = folderColorsArgb(tasks).mapValues { Color(it.value) }

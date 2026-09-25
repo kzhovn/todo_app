@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.repository
 
+import com.kzhovn.todoapp.data.folderColorAssignments
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskContextDao
@@ -185,6 +186,9 @@ class TaskRepository(
     suspend fun getAllTasks(): List<Task> = taskDao.getAllOnce()
 
     fun taskChanges() = taskDao.observeAll()
+
+    // Stores colour slots for folders that don't have one yet (see folderColorAssignments).
+    suspend fun ensureFolderColors() = folderColorAssignments(taskDao.getAllOnce()).forEach { taskDao.update(it) }
 
     suspend fun getAllTaskContexts(): Map<Long, Set<Long>> =
         taskContextDao.getAllCrossRefs().groupBy({ it.taskId }, { it.contextId }).mapValues { it.value.toSet() }
