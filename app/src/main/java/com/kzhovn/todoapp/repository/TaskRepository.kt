@@ -7,6 +7,7 @@ import com.kzhovn.todoapp.data.TaskDao
 import com.kzhovn.todoapp.data.TaskContextCrossRef
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.newId
 import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
@@ -63,9 +64,58 @@ class TaskRepository(
         _lastDeleted.value = null
     }
 
+    // Lands at the end of its new sibling list (a stale position from the old list would misplace it).
     suspend fun reparent(taskId: Long, newParentId: Long?) {
         val task = taskDao.getById(taskId) ?: return
-        taskDao.update(task.copy(parentId = newParentId))
+        taskDao.update(task.copy(parentId = newParentId, position = null))
+    }
+
+    // Moves a task right before/after `anchorId`, under the anchor's parent, and renumbers that whole
+    // sibling list 1..n. Renumbering (rather than squeezing a value between neighbours) never runs
+    // out of room; it rewrites a few rows per move, which is nothing at one user's scale.
+    suspend fun moveNextTo(taskId: Long, anchorId: Long, after: Boolean) {
+        val all = taskDao.getAllOnce()
+        val byId = all.associateBy { it.id }
+        val task = byId[taskId] ?: return
+        val anchor = byId[anchorId]?.takeIf { it.id != taskId } ?: return
+        val parentId = anchor.parentId
+        if (parentId != null && wouldCreateCycle(parentId, taskId, byId)) return
+        val siblings = all.filter { it.parentId == parentId && it.id != taskId }.sortedWith(TaskOrder).toMutableList()
+        siblings.add(siblings.indexOf(anchor) + if (after) 1 else 0, task.copy(parentId = parentId))
+        siblings.forEachIndexed { index, sibling ->
+            val position = index + 1L
+            if (sibling.position != position || sibling.id == taskId) taskDao.update(sibling.copy(position = position))
+        }
+    }
+
+    suspend fun getDescendants(taskId: Long): List<Task> = taskDao.getDescendants(taskId)
+
+    // Subtasks that set their own value for one of these inherited fields, and so wouldn't follow
+    // a change to it on this task.
+    suspend fun descendantsOverriding(taskId: Long, fields: Set<InheritedField>): List<Task> =
+        taskDao.getDescendants(taskId).filter { d ->
+            fields.any { field ->
+                when (field) {
+                    InheritedField.START -> d.startDate != null
+                    InheritedField.DUE -> d.dueDate != null
+                    InheritedField.ICON -> d.icon != null
+                    InheritedField.CONTEXTS -> taskContextDao.getContextIdsForTask(d.id).isNotEmpty()
+                }
+            }
+        }
+
+    // Clears those fields on the given tasks, so they inherit from their ancestors again.
+    suspend fun clearInherited(tasks: List<Task>, fields: Set<InheritedField>) {
+        for (t in tasks) {
+            updateTask(
+                t.copy(
+                    startDate = t.startDate.takeUnless { InheritedField.START in fields },
+                    dueDate = t.dueDate.takeUnless { InheritedField.DUE in fields },
+                    icon = t.icon.takeUnless { InheritedField.ICON in fields }
+                )
+            )
+            if (InheritedField.CONTEXTS in fields) taskContextDao.deleteAssignmentsForTask(t.id)
+        }
     }
 
     suspend fun toggleStar(taskId: Long) {
@@ -254,3 +304,6 @@ data class BulkEdit(
 
 data class DateChange(val date: Long?)      // null date = clear it
 data class FolderChange(val folderId: Long?) // null folder = move to top level
+
+// The fields subtasks inherit from their parents when they don't set their own (see resolveEffective).
+enum class InheritedField(val label: String) { START("start date"), DUE("due date"), CONTEXTS("contexts"), ICON("icon") }

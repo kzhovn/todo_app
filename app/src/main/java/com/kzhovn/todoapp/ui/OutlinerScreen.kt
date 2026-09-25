@@ -1,5 +1,11 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Rect
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -72,6 +78,7 @@ fun OutlinerScreen(
     onStar: (Long) -> Unit,
     onReparent: (Long, Long) -> Unit,
     onAddSubtask: (Long) -> Unit,
+    onMove: (taskId: Long, anchorId: Long, after: Boolean) -> Unit = { _, _, _ -> },
     selectedIds: Set<Long> = emptySet()
 ) {
     val context = LocalContext.current
@@ -93,7 +100,7 @@ fun OutlinerScreen(
     }
 
     LazyColumn {
-        renderNodes(tree, depth = 0, collapsed = collapsed, onToggle = ::toggle, onCheck = onCheck, onEdit = onEdit, onStar = onStar, onReparent = onReparent, onAddSubtask = onAddSubtask, allById = allById, selectedIds = selectedIds)
+        renderNodes(tree, depth = 0, collapsed = collapsed, onToggle = ::toggle, onCheck = onCheck, onEdit = onEdit, onStar = onStar, onReparent = onReparent, onAddSubtask = onAddSubtask, onMove = onMove, allById = allById, selectedIds = selectedIds)
     }
 }
 
@@ -107,15 +114,16 @@ private fun LazyListScope.renderNodes(
     onStar: (Long) -> Unit,
     onReparent: (Long, Long) -> Unit,
     onAddSubtask: (Long) -> Unit,
+    onMove: (Long, Long, Boolean) -> Unit,
     allById: Map<Long, Task>,
     selectedIds: Set<Long>
 ) {
     nodes.forEach { node ->
         item(key = node.task.id) {
-            OutlinerRow(node, depth, node.task.id in collapsed, onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, allById, node.task.id in selectedIds)
+            OutlinerRow(node, depth, node.task.id in collapsed, onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, allById, node.task.id in selectedIds)
         }
         if (node.children.isNotEmpty() && node.task.id !in collapsed) {
-            renderNodes(node.children, depth + 1, collapsed, onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, allById, selectedIds)
+            renderNodes(node.children, depth + 1, collapsed, onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, allById, selectedIds)
         }
     }
 }
@@ -132,32 +140,51 @@ private fun OutlinerRow(
     onStar: (Long) -> Unit,
     onReparent: (Long, Long) -> Unit,
     onAddSubtask: (Long) -> Unit,
+    onMove: (Long, Long, Boolean) -> Unit,
     allById: Map<Long, Task>,
     selected: Boolean
 ) {
     val task = node.task
     val hasChildren = node.children.isNotEmpty()
     val indent = (8 + depth * 18).dp
-    var isDropHover by remember { mutableStateOf(false) }
+    // Where a drag hovering this row would land: the top/bottom quarter reorders it before/after
+    // this row, the middle nests it inside.
+    var dropZone by remember { mutableStateOf<DropZone?>(null) }
+    var rowBounds by remember { mutableStateOf(Rect.Zero) }
 
     val dropTarget = remember(task.id, allById) {
         object : DragAndDropTarget {
-            override fun onEntered(event: DragAndDropEvent) {
-                isDropHover = true
+            // Drag events arrive in the ComposeView's coordinates, the same space as boundsInRoot.
+            private fun zoneOf(event: DragAndDropEvent): DropZone {
+                val y = event.toAndroidDragEvent().y
+                val quarter = rowBounds.height / 4
+                return when {
+                    y < rowBounds.top + quarter -> DropZone.BEFORE
+                    y > rowBounds.bottom - quarter -> DropZone.AFTER
+                    else -> DropZone.INTO
+                }
             }
 
-            override fun onExited(event: DragAndDropEvent) {
-                isDropHover = false
-            }
+            override fun onEntered(event: DragAndDropEvent) { dropZone = zoneOf(event) }
+            override fun onMoved(event: DragAndDropEvent) { dropZone = zoneOf(event) }
+            override fun onExited(event: DragAndDropEvent) { dropZone = null }
+            override fun onEnded(event: DragAndDropEvent) { dropZone = null }
 
             override fun onDrop(event: DragAndDropEvent): Boolean {
-                isDropHover = false
+                val zone = zoneOf(event)
+                dropZone = null
                 val draggedId = event.toAndroidDragEvent().clipData
                     ?.takeIf { it.itemCount > 0 }
                     ?.getItemAt(0)?.text?.toString()?.toLongOrNull()
                     ?: return false
-                if (draggedId == task.id || wouldCreateCycle(task.id, draggedId, allById)) return false
-                onReparent(draggedId, task.id)
+                if (draggedId == task.id) return false
+                when (zone) {
+                    DropZone.INTO -> {
+                        if (wouldCreateCycle(task.id, draggedId, allById)) return false
+                        onReparent(draggedId, task.id)
+                    }
+                    else -> onMove(draggedId, task.id, zone == DropZone.AFTER)
+                }
                 return true
             }
         }
@@ -185,7 +212,17 @@ private fun OutlinerRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(if (isDropHover || selected) LedgerAccentSoft else LedgerBackground)
+                .onGloballyPositioned { rowBounds = it.boundsInRoot() }
+                .background(if (dropZone == DropZone.INTO || selected) LedgerAccentSoft else LedgerBackground)
+                .drawWithContent {
+                    drawContent()
+                    val line = 3.dp.toPx()
+                    when (dropZone) {
+                        DropZone.BEFORE -> drawRect(LedgerAccent, size = Size(size.width, line))
+                        DropZone.AFTER -> drawRect(LedgerAccent, topLeft = Offset(0f, size.height - line), size = Size(size.width, line))
+                        else -> Unit
+                    }
+                }
                 .padding(start = indent, top = 1.dp, bottom = 1.dp, end = 8.dp)
                 .dragAndDropSource {
                     detectDragGesturesAfterLongPress(
@@ -225,8 +262,9 @@ private fun OutlinerRow(
                         modifier = Modifier.weight(1f).clickable { onEdit(task.id) }
                     )
                 }
-                TaskType.TASK -> {
-                    TaskCheckbox(checked = task.isComplete, overdue = isOverdue(task.isComplete, task.dueDate), size = 20.dp, touchSize = 36.dp, onCheckedChange = { onCheck(task.id) })
+                TaskType.TASK, TaskType.PROJECT -> {
+                    if (task.type == TaskType.PROJECT) ProjectMark(36.dp)
+                    else TaskCheckbox(checked = task.isComplete, overdue = isOverdue(task.isComplete, task.dueDate), size = 20.dp, touchSize = 36.dp, onCheckedChange = { onCheck(task.id) })
                     Spacer(Modifier.width(6.dp))
                     Text(
                         task.title,
@@ -252,3 +290,5 @@ private fun OutlinerRow(
         }
     }
 }
+
+private enum class DropZone { BEFORE, INTO, AFTER }

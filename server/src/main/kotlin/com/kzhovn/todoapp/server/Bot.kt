@@ -26,7 +26,7 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
         if (event.author.idLong !in allowedUserIds) return
         val message = event.message
         val content = message.contentRaw.trim()
-        if (logic.onAdd(message.idLong, message.jumpUrl, content)) return
+        if (logic.onAdd(message.idLong, message.jumpUrl, content, message.messageReference?.messageIdLong)) return
         val result = logic.command(content) ?: return
         result.fold(
             onSuccess = { postList(event.channel, it) },

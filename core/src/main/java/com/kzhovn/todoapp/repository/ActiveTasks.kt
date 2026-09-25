@@ -5,6 +5,7 @@ import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskDependency
+import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.resolveEffective
 
@@ -44,13 +45,13 @@ fun computeActiveTasks(
 
     val childrenByParentId = all.groupBy { it.parentId }
 
-    // Under a sequential parent, only the lowest-id (earliest-created) incomplete child is workable.
+    // Under a sequential parent, only the first incomplete child (in sibling order) is workable.
     fun isSequentiallyBlocked(task: Task): Boolean {
         val parent = task.parentId?.let { allById[it] } ?: return false
         if (!parent.sequential) return false
         val firstIncomplete = childrenByParentId[parent.id].orEmpty()
             .filter { !it.isComplete }
-            .minByOrNull { it.id } ?: return false
+            .minWithOrNull(TaskOrder) ?: return false
         return firstIncomplete.id != task.id
     }
 
@@ -70,7 +71,7 @@ fun computeActiveTasks(
     }
 
     return all.filter { task ->
-        if (task.type == TaskType.FOLDER || task.isComplete || task.isMaybe || task.isExpired(now)) return@filter false
+        if (task.type != TaskType.TASK || task.isComplete || task.isMaybe || task.isExpired(now)) return@filter false
         if (task.id in blockedByDependency || isSequentiallyBlocked(task)) return@filter false
         val effective = resolveEffective(task, allById, contextsByTaskId)
         (effective.effectiveStartDate == null || effective.effectiveStartDate <= now) &&

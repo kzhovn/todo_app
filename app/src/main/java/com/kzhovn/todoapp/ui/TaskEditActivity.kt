@@ -1,5 +1,8 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.material3.AlertDialog
+import com.kzhovn.todoapp.repository.InheritedField
+import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.notifications.PinnedTask
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.text.style.TextDecoration
@@ -92,12 +95,16 @@ class TaskEditActivity : ComponentActivity() {
         val repository = app.repository
         val contextRepository = app.contextRepository
         val taskId = intent.getLongExtra(EXTRA_TASK_ID, 0L)
-        val createAsFolder = intent.getBooleanExtra(EXTRA_CREATE_AS_FOLDER, false)
+        val initialType = when {
+            intent.getBooleanExtra(EXTRA_CREATE_AS_FOLDER, false) -> TaskType.FOLDER
+            intent.getBooleanExtra(EXTRA_CREATE_AS_PROJECT, false) -> TaskType.PROJECT
+            else -> TaskType.TASK
+        }
         setContent {
             LedgerTheme {
             val viewModel = remember { TaskEditViewModel(repository) }
             val scope = rememberCoroutineScope()
-            var task by remember { mutableStateOf(Task(id = taskId, title = "", type = if (createAsFolder) TaskType.FOLDER else TaskType.TASK)) }
+            var task by remember { mutableStateOf(Task(id = taskId, title = "", type = initialType)) }
             // For an existing task, Save must stay disabled until the real task data has
             // loaded — otherwise a tap before the load completes commits this empty
             // placeholder, wiping the task's title and every other field.
@@ -136,7 +143,16 @@ class TaskEditActivity : ComponentActivity() {
             // a reminder alarm; a folder can't be completed, so leaving it as someone's
             // dependency would block that task forever) — clear them on save regardless of what
             // the (hidden, for folders) recurrence/deps UI holds.
-            val onSave: () -> Unit = {
+            // As loaded, to tell which inherited fields this edit changes.
+            var original by remember { mutableStateOf<Task?>(null) }
+            var originalContextIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+            // A project needs a first step; asked on save when it has none.
+            var askFirstSubtask by remember { mutableStateOf(false) }
+            var firstSubtaskTitle by remember { mutableStateOf("") }
+            // Subtasks with their own value for a changed inherited field, pending "update them too?".
+            var pendingInherit by remember { mutableStateOf<Pair<List<Task>, Set<InheritedField>>?>(null) }
+
+            fun save(clearOn: List<Task>, fields: Set<InheritedField>, firstSubtask: String?) {
                 val toSave: Task
                 val dependenciesToSave: Set<Long>
                 if (task.type == TaskType.FOLDER) {
@@ -153,8 +169,32 @@ class TaskEditActivity : ComponentActivity() {
                 viewModel.save(toSave) { savedId ->
                     repository.setDependencies(savedId, dependenciesToSave)
                     contextRepository.setTaskContexts(savedId, contextsToSave)
+                    repository.clearInherited(clearOn, fields)
+                    firstSubtask?.let { repository.createTask(Task(title = it, parentId = savedId)) }
                     TodoWidget().updateAll(applicationContext)
                     finish()
+                }
+            }
+
+            val onSave: () -> Unit = {
+                val hasSubtasks = allTasks.any { it.parentId == taskId && taskId != 0L }
+                if (task.type == TaskType.PROJECT && !hasSubtasks) {
+                    firstSubtaskTitle = ""
+                    askFirstSubtask = true
+                } else {
+                    val before = original
+                    val changed = if (before == null) emptySet() else buildSet {
+                        if (task.startDate != before.startDate) add(InheritedField.START)
+                        if (task.dueDate != before.dueDate) add(InheritedField.DUE)
+                        if (task.icon != before.icon) add(InheritedField.ICON)
+                        if (selectedContextIds != originalContextIds) add(InheritedField.CONTEXTS)
+                    }
+                    scope.launch {
+                        // Only subtasks that override a changed field need asking; the rest already follow it.
+                        val overriding = if (changed.isEmpty()) emptyList() else repository.descendantsOverriding(taskId, changed)
+                        if (overriding.isEmpty()) save(emptyList(), emptySet(), null)
+                        else pendingInherit = overriding to changed.filterTo(mutableSetOf()) { f -> overriding.any { overrides(it, f) } }
+                    }
                 }
             }
 
@@ -167,6 +207,8 @@ class TaskEditActivity : ComponentActivity() {
                     }
                     selectedDependencyIds = repository.getDependencyIds(taskId)
                     selectedContextIds = contextRepository.getContextsForTask(taskId).map { it.id }.toSet()
+                    original = task
+                    originalContextIds = selectedContextIds
                     isLoaded = true
                 }
                 allTasks = repository.getAllTasks()
@@ -214,7 +256,7 @@ class TaskEditActivity : ComponentActivity() {
                         showLabelWhenSet = false
                     )
                     Spacer(Modifier.width(8.dp))
-                    if (task.type == TaskType.TASK) {
+                    if (task.type != TaskType.FOLDER) {
                         PropertyChip(
                             label = "Due",
                             valueText = task.dueDate?.let(::formatChipDate),
@@ -254,7 +296,7 @@ class TaskEditActivity : ComponentActivity() {
                     showLabelWhenSet = false
                 )
 
-                if (task.type == TaskType.TASK) {
+                if (task.type != TaskType.FOLDER) {
                     Spacer(Modifier.height(12.dp))
                     Text("Repeat", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
                     Row(modifier = Modifier.padding(top = 4.dp)) {
@@ -335,7 +377,7 @@ class TaskEditActivity : ComponentActivity() {
                     createNewLabel = "Create new context"
                 )
 
-                val subtasks = remember(allTasks, taskId) { allTasks.filter { it.parentId == taskId && taskId != 0L } }
+                val subtasks = remember(allTasks, taskId) { allTasks.filter { it.parentId == taskId && taskId != 0L }.sortedWith(TaskOrder) }
                 if (subtasks.isNotEmpty()) {
                     Spacer(Modifier.height(12.dp))
                     Text("Subtasks", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk)
@@ -380,8 +422,8 @@ class TaskEditActivity : ComponentActivity() {
                             }
                         )
                         // A dependent task is one blocked until this one is done. Folders can't be completed,
-                        // so they can't be depended on.
-                        if (task.type == TaskType.TASK) {
+                        // so they can't be depended on (projects can: they complete as a whole).
+                        if (task.type != TaskType.FOLDER) {
                             Spacer(Modifier.width(24.dp))
                             Text(
                                 "+ Add dependent task",
@@ -405,7 +447,7 @@ class TaskEditActivity : ComponentActivity() {
                     }
                 }
 
-                if (task.type == TaskType.TASK) {
+                if (task.type != TaskType.FOLDER) {
                     Spacer(Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Maybe (?)", fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.weight(1f))
@@ -422,11 +464,10 @@ class TaskEditActivity : ComponentActivity() {
 
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("This is a folder", fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = task.type == TaskType.FOLDER,
-                        onCheckedChange = { task = task.copy(type = if (it) TaskType.FOLDER else TaskType.TASK) }
-                    )
+                    listOf(TaskType.TASK to "Task", TaskType.PROJECT to "Project", TaskType.FOLDER to "Folder").forEach { (type, label) ->
+                        SelectablePill(label, selected = task.type == type) { task = task.copy(type = type) }
+                        Spacer(Modifier.width(8.dp))
+                    }
                 }
 
                 // Folders and tasks alike: only the first incomplete child counts as active.
@@ -479,6 +520,36 @@ class TaskEditActivity : ComponentActivity() {
                         }
                     },
                     onDismiss = { showDeleteConfirm = false }
+                )
+            }
+
+            if (askFirstSubtask) {
+                TextInputDialog(
+                    title = "First step of this project",
+                    placeholder = "Subtask",
+                    confirmLabel = "Save project",
+                    value = firstSubtaskTitle,
+                    onValueChange = { firstSubtaskTitle = it },
+                    onConfirm = {
+                        askFirstSubtask = false
+                        save(emptyList(), emptySet(), firstSubtaskTitle.trim())
+                    },
+                    onDismiss = { askFirstSubtask = false }
+                )
+            }
+
+            pendingInherit?.let { (overriding, fields) ->
+                val what = fields.joinToString(" and ") { it.label }
+                AlertDialog(
+                    onDismissRequest = { pendingInherit = null },
+                    title = { Text("Update subtasks too?") },
+                    text = { Text("${overriding.size} subtask${if (overriding.size == 1) " has its" else "s have their"} own $what. Clear ${if (overriding.size == 1) "it" else "them"} so ${if (overriding.size == 1) "it follows" else "they follow"} this task?") },
+                    confirmButton = {
+                        Button(onClick = { pendingInherit = null; save(overriding, fields, null) }) { Text("Update subtasks") }
+                    },
+                    dismissButton = {
+                        Button(onClick = { pendingInherit = null; save(emptyList(), emptySet(), null) }) { Text("Only this task") }
+                    }
                 )
             }
 
@@ -554,6 +625,7 @@ class TaskEditActivity : ComponentActivity() {
     companion object {
         const val EXTRA_TASK_ID = "task_id"
         const val EXTRA_CREATE_AS_FOLDER = "create_as_folder"
+        const val EXTRA_CREATE_AS_PROJECT = "create_as_project"
     }
 }
 
@@ -596,3 +668,11 @@ private fun CompactNumberField(value: Int, onValueChange: (Int) -> Unit) {
     )
 }
 
+// Whether a subtask sets its own value for an inherited field (dates/icon here; contexts are checked
+// by the repository, which knows the assignments).
+private fun overrides(task: Task, field: InheritedField): Boolean = when (field) {
+    InheritedField.START -> task.startDate != null
+    InheritedField.DUE -> task.dueDate != null
+    InheritedField.ICON -> task.icon != null
+    InheritedField.CONTEXTS -> true
+}

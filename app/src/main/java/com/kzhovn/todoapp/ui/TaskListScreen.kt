@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.TaskType
+import androidx.compose.material.icons.filled.AccountTree
 import com.kzhovn.todoapp.notifications.PinnedTask
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -142,7 +144,8 @@ private fun TaskRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(Modifier.width(3.dp).fillMaxHeight().background(barColor))
-            TaskCheckbox(checked = task.isComplete, overdue = effectiveOverdue, onCheckedChange = { onCheck(task.id) })
+            if (task.type == TaskType.PROJECT) ProjectMark()
+            else TaskCheckbox(checked = task.isComplete, overdue = effectiveOverdue, onCheckedChange = { onCheck(task.id) })
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -204,6 +207,14 @@ private fun TaskRow(
 private const val HOUR_MILLIS = 60 * 60 * 1000L
 private const val DAY_MILLIS = 24 * HOUR_MILLIS
 private const val WEEK_MILLIS = 7 * DAY_MILLIS
+
+// Shown in the checkbox's place: a project is completed as a whole, not ticked off directly.
+@Composable
+fun ProjectMark(size: Dp = 40.dp) {
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        Icon(Icons.Filled.AccountTree, contentDescription = "Project", tint = LedgerAccent, modifier = Modifier.size(size * 0.5f))
+    }
+}
 
 // Shown in the star's place: a maybe can't be starred.
 @Composable

@@ -40,7 +40,7 @@ class MigrationTest {
         }
 
         val room = Room.databaseBuilder(context, TodoDatabase::class.java, file.path)
-            .addMigrations(MIGRATION_3_4, MIGRATION_4_5).allowMainThreadQueries().build()
+            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).allowMainThreadQueries().build()
         val task = runBlocking { room.taskDao().getById(1) }!!
         room.close()
 

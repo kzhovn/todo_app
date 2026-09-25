@@ -73,10 +73,13 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         return parsed.takeIf { it.title.isNotBlank() }?.copy(parentId = folder?.id, isStarred = bare, expiresAt = expiresAt)
     }
 
-    fun onAdd(messageId: Long, jumpUrl: String, content: String): Boolean {
+    // Replying to another todo's `--` message with a new todo makes the replied-to task wait for
+    // the new one ("-- hang mirror" <- reply "-- move mirror upstairs").
+    fun onAdd(messageId: Long, jumpUrl: String, content: String, replyToMessageId: Long? = null): Boolean {
         val task = service.create(parseAdd(content) ?: return false)
         saveLink(messageId, MessageLink(taskId = task.id, text = content))
         store.setValue("src:${task.id}", jumpUrl)
+        replyToMessageId?.let(::link)?.taskId?.let { waiting -> service.addDependency(waiting, task.id) }
         return true
     }
 

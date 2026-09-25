@@ -10,6 +10,7 @@ import com.kzhovn.todoapp.sync.SyncResponse
 import com.kzhovn.todoapp.sync.SyncRow
 import com.kzhovn.todoapp.sync.TASKS
 import com.kzhovn.todoapp.sync.diff
+import com.kzhovn.todoapp.sync.dependsOn
 import com.kzhovn.todoapp.sync.taskFields
 import com.kzhovn.todoapp.sync.toTask
 import io.ktor.client.request.header
@@ -234,6 +235,21 @@ class ServerTest {
         val task = service.get(id)!!
         assertEquals("call mum", task.title)
         assertEquals(42L, task.dueDate)
+    }
+
+    @Test
+    fun `replying to a todo with a todo makes the first wait for the second`() {
+        logic.onAdd(1L, "u1", "-- hang mirror")
+        logic.onAdd(2L, "u2", "-- move mirror upstairs", replyToMessageId = 1L)
+        val hang = service.tasks().single { it.title == "hang mirror" }
+        val move = service.tasks().single { it.title == "move mirror upstairs" }
+
+        assertEquals(setOf(move.id), store.get(TASKS, hang.id)!!.dependsOn())
+        assertTrue(service.active().none { it.id == hang.id })
+
+        logic.onAdd(3L, "u3", "-- loop back", replyToMessageId = 2L) // move waits for loop: fine
+        service.addDependency(service.tasks().single { it.title == "loop back" }.id, hang.id) // would close a loop: refused
+        assertTrue(store.get(TASKS, service.tasks().single { it.title == "loop back" }.id)!!.dependsOn().isEmpty())
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
 
@@ -17,7 +18,7 @@ fun buildOutlinerTree(tasks: List<Task>, hideCompleted: Boolean = false): List<O
     fun build(parentId: Long?): List<OutlinerNode> =
         byParent[parentId].orEmpty()
             .filter { seen.add(it.id) }
-            .sortedBy { it.id }
+            .sortedWith(TaskOrder)
             .flatMap { task ->
                 val children = build(task.id)
                 if (hideCompleted && task.type == TaskType.TASK && task.isComplete) {

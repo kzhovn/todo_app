@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.stalledProjects
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kzhovn.todoapp.data.SearchFilters
@@ -61,8 +62,35 @@ class TaskListViewModel(
         }
     }
 
+    // Projects whose subtasks are all done, waiting on "complete it or add the next step".
+    private val _stalledProjects = MutableStateFlow<List<Task>>(emptyList())
+    val stalledProjects: StateFlow<List<Task>> = _stalledProjects
+
+    fun completeProject(projectId: Long, mode: TaskListMode) {
+        viewModelScope.launch {
+            repository.markComplete(projectId, clock())
+            load(mode)
+        }
+    }
+
+    fun addSubtask(parentId: Long, title: String, mode: TaskListMode) {
+        if (title.isBlank()) return
+        viewModelScope.launch {
+            repository.createTask(Task(title = title, parentId = parentId))
+            load(mode)
+        }
+    }
+
+    fun move(taskId: Long, anchorId: Long, after: Boolean, mode: TaskListMode) {
+        viewModelScope.launch {
+            repository.moveNextTo(taskId, anchorId, after)
+            load(mode)
+        }
+    }
+
     private suspend fun refreshSubtaskCounts(): List<Task> {
         val all = repository.getAllTasks()
+        _stalledProjects.value = stalledProjects(all)
         _subtaskCounts.value = subtaskCounts(all)
         _allById.value = all.associateBy { it.id }
         _contextsByTaskId.value = repository.getAllTaskContexts()

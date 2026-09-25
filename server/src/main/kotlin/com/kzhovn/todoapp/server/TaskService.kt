@@ -5,6 +5,7 @@ import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.newId
+import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
 import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 import com.kzhovn.todoapp.repository.computeActiveTasks
@@ -90,6 +91,15 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     }
 
     fun setStarred(id: Long, starred: Boolean) = update(id) { it.copy(isStarred = starred) }
+
+    // Makes taskId wait for dependsOnId, unless that would create a dependency loop.
+    fun addDependency(taskId: Long, dependsOnId: Long) = store.transaction {
+        val rows = liveRows()
+        val row = rows.firstOrNull { it.id == taskId } ?: return@transaction
+        val edges = rows.flatMap { r -> r.dependsOn().map { TaskDependency(r.id, it) } }
+        if (dependsOnId == taskId || wouldCreateDependencyCycle(dependsOnId, taskId, edges)) return@transaction
+        store.write(TASKS, taskId, JsonObject(taskFields(row.toTask(), row.contextIds(), row.dependsOn() + dependsOnId) - DELETED_AT), clock())
+    }
 
     // Mirrors TaskRepository.markComplete: the next instance keeps the task's contexts (not its
     // dependencies) and gets fresh copies of its subtasks.

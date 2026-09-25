@@ -5,7 +5,9 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import kotlinx.serialization.Serializable
 
-enum class TaskType { TASK, FOLDER }
+// A PROJECT is completed as a whole once its subtasks are done; it has no checkbox of its own and
+// never shows in Active/Doing (its subtasks do).
+enum class TaskType { TASK, FOLDER, PROJECT }
 enum class RecurrenceType { RRULE, AFTER_COMPLETION }
 
 @Serializable
@@ -29,7 +31,9 @@ data class Task(
     @ColumnInfo(defaultValue = "0") val isMaybe: Boolean = false,
     // Set for "just for today" tasks: the day rollover after creation. Past it, the task is hidden
     // and then deleted (unlike ordinary completed tasks, which are kept forever).
-    val expiresAt: Long? = null
+    val expiresAt: Long? = null,
+    // Manual order among siblings (1, 2, 3... after a reorder); null sorts by creation. See TaskOrder.
+    val position: Long? = null
 ) {
     fun isExpired(now: Long): Boolean = expiresAt != null && expiresAt <= now
 

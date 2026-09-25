@@ -51,6 +51,7 @@ import com.kzhovn.todoapp.repository.dayOfWeekMask
 import com.kzhovn.todoapp.repository.filterDoing
 import com.kzhovn.todoapp.repository.minuteOfDay
 import com.kzhovn.todoapp.ui.TaskEditActivity
+import com.kzhovn.todoapp.ui.subtaskCounts
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
@@ -92,7 +93,7 @@ class TodoWidget : GlanceAppWidget() {
                 else filterDoing(active, now) { resolveEffective(it, allById, contextsByTaskId).effectiveDueDate }
             }
         }.filter { folderId == null || isUnder(it, folderId, allById) }
-        val rows = TodoWidgetPresenter.toRows(tasks)
+        val rows = TodoWidgetPresenter.toRows(tasks, subtaskCounts(allTasks))
         val folderName = folderId?.let { allById[it]?.title }
         val header = mode.label.uppercase() + folderName?.let { " · $it" }.orEmpty()
 
@@ -190,6 +191,9 @@ private fun WidgetRow(row: WidgetTaskRow) {
                     )
                 )
         )
+        row.subtasks?.let { (done, total) ->
+            Text("$done/$total", style = TextStyle(color = fixed(LedgerMuted), fontSize = 11.sp), maxLines = 1)
+        }
         if (row.isMaybe) {
             Box(contentAlignment = Alignment.Center, modifier = GlanceModifier.size(width = 34.dp, height = 36.dp)) {
                 Text("?", style = TextStyle(color = fixed(LedgerMuted), fontSize = 22.sp, fontWeight = FontWeight.Bold))

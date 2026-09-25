@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp
 
+import com.kzhovn.todoapp.ui.TextInputDialog
+import androidx.compose.material.icons.filled.AccountTree
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -284,6 +286,17 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                             DropdownMenuItem(
+                                text = { Text("+ Project") },
+                                leadingIcon = { Icon(Icons.Filled.AccountTree, contentDescription = null) },
+                                onClick = {
+                                    showFabMenu = false
+                                    startActivity(
+                                        Intent(this@MainActivity, TaskEditActivity::class.java)
+                                            .putExtra(TaskEditActivity.EXTRA_CREATE_AS_PROJECT, true)
+                                    )
+                                }
+                            )
+                            DropdownMenuItem(
                                 text = { Text("+ Folder") },
                                 leadingIcon = { Icon(Icons.Filled.Folder, contentDescription = null) },
                                 onClick = {
@@ -389,6 +402,7 @@ class MainActivity : ComponentActivity() {
                             onStar = onStar,
                             selectedIds = selectedIds,
                             onReparent = { taskId, newParentId -> viewModel.reparent(taskId, newParentId, selectedMode) },
+                            onMove = { taskId, anchorId, after -> viewModel.move(taskId, anchorId, after, selectedMode) },
                             onAddSubtask = { parentId ->
                                 startActivity(
                                     Intent(this@MainActivity, QuickAddActivity::class.java)
@@ -404,6 +418,43 @@ class MainActivity : ComponentActivity() {
                             onEdit = onEdit,
                             selectedIds = selectedIds,
                             onSnooze = { id, duration -> viewModel.snooze(id, duration, selectedMode) }
+                        )
+                    }
+                    // A project whose subtasks are all done asks what's next. "Later" only snoozes it for
+                    // this session; it's asked again next time the app starts.
+                    val stalled by viewModel.stalledProjects.collectAsState()
+                    var snoozedProjects by remember { mutableStateOf(emptySet<Long>()) }
+                    var nextStepFor by remember { mutableStateOf<Task?>(null) }
+                    var nextStepTitle by remember { mutableStateOf("") }
+                    stalled.firstOrNull { it.id !in snoozedProjects }?.takeIf { nextStepFor == null }?.let { project ->
+                        AlertDialog(
+                            onDismissRequest = { snoozedProjects = snoozedProjects + project.id },
+                            title = { Text("“${project.title}”: all subtasks done") },
+                            text = { Text("Is the project complete?") },
+                            confirmButton = {
+                                Button(onClick = { viewModel.completeProject(project.id, selectedMode) }) { Text("Complete project") }
+                            },
+                            dismissButton = {
+                                Row {
+                                    Button(onClick = { nextStepFor = project; nextStepTitle = "" }) { Text("Add next") }
+                                    Spacer(Modifier.width(8.dp))
+                                    Button(onClick = { snoozedProjects = snoozedProjects + project.id }) { Text("Later") }
+                                }
+                            }
+                        )
+                    }
+                    nextStepFor?.let { project ->
+                        TextInputDialog(
+                            title = "Next step for “${project.title}”",
+                            placeholder = "Subtask",
+                            confirmLabel = "Add",
+                            value = nextStepTitle,
+                            onValueChange = { nextStepTitle = it },
+                            onConfirm = {
+                                viewModel.addSubtask(project.id, nextStepTitle.trim(), selectedMode)
+                                nextStepFor = null
+                            },
+                            onDismiss = { nextStepFor = null }
                         )
                     }
                     completeDecision?.let { (taskId, activeCount) ->
