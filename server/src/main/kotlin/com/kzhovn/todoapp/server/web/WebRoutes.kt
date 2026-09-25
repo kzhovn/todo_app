@@ -47,6 +47,7 @@ fun Route.webRoutes(service: TaskService) {
     }
 
     editorRoutes(service)
+    pageRoutes(service)
 
     // The All tree's outliner actions (app.js sends them from keys and drag).
     post("/outline/{id}/{action}") {
@@ -101,12 +102,11 @@ fun Route.webRoutes(service: TaskService) {
     post("/quickadd") {
         val params = call.receiveParameters()
         val text = params["text"].orEmpty()
-        val mode = params["mode"]?.let { runCatching { ListMode.valueOf(it) }.getOrNull() } ?: ListMode.DOING
-        if (text.isNotBlank()) {
-            val parsed = QuickAddParser.parse(text)
-            if (parsed.title.isNotBlank()) service.create(parsed.copy(parentId = service.findFolder(DEFAULT_FOLDER)?.id))
-        }
-        call.respondList(service, mode)
+        val mode = params["mode"]?.let { runCatching { ListMode.valueOf(it) }.getOrNull() }
+        val parsed = QuickAddParser.parse(text)
+        val created = if (parsed.title.isNotBlank()) service.create(parsed.copy(parentId = service.findFolder(DEFAULT_FOLDER)?.id)) else null
+        if (mode != null) return@post call.respondList(service, mode)
+        call.respondText(created?.let { t -> createHTML().div { addedToastContents(t) } }.orEmpty(), ContentType.Text.Html)
     }
 }
 

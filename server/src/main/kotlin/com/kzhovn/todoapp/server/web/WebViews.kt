@@ -104,25 +104,32 @@ fun HTML.page(title: String, content: BODY.() -> Unit) {
 }
 
 // deleted: a task just deleted from the editor, offered back with an Undo toast.
-fun HTML.listPage(data: ListData, deleted: Task? = null) = shellPage("Raspberry · ${data.mode.label}", data.mode, toast = deleted?.let { { deletedToastContents(it, data.mode) } }) {
+fun HTML.listPage(data: ListData, deleted: Task? = null) = shellPage("Raspberry · ${data.mode.label}", data.mode.path, data.mode, toast = deleted?.let { { deletedToastContents(it, data.mode) } }) {
     div { listContents(data) }
 }
 
-fun HTML.shellPage(title: String, mode: ListMode, toast: (DIV.() -> Unit)? = null, content: MAIN.() -> Unit) = page(title) {
+val ListMode.path get() = "/${name.lowercase()}"
+
+// current: the nav path to highlight. listMode: the list on this page, which quick add re-renders;
+// on pages without one, quick add just confirms with a toast.
+fun HTML.shellPage(title: String, current: String, listMode: ListMode? = null, toast: (DIV.() -> Unit)? = null, content: MAIN.() -> Unit) = page(title) {
     div(classes = "shell") {
         aside(classes = "sidebar") {
             h1 { +"Raspberry" }
             nav {
-                ListMode.entries.forEach { m ->
-                    a(href = "/${m.name.lowercase()}", classes = if (m == mode) "current" else null) { +m.label }
-                }
+                (ListMode.entries.map { it.path to it.label } + listOf("/search" to "Search", "/review" to "Review", "/contexts" to "Contexts"))
+                    .forEach { (path, label) -> a(href = path, classes = if (path == current) "current" else null) { +label } }
             }
             // Same parser as the app's quick add; new tasks default to the Personal folder.
             form(classes = "quickadd") {
                 attributes["hx-post"] = "/quickadd"
-                attributes["hx-target"] = "#list"
-                attributes["hx-swap"] = "outerHTML"
-                hiddenInput(name = "mode") { value = mode.name }
+                if (listMode != null) {
+                    attributes["hx-target"] = "#list"
+                    attributes["hx-swap"] = "outerHTML"
+                    hiddenInput(name = "mode") { value = listMode.name }
+                } else {
+                    attributes["hx-swap"] = "none"
+                }
                 textInput(name = "text") { id = "quickadd"; placeholder = "Add a task… (n)"; attributes["autocomplete"] = "off" }
             }
             syntaxKey()
@@ -264,7 +271,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
     }
 }
 
-private fun FlowContent.dueChip(due: Long, now: Long, overdue: Boolean) {
+internal fun FlowContent.dueChip(due: Long, now: Long, overdue: Boolean) {
     val today = Calendar.getInstance().apply { timeInMillis = now }
     val day = Calendar.getInstance().apply { timeInMillis = due }
     val isToday = today.get(Calendar.YEAR) == day.get(Calendar.YEAR) && today.get(Calendar.DAY_OF_YEAR) == day.get(Calendar.DAY_OF_YEAR)
@@ -283,6 +290,14 @@ fun DIV.deletedToastContents(task: Task, mode: ListMode) {
         attributes["hx-swap"] = "outerHTML"
         +"Undo"
     }
+}
+
+// Confirms a quick add made from a page without a list to show it in.
+fun DIV.addedToastContents(task: Task) {
+    id = "toast"
+    attributes["hx-swap-oob"] = "true"
+    classes = setOf("show")
+    span { +"Added “${task.title}”" }
 }
 
 // Shown out-of-band after completing, with a one-click undo.

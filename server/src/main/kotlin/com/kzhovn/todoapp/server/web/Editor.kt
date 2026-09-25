@@ -213,7 +213,7 @@ private fun parseRecurrence(p: Parameters): RecurrenceSelection {
 }
 
 // A date without a time is local midnight (see hasTime).
-private fun dateTime(date: String?, time: String?): Long? {
+internal fun dateTime(date: String?, time: String?): Long? {
     val d = date?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return null
     val t = time?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: LocalTime.MIDNIGHT
     return d.atTime(t).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -236,11 +236,9 @@ private fun merge(base: EditState, form: EditState, current: EditState): EditSta
     )
 }
 
-private val ListMode.path get() = "/${name.lowercase()}"
-
 private fun localDateTime(millis: Long) = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
 
-private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Raspberry · ${v.shown.task.title.ifBlank { "Edit" }}", v.mode) {
+private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Raspberry · ${v.shown.task.title.ifBlank { "Edit" }}", v.mode.path) {
     val t = v.shown.task
     val all = service.tasks()
     val byId = all.associateBy { it.id }
@@ -341,7 +339,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
 
         field("Contexts", "") {
             val contexts = service.contexts().sortedBy { it.name.lowercase() }
-            if (contexts.isEmpty()) span(classes = "hint") { +"No contexts yet." }
+            if (contexts.isEmpty()) span(classes = "hint") { +"No contexts yet. "; a(href = "/contexts") { +"Create one" } }
             div(classes = "pills") {
                 contexts.forEach { c ->
                     label(classes = "pill") { checkBoxInput(name = "ctx") { value = c.id.toString(); checked = c.id in v.shown.contextIds }; +"@${c.name}" }

@@ -1,6 +1,9 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.data.ContextTimeWindow
+import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.DEFAULT_ROLLOVER_HOUR
+import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskDependency
@@ -18,6 +21,7 @@ import com.kzhovn.todoapp.sync.CONTEXTS
 import com.kzhovn.todoapp.sync.DELETED_AT
 import com.kzhovn.todoapp.sync.SyncRow
 import com.kzhovn.todoapp.sync.TASKS
+import com.kzhovn.todoapp.sync.contextFields
 import com.kzhovn.todoapp.sync.contextIds
 import com.kzhovn.todoapp.sync.dependsOn
 import com.kzhovn.todoapp.sync.taskFields
@@ -106,6 +110,47 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun contexts(): List<TaskContext> = store.all(CONTEXTS).filterNot { it.isDeleted }.map { it.toContext() }
 
     fun contextIdsByTask(): Map<Long, Set<Long>> = liveRows().associate { it.id to it.contextIds() }
+
+    fun timeWindows(contextId: Long): List<ContextTimeWindow> =
+        store.get(CONTEXTS, contextId)?.takeUnless { it.isDeleted }?.timeWindows().orEmpty()
+
+    // The web's side of the phone's contexts screen. Whether a place context currently holds is the
+    // phone's to say (it sees the wifi), so a save keeps whatever the phone last reported.
+    fun saveContext(context: TaskContext, windows: List<ContextTimeWindow>): TaskContext {
+        val existing = store.get(CONTEXTS, context.id)?.takeUnless { it.isDeleted }?.toContext()
+        val place = context.type == ContextType.PLACE
+        val saved = context.copy(
+            id = existing?.id ?: newId(),
+            wifiSsid = context.wifiSsid.takeIf { place },
+            isCurrentlySatisfied = existing?.isCurrentlySatisfied ?: false
+        )
+        store.write(CONTEXTS, saved.id, contextFields(saved, if (place) emptyList() else windows), clock())
+        return saved
+    }
+
+    // Like the phone's: the context goes, and so does every task's assignment to it.
+    fun deleteContext(id: Long) = store.transaction {
+        val now = clock()
+        liveRows().filter { id in it.contextIds() }.forEach { row ->
+            store.write(TASKS, row.id, JsonObject(taskFields(row.toTask(), row.contextIds() - id, row.dependsOn()) - DELETED_AT), now)
+        }
+        store.write(CONTEXTS, id, JsonObject(mapOf(DELETED_AT to JsonPrimitive(now))), now)
+    }
+
+    // Mirrors TaskDao.searchFiltered, including its quirk that the folder filter matches only
+    // tasks directly in that folder.
+    fun search(query: String, filters: SearchFilters): List<Task> {
+        val contexts = contextIdsByTask()
+        return tasks().filter { t ->
+            t.type != TaskType.FOLDER && t.title.contains(query.trim(), ignoreCase = true) &&
+                (filters.includeCompleted || !t.isComplete) &&
+                (filters.folderId == null || t.parentId == filters.folderId) &&
+                (!filters.starredOnly || t.isStarred) &&
+                filters.dueAfter.let { after -> after == null || t.dueDate.let { it != null && it >= after } } &&
+                filters.dueBefore.let { before -> before == null || t.dueDate.let { it != null && it <= before } } &&
+                (filters.contextId == null || filters.contextId in contexts[t.id].orEmpty())
+        }.sortedBy { it.id }
+    }
 
     fun dependsOn(id: Long): Set<Long> = store.get(TASKS, id)?.dependsOn().orEmpty()
 

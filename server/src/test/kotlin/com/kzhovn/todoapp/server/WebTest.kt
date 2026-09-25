@@ -179,4 +179,52 @@ class WebTest {
         assertTrue(client.get("/list/all").bodyAsText().contains(">A2<")) // another browser isn't
         assertTrue(browser.get("/list/all?toggle=${folder.id}").bodyAsText().contains(">A2<"))
     }
+
+    @Test
+    fun `search filters like the phone's`() = web {
+        val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
+        service.create(Task(title = "Fix bug", parentId = work.id, isStarred = true))
+        service.create(Task(title = "Old bug", isComplete = true))
+        service.create(Task(title = "Buy milk"))
+        suspend fun titles(query: String) = Regex("mode=ALL\"[^>]*>([^<]+)</a>").findAll(client.get("/search/results?$query").bodyAsText()).map { it.groupValues[1] }.toList()
+
+        assertEquals(listOf("Fix bug"), titles("q=BUG"))
+        assertEquals(listOf("Fix bug", "Old bug"), titles("q=bug&completed=on"))
+        assertEquals(listOf("Fix bug"), titles("folder=${work.id}"))
+        assertEquals(listOf("Fix bug"), titles("starred=on"))
+    }
+
+    @Test
+    fun `contexts are created, edited and deleted from every task`() = web {
+        val noRedirects = createClient { followRedirects = false }
+        assertTrue(client.submitForm("/contexts", parameters { append("name", "Office"); append("type", "TIME") }).bodyAsText().contains("at least one window"))
+
+        noRedirects.submitForm("/contexts", parameters {
+            append("name", "Office"); append("type", "TIME")
+            append("start", "09:00"); append("end", "17:30"); append("days0", "1"); append("days0", "5")
+            append("start", ""); append("end", "")
+        })
+        val office = service.contexts().single()
+        val window = service.timeWindows(office.id).single()
+        assertEquals(listOf(540, 1050, 0b100010), listOf(window.windowStartMinute, window.windowEndMinute, window.daysMask))
+
+        noRedirects.submitForm("/contexts", parameters { append("id", office.id.toString()); append("name", "Home"); append("type", "PLACE"); append("ssid", "HomeNet") })
+        assertEquals(listOf("Home" to "HomeNet"), service.contexts().map { it.name to it.wifiSsid })
+
+        val task = service.create(Task(title = "Water plants"))
+        service.edit(task, setOf(office.id), emptySet())
+        client.post("/contexts/${office.id}/delete")
+        assertEquals(emptyList<Any>(), service.contexts())
+        assertEquals(emptySet<Long>(), service.contextIdsByTask()[task.id])
+    }
+
+    @Test
+    fun `review counts completions by day, and quick add off a list confirms with a toast`() = web {
+        service.create(Task(title = "Done today", isComplete = true, completedAt = service.now()))
+        val review = client.get("/review").bodyAsText()
+        assertTrue(review.contains("1 done in the last 7 days"))
+        assertTrue(review.contains("Done today"))
+
+        assertTrue(client.submitForm("/quickadd", parameters { append("text", "call mom") }).bodyAsText().contains("Added “call mom”"))
+    }
 }

@@ -149,3 +149,44 @@ form.inline button { padding: 6px 10px; border: 1px solid var(--border); border-
 .node[data-drop="after"] { box-shadow: inset 0 -3px 0 var(--accent); }
 .node[data-drop="into"] { background: var(--accent-soft); }
 .outline-new { display: block; width: calc(100% - 60px); margin: 4px 0; padding: 6px 8px; border: 1px solid var(--accent); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
+
+/* Search */
+.search { padding: 20px 24px 8px; display: flex; flex-direction: column; gap: 10px; }
+.search-q { width: 100%; padding: 8px 10px; font: inherit; font-size: 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); }
+.search select, .search input[type=date] { padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--ink); font: inherit; font-size: 13px; }
+.date-filter { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+.results { padding: 0 24px 24px; }
+.result { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.result a { color: var(--ink); text-decoration: none; font-weight: 600; }
+.result a:hover { text-decoration: underline; }
+.result a.done { color: var(--muted); text-decoration: line-through; font-weight: 400; }
+.starred { color: var(--star); }
+
+/* Review */
+.review, .contexts { padding: 20px 24px; }
+.review h1, .contexts h1 { font-size: 20px; margin: 0 0 4px; }
+.review h2 { font-size: 14px; margin: 18px 0 4px; }
+.chart { display: flex; align-items: stretch; gap: 2px; height: 170px; margin: 16px 0 8px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.chart .day { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+.chart .count, .chart .weekday { font-size: 11px; color: var(--muted); height: 14px; }
+.chart .plot { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.chart .bar { width: 60%; background: var(--accent); border-radius: 4px 4px 0 0; }
+.chart .day:hover .bar { opacity: .8; }
+.done-row { display: flex; gap: 6px; align-items: baseline; padding: 2px 0; }
+.done-row .tick { color: var(--accent); }
+.done-row a { color: var(--ink); text-decoration: none; flex: 1; }
+.done-row a:hover { text-decoration: underline; }
+.folder-name { font-size: 12px; color: var(--muted); }
+
+/* Contexts */
+.context-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.context-name { font-weight: 600; }
+.context-row .hint { width: auto; flex: 1; }
+.context-row a { color: var(--accent); text-decoration: none; font-size: 13px; }
+.context-row .delete { color: var(--overdue); font-size: 13px; }
+.context-form { padding: 16px 0 0; }
+.context-form h2 { font-size: 15px; margin: 0; }
+.window-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; width: 100%; }
+.window-row input[type=time] { padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
+.context-form:has(input[name=type][value=PLACE]:checked) .time-only,
+.context-form:has(input[name=type][value=TIME]:checked) .place-only { display: none; }

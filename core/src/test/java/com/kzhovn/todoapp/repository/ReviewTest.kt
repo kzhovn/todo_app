@@ -1,4 +1,4 @@
-package com.kzhovn.todoapp.ui
+package com.kzhovn.todoapp.repository
 
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
