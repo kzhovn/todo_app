@@ -32,8 +32,6 @@ class Store(path: String) {
     // Called after each row a client pushed is merged (not for bot writes), so the bot can mirror
     // app-side changes back into Discord.
     @Volatile
-    var onSyncedChange: ((before: SyncRow?, after: SyncRow) -> Unit)? = null
-
     // Every row change, whether synced or a server-side edit (web, bot).
     var onChange: ((before: SyncRow?, after: SyncRow) -> Unit)? = null
 
@@ -53,7 +51,6 @@ class Store(path: String) {
             SyncResponse(maxVersion(), since(request.cursor))
         }
         changed.forEach { (before, after) ->
-            onSyncedChange?.invoke(before, after)
             onChange?.invoke(before, after)
         }
         return response

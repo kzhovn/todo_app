@@ -135,9 +135,9 @@ class ServerTest {
     }
 
     @Test
-    fun `app-side completion and deletion of a Discord task mirror onto its message`() {
+    fun `app- and web-side completion and deletion of a Discord task mirror onto its message`() {
         val mirrored = mutableListOf<SourceReaction>()
-        store.onSyncedChange = { before, after -> mirrored += logic.sourceReactions(before, after) }
+        store.onChange = { before, after -> mirrored += logic.sourceReactions(before, after) }
         logic.onAdd(55L, "https://discord.com/channels/1/22/55", "-- call mom")
         val id = service.tasks().single().id
 
@@ -148,8 +148,12 @@ class ServerTest {
         push({ it.copy(isComplete = true) }, now + 10)
         push({ it.copy(isComplete = false) }, now + 20)
         logic.onReaction(55L, DONE, added = true) // completed from Discord itself: no mirror
-
-        assertEquals(listOf(SourceReaction(22, 55, DONE, true), SourceReaction(22, 55, DONE, false)), mirrored)
+        logic.onReaction(55L, DONE, added = false)
+        service.delete(id) // from the web
+        assertEquals(
+            listOf(SourceReaction(22, 55, DONE, true), SourceReaction(22, 55, DONE, false), SourceReaction(22, 55, DELETE, true)),
+            mirrored
+        )
     }
 
     @Test

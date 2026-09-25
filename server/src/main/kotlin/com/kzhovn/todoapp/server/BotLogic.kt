@@ -107,7 +107,7 @@ class BotLogic(private val service: TaskService, private val store: Store) {
 
     // Replying to another todo's `--` message with a new todo makes the replied-to task wait for
     // the new one ("-- hang mirror" <- reply "-- move mirror upstairs").
-    fun onAdd(messageId: Long, jumpUrl: String, content: String, replyToMessageId: Long? = null): Boolean {
+    fun onAdd(messageId: Long, jumpUrl: String, content: String, replyToMessageId: Long? = null): Boolean = fromDiscord {
         replyToMessageId?.let(::link)?.nudgeFor?.let { return breakUp(it, content) }
         val task = service.create(parseAdd(content) ?: return false)
         saveLink(messageId, MessageLink(taskId = task.id, text = content))
@@ -118,7 +118,7 @@ class BotLogic(private val service: TaskService, private val store: Store) {
 
     // Only fields whose parse changed are written, so a typo fix doesn't clobber a star or due
     // date set in the app since.
-    fun onEdit(messageId: Long, content: String) {
+    fun onEdit(messageId: Long, content: String) = fromDiscord {
         val link = link(messageId) ?: return
         val taskId = link.taskId ?: return
         val old = parseAdd(link.text.orEmpty()) ?: return
@@ -134,15 +134,15 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         saveLink(messageId, link.copy(text = content))
     }
 
-    fun onDelete(messageId: Long) {
+    fun onDelete(messageId: Long) = fromDiscord {
         link(messageId)?.taskId?.let(service::delete)
         store.setValue("msg:$messageId", null)
     }
 
-    // Mirrors a completion/deletion made in the app onto the task's `--` message: ✅/❌ appear when
-    // it's completed/deleted and disappear when undone.
+    // Mirrors a completion/deletion made in the app or on the web onto the task's `--` message: ✅/❌
+    // appear when it's completed/deleted and disappear when undone.
     fun sourceReactions(before: SyncRow?, after: SyncRow): List<SourceReaction> {
-        if (after.table != TASKS || before == null) return emptyList()
+        if (after.table != TASKS || before == null || handlingDiscord.get()) return emptyList()
         val url = store.getValue("src:${after.id}") ?: return emptyList()
         val (channelId, messageId) = url.split('/').takeLast(2).map { it.toLongOrNull() ?: return emptyList() }
         return listOfNotNull(
@@ -183,7 +183,7 @@ class BotLogic(private val service: TaskService, private val store: Store) {
 
     fun recordNudge(messageId: Long, taskId: Long) = saveLink(messageId, MessageLink(nudgeFor = taskId))
 
-    fun onReaction(messageId: Long, emoji: String, added: Boolean): ReactionOutcome {
+    fun onReaction(messageId: Long, emoji: String, added: Boolean): ReactionOutcome = fromDiscord {
         val link = link(messageId)
         link?.nudgeFor?.let { stuck ->
             if (emoji == MOVE_OUT) service.setStarred(stuck, !added) // un-reacting puts it back
@@ -314,6 +314,19 @@ class BotLogic(private val service: TaskService, private val store: Store) {
             result[task.id] = emoji
         }
         result
+    }
+
+    // Set while handling a Discord event, whose changes already show in Discord and so aren't
+    // mirrored back. Thread-local because web requests change tasks concurrently.
+    private val handlingDiscord = ThreadLocal.withInitial { false }
+
+    private inline fun <T> fromDiscord(block: () -> T): T {
+        handlingDiscord.set(true)
+        try {
+            return block()
+        } finally {
+            handlingDiscord.set(false)
+        }
     }
 
     private fun link(messageId: Long): MessageLink? =

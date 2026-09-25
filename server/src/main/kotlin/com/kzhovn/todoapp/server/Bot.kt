@@ -93,15 +93,15 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
                 GatewayIntent.GUILD_MESSAGE_REACTIONS, GatewayIntent.DIRECT_MESSAGE_REACTIONS
             ).addEventListeners(bot).build()
             // ponytail: DM channels aren't cached by createLight, so this only mirrors onto server channels.
-            store.onSyncedChange = { before, after ->
+            store.onChange = { before, after ->
                 bot.logic.sourceReactions(before, after).forEach { r ->
                     jda.getChannelById(MessageChannel::class.java, r.channelId)?.let { channel ->
                         val emoji = Emoji.fromUnicode(r.emoji)
                         (if (r.add) channel.addReactionById(r.messageId, emoji) else channel.removeReactionById(r.messageId, emoji)).queue()
                     }
                 }
+                bot.logic.listToRefresh(before, after)?.let { bot.refreshSoon(jda, it) }
             }
-            store.onChange = { before, after -> bot.logic.listToRefresh(before, after)?.let { bot.refreshSoon(jda, it) } }
             if (digestChannelId != null && digestTime != null) {
                 scheduleDigest(LocalTime.parse(digestTime)) {
                     service.purgeExpired()
