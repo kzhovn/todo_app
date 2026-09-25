@@ -227,4 +227,103 @@ class WebTest {
 
         assertTrue(client.submitForm("/quickadd", parameters { append("text", "call mom") }).bodyAsText().contains("Added “call mom”"))
     }
+
+    @Test
+    fun `completing a task with open subtasks asks first, then completes or moves them out`() = web {
+        val folder = service.create(Task(type = TaskType.FOLDER, title = "Personal"))
+        val trip = service.create(Task(title = "Plan trip", parentId = folder.id))
+        val hotel = service.create(Task(title = "Book hotel", parentId = trip.id))
+        assertTrue(client.post("/tasks/${trip.id}/complete?mode=ALL").bodyAsText().contains("1 open subtask"))
+        assertFalse(service.get(trip.id)!!.isComplete)
+
+        client.post("/tasks/${trip.id}/complete?mode=ALL&subtasks=promote")
+        assertTrue(service.get(trip.id)!!.isComplete)
+        assertEquals(null, service.get(hotel.id)!!.parentId) // moved out to the top level, like the phone
+        assertFalse(service.get(hotel.id)!!.isComplete)
+
+        val pack = service.create(Task(title = "Pack"))
+        service.create(Task(title = "Socks", parentId = pack.id)).let { socks ->
+            client.post("/tasks/${pack.id}/complete?mode=ALL&subtasks=complete")
+            assertTrue(service.get(socks.id)!!.isComplete)
+        }
+    }
+
+    @Test
+    fun `a project with all steps done is asked about until completed, extended or put off`() = web {
+        val project = service.create(Task(type = TaskType.PROJECT, title = "Wool coat"))
+        service.create(Task(title = "Cut fabric", parentId = project.id, isComplete = true))
+        assertTrue(client.get("/list/active").bodyAsText().contains("“Wool coat”: all steps done"))
+
+        client.submitForm("/tasks/${project.id}/next?mode=ACTIVE", parameters { append("text", "Sew lining") })
+        assertFalse(client.get("/list/active").bodyAsText().contains("all steps done"))
+
+        service.complete(service.tasks().single { it.title == "Sew lining" }.id)
+        val browser = createClient { install(io.ktor.client.plugins.cookies.HttpCookies) }
+        assertFalse(browser.get("/list/active?later=${project.id}").bodyAsText().contains("all steps done"))
+        assertFalse(browser.get("/list/active").bodyAsText().contains("all steps done")) // for this session
+    }
+
+    @Test
+    fun `new tasks, projects and folders are made in the full editor`() = web {
+        val personal = service.create(Task(type = TaskType.FOLDER, title = "Personal"))
+        assertTrue(client.get("/tasks/new?type=TASK").bodyAsText().contains("<option value=\"${personal.id}\" selected"))
+
+        fun blank(type: TaskType) = taskFields(Task(title = "", type = type), emptySet(), emptySet()).toString()
+        val noRedirects = createClient { followRedirects = false }
+        noRedirects.submitForm("/tasks/new?mode=ALL", parameters { append("base", blank(TaskType.FOLDER)); append("title", "Hobby"); append("type", "FOLDER") })
+        assertEquals(TaskType.FOLDER, service.tasks().single { it.title == "Hobby" }.type)
+
+        val project = parameters { append("base", blank(TaskType.PROJECT)); append("title", "Wool coat"); append("type", "PROJECT"); append("starred", "on") }
+        assertTrue(client.submitForm("/tasks/new", project).bodyAsText().contains("needs a first step"))
+        assertEquals(null, service.tasks().firstOrNull { it.title == "Wool coat" })
+        noRedirects.submitForm("/tasks/new", parameters { appendAll(project); append("firstStep", "Buy wool") })
+        val coat = service.tasks().single { it.title == "Wool coat" }
+        assertTrue(coat.isStarred)
+        assertEquals(coat.id, service.tasks().single { it.title == "Buy wool" }.parentId)
+    }
+
+    @Test
+    fun `bulk edit changes only what it's told, and skips folders`() = web {
+        val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
+        val office = service.saveContext(com.kzhovn.todoapp.data.TaskContext(name = "Office", type = com.kzhovn.todoapp.data.ContextType.PLACE, wifiSsid = "Corp"), emptyList())
+        val blocker = service.create(Task(title = "Get keys"))
+        val a = service.create(Task(title = "A", isStarred = true, dueDate = 1_000_000))
+        val b = service.create(Task(title = "B"))
+        val folder = service.create(Task(type = TaskType.FOLDER, title = "Not me"))
+        client.submitForm("/bulk?mode=DOING", parameters {
+            listOf(a, b, folder).forEach { append("id", it.id.toString()) }
+            append("star", "unstar"); append("maybe", "keep"); append("dueClear", "on")
+            append("folder", work.id.toString()); append("addCtx", office.id.toString()); append("waitFor", blocker.id.toString())
+        })
+        listOf(a, b).map { service.get(it.id)!! }.forEach {
+            assertFalse(it.isStarred)
+            assertEquals(null, it.dueDate)
+            assertEquals(work.id, it.parentId)
+            assertEquals(setOf(office.id), service.contextIdsByTask()[it.id])
+            assertEquals(setOf(blocker.id), service.dependsOn(it.id))
+        }
+        assertEquals(null, service.get(folder.id)!!.parentId)
+    }
+
+    @Test
+    fun `search results complete and reopen tasks, and quick add in Doing stars`() = web {
+        val done = service.create(Task(title = "Old bug", isComplete = true, completedAt = 1))
+        client.submitForm("/search/toggle/${done.id}", parameters { append("q", "bug"); append("completed", "on") })
+        assertFalse(service.get(done.id)!!.isComplete)
+
+        client.submitForm("/quickadd", parameters { append("text", "call mom"); append("mode", "DOING") })
+        client.submitForm("/quickadd", parameters { append("text", "call dad"); append("mode", "ACTIVE") })
+        assertTrue(service.tasks().single { it.title == "call mom" }.isStarred)
+        assertFalse(service.tasks().single { it.title == "call dad" }.isStarred)
+    }
+
+    @Test
+    fun `a new dependent task lands in the task's folder and waits for it`() = web {
+        val folder = service.create(Task(type = TaskType.FOLDER, title = "Home"))
+        val paint = service.create(Task(title = "Buy paint", parentId = folder.id))
+        client.submitForm("/tasks/${paint.id}/dependent", parameters { append("text", "Paint the wall") })
+        val wall = service.tasks().single { it.title == "Paint the wall" }
+        assertEquals(folder.id, wall.parentId)
+        assertEquals(setOf(paint.id), service.dependsOn(wall.id))
+    }
 }

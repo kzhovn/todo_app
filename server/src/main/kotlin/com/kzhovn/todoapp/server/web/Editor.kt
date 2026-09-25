@@ -31,6 +31,7 @@ import io.ktor.server.response.respond
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.RoutingContext
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import kotlinx.html.ButtonType
@@ -102,39 +103,16 @@ fun Route.editorRoutes(service: TaskService) {
         call.respondHtml { editorPage(service, EditorView(call.mode(), state, recurrence, state.encode())) }
     }
 
-    post("/tasks/{id}") {
-        val mode = call.mode()
-        val id = call.taskId() ?: return@post call.respond(HttpStatusCode.NotFound)
-        // Deleted elsewhere while the editor was open.
-        val current = service.editState(id) ?: return@post call.respondRedirect(mode.path)
-        val params = call.receiveParameters()
-        val base = decodeState(id, params["base"]) ?: current
-        val recurrence = parseRecurrence(params)
-        val form = parseForm(params, base, recurrence, service)
-        val firstStep = params["firstStep"]?.trim().orEmpty()
-        val view = EditorView(mode, form, recurrence, base.encode(), firstStep = firstStep)
-        suspend fun reshow(v: EditorView) = call.respondHtml { editorPage(service, v) }
-
-        if (form.task.title.isBlank()) return@post reshow(view.copy(error = "A title is required."))
-        val merged = merge(base, form, current)
-        val needsFirstStep = merged.task.type == TaskType.PROJECT && service.tasks().none { it.parentId == id }
-        if (needsFirstStep && firstStep.isBlank()) {
-            return@post reshow(view.copy(needFirstStep = true, error = "A project needs a first step."))
-        }
-        val changed = buildSet {
-            if (form.task.startDate != base.task.startDate) add(InheritedField.START)
-            if (form.task.dueDate != base.task.dueDate) add(InheritedField.DUE)
-            if (form.contextIds != base.contextIds) add(InheritedField.CONTEXTS)
-        }.filterTo(mutableSetOf()) { service.descendantsOverriding(id, setOf(it)).isNotEmpty() }
-        val overriding = if (changed.isEmpty()) emptyList() else service.descendantsOverriding(id, changed)
-        val inherit = params["inherit"]
-        if (changed.isNotEmpty() && inherit == null) return@post reshow(view.copy(ask = overriding.size to changed))
-
-        service.edit(merged.task, merged.contextIds, merged.dependsOn)
-        if (inherit == "update") service.clearInherited(overriding, changed)
-        if (needsFirstStep) service.create(Task(title = firstStep, parentId = id))
-        call.respondRedirect(mode.path)
+    // A blank editor, like the phone's "+ Project" / "+ Folder". A new task goes in Personal, as quick
+    // add's do; a project or folder starts at the top.
+    get("/tasks/new") {
+        val type = call.request.queryParameters["type"]?.let { runCatching { TaskType.valueOf(it) }.getOrNull() } ?: TaskType.TASK
+        val parent = if (type == TaskType.TASK) service.findFolder(DEFAULT_FOLDER)?.id else null
+        val state = EditState(Task(title = "", type = type, parentId = parent), emptySet(), emptySet())
+        call.respondHtml { editorPage(service, EditorView(call.mode(), state, RecurrenceSelection(RecurrencePreset.NONE), state.encode())) }
     }
+    post("/tasks/new") { saveTask(service, id = null) }
+    post("/tasks/{id}") { saveTask(service, call.taskId() ?: return@post call.respond(HttpStatusCode.NotFound)) }
 
     // No confirmation: the list it lands on offers Undo instead.
     post("/tasks/{id}/delete") {
@@ -157,9 +135,18 @@ fun Route.editorRoutes(service: TaskService) {
         call.receiveParameters()["child"]?.toLongOrNull()?.let { service.reparent(it, id) }
         call.respondSubtasks(service, id)
     }
+    // An existing task, or (text) a new one, that waits for this one. A new one goes in this task's
+    // folder, like the phone's, since dependent work usually belongs together.
     post("/tasks/{id}/dependent") {
         val id = call.taskId() ?: return@post
-        call.receiveParameters()["dependent"]?.toLongOrNull()?.let { service.addDependency(it, id) }
+        val params = call.receiveParameters()
+        params["dependent"]?.toLongOrNull()?.let { service.addDependency(it, id) }
+        val parsed = QuickAddParser.parse(params["text"].orEmpty())
+        val task = service.get(id)
+        if (parsed.title.isNotBlank() && task != null) {
+            val folderId = task.parentId?.takeIf { service.get(it)?.type == TaskType.FOLDER }
+            service.addDependency(service.create(parsed.copy(parentId = folderId)).id, id)
+        }
         call.respondSubtasks(service, id)
     }
     post("/tasks/{id}/subtasks/{sub}/toggle") {
@@ -169,6 +156,46 @@ fun Route.editorRoutes(service: TaskService) {
         }
         call.respondSubtasks(service, id)
     }
+}
+
+// Saves the editor's form, to the task `id` or (null) to a new one.
+private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
+    val mode = call.mode()
+    // Deleted elsewhere while the editor was open.
+    val current = if (id == null) null else service.editState(id) ?: return call.respondRedirect(mode.path)
+    val params = call.receiveParameters()
+    val base = decodeState(id ?: 0, params["base"]) ?: current ?: EditState(Task(title = ""), emptySet(), emptySet())
+    val recurrence = parseRecurrence(params)
+    val form = parseForm(params, base, recurrence, service)
+    val firstStep = params["firstStep"]?.trim().orEmpty()
+    val view = EditorView(mode, form, recurrence, base.encode(), firstStep = firstStep)
+    suspend fun reshow(v: EditorView) = call.respondHtml { editorPage(service, v) }
+
+    if (form.task.title.isBlank()) return reshow(view.copy(error = "A title is required."))
+    val merged = merge(base, form, current ?: base)
+    val needsFirstStep = merged.task.type == TaskType.PROJECT && (id == null || service.tasks().none { it.parentId == id })
+    if (needsFirstStep && firstStep.isBlank()) {
+        return reshow(view.copy(needFirstStep = true, error = "A project needs a first step."))
+    }
+    val changed = if (id == null) emptySet() else buildSet {
+        if (form.task.startDate != base.task.startDate) add(InheritedField.START)
+        if (form.task.dueDate != base.task.dueDate) add(InheritedField.DUE)
+        if (form.contextIds != base.contextIds) add(InheritedField.CONTEXTS)
+    }.filterTo(mutableSetOf()) { service.descendantsOverriding(id, setOf(it)).isNotEmpty() }
+    val overriding = if (id == null || changed.isEmpty()) emptyList() else service.descendantsOverriding(id, changed)
+    val inherit = params["inherit"]
+    if (changed.isNotEmpty() && inherit == null) return reshow(view.copy(ask = overriding.size to changed))
+
+    val savedId = if (id == null) {
+        // Created first, then edited, so contexts and dependencies go through edit()'s checks.
+        service.create(merged.task).id.also { service.edit(merged.task.copy(id = it), merged.contextIds, merged.dependsOn) }
+    } else {
+        service.edit(merged.task, merged.contextIds, merged.dependsOn)
+        id
+    }
+    if (inherit == "update") service.clearInherited(overriding, changed)
+    if (needsFirstStep) service.create(Task(title = firstStep, parentId = savedId))
+    call.respondRedirect(mode.path)
 }
 
 private suspend fun io.ktor.server.application.ApplicationCall.respondSubtasks(service: TaskService, id: Long) =
@@ -238,11 +265,12 @@ private fun merge(base: EditState, form: EditState, current: EditState): EditSta
 
 private fun localDateTime(millis: Long) = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
 
-private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Raspberry · ${v.shown.task.title.ifBlank { "Edit" }}", v.mode.path) {
+private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Raspberry · ${v.shown.task.title.ifBlank { "New ${v.shown.task.type.name.lowercase()}" }}", v.mode.path) {
     val t = v.shown.task
+    val isNew = t.id == 0L
     val all = service.tasks()
     val byId = all.associateBy { it.id }
-    form(action = "/tasks/${t.id}?mode=${v.mode.name}", method = FormMethod.post, classes = "editor") {
+    form(action = "/tasks/${if (isNew) "new" else t.id}?mode=${v.mode.name}", method = FormMethod.post, classes = "editor") {
         hiddenInput(name = "base") { value = v.base }
         v.error?.let { p(classes = "error") { +it } }
         v.ask?.let { (count, fields) ->
@@ -358,7 +386,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
         }
 
         div(classes = "actions") {
-            button(type = ButtonType.submit, classes = "delete") {
+            if (!isNew) button(type = ButtonType.submit, classes = "delete") {
                 attributes["formaction"] = "/tasks/${t.id}/delete?mode=${v.mode.name}"
                 attributes["formnovalidate"] = ""
                 +"Delete"
@@ -367,10 +395,10 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
             button(type = ButtonType.submit, classes = "primary") { +"Save" }
         }
     }
-    div { subtasksSection(service, t.id, v.mode) }
+    if (!isNew) div { subtasksSection(service, t.id, v.mode) }
 }
 
-private fun FlowContent.field(label: String, classes: String, content: FlowContent.() -> Unit) = div(classes = "field $classes") {
+internal fun FlowContent.field(label: String, classes: String, content: FlowContent.() -> Unit) = div(classes = "field $classes") {
     span(classes = "field-label") { +label }
     content()
 }
@@ -381,7 +409,7 @@ private fun FlowContent.dateField(label: String, prefix: String, millis: Long?, 
     timeInput(name = "${prefix}Time") { value = if (millis != null && hasTime(millis)) at!!.toLocalTime().withSecond(0).withNano(0).toString() else "" }
 }
 
-private fun folderPath(folder: Task, byId: Map<Long, Task>): String =
+internal fun folderPath(folder: Task, byId: Map<Long, Task>): String =
     generateSequence(folder) { byId[it.parentId]?.takeIf { p -> p.type == TaskType.FOLDER } }.map { it.title }.toList().reversed().joinToString(" / ")
 
 // Filled into a div by the caller so the fragment's root is #subtasks, which htmx swaps.
@@ -438,11 +466,15 @@ fun DIV.subtasksSection(service: TaskService, id: Long, mode: ListMode) {
     val candidates = all.filter {
         it.id != id && it.type == TaskType.TASK && !it.isComplete && it !in waiting && !wouldCreateDependencyCycle(id, it.id, edges)
     }.sortedBy { it.title.lowercase() }
+    form(classes = "inline") {
+        htmx("/tasks/$id/dependent?mode=${mode.name}")
+        textInput(name = "text") { placeholder = "A new task that waits for this…"; attributes["autocomplete"] = "off" }
+    }
     if (candidates.isNotEmpty()) {
         form(classes = "inline") {
             htmx("/tasks/$id/dependent?mode=${mode.name}")
             select { name = "dependent"; candidates.forEach { option { value = it.id.toString(); +it.title } } }
-            button(type = ButtonType.submit) { +"Add a task that waits for this" }
+            button(type = ButtonType.submit) { +"Make it wait for this" }
         }
     }
 }

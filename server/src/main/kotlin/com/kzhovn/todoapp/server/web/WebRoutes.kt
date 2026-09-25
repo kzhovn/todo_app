@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.quickadd.QuickAddParser
 import com.kzhovn.todoapp.server.TaskService
@@ -23,7 +24,7 @@ import kotlinx.html.div
 import kotlinx.html.stream.createHTML
 
 private const val HOUR_MS = 60 * 60 * 1000L
-private const val DEFAULT_FOLDER = "Personal" // matches the app's quick add
+internal const val DEFAULT_FOLDER = "Personal" // matches the app's quick add
 
 // No login here: Caddy's basic_auth guards every web page, and Main only mounts these routes when the
 // server listens on loopback, i.e. is reachable solely through Caddy.
@@ -38,10 +39,12 @@ fun Route.webRoutes(service: TaskService) {
     ListMode.entries.forEach { mode ->
         get("/${mode.name.lowercase()}") {
             val deleted = call.request.queryParameters["deleted"]?.toLongOrNull()?.let(service::deletedTask)
-            call.respondHtml { listPage(ListData(service, mode, call.collapsed()), deleted) }
+            call.respondHtml { listPage(call.listData(service, mode), deleted) }
         }
+        // ?toggle folds/unfolds an All-tree node; ?later puts off a stalled project's prompt.
         get("/list/${mode.name.lowercase()}") {
-            call.request.queryParameters["toggle"]?.toLongOrNull()?.let { call.setCollapsed(call.collapsed().let { c -> if (it in c) c - it else c + it }) }
+            call.request.queryParameters["toggle"]?.toLongOrNull()?.let { call.toggleIn(COLLAPSED, it) }
+            call.request.queryParameters["later"]?.toLongOrNull()?.let { call.toggleIn(LATER, it) }
             call.respondList(service, mode)
         }
     }
@@ -80,11 +83,20 @@ fun Route.webRoutes(service: TaskService) {
         call.respondList(service, ListMode.ALL)
     }
 
+    // A task with open subtasks asks first, like the phone: complete them too, or move them out.
     post("/tasks/{id}/complete") {
         val id = call.taskId() ?: return@post
-        service.complete(id)
-        val task = service.tasks().firstOrNull { it.id == id } ?: service.get(id)
-        call.respondList(service, call.mode(), extra = task?.let { t -> createHTML().div { undoToastContents(t, call.mode()) } })
+        val mode = call.mode()
+        val task = service.get(id) ?: return@post call.respondList(service, mode)
+        val choice = call.request.queryParameters["subtasks"]
+        val open = service.activeDescendantCount(id)
+        if (open > 0 && choice == null) {
+            return@post call.respondList(service, mode, extra = createHTML().div {
+                askSubtasksToast(task, open, "/tasks/$id/complete?mode=${mode.name}", target = "#list")
+            })
+        }
+        service.completeOrDecide(id, choice)
+        call.respondList(service, mode, extra = createHTML().div { undoToastContents(task, mode) })
     }
     post("/tasks/{id}/uncomplete") { call.taskId()?.let(service::uncomplete); call.respondList(service, call.mode()) }
     post("/tasks/{id}/star") { call.taskId()?.let(service::toggleStar); call.respondList(service, call.mode()) }
@@ -99,15 +111,33 @@ fun Route.webRoutes(service: TaskService) {
         call.taskId()?.let { service.snooze(it, until) }
         call.respondList(service, call.mode())
     }
+    // A stalled project's "Add next" step.
+    post("/tasks/{id}/next") {
+        val id = call.taskId() ?: return@post
+        val title = call.receiveParameters()["text"].orEmpty().trim()
+        if (title.isNotEmpty() && service.get(id) != null) service.create(Task(title = title, parentId = id))
+        call.respondList(service, call.mode())
+    }
     post("/quickadd") {
         val params = call.receiveParameters()
         val text = params["text"].orEmpty()
         val mode = params["mode"]?.let { runCatching { ListMode.valueOf(it) }.getOrNull() }
         val parsed = QuickAddParser.parse(text)
-        val created = if (parsed.title.isNotBlank()) service.create(parsed.copy(parentId = service.findFolder(DEFAULT_FOLDER)?.id)) else null
+        // Added from Doing, it starts starred so it shows up right there, like the Doing widget's.
+        val created = if (parsed.title.isBlank()) null else service.create(
+            parsed.copy(parentId = service.findFolder(DEFAULT_FOLDER)?.id, isStarred = parsed.isStarred || mode == ListMode.DOING)
+        )
         if (mode != null) return@post call.respondList(service, mode)
         call.respondText(created?.let { t -> createHTML().div { addedToastContents(t) } }.orEmpty(), ContentType.Text.Html)
     }
+}
+
+// "complete" also completes the open subtasks; "promote" moves them out first (to the top level, as
+// the phone does); anything else completes just this task.
+internal fun TaskService.completeOrDecide(id: Long, choice: String?) = when (choice) {
+    "complete" -> completeWithDescendants(id)
+    "promote" -> { promoteChildren(id); complete(id) }
+    else -> complete(id)
 }
 
 internal fun ApplicationCall.taskId() = parameters["id"]?.toLongOrNull()
@@ -115,22 +145,32 @@ internal fun ApplicationCall.taskId() = parameters["id"]?.toLongOrNull()
 internal fun ApplicationCall.mode() =
     request.queryParameters["mode"]?.let { runCatching { ListMode.valueOf(it) }.getOrNull() } ?: ListMode.DOING
 
+internal fun ApplicationCall.listData(service: TaskService, mode: ListMode) = ListData(service, mode, ids(COLLAPSED), ids(LATER))
+
 internal suspend fun ApplicationCall.respondList(service: TaskService, mode: ListMode, extra: String? = null) =
-    respondText(createHTML().div { listContents(ListData(service, mode, collapsed())) } + extra.orEmpty(), ContentType.Text.Html)
+    respondText(createHTML().div { listContents(listData(service, mode)) } + extra.orEmpty(), ContentType.Text.Html)
 
-// Folded All-tree nodes live in a cookie: per browser, and read by the server so the list's periodic
-// re-render keeps them folded. ponytail: ~250 ids fit a cookie; plenty for folded nodes.
-private const val COLLAPSED = "collapsed"
+// Per-browser id sets kept in cookies the server reads, so the list's periodic re-render honours them.
+// ponytail: ~250 ids fit a cookie; plenty for these.
+private class IdCookie(val name: String, val maxAge: Int?) {
+    // A just-set value wins over the request's, so the toggling request's own response renders it.
+    val override = AttributeKey<Set<Long>>(name)
+}
 
-// A just-set value wins over the request's, so a toggle's own response renders it.
-private val CollapsedOverride = AttributeKey<Set<Long>>("collapsed")
+// Folded All-tree nodes, remembered for a year.
+private val COLLAPSED = IdCookie("collapsed", maxAge = 365 * 24 * 3600)
 
-internal fun ApplicationCall.collapsed(): Set<Long> = attributes.getOrNull(CollapsedOverride)
-    ?: request.cookies[COLLAPSED].orEmpty().split('.').mapNotNull { it.toLongOrNull() }.toSet()
+// Stalled projects put off with "Later": for this browser session, like the phone's (which asks
+// again the next time the app starts).
+private val LATER = IdCookie("later", maxAge = null)
 
-private fun ApplicationCall.setCollapsed(ids: Set<Long>) {
-    attributes.put(CollapsedOverride, ids)
+private fun ApplicationCall.ids(cookie: IdCookie): Set<Long> = attributes.getOrNull(cookie.override)
+    ?: request.cookies[cookie.name].orEmpty().split('.').mapNotNull { it.toLongOrNull() }.toSet()
+
+private fun ApplicationCall.toggleIn(cookie: IdCookie, id: Long) {
+    val ids = ids(cookie).let { if (id in it) it - id else it + id }
+    attributes.put(cookie.override, ids)
     response.cookies.append(
-        Cookie(COLLAPSED, ids.joinToString("."), encoding = CookieEncoding.RAW, maxAge = 365 * 24 * 3600, path = "/", httpOnly = true, extensions = mapOf("SameSite" to "Lax"))
+        Cookie(cookie.name, ids.joinToString("."), encoding = CookieEncoding.RAW, maxAge = cookie.maxAge, path = "/", httpOnly = true, extensions = mapOf("SameSite" to "Lax"))
     )
 }

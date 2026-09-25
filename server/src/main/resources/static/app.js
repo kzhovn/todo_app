@@ -117,6 +117,42 @@
   });
   document.addEventListener("dragend", () => { dragId = null; clearDrop(); });
 
+  // --- Bulk edit. "Select" makes clicks in the list pick task rows (folders and projects are skipped,
+  // as on the phone); "Edit selected" opens the bulk editor. Captured before htmx sees the click, so
+  // a picked row's checkbox or star doesn't fire.
+  const selected = new Set();
+  const selecting = () => document.body.classList.contains("selecting");
+  const paintSelection = () => {
+    document.querySelectorAll("#list .row[data-task-id]").forEach((r) => r.classList.toggle("selected", selected.has(r.dataset.taskId)));
+    const tools = document.querySelector(".list-tools");
+    if (!tools) return;
+    tools.querySelector(".selection-count").textContent = selecting() ? `${selected.size} selected` : "";
+    tools.querySelector(".select-toggle").textContent = selecting() ? "Cancel" : "Select";
+    tools.querySelector(".bulk-edit").disabled = selected.size === 0;
+  };
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("#toast .dismiss")) { document.getElementById("toast").classList.remove("show"); return; }
+    if (e.target.closest(".select-toggle")) {
+      document.body.classList.toggle("selecting");
+      selected.clear();
+      paintSelection();
+      return;
+    }
+    if (e.target.closest(".bulk-edit")) {
+      location.href = `/bulk?ids=${[...selected].join(",")}&mode=${document.querySelector(".list-tools").dataset.mode}`;
+      return;
+    }
+    if (!selecting() || !e.target.closest("#list")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const row = e.target.closest(".row[data-type='TASK']");
+    if (!row) return;
+    const id = row.dataset.taskId;
+    if (!selected.delete(id)) selected.add(id);
+    paintSelection();
+  }, true);
+  document.addEventListener("htmx:afterSwap", paintSelection);
+
   // Clear quick add after a successful add (here rather than in an inline hx-on handler, so the
   // Content-Security-Policy can forbid inline script).
   document.addEventListener("htmx:afterRequest", (e) => {
@@ -138,7 +174,12 @@
     clearTimeout(hideTimer);
     hideTimer = setTimeout(() => toast.classList.remove("show"), 6000);
   };
-  document.addEventListener("htmx:oobAfterSwap", (e) => { if (e.detail.target.id === "toast") hideSoon(e.detail.target); });
+  // A question (the "open subtasks" one) stays until it's answered.
+  document.addEventListener("htmx:oobAfterSwap", (e) => {
+    const toast = e.detail.target;
+    if (toast.id === "toast" && !toast.classList.contains("question")) hideSoon(toast);
+    else if (toast.id === "toast") clearTimeout(hideTimer);
+  });
   document.addEventListener("DOMContentLoaded", () => {
     const toast = document.getElementById("toast");
     if (toast?.classList.contains("show")) hideSoon(toast);

@@ -6,7 +6,10 @@ import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.deadline
+import com.kzhovn.todoapp.repository.BulkEdit
+import com.kzhovn.todoapp.repository.DateChange
 import com.kzhovn.todoapp.repository.DayCompletions
+import com.kzhovn.todoapp.repository.FolderChange
 import com.kzhovn.todoapp.repository.completionsByDay
 import com.kzhovn.todoapp.server.TaskService
 import io.ktor.http.ContentType
@@ -60,7 +63,35 @@ private const val LIST_DAYS = 30
 
 fun Route.pageRoutes(service: TaskService) {
     get("/search") { call.respondHtml { searchPage(service, call.request.queryParameters) } }
-    get("/search/results") { call.respondText(createHTML().div { searchResults(service, call.request.queryParameters) }, ContentType.Text.Html) }
+    get("/search/results") { call.respondResults(service, call.request.queryParameters) }
+    // Completing or reopening from the results. The search form's fields come along, so the
+    // refreshed results still match it; open subtasks are asked about, as in the lists.
+    post("/search/toggle/{id}") {
+        val p = call.receiveParameters()
+        val id = call.taskId() ?: return@post
+        val task = service.get(id) ?: return@post call.respondResults(service, p)
+        val choice = call.request.queryParameters["subtasks"]
+        val open = service.activeDescendantCount(id)
+        when {
+            task.isComplete -> service.uncomplete(id)
+            open > 0 && choice == null -> return@post call.respondResults(service, p, extra = createHTML().div {
+                askSubtasksToast(task, open, "/search/toggle/$id", target = "#results", include = "form.search")
+            })
+            else -> service.completeOrDecide(id, choice)
+        }
+        call.respondResults(service, p)
+    }
+
+    // Bulk edit, like the phone's: the list's selected tasks, and only what makes sense in bulk.
+    get("/bulk") {
+        val ids = call.request.queryParameters["ids"].orEmpty().split(',').mapNotNull { it.toLongOrNull() }
+        call.respondHtml { bulkPage(service, ids, call.mode()) }
+    }
+    post("/bulk") {
+        val p = call.receiveParameters()
+        service.applyBulkEdit(p.getAll("id").orEmpty().mapNotNull { it.toLongOrNull() }, parseBulk(p))
+        call.respondRedirect(call.mode().path)
+    }
 
     get("/review") { call.respondHtml { reviewPage(service) } }
 
@@ -91,6 +122,9 @@ fun Route.pageRoutes(service: TaskService) {
 }
 
 // --- Search
+
+private suspend fun io.ktor.server.application.ApplicationCall.respondResults(service: TaskService, p: Parameters, extra: String = "") =
+    respondText(createHTML().div { searchResults(service, p) } + extra, ContentType.Text.Html)
 
 private fun Parameters.searchFilters() = SearchFilters(
     folderId = this["folder"]?.toLongOrNull(),
@@ -147,6 +181,14 @@ private fun DIV.searchResults(service: TaskService, p: Parameters) {
     p(classes = "hint") { +"${results.size} task${if (results.size == 1) "" else "s"}$shown" }
     results.take(MAX_RESULTS).forEach { task ->
         div(classes = "result") {
+            if (task.type == TaskType.TASK) button(classes = if (task.isComplete) "check done" else "check") {
+                attributes["hx-post"] = "/search/toggle/${task.id}"
+                attributes["hx-include"] = "form.search"
+                attributes["hx-target"] = "#results"
+                attributes["hx-swap"] = "outerHTML"
+                attributes["aria-label"] = if (task.isComplete) "Mark not done" else "Complete"
+                if (task.isComplete) icon(Icon.CHECK, "")
+            } else span(classes = "project") { icon(Icon.PROJECT, "") }
             a(href = "/tasks/${task.id}?mode=ALL", classes = if (task.isComplete) "done" else null) { +task.title }
             div(classes = "meta") {
                 task.dueDate?.let { dueChip(it, now, overdue = !task.isComplete && deadline(it) <= now) }
@@ -154,6 +196,82 @@ private fun DIV.searchResults(service: TaskService, p: Parameters) {
                 contextIds[task.id].orEmpty().mapNotNull(contextNames::get).forEach { span { +"@$it" } }
                 if (task.isStarred) span(classes = "starred") { +"★" }
             }
+        }
+    }
+}
+
+// --- Bulk edit
+
+// Blank or "keep" means leave as is, matching BulkEdit's nulls.
+private fun parseBulk(p: Parameters): BulkEdit {
+    fun date(prefix: String) =
+        if (p["${prefix}Clear"] != null) DateChange(null) else dateTime(p["${prefix}Date"], p["${prefix}Time"])?.let(::DateChange)
+    fun ids(name: String) = p.getAll(name).orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
+    return BulkEdit(
+        starred = when (p["star"]) { "star" -> true; "unstar" -> false; else -> null },
+        maybe = when (p["maybe"]) { "yes" -> true; "no" -> false; else -> null },
+        startDate = date("start"),
+        dueDate = date("due"),
+        moveTo = when (val folder = p["folder"]) { null, "", "keep" -> null; "top" -> FolderChange(null); else -> folder.toLongOrNull()?.let(::FolderChange) },
+        addContextIds = ids("addCtx"),
+        removeContextIds = ids("removeCtx") - ids("addCtx"),
+        dependsOnId = p["waitFor"]?.toLongOrNull()
+    )
+}
+
+private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode) = shellPage("Raspberry · Edit tasks", mode.path) {
+    val all = service.tasks()
+    val byId = all.associateBy { it.id }
+    // Folders and projects are skipped, as on the phone: none of the bulk properties apply.
+    val tasks = ids.mapNotNull(byId::get).filter { it.type == TaskType.TASK }
+    val contexts = service.contexts().sortedBy { it.name.lowercase() }
+    fun FlowContent.choice(label: String, name: String, options: List<Pair<String, String>>) = field(label, "") {
+        div(classes = "pills") {
+            options.forEach { (value, text) -> label(classes = "pill") { radioInput(name = name) { this.value = value; checked = value == "keep" }; +text } }
+        }
+    }
+    fun FlowContent.dateChoice(label: String, prefix: String) = field(label, "") {
+        dateInput(name = "${prefix}Date")
+        timeInput(name = "${prefix}Time")
+        label(classes = "pill") { checkBoxInput(name = "${prefix}Clear"); +"Clear" }
+        span(classes = "hint") { +"Leave empty to keep each task's own." }
+    }
+    fun FlowContent.contextPills(label: String, name: String) = field(label, "") {
+        div(classes = "pills") { contexts.forEach { c -> label(classes = "pill") { checkBoxInput(name = name) { value = c.id.toString() }; +"@${c.name}" } } }
+    }
+
+    form(action = "/bulk?mode=${mode.name}", method = FormMethod.post, classes = "editor bulk") {
+        h1 { +"Edit ${tasks.size} task${if (tasks.size == 1) "" else "s"}" }
+        p(classes = "hint") { +(tasks.take(8).joinToString(", ") { it.title } + if (tasks.size > 8) " and ${tasks.size - 8} more" else "") }
+        tasks.forEach { hiddenInput(name = "id") { value = it.id.toString() } }
+        choice("Star", "star", listOf("keep" to "Keep", "star" to "Star", "unstar" to "Unstar"))
+        choice("Maybe (?)", "maybe", listOf("keep" to "Keep", "yes" to "Maybe", "no" to "Not maybe"))
+        dateChoice("Start date", "start")
+        dateChoice("Due date", "due")
+        field("Folder", "") {
+            select {
+                name = "folder"
+                option { value = "keep"; +"Keep each task's folder" }
+                option { value = "top"; +"Top level (no folder)" }
+                all.filter { it.type == TaskType.FOLDER }.map { it to folderPath(it, byId) }.sortedBy { it.second.lowercase() }
+                    .forEach { (f, path) -> option { value = f.id.toString(); +path } }
+            }
+        }
+        if (contexts.isNotEmpty()) {
+            contextPills("Add contexts", "addCtx")
+            contextPills("Remove contexts", "removeCtx")
+        }
+        field("Wait for", "") {
+            select {
+                name = "waitFor"
+                option { value = ""; +"Nothing new" }
+                all.filter { it.type == TaskType.TASK && !it.isComplete && it.id !in ids }.sortedBy { it.title.lowercase() }
+                    .forEach { option { value = it.id.toString(); +it.title } }
+            }
+        }
+        div(classes = "actions") {
+            a(href = mode.path, classes = "cancel") { +"Cancel" }
+            button(type = ButtonType.submit, classes = "primary") { +"Apply to ${tasks.size} task${if (tasks.size == 1) "" else "s"}" }
         }
     }
 }

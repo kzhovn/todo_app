@@ -63,12 +63,6 @@ main { flex: 1; min-width: 0; max-width: 860px; }
 #toast.show { display: flex; }
 #toast button { color: var(--accent-soft); font-weight: 700; }
 
-.login { max-width: 320px; margin: 15vh auto; display: flex; flex-direction: column; gap: 12px; padding: 16px; }
-.login form { display: flex; gap: 8px; }
-.login input { flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
-.login button { padding: 8px 14px; border-radius: 6px; background: var(--accent); color: #fff; }
-.error { color: var(--overdue); }
-
 /* Phone browsers: the sidebar becomes a header above the list. */
 @media (max-width: 700px) {
   .shell { flex-direction: column; }
@@ -190,3 +184,27 @@ form.inline button { padding: 6px 10px; border: 1px solid var(--border); border-
 .window-row input[type=time] { padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
 .context-form:has(input[name=type][value=PLACE]:checked) .time-only,
 .context-form:has(input[name=type][value=TIME]:checked) .place-only { display: none; }
+
+/* Parity: bulk selection, the stalled-project prompt, the subtasks question, new-item links */
+.list-tools { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 8px 12px 0; font-size: 13px; color: var(--muted); }
+.list-tools button { font-size: 13px; color: var(--accent); }
+.list-tools .bulk-edit { display: none; background: var(--accent); color: var(--panel); padding: 4px 10px; border-radius: 6px; font-weight: 600; }
+.list-tools .bulk-edit:disabled { opacity: .5; cursor: default; }
+body.selecting .list-tools .bulk-edit { display: inline-block; }
+body.selecting #list .row[data-type="TASK"] { cursor: pointer; }
+body.selecting #list .row:not([data-type="TASK"]), body.selecting #list .folder { opacity: .5; }
+#list .row.selected { background: var(--accent-soft); }
+.stalled { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 12px; padding: 10px 12px; background: var(--today-bg); border-radius: 8px; }
+.stalled > span { width: 100%; }
+.stalled button:not(.primary) { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; }
+.stalled form.inline { margin-top: 0; flex: 1; }
+.stalled input[type=text] { flex: 1; min-width: 160px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
+#toast.question { flex-wrap: wrap; max-width: calc(100vw - 32px); }
+#toast .dismiss { color: var(--bg); font-weight: 400; opacity: .7; }
+.new-links { font-size: 13px; color: var(--muted); display: flex; gap: 10px; }
+.new-links a { color: var(--accent); text-decoration: none; }
+.new-links a:hover { text-decoration: underline; }
+.result { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+.result .check, .result .project { margin-left: 0; margin-top: 2px; display: flex; align-items: center; justify-content: center; }
+.result .meta { width: 100%; padding-left: 30px; }
+.bulk h1 { font-size: 20px; margin: 0; }

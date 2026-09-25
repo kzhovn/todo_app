@@ -6,6 +6,7 @@ import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.deadline
 import com.kzhovn.todoapp.data.hasTime
 import com.kzhovn.todoapp.data.resolveEffective
+import com.kzhovn.todoapp.data.stalledProjects
 import com.kzhovn.todoapp.data.walkParentChain
 import com.kzhovn.todoapp.server.TaskService
 import kotlinx.html.BODY
@@ -48,8 +49,8 @@ enum class ListMode(val label: String) { DOING("Doing"), ACTIVE("Active"), ALL("
 private val FOLDER_PALETTE = listOf("#8A4C2E", "#6B8A2E", "#2E8A4D", "#2E6B8A", "#4D2E8A", "#8A2E6B")
 
 // Everything a list needs, computed once per request from the live task set. `collapsed`: the All
-// tree's folded nodes, remembered per browser.
-class ListData(service: TaskService, val mode: ListMode, val collapsed: Set<Long> = emptySet(), val now: Long = service.now()) {
+// tree's folded nodes; `later`: stalled projects put off for now. Both are per browser.
+class ListData(service: TaskService, val mode: ListMode, val collapsed: Set<Long> = emptySet(), later: Set<Long> = emptySet(), val now: Long = service.now()) {
     val all: List<Task> = service.tasks()
     private val byId = all.associateBy { it.id }
     private val contextIds = service.contextIdsByTask()
@@ -71,6 +72,9 @@ class ListData(service: TaskService, val mode: ListMode, val collapsed: Set<Long
     fun subtaskCounts(task: Task): Pair<Int, Int>? =
         children[task.id].orEmpty().filter { it.type != TaskType.FOLDER }.takeIf { it.isNotEmpty() }?.let { kids -> kids.count { it.isComplete } to kids.size }
     fun openChildren(parentId: Long?) = children[parentId].orEmpty().filter { !it.isComplete }.sortedWith(TaskOrder)
+
+    // One open project whose steps are all done, to ask about (the phone asks the same, one at a time).
+    val stalled: Task? = stalledProjects(all).firstOrNull { it.id !in later }
 }
 
 // The Material icons the phone uses (Icons.Filled.*), inlined so both clients look alike.
@@ -105,6 +109,13 @@ fun HTML.page(title: String, content: BODY.() -> Unit) {
 
 // deleted: a task just deleted from the editor, offered back with an Undo toast.
 fun HTML.listPage(data: ListData, deleted: Task? = null) = shellPage("Raspberry · ${data.mode.label}", data.mode.path, data.mode, toast = deleted?.let { { deletedToastContents(it, data.mode) } }) {
+    // Bulk edit: app.js turns on selection, where clicking task rows picks them instead.
+    div(classes = "list-tools") {
+        attributes["data-mode"] = data.mode.name
+        span(classes = "selection-count") {}
+        button(classes = "select-toggle") { +"Select" }
+        button(classes = "bulk-edit") { +"Edit selected" }
+    }
     div { listContents(data) }
 }
 
@@ -132,6 +143,12 @@ fun HTML.shellPage(title: String, current: String, listMode: ListMode? = null, t
                 }
                 textInput(name = "text") { id = "quickadd"; placeholder = "Add a task… (n)"; attributes["autocomplete"] = "off" }
             }
+            div(classes = "new-links") {
+                +"New "
+                listOf("TASK" to "task", "PROJECT" to "project", "FOLDER" to "folder").forEach { (type, label) ->
+                    a(href = "/tasks/new?type=$type&mode=${(listMode ?: ListMode.DOING).name}") { +label }
+                }
+            }
             syntaxKey()
         }
         main { content() }
@@ -143,6 +160,8 @@ private fun FlowContent.syntaxKey() = div(classes = "key") {
     listOf(
         "-d fri · due 3pm" to "due (and time)",
         "-s tomorrow · start mon 9am" to "start",
+        "today, tomorrow, mon–sun, next fri, 2026-10-01" to "dates",
+        "5pm, 9:30am, 14:00" to "times",
         "ends with ?" to "maybe",
         "n · g d / g a / g t · ?" to "keys"
     ).forEach { (syntax, meaning) -> div { span(classes = "mono") { +syntax }; +" $meaning" } }
@@ -157,6 +176,7 @@ fun DIV.listContents(data: ListData) {
     attributes["hx-get"] = "/list/${data.mode.name.lowercase()}"
     attributes["hx-trigger"] = "every 60s[document.visibilityState==='visible'], visibilitychange[document.visibilityState==='visible'] from:document"
     attributes["hx-swap"] = "outerHTML"
+    data.stalled?.let { stalledPrompt(it, data.mode) }
     if (data.mode == ListMode.ALL) {
         tree(data, parentId = null, depth = 0)
     } else if (data.tasks.isEmpty()) {
@@ -211,6 +231,8 @@ private fun FlowContent.chevron(id: Long, hasChildren: Boolean, collapsed: Boole
 private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineNode: (DIV.() -> Unit)? = null) {
     val mode = data.mode.name
     div(classes = "row") {
+        attributes["data-task-id"] = task.id.toString()
+        attributes["data-type"] = task.type.name
         if (task.isBackburner(data.now)) classes = classes + "dim"
         style = "padding-left: ${depth * 18}px; border-left-color: ${data.folderColor(task) ?: "var(--border)"}"
         outlineNode?.invoke(this)
@@ -290,6 +312,43 @@ fun DIV.deletedToastContents(task: Task, mode: ListMode) {
         attributes["hx-swap"] = "outerHTML"
         +"Undo"
     }
+}
+
+// The phone's "all subtasks done" prompt: complete the project, add its next step, or not now.
+private fun FlowContent.stalledPrompt(project: Task, mode: ListMode) = div(classes = "stalled") {
+    val m = mode.name
+    fun htmx(tag: kotlinx.html.HTMLTag, verb: String, url: String) {
+        tag.attributes["hx-$verb"] = url
+        tag.attributes["hx-target"] = "#list"
+        tag.attributes["hx-swap"] = "outerHTML"
+    }
+    span { +"“${project.title}”: all steps done. Is the project complete?" }
+    button(classes = "primary") { htmx(this, "post", "/tasks/${project.id}/complete?mode=$m"); +"Complete project" }
+    form(classes = "inline") {
+        htmx(this, "post", "/tasks/${project.id}/next?mode=$m")
+        textInput(name = "text") { placeholder = "Or add the next step…"; attributes["autocomplete"] = "off" }
+    }
+    button { htmx(this, "get", "/list/${mode.name.lowercase()}?later=${project.id}"); +"Later" }
+}
+
+// Asks what to do with a task's open subtasks before completing it. `url` is the completing
+// request; the choice is added to it. `include`: a form whose fields must go along (search's).
+fun DIV.askSubtasksToast(task: Task, open: Int, url: String, target: String, include: String? = null) {
+    id = "toast"
+    attributes["hx-swap-oob"] = "true"
+    classes = setOf("show", "question")
+    span { +"“${task.title}” has $open open subtask${if (open == 1) "" else "s"}." }
+    val sep = if ('?' in url) '&' else '?'
+    listOf("complete" to "Complete them too", "promote" to "Move them out").forEach { (choice, label) ->
+        button {
+            attributes["hx-post"] = "$url${sep}subtasks=$choice"
+            attributes["hx-target"] = target
+            attributes["hx-swap"] = "outerHTML"
+            include?.let { attributes["hx-include"] = it }
+            +label
+        }
+    }
+    button(classes = "dismiss") { +"Cancel" }
 }
 
 // Confirms a quick add made from a page without a list to show it in.

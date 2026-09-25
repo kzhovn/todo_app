@@ -14,6 +14,8 @@ import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
 import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
+import com.kzhovn.todoapp.data.stalledProjects
+import com.kzhovn.todoapp.repository.BulkEdit
 import com.kzhovn.todoapp.repository.InheritedField
 import com.kzhovn.todoapp.repository.computeActiveTasks
 import com.kzhovn.todoapp.repository.filterDoing
@@ -285,6 +287,51 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
             for ((originalId, copy) in copies) {
                 store.write(TASKS, copy.id, taskFields(copy, rows[originalId]?.contextIds().orEmpty(), emptySet()), now)
             }
+        }
+    }
+
+    fun activeDescendantCount(id: Long): Int =
+        (subtreeIds(id) - id).mapNotNull(::get).count { it.type != TaskType.FOLDER && !it.isComplete }
+
+    // Mirrors TaskRepository.completeWithDescendants: each goes through complete(), so a recurring
+    // subtask still spawns its next instance.
+    fun completeWithDescendants(id: Long) = store.transaction {
+        (subtreeIds(id) - id).mapNotNull(::get).filter { it.type != TaskType.FOLDER && !it.isComplete }.forEach { complete(it.id) }
+        complete(id)
+    }
+
+    // Mirrors TaskRepository.promoteChildrenToTopLevel: only direct children move out, so they
+    // survive as independent tasks.
+    fun promoteChildren(id: Long) = store.transaction {
+        tasks().filter { it.parentId == id }.forEach { child -> update(child.id) { it.copy(parentId = null, position = null) } }
+    }
+
+    // Open projects whose steps are all done: time to complete them or add the next step.
+    fun stalled(): List<Task> = stalledProjects(tasks())
+
+    // Mirrors TaskRepository.applyBulkEdit. Folders are skipped (none of the bulk properties apply),
+    // and a move or dependency that would make a loop is skipped for that task.
+    fun applyBulkEdit(ids: Collection<Long>, change: BulkEdit) = store.transaction {
+        val byId = tasks().associateBy { it.id }
+        val edges = dependencyEdges()
+        val contexts = contextIdsByTask()
+        for (id in ids) {
+            val task = byId[id]?.takeIf { it.type == TaskType.TASK } ?: continue
+            val target = change.moveTo?.folderId
+            val parentId = when {
+                change.moveTo == null -> task.parentId
+                target != null && wouldCreateCycle(target, id, byId) -> task.parentId
+                else -> target
+            }
+            val updated = task.copy(
+                isStarred = change.starred ?: task.isStarred,
+                isMaybe = change.maybe ?: task.isMaybe,
+                startDate = change.startDate.let { if (it != null) it.date else task.startDate },
+                dueDate = change.dueDate.let { if (it != null) it.date else task.dueDate },
+                parentId = parentId
+            )
+            val blocker = change.dependsOnId?.takeIf { it != id && !wouldCreateDependencyCycle(it, id, edges) }
+            edit(updated, contexts[id].orEmpty() + change.addContextIds - change.removeContextIds, dependsOn(id) + listOfNotNull(blocker))
         }
     }
 
