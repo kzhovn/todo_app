@@ -47,29 +47,34 @@ fun PropertyChip(
     icon: ImageVector,
     onClick: () -> Unit,
     onClear: (() -> Unit)? = null,
-    showLabelWhenSet: Boolean = true
+    showLabelWhenSet: Boolean = true,
+    // A set chip's colour, e.g. a folder's own; its fill is a pale version of it.
+    tint: Color = LedgerAccent,
+    iconOnly: Boolean = false
 ) {
     val set = valueText != null
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(5.dp))
-            .background(if (set) LedgerAccentSoft else Color.Transparent)
+            .background(if (!set) Color.Transparent else if (tint == LedgerAccent) LedgerAccentSoft else tint.copy(alpha = 0.14f))
             .clickable { onClick() }
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = if (set) LedgerAccent else LedgerMuted, modifier = Modifier.size(14.dp))
-        Spacer(Modifier.width(4.dp))
-        val text = when {
-            !set -> label
-            showLabelWhenSet -> "$label: $valueText"
-            else -> valueText ?: label
+        Icon(icon, contentDescription = label.takeIf { iconOnly }, tint = if (set) tint else LedgerMuted, modifier = Modifier.size(14.dp))
+        if (!iconOnly) {
+            Spacer(Modifier.width(4.dp))
+            val text = when {
+                !set -> label
+                showLabelWhenSet -> "$label: $valueText"
+                else -> valueText ?: label
+            }
+            Text(
+                text = text,
+                fontSize = 12.sp,
+                color = if (set) tint else LedgerMuted
+            )
         }
-        Text(
-            text = text,
-            fontSize = 12.sp,
-            color = if (set) LedgerAccent else LedgerMuted
-        )
         if (set && onClear != null) {
             Spacer(Modifier.width(4.dp))
             Box(

@@ -1,5 +1,10 @@
 package com.kzhovn.todoapp.quickadd
 
+import com.kzhovn.todoapp.ui.theme.folderColors
+import com.kzhovn.todoapp.data.nextRollover
+import com.kzhovn.todoapp.data.Labels
+import com.kzhovn.todoapp.AppSettings
+import androidx.compose.material.icons.filled.AcUnit
 import com.kzhovn.todoapp.ui.StarIcon
 import android.content.Intent
 import android.os.Bundle
@@ -81,6 +86,7 @@ class QuickAddActivity : ComponentActivity() {
             var folder by remember { mutableStateOf<Task?>(null) }
             var showFolderPicker by remember { mutableStateOf(false) }
             var folders by remember { mutableStateOf<List<Task>>(emptyList()) }
+            var todayOnly by remember { mutableStateOf(false) }
             var dependsOnTitle by remember { mutableStateOf<String?>(null) }
             val focus = remember { FocusRequester() }
 
@@ -107,7 +113,8 @@ class QuickAddActivity : ComponentActivity() {
                     // Adding a subtask fixes the parent to the task it was launched from — the
                     // Folder chip doesn't apply, since the subtask's position in the tree is
                     // already decided by that relationship.
-                    parentId = fixedParentId ?: folder?.id
+                    parentId = fixedParentId ?: folder?.id,
+                    expiresAt = if (todayOnly) nextRollover(System.currentTimeMillis(), AppSettings.rolloverHour(this@QuickAddActivity)) else null
                 )
             }
 
@@ -127,7 +134,7 @@ class QuickAddActivity : ComponentActivity() {
                     }
                 }
                 if (keepOpen) {
-                    title = ""; starred = startStarred; startDate = null; dueDate = null
+                    title = ""; starred = startStarred; startDate = null; dueDate = null; todayOnly = false
                     focus.requestFocus()
                 }
             }
@@ -169,13 +176,23 @@ class QuickAddActivity : ComponentActivity() {
                         onClick = { pickDate(this@QuickAddActivity, dueDate) { dueDate = it } },
                         showLabelWhenSet = false
                     )
+                    Spacer(Modifier.width(8.dp))
+                    PropertyChip(
+                        label = Labels.TODAY_ONLY,
+                        valueText = Labels.TODAY_ONLY.takeIf { todayOnly },
+                        icon = Icons.Filled.AcUnit,
+                        onClick = { todayOnly = !todayOnly },
+                        iconOnly = true
+                    )
                     if (fixedParentId == null) {
                         Spacer(Modifier.width(8.dp))
                         PropertyChip(
-                            label = "Folder",
+                            label = Labels.FOLDER,
                             valueText = folder?.title,
                             icon = Icons.Filled.Folder,
-                            onClick = { showFolderPicker = true }
+                            onClick = { showFolderPicker = true },
+                            showLabelWhenSet = false,
+                            tint = folder?.let { folderColors(folders)[it.id] } ?: LedgerAccent
                         )
                     }
                 }
