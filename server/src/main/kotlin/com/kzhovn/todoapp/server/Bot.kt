@@ -85,6 +85,8 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
     }
 
     companion object {
+        const val EMPTY_DIGEST = "Nothing on the list - add something?"
+
         fun start(token: String, service: TaskService, store: Store, allowedUserIds: Set<Long>, digestChannelId: Long?, digestTime: String?): JDA {
             val bot = Bot(BotLogic(service, store), allowedUserIds)
             val jda = JDABuilder.createLight(
@@ -112,7 +114,10 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
                     // DM channels aren't cached by createLight, so a DM's id finds nothing here.
                     val channel = jda.getChannelById(MessageChannel::class.java, digestChannelId)
                     println("Digest: ${doing.size} in Doing, channel ${if (channel == null) "$digestChannelId NOT FOUND (a server channel the bot can see?)" else channel.name}")
-                    if (doing.isNotEmpty() && channel != null) bot.postList(channel, doing)
+                    // Posts even when empty, so a quiet morning looks different from a broken bot.
+                    if (channel != null) {
+                        if (doing.isEmpty()) channel.sendMessage(EMPTY_DIGEST).queue() else bot.postList(channel, doing)
+                    }
                     val nudges = bot.logic.dueNudges()
                     if (channel != null) nudges.forEach { (task, days) ->
                         channel.sendMessage(bot.logic.nudgeText(task, days)).queue { sent ->
