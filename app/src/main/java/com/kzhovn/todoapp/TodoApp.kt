@@ -1,5 +1,11 @@
 package com.kzhovn.todoapp
 
+import com.kzhovn.todoapp.context.WifiContextMonitor
+import androidx.core.content.ContextCompat
+import android.net.wifi.WifiManager
+import android.net.ConnectivityManager
+import android.content.pm.PackageManager
+import android.Manifest
 import android.app.AlarmManager
 import android.app.Application
 import androidx.room.InvalidationTracker
@@ -40,11 +46,20 @@ class TodoApp : Application() {
     }
     val contextRepository: ContextRepository by lazy { ContextRepository(database.taskContextDao()) }
     val syncClient: SyncClient by lazy { SyncClient(this, database, reminderScheduler) }
+    private val wifiMonitor by lazy {
+        WifiContextMonitor(getSystemService(ConnectivityManager::class.java), getSystemService(WifiManager::class.java), database.taskContextDao(), CoroutineScope(Dispatchers.IO))
+    }
+
+    // Place contexts need the wifi's name, so location access; MainActivity asks for it and calls this again.
+    fun startWifiMonitor() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) wifiMonitor.start()
+    }
 
     override fun onCreate() {
         super.onCreate()
         if (SyncSettings.config(this) != null) SyncWorker.ensurePeriodic(this)
         TaskTimer.restore(this)
+        startWifiMonitor()
         // Push shortly after any local edit, from any screen or the widget. Pull-applies clear
         // their own dirty marks, so they don't re-trigger this.
         database.invalidationTracker.addObserver(object : InvalidationTracker.Observer(TRACKED_TABLES) {

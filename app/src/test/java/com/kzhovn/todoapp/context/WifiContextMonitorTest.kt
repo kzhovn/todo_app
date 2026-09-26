@@ -64,7 +64,7 @@ class WifiContextMonitorTest {
         Shadows.shadowOf(wifiInfo).setSSID("MyHomeNetwork")
         Shadows.shadowOf(wifiManager).setConnectionInfo(wifiInfo)
 
-        monitor.refresh()
+        monitor.refresh(onWifi = true)
         advanceUntilIdle()
 
         assertEquals(true, db.taskContextDao().getById(id)?.isCurrentlySatisfied)
@@ -80,9 +80,39 @@ class WifiContextMonitorTest {
         Shadows.shadowOf(wifiInfo).setSSID("CoffeeShopWifi")
         Shadows.shadowOf(wifiManager).setConnectionInfo(wifiInfo)
 
-        monitor.refresh()
+        monitor.refresh(onWifi = true)
         advanceUntilIdle()
 
         assertEquals(false, db.taskContextDao().getById(id)?.isCurrentlySatisfied)
+    }
+
+    @Test
+    fun `off wifi no place holds, even if the old network name lingers`() = runTest(testDispatcher) {
+        val id = db.taskContextDao().insert(
+            TaskContext(name = "Home", type = ContextType.PLACE, wifiSsid = "MyHomeNetwork", isCurrentlySatisfied = true)
+        )
+        val wifiInfo = ShadowWifiInfo.newInstance()
+        Shadows.shadowOf(wifiInfo).setSSID("MyHomeNetwork")
+        Shadows.shadowOf(wifiManager).setConnectionInfo(wifiInfo)
+
+        monitor.refresh(onWifi = false)
+        advanceUntilIdle()
+
+        assertEquals(false, db.taskContextDao().getById(id)?.isCurrentlySatisfied)
+    }
+
+    @Test
+    fun `on wifi with the name hidden, nothing changes`() = runTest(testDispatcher) {
+        val id = db.taskContextDao().insert(
+            TaskContext(name = "Home", type = ContextType.PLACE, wifiSsid = "MyHomeNetwork", isCurrentlySatisfied = true)
+        )
+        val wifiInfo = ShadowWifiInfo.newInstance()
+        Shadows.shadowOf(wifiInfo).setSSID(WifiManager.UNKNOWN_SSID)
+        Shadows.shadowOf(wifiManager).setConnectionInfo(wifiInfo)
+
+        monitor.refresh(onWifi = true)
+        advanceUntilIdle()
+
+        assertEquals(true, db.taskContextDao().getById(id)?.isCurrentlySatisfied)
     }
 }

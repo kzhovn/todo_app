@@ -13,8 +13,6 @@ import androidx.compose.material.icons.filled.AccountTree
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.ConnectivityManager
-import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -77,7 +75,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.lifecycleScope
-import com.kzhovn.todoapp.context.WifiContextMonitor
 import com.kzhovn.todoapp.contexts.ContextsActivity
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.ui.BulkEditActivity
@@ -107,15 +104,9 @@ import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
-    private lateinit var wifiContextMonitor: WifiContextMonitor
-    private var wifiMonitorStarted = false
-
     private val locationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) {
-                wifiContextMonitor.start()
-                wifiMonitorStarted = true
-            }
+            if (granted) (application as TodoApp).startWifiMonitor()
         }
 
     private val notificationPermissionLauncher =
@@ -144,17 +135,8 @@ class MainActivity : ComponentActivity() {
         val repository = app.repository
         val contextRepository = app.contextRepository
 
-        val connectivityManager = getSystemService(ConnectivityManager::class.java)
-        val wifiManager = getSystemService(WifiManager::class.java)
-        wifiContextMonitor = WifiContextMonitor(
-            connectivityManager, wifiManager, app.database.taskContextDao(), lifecycleScope
-        )
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            == PackageManager.PERMISSION_GRANTED
-        ) {
-            wifiContextMonitor.start()
-            wifiMonitorStarted = true
-        } else {
+        // The wifi monitor itself runs app-wide (TodoApp); this only asks for the access it needs.
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
 
@@ -460,11 +442,6 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (SyncSettings.config(this) != null) SyncWorker.requestSoon(this, delaySeconds = 0)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        if (wifiMonitorStarted) wifiContextMonitor.stop()
     }
 
     companion object {
