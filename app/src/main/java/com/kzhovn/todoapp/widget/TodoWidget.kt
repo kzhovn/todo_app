@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.widget
 
+import com.kzhovn.todoapp.sync.SyncWorker
+import com.kzhovn.todoapp.sync.SyncSettings
 import com.kzhovn.todoapp.R
 import androidx.glance.ImageProvider
 import androidx.glance.Image
@@ -142,6 +144,13 @@ class TodoWidget : GlanceAppWidget() {
                         maxLines = 1,
                         modifier = GlanceModifier.defaultWeight().clickable(actionStartActivity(configIntent))
                     )
+                    // Syncs now; the list redraws on its own once the pull lands (see the Room Flow above).
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = GlanceModifier.size(32.dp).clickable(actionRunCallback<SyncNowAction>())
+                    ) {
+                        Image(ImageProvider(R.drawable.widget_refresh), contentDescription = "Sync now", modifier = GlanceModifier.size(18.dp))
+                    }
                     // Opens the app on the same list; the widget's modes match the app's tabs by name.
                     Box(
                         contentAlignment = Alignment.Center,
@@ -273,6 +282,12 @@ private fun WidgetRow(row: WidgetTaskRow) {
                 )
             }
         }
+    }
+}
+
+class SyncNowAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        if (SyncSettings.config(context) != null) SyncWorker.requestSoon(context, delaySeconds = 0)
     }
 }
 
