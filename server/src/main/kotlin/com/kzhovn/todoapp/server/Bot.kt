@@ -102,11 +102,16 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
                 }
                 bot.logic.listToRefresh(before, after)?.let { bot.refreshSoon(jda, it) }
             }
-            if (digestChannelId != null && digestTime != null) {
+            // Logged either way, so a missing digest can be traced in the journal (journalctl -u todo).
+            if (digestChannelId == null || digestTime == null) println("Digest off: set DIGEST_CHANNEL_ID and DIGEST_TIME to turn it on")
+            else {
+                println("Digest scheduled daily at $digestTime ${java.util.TimeZone.getDefault().id}")
                 scheduleDigest(LocalTime.parse(digestTime)) {
                     service.purgeExpired()
                     val doing = service.doing()
+                    // DM channels aren't cached by createLight, so a DM's id finds nothing here.
                     val channel = jda.getChannelById(MessageChannel::class.java, digestChannelId)
+                    println("Digest: ${doing.size} in Doing, channel ${if (channel == null) "$digestChannelId NOT FOUND (a server channel the bot can see?)" else channel.name}")
                     if (doing.isNotEmpty() && channel != null) bot.postList(channel, doing)
                     val nudges = bot.logic.dueNudges()
                     if (channel != null) nudges.forEach { (task, days) ->
