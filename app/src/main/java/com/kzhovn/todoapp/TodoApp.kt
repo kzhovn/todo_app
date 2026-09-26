@@ -1,5 +1,9 @@
 package com.kzhovn.todoapp
 
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.Flow
 import com.kzhovn.todoapp.context.WifiContextMonitor
 import androidx.core.content.ContextCompat
 import android.net.wifi.WifiManager
@@ -55,6 +59,16 @@ class TodoApp : Application() {
     fun startWifiMonitor() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) wifiMonitor.start()
     }
+
+    // Fires on any change to what decides a list: tasks, and also contexts (a place turning on at
+    // home), their time windows, and dependencies, which don't touch the tasks table.
+    fun listInputChanges(): Flow<Unit> = callbackFlow {
+        val observer = object : InvalidationTracker.Observer(arrayOf("tasks", "contexts", "context_time_windows", "task_contexts", "task_dependencies")) {
+            override fun onInvalidated(tables: Set<String>) { trySend(Unit) }
+        }
+        database.invalidationTracker.addObserver(observer)
+        awaitClose { database.invalidationTracker.removeObserver(observer) }
+    }.conflate()
 
     override fun onCreate() {
         super.onCreate()

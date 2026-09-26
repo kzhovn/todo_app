@@ -190,8 +190,6 @@ class TaskRepository(
 
     suspend fun getAllTasks(): List<Task> = taskDao.getAllOnce()
 
-    fun taskChanges() = taskDao.observeAll()
-
     // Stores colour slots for folders that don't have one yet (see folderColorAssignments).
     suspend fun ensureFolderColors() = folderColorAssignments(taskDao.getAllOnce()).forEach { taskDao.update(it) }
 

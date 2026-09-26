@@ -113,10 +113,9 @@ class TodoWidget : GlanceAppWidget() {
                 mode.label.uppercase() + folderName?.let { " · $it" }.orEmpty()
         }
         val initial = load()
-        // Reloaded whenever the tasks table changes. A widget's session outlives a single update(),
-        // which only recomposes it, so data loaded once would still show the list from before a
-        // task was added through this very widget.
-        val updates = repository.taskChanges().map { load() }
+        // Reloaded whenever a task, context or dependency changes. A widget's session outlives a single
+        // update(), which only recomposes it, so data loaded once would go stale.
+        val updates = (context.applicationContext as TodoApp).listInputChanges().map { load() }
 
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
         // The data Uri keeps each widget's PendingIntent distinct, so every widget opens its own settings.
