@@ -441,6 +441,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        (application as TodoApp).startWifiMonitor()
         if (SyncSettings.config(this) != null) SyncWorker.requestSoon(this, delaySeconds = 0)
     }
 

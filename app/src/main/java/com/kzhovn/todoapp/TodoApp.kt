@@ -50,7 +50,8 @@ class TodoApp : Application() {
         WifiContextMonitor(getSystemService(ConnectivityManager::class.java), getSystemService(WifiManager::class.java), database.taskContextDao(), CoroutineScope(Dispatchers.IO))
     }
 
-    // Place contexts need the wifi's name, so location access; MainActivity asks for it and calls this again.
+    // Place contexts need the wifi's name, so location access; MainActivity and ContextsActivity ask
+    // for it. Also re-checks the wifi now, so opening the app (when the name is always readable) fixes a stale state.
     fun startWifiMonitor() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) wifiMonitor.start()
     }

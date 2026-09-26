@@ -32,12 +32,15 @@ class WifiContextMonitor(
         }
     }
 
+    // Starts watching, once; every call also re-checks now (the callback only fires on changes, so
+    // off wifi at start it would never correct a stale "home").
     fun start() {
-        if (started) return
-        started = true
-        connectivityManager.registerNetworkCallback(NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(), callback)
-        // The callback only fires for wifi that's up, so off wifi at start it would never correct a stale "home".
-        refresh(onWifi = connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true)
+        if (!started) {
+            started = true
+            connectivityManager.registerNetworkCallback(NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(), callback)
+        }
+        val activeIsWifi = connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        refresh(onWifi = activeIsWifi || synchronized(wifiNetworks) { wifiNetworks.isNotEmpty() })
     }
 
     // Off wifi, no place holds. On wifi, the network's name decides, unless Android hides it (no

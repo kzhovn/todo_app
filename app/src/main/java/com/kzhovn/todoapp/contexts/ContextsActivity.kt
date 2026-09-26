@@ -1,5 +1,11 @@
 package com.kzhovn.todoapp.contexts
 
+import androidx.core.content.ContextCompat
+import androidx.compose.material3.TextButton
+import androidx.activity.result.contract.ActivityResultContracts
+import android.os.Build
+import android.content.pm.PackageManager
+import android.Manifest
 import android.app.TimePickerDialog
 import android.net.wifi.WifiManager
 import android.os.Bundle
@@ -49,6 +55,7 @@ import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
 import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk
+import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerOverdue
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
 import kotlinx.coroutines.launch
@@ -56,6 +63,23 @@ import java.util.Calendar
 import java.util.Locale
 
 class ContextsActivity : ComponentActivity() {
+    // "Allow all the time" location, so place contexts update while the app is in the background.
+    private val backgroundGranted = mutableStateOf(true)
+    private val locationLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        checkBackgroundLocation()
+        (application as TodoApp).startWifiMonitor()
+    }
+
+    private fun checkBackgroundLocation() {
+        backgroundGranted.value = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
+    }
+
+    override fun onResume() {
+        super.onResume()
+        checkBackgroundLocation()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val contextRepository = (application as TodoApp).contextRepository
@@ -99,6 +123,19 @@ class ContextsActivity : ComponentActivity() {
             Column(modifier = Modifier.fillMaxSize().background(LedgerBackground).padding(16.dp)) {
                 Text("Contexts", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk)
                 Spacer(Modifier.height(12.dp))
+                if (!backgroundGranted.value && contexts.any { it.type == ContextType.PLACE }) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+                        Text(
+                            "Place contexts only update while the app is open. Set location to “Allow all the time” so they follow you in the background.",
+                            fontSize = 13.sp, color = LedgerMuted, modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = {
+                            // Android only offers "all the time" once "while in use" is granted.
+                            val fine = ContextCompat.checkSelfPermission(this@ContextsActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                            locationLauncher.launch(if (fine) Manifest.permission.ACCESS_BACKGROUND_LOCATION else Manifest.permission.ACCESS_FINE_LOCATION)
+                        }) { Text("Allow") }
+                    }
+                }
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(contexts, key = { it.id }) { ctx ->
                         Row(
