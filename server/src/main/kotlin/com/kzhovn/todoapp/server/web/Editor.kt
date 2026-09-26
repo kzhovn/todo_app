@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.data.folderColorsArgb
 import com.kzhovn.todoapp.data.Task
 import kotlinx.html.summary
 import kotlinx.html.details
@@ -404,7 +405,9 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
         div(classes = "field-label section") { +Labels.FOLDER_AND_CONTEXTS }
         div(classes = "pills") {
             val parentLabel = byId[t.parentId]?.let { p -> if (p.type == TaskType.FOLDER) folderPath(p, byId) else "Subtask of “${p.title}”" }
-            popPill(Labels.FOLDER, Icon.FOLDER, parentLabel, "select", "") {
+            // A set folder shows in its own colour, like the app's chip; app.js follows the pick.
+            val colors = folderColorsArgb(all).mapValues { "#%06X".format(it.value and 0xFFFFFF) }
+            popPill(Labels.FOLDER, Icon.FOLDER, parentLabel, "select", "tinted", tint = t.parentId?.let(colors::get)) {
                 select {
                     name = "parent"
                     option { value = ""; selected = t.parentId == null; +Labels.NO_FOLDER }
@@ -413,7 +416,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
                     }
                     all.filter { it.type == TaskType.FOLDER && !wouldCreateCycle(it.id, t.id, byId) }
                         .map { it to folderPath(it, byId) }.sortedBy { it.second.lowercase() }
-                        .forEach { (f, path) -> option { value = f.id.toString(); selected = f.id == t.parentId; +path } }
+                        .forEach { (f, path) -> option { value = f.id.toString(); selected = f.id == t.parentId; colors[f.id]?.let { attributes["data-color"] = it }; +path } }
                 }
             }
             // Folders keep contexts too: their tasks inherit them.
@@ -470,8 +473,9 @@ internal fun FlowContent.field(label: String, classes: String, content: FlowCont
 
 // A pill that opens a popover of controls. `value` is its text when set (else the label shows);
 // `kind` tells app.js how to re-derive that text as the controls change.
-private fun FlowContent.popPill(label: String, icon: Icon, value: String?, kind: String, classes: String, content: FlowContent.() -> Unit) =
+private fun FlowContent.popPill(label: String, icon: Icon, value: String?, kind: String, classes: String, tint: String? = null, content: FlowContent.() -> Unit) =
     details(classes = "pp $classes") {
+        tint?.let { attributes["style"] = "--tint: $it" }
         attributes["data-kind"] = kind
         attributes["data-label"] = label
         summary(classes = if (value != null) "pill set" else "pill") {

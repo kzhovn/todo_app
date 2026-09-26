@@ -293,6 +293,8 @@
     const value = pillValue(pp), summary = pp.querySelector("summary");
     summary.classList.toggle("set", !!value);
     summary.querySelector(".pp-text").textContent = value ?? pp.dataset.label;
+    const color = pp.querySelector(".pop select")?.selectedOptions[0]?.dataset.color;
+    if (color) pp.style.setProperty("--tint", color); else pp.style.removeProperty("--tint");
   }
   document.addEventListener("input", (e) => { const pp = e.target.closest(".pp[data-kind]"); if (pp) refreshPill(pp); });
   document.addEventListener("change", (e) => { const pp = e.target.closest(".pp[data-kind]"); if (pp) refreshPill(pp); });

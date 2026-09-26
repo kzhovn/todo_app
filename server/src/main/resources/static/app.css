@@ -246,6 +246,7 @@ body.selecting #list .row:not([data-type="TASK"]), body.selecting #list .folder 
 .pp > summary { list-style: none; display: inline-flex; align-items: center; }
 .pp > summary::-webkit-details-marker { display: none; }
 .pill.set { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.pp.tinted[style*="--tint"] > .pill.set { color: var(--tint); border-color: var(--tint); background: color-mix(in srgb, var(--tint) 14%, transparent); }
 .pp-clear { display: none; margin-left: 6px; font-weight: 400; opacity: .7; }
 .pill.set .pp-clear { display: inline; }
 .pop { position: absolute; z-index: 10; top: calc(100% + 6px); left: 0; min-width: 240px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px #0002; padding: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.ui.theme.folderColors
 import com.kzhovn.todoapp.data.dueStatus
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -408,7 +409,8 @@ class TaskEditActivity : ComponentActivity() {
                         valueText = allById[task.parentId]?.title,
                         icon = Icons.Filled.Folder,
                         onClick = { showFolderPicker = true },
-                        showLabelWhenSet = false
+                        showLabelWhenSet = false,
+                        tint = task.parentId?.let { folderColors(allTasks)[it] } ?: LedgerAccent
                     )
                     // Folders keep contexts too: their tasks inherit them (e.g. Work only in work hours).
                     allContexts.filter { it.id in selectedContextIds }.sortedBy { it.name.lowercase() }.forEach { ctx ->
