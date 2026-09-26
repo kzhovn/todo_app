@@ -135,9 +135,18 @@ class TodoWidget : GlanceAppWidget() {
             val (rows, header) = updates.collectAsState(initial).value
             Column(modifier = GlanceModifier.fillMaxSize().background(fixed(LedgerBackground)).padding(start = 4.dp, end = 4.dp, top = 2.dp, bottom = 4.dp)) {
                 Row(
-                    modifier = GlanceModifier.fillMaxWidth().padding(start = 6.dp),
+                    modifier = GlanceModifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Opens the app on the same list; the widget's modes match the app's tabs by name.
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = GlanceModifier
+                            .size(32.dp)
+                            .clickable(actionStartActivity(openListIntent))
+                    ) {
+                        Text("☰", style = TextStyle(color = fixed(LedgerAccent), fontSize = 20.sp, fontWeight = FontWeight.Bold))
+                    }
                     Text(
                         text = header,
                         style = TextStyle(color = fixed(LedgerMuted), fontSize = 11.sp, fontWeight = FontWeight.Bold),
@@ -150,15 +159,6 @@ class TodoWidget : GlanceAppWidget() {
                         modifier = GlanceModifier.size(32.dp).clickable(actionRunCallback<SyncNowAction>())
                     ) {
                         Image(ImageProvider(R.drawable.widget_refresh), contentDescription = "Sync now", modifier = GlanceModifier.size(18.dp))
-                    }
-                    // Opens the app on the same list; the widget's modes match the app's tabs by name.
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = GlanceModifier
-                            .size(32.dp)
-                            .clickable(actionStartActivity(openListIntent))
-                    ) {
-                        Text("☰", style = TextStyle(color = fixed(LedgerAccent), fontSize = 20.sp, fontWeight = FontWeight.Bold))
                     }
                     Box(
                         contentAlignment = Alignment.Center,
