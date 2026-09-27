@@ -487,4 +487,27 @@ class WebTest {
         })
         assertEquals(setOf(vpn.id), service.dependsOn(report.id))
     }
+
+    @Test
+    fun `the pin is shared, the newest pin wins, and the editor toggles it`() = web {
+        val a = service.create(Task(title = "Call mom"))
+        val b = service.create(Task(title = "Buy milk"))
+        assertTrue(client.post("/tasks/${a.id}/pin?mode=DOING").bodyAsText().contains("Pinned “Call mom”"))
+        assertEquals(a.id, service.pinned()?.id)
+        service.pin(b.id)
+        assertEquals(b.id, service.pinned()?.id)
+        assertEquals(null, service.get(a.id)!!.pinnedAt) // the older pin is cleared
+
+        assertTrue(client.get("/tasks/${b.id}").bodyAsText().contains("pin-toggle on"))
+        assertTrue(client.post("/tasks/${b.id}/pin-toggle").bodyAsText().contains("class=\"pin-toggle\""))
+        assertEquals(null, service.pinned())
+
+        // A save from the editor keeps a pin made meanwhile (it isn't a form field).
+        val base = taskFields(a, emptySet(), emptySet()).toString()
+        service.pin(a.id)
+        client.submitForm("/tasks/${a.id}?mode=DOING", parameters { append("base", base); append("title", "Call mom!"); append("type", "TASK") })
+        assertEquals(a.id, service.pinned()?.id)
+        service.complete(a.id)
+        assertEquals(null, service.pinned()) // done: no longer pinned
+    }
 }

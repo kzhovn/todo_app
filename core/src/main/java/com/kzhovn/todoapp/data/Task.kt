@@ -48,7 +48,9 @@ data class Task(
     // A timed task ("1 hour of ticket work"): how long to spend, which its play button counts down.
     val durationMinutes: Int? = null,
     // Normally a task waits on its open subtasks (see computeActiveTasks); this keeps it active anyway.
-    @ColumnInfo(defaultValue = "0") val activeWithSubtasks: Boolean = false
+    @ColumnInfo(defaultValue = "0") val activeWithSubtasks: Boolean = false,
+    // When it was pinned ("what I'm doing now"), shared by every device. See pinnedTask.
+    val pinnedAt: Long? = null
 ) {
     fun isExpired(now: Long): Boolean = expiresAt != null && expiresAt <= now
 
@@ -67,3 +69,7 @@ data class Task(
     // A maybe left alone for a month drifts to the back burner: still listed, but dimmed.
     fun isBackburner(now: Long): Boolean = isMaybe && maybeSince != null && now - maybeSince >= BACKBURNER_AFTER
 }
+
+// The pinned task: the open task pinned most recently. A time rather than a flag, so two devices
+// pinning while offline can't both end up pinned; the newer pin wins.
+fun pinnedTask(tasks: Collection<Task>): Task? = tasks.filter { it.pinnedAt != null && !it.isComplete }.maxByOrNull { it.pinnedAt!! }

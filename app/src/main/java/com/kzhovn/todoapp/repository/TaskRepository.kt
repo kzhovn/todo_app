@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.repository
 
+import com.kzhovn.todoapp.data.pinnedTask
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.searchTasks
 import com.kzhovn.todoapp.data.planMoveNextTo
@@ -183,6 +184,16 @@ class TaskRepository(
     suspend fun getFolders(): List<Task> = getAllTasks().filter { it.type == TaskType.FOLDER }
 
     suspend fun getTask(taskId: Long): Task? = taskDao.getById(taskId)
+
+    // One pin, shared by every device (see pinnedTask). Older pins are cleared, so normally only one is set.
+    suspend fun pin(taskId: Long, now: Long) {
+        taskDao.getAllOnce().filter { it.pinnedAt != null && it.id != taskId }.forEach { taskDao.update(it.copy(pinnedAt = null)) }
+        taskDao.getById(taskId)?.let { taskDao.update(it.copy(pinnedAt = now)) }
+    }
+
+    suspend fun unpin() = taskDao.getAllOnce().filter { it.pinnedAt != null }.forEach { taskDao.update(it.copy(pinnedAt = null)) }
+
+    suspend fun getPinnedTask(): Task? = pinnedTask(taskDao.getAllOnce())
 
     suspend fun updateTask(task: Task) {
         taskDao.update(task.withRules(System.currentTimeMillis()))

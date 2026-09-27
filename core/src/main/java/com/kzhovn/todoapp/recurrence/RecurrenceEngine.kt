@@ -27,7 +27,7 @@ object RecurrenceEngine {
         // original (now stale) absolute timestamp.
         val startAnchor = task.startDate ?: completedAt
         val nextDueDate = task.dueDate?.plus(nextStart - startAnchor)
-        return task.copy(id = newId(), startDate = nextStart, dueDate = nextDueDate, isComplete = false, completedAt = null, recurrenceRule = nextRule)
+        return task.copy(id = newId(), startDate = nextStart, dueDate = nextDueDate, isComplete = false, completedAt = null, recurrenceRule = nextRule, pinnedAt = null)
     }
 
     // The instance that completing `completed` spawned, if it still exists unedited. Un-completing
@@ -49,7 +49,7 @@ object RecurrenceEngine {
             val parent = newIds[sub.parentId] ?: return@mapNotNull null
             if (sub.recurrenceType != null) return@mapNotNull null
             val copy = sub.copy(
-                id = newId(), parentId = parent, isComplete = false, completedAt = null,
+                id = newId(), parentId = parent, isComplete = false, completedAt = null, pinnedAt = null,
                 startDate = sub.startDate?.plus(shift), dueDate = sub.dueDate?.plus(shift)
             )
             newIds[sub.id] = copy.id

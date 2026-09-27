@@ -97,7 +97,8 @@ class TaskEditActivity : ComponentActivity() {
         val scope = rememberCoroutineScope()
         var dialog by remember { mutableStateOf<EditorDialog?>(null) }
         // Pinning takes effect at once (it's "what I'm doing now"), not on Save; a new task's, on save.
-        var pinned by remember { mutableStateOf(!vm.isNew && PinnedTask.pinnedId(this) == vm.taskId) }
+        var pinned by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) { if (!vm.isNew) pinned = PinnedTask.pinnedId(this@TaskEditActivity) == vm.taskId }
         val openTask = { id: Long -> startActivity(Intent(this, TaskEditActivity::class.java).putExtra(EXTRA_TASK_ID, id)) }
 
         LaunchedEffect(Unit) {
@@ -117,8 +118,8 @@ class TaskEditActivity : ComponentActivity() {
         }
 
         fun save(clearOn: List<Task> = emptyList(), fields: Set<com.kzhovn.todoapp.repository.InheritedField> = emptySet(), firstStep: String? = null) =
-            vm.saveEdits(clearOn, fields, firstStep) { savedId, saved ->
-                if (vm.isNew && pinned) PinnedTask.pin(this, saved.copy(id = savedId))
+            vm.saveEdits(clearOn, fields, firstStep) { savedId, _ ->
+                if (vm.isNew && pinned) PinnedTask.pin(this, savedId)
                 finish()
             }
 
@@ -145,7 +146,7 @@ class TaskEditActivity : ComponentActivity() {
             TitleBox(
                 vm, pinned,
                 onTogglePin = {
-                    if (!vm.isNew) { if (pinned) PinnedTask.unpin(this@TaskEditActivity) else PinnedTask.pin(this@TaskEditActivity, vm.task) }
+                    if (!vm.isNew) scope.launch { if (pinned) PinnedTask.unpin(this@TaskEditActivity) else PinnedTask.pin(this@TaskEditActivity, vm.taskId) }
                     pinned = !pinned
                 },
                 onFocus = {

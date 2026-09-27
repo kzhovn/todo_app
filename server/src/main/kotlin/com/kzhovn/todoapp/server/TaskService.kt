@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.data.pinnedTask
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.searchTasks
 import com.kzhovn.todoapp.data.findFolder
@@ -123,6 +124,16 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         val row = store.get(TASKS, id)?.takeUnless { it.isDeleted } ?: return
         writeTask(change(row.toTask()).withRules(clock()), row)
     }
+
+    // One pin, shared by every device (see pinnedTask). Older pins are cleared, so normally only one is set.
+    fun pin(id: Long) = store.transaction {
+        tasks().filter { it.pinnedAt != null && it.id != id }.forEach { t -> update(t.id) { it.copy(pinnedAt = null) } }
+        update(id) { it.copy(pinnedAt = clock()) }
+    }
+
+    fun unpin() = store.transaction { tasks().filter { it.pinnedAt != null }.forEach { t -> update(t.id) { it.copy(pinnedAt = null) } } }
+
+    fun pinned(): Task? = pinnedTask(tasks())
 
     fun setStarred(id: Long, starred: Boolean) = update(id) { it.copy(isStarred = starred) }
 

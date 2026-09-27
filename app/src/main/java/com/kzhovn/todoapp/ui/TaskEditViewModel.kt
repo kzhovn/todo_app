@@ -138,7 +138,7 @@ class TaskEditViewModel(
     // Saves the task with its contexts, dependencies and pending relations. clearOn/fields: subtasks to
     // make follow this task again (see Question.UpdateSubtasks). Afterwards the saved state is the
     // baseline for isDirty, since an auto-save keeps the editor open.
-    fun saveEdits(clearOn: List<Task> = emptyList(), fields: Set<InheritedField> = emptySet(), firstStep: String? = null, onSaved: (savedId: Long, saved: Task) -> Unit) {
+    fun saveEdits(clearOn: List<Task> = emptyList(), fields: Set<InheritedField> = emptySet(), firstStep: String? = null, onSaved: suspend (savedId: Long, saved: Task) -> Unit) {
         val (toSave, dependencies) = taskToSave()
         val contexts = contextIds
         save(toSave) { savedId ->
@@ -159,7 +159,8 @@ class TaskEditViewModel(
     fun save(task: Task, onSaved: suspend (Long) -> Unit) {
         viewModelScope.launch {
             val savedId = if (task.id == 0L) repository.createTask(task) else {
-                repository.updateTask(task)
+                // Pinning isn't an editor field (it applies at once), so a save keeps whatever is stored.
+                repository.updateTask(task.copy(pinnedAt = repository.getTask(task.id)?.pinnedAt))
                 task.id
             }
             onSaved(savedId)

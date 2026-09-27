@@ -217,6 +217,7 @@ private fun TaskRow(
     onSnooze: (Long, Long) -> Unit
 ) {
     var showSnoozeMenu by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     // Due styling tracks the *displayed* (effective/inherited) due date, not the task's own
     // possibly-null field, or an inherited due date would render in the neutral colour.
     val now = System.currentTimeMillis()
@@ -308,7 +309,7 @@ private fun TaskRow(
                     SnoozeTile(Labels.SNOOZE_WEEK, Icons.Filled.DateRange) { snooze { it + WEEK_MILLIS } }
                 }
                 HorizontalDivider(color = LedgerBorder)
-                MenuRow(Labels.PIN, Icons.Filled.PushPin) { showSnoozeMenu = false; PinnedTask.pin(context, task) }
+                MenuRow(Labels.PIN, Icons.Filled.PushPin) { showSnoozeMenu = false; scope.launch { PinnedTask.pin(context, task.id) } }
                 MenuRow("Focus", Icons.Filled.CenterFocusStrong) {
                     showSnoozeMenu = false
                     context.startActivity(Intent(context, FocusActivity::class.java).putExtra(FocusActivity.EXTRA_TASK_ID, task.id))

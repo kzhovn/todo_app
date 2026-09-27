@@ -432,6 +432,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
         // The title wraps (up to four lines), with the star inside the box by the first line. A starred
         // task is never a maybe (Maybe is under Properties); app.js unticks the other when one is ticked.
         div(classes = "title-box") {
+            if (!isNew && t.type == TaskType.TASK && !t.isComplete) pinToggle(t.id, service.pinned()?.id == t.id)
             textArea(classes = "title-input") { name = "title"; rows = "1"; placeholder = Labels.TITLE; required = true; +t.title }
             label(classes = "flag-toggle star-toggle task-only") {
                 attributes["title"] = Labels.STAR

@@ -12,7 +12,8 @@ object Labels {
     const val TITLE = "Title"
     const val STAR = "Star"
     const val MAYBE = "Maybe"
-    const val PIN = "Pin to notification"
+    const val PIN = "Pin"
+    const val UNPIN = "Unpin"
 
     const val TASK = "Task"
     const val PROJECT = "Project"

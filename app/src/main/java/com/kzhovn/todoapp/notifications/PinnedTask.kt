@@ -16,9 +16,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-// "Doing" mode: one task pinned as an ongoing notification, completable from the lock screen.
-// The pinned id is persisted so the notification can be restored after a reboot, and refresh()
-// drops it once the task is completed or deleted anywhere (app, widget, sync, Discord).
+// "Doing" mode: one task pinned as an ongoing notification, completable from the lock screen. The pin
+// is shared by every device (Task.pinnedAt), and refresh() runs on every data change, so the
+// notification follows pins, completions and deletions from anywhere (app, widget, sync, web).
 object PinnedTask {
     // Channel importance can't change once created, so raising it meant a new channel; the old,
     // low-importance "doing" one is deleted. Low importance counts as "silent", which Pixels hide
@@ -29,25 +29,34 @@ object PinnedTask {
     const val ACTION_COMPLETE = "com.kzhovn.todoapp.PINNED_COMPLETE"
     const val ACTION_UNPIN = "com.kzhovn.todoapp.PINNED_UNPIN"
 
-    private fun prefs(context: Context) = context.getSharedPreferences("pinned", Context.MODE_PRIVATE)
+    private fun repository(context: Context) = (context.applicationContext as TodoApp).repository
 
-    fun pinnedId(context: Context): Long? = prefs(context).getLong("taskId", 0L).takeIf { it != 0L }
+    suspend fun pinnedId(context: Context): Long? = repository(context).getPinnedTask()?.id
 
-    fun pin(context: Context, task: Task) {
-        prefs(context).edit().putLong("taskId", task.id).apply()
-        show(context, task)
+    suspend fun pin(context: Context, taskId: Long) {
+        repository(context).pin(taskId, System.currentTimeMillis())
+        refresh(context)
     }
 
-    fun unpin(context: Context) {
-        prefs(context).edit().remove("taskId").apply()
-        manager(context).cancel(NOTIFICATION_ID)
+    suspend fun unpin(context: Context) {
+        repository(context).unpin()
+        refresh(context)
     }
 
-    // Re-shows the pinned task (new title, after reboot) or unpins it if it's no longer open.
+    // Shows whatever is pinned now (a new title, a pin from another device, after a reboot), or
+    // removes the notification when nothing is.
     suspend fun refresh(context: Context) {
-        val id = pinnedId(context) ?: return
-        val task = (context.applicationContext as TodoApp).repository.getTask(id)
-        if (task == null || task.isComplete) unpin(context) else show(context, task)
+        migrateLocalPin(context)
+        val task = repository(context).getPinnedTask()
+        if (task == null) manager(context).cancel(NOTIFICATION_ID) else show(context, task)
+    }
+
+    // Before pins synced, the phone kept its own in preferences; moved onto the task once.
+    private suspend fun migrateLocalPin(context: Context) {
+        val prefs = context.getSharedPreferences("pinned", Context.MODE_PRIVATE)
+        val id = prefs.getLong("taskId", 0L).takeIf { it != 0L } ?: return
+        prefs.edit().remove("taskId").apply()
+        if (repository(context).getTask(id)?.isComplete == false) repository(context).pin(id, System.currentTimeMillis())
     }
 
     private fun manager(context: Context) = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -110,20 +119,21 @@ object PinnedTask {
 class PinnedTaskReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val app = context.applicationContext as TodoApp
-        when (intent.action) {
-            PinnedTask.ACTION_UNPIN -> PinnedTask.unpin(context)
-            PinnedTask.ACTION_COMPLETE -> {
-                val taskId = intent.getLongExtra(TaskEditActivity.EXTRA_TASK_ID, 0L)
-                val pending = goAsync()
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        // Like the widget: no room for the subtask dialog, so subtasks complete too.
+        val taskId = intent.getLongExtra(TaskEditActivity.EXTRA_TASK_ID, 0L)
+        val pending = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                when (intent.action) {
+                    PinnedTask.ACTION_UNPIN -> PinnedTask.unpin(context)
+                    // Like the widget: no room for the subtask dialog, so subtasks complete too. A
+                    // completed task is no longer pinned.
+                    PinnedTask.ACTION_COMPLETE -> {
                         app.repository.completeWithDescendants(taskId, System.currentTimeMillis())
-                        PinnedTask.unpin(context)
-                    } finally {
-                        pending.finish()
+                        PinnedTask.refresh(context)
                     }
                 }
+            } finally {
+                pending.finish()
             }
         }
     }

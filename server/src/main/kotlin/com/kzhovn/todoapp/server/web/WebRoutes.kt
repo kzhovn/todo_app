@@ -101,6 +101,17 @@ fun Route.webRoutes(service: TaskService) {
         call.respondList(service, mode, extra = createHTML().div { undoToastContents(task, mode) })
     }
     post("/tasks/{id}/uncomplete") { call.taskId()?.let(service::uncomplete); call.respondList(service, call.mode()) }
+    post("/tasks/{id}/pin") {
+        val task = call.taskId()?.let(service::get) ?: return@post call.respondList(service, call.mode())
+        service.pin(task.id)
+        call.respondList(service, call.mode(), extra = createHTML().div { pinnedToastContents(task) })
+    }
+    post("/tasks/{id}/pin-toggle") {
+        val id = call.taskId() ?: return@post
+        val pinned = service.pinned()?.id == id
+        if (pinned) service.unpin() else service.pin(id)
+        call.respondText(createHTML().div { pinToggle(id, !pinned) }.removePrefix("<div>").removeSuffix("</div>"), ContentType.Text.Html)
+    }
     post("/tasks/{id}/star") { call.taskId()?.let(service::toggleStar); call.respondList(service, call.mode()) }
     post("/tasks/{id}/snooze") {
         val now = service.now()

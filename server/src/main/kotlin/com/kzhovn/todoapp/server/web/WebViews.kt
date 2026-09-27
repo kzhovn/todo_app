@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server.web
 
+import kotlinx.html.ButtonType
 import com.kzhovn.todoapp.data.OutlinerNode
 import com.kzhovn.todoapp.data.buildOutlinerTree
 import kotlinx.html.HTMLTag
@@ -116,6 +117,7 @@ internal enum class Icon(val path: String) {
     BEDTIME("M12.34 2.02C6.59 1.82 2 6.42 2 12c0 5.52 4.48 10 10 10 3.71 0 6.93-2.02 8.66-5.02-7.51-.25-12.09-8.43-8.32-14.96z"),
     LIST_NUMBERED("M2 17h2v.5H3v1h1v.5H2v1h3v-4H2v1zm1-9h1V4H2v1h1v3zm-1 3h1.8L2 13.1v.9h3v-1H3.2L5 10.9V10H2v1zm5-6v2h14V5H7zm0 14h14v-2H7v2zm0-6h14v-2H7v2z"), // FormatListNumbered
     BOLT("M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z"),
+    PUSH_PIN("M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z"),
     DATE_RANGE("M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z")
 }
 
@@ -347,6 +349,12 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                             }
                         }
                 }
+                // Pinned on every device: the phone's notification and the desktop's top bar.
+                button(classes = "menu-row") {
+                    hx("post", "/tasks/${task.id}/pin?mode=$mode")
+                    icon(Icon.PUSH_PIN, "")
+                    +Labels.PIN
+                }
             }
         }
         if (task.isMaybe) {
@@ -404,6 +412,20 @@ fun DIV.askSubtasksToast(task: Task, open: Int, url: String, target: String, inc
         }
     }
     button(classes = "dismiss") { +"Cancel" }
+}
+
+// The editor's pin, like the phone's: applies at once (not on Save) and toggles in place.
+internal fun FlowContent.pinToggle(taskId: Long, pinned: Boolean) = button(type = ButtonType.button, classes = if (pinned) "pin-toggle on" else "pin-toggle") {
+    hx("post", "/tasks/$taskId/pin-toggle", "this")
+    attributes["title"] = if (pinned) Labels.UNPIN else Labels.PIN
+    icon(Icon.PUSH_PIN, "")
+}
+
+fun DIV.pinnedToastContents(task: Task) {
+    id = "toast"
+    attributes["hx-swap-oob"] = "true"
+    classes = setOf("show")
+    span { +"Pinned “${task.title}”" }
 }
 
 // Confirms a quick add made from a page without a list to show it in.
