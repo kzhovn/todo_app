@@ -226,8 +226,6 @@ body.selecting #list .row:not([data-type="TASK"]), body.selecting #list .folder 
 .result .meta { width: 100%; padding-left: 30px; }
 .bulk h1 { font-size: 20px; margin: 0; }
 
-.editor:has(input[name=type][value=FOLDER]:checked) .seq-task,
-.editor:not(:has(input[name=type][value=FOLDER]:checked)) .seq-folder { display: none; }
 
 /* Doing / Active / All as top tabs, like the phone's tab row */
 .tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--panel); position: sticky; top: 0; z-index: 4; }
@@ -280,13 +278,22 @@ body.selecting #list .row:not([data-type="TASK"]), body.selecting #list .folder 
 .when { margin-top: 2px; }
 .field-label.section { margin-top: 10px; }
 .editor-foot { padding: 0 24px 24px; }
-.in-order { display: flex; align-items: center; gap: 8px; color: var(--muted); cursor: pointer; margin: 4px 0 8px; }
 /* Only a plain task waits on its subtasks, so only it gets "active while subtasks are open". */
 .editor:has(input[name=type]:not([value=TASK]):checked) ~ .editor-foot .task-type-only { display: none; }
-/* A checklist's items are ticked in any order, so no "in order" choice. */
-.editor:has(input[name=type][value=CHECKLIST]:checked) ~ .editor-foot .in-order { display: none; }
-.editor:has(input[name=type][value=FOLDER]:checked) ~ .editor-foot .seq-task,
-.editor:not(:has(input[name=type][value=FOLDER]:checked)) ~ .editor-foot .seq-folder { display: none; }
+/* A checklist's items are ticked in any order and never block it, so no subtask options. */
+.editor:has(input[name=type][value=CHECKLIST]:checked) ~ .editor-foot .subtask-options { display: none; }
+.subtask-options { margin: 8px 0; }
+.subtask-options summary { cursor: pointer; font-size: 12px; color: var(--muted); list-style: none; }
+.subtask-options summary::before { content: "›"; display: inline-block; width: 12px; }
+.subtask-options[open] summary::before { content: "⌄"; }
+.subtask-options .pills { margin-top: 6px; }
+/* Folded, the summary still says what's on. */
+.subtask-options :is(.on-seq, .on-active) { color: var(--accent); display: none; }
+.subtask-options:not([open]):has([name=sequential]:checked) .on-seq,
+.subtask-options:not([open]):has([name=activeWithSubtasks]:checked) .on-active { display: inline; }
+.pill.toggle { display: inline-flex; align-items: center; gap: 4px; }
+.pill.toggle input { display: none; }
+.pill.toggle:has(:checked) { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .pill.manage { text-decoration: none; }
 .related { padding: 0 24px 4px; }
 .rel-row { display: flex; align-items: center; gap: 10px; min-height: 34px; border-bottom: 1px solid var(--border); }

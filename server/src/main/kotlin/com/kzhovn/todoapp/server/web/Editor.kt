@@ -558,15 +558,26 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
     if (!isNew) div { relatedSection(service, t.id, v.mode) }
     // Outside the form (so Related tasks can sit above them), tied to it by the form attribute.
     div(classes = "editor-foot") {
-        label(classes = "in-order") {
-            checkBoxInput(name = "sequential") { checked = t.sequential; attributes["form"] = formId }
-            span(classes = "seq-task") { +Labels.inOrder(TaskType.TASK) }
-            span(classes = "seq-folder") { +Labels.inOrder(TaskType.FOLDER) }
-        }
-        // Normally a task waits on its open subtasks; this keeps it in Doing/Active anyway.
-        label(classes = "in-order task-type-only") {
-            checkBoxInput(name = "activeWithSubtasks") { checked = t.activeWithSubtasks; attributes["form"] = formId }
-            +Labels.ACTIVE_WITH_SUBTASKS
+        // Folded unless the task has subtasks; folded, it still says what's on (CSS, from the pills).
+        details(classes = "subtask-options") {
+            if (!isNew && service.tasks().any { it.parentId == t.id }) attributes["open"] = ""
+            summary {
+                +Labels.SUBTASK_OPTIONS
+                span(classes = "on-seq") { +" · ${Labels.SEQUENTIAL.lowercase()}" }
+                span(classes = "on-active task-type-only") { +" · ${Labels.ACTIVE_WITH_SUBTASKS.lowercase()}" }
+            }
+            div(classes = "pills") {
+                // Only the first incomplete child counts as active.
+                label(classes = "pill toggle") {
+                    checkBoxInput(name = "sequential") { checked = t.sequential; attributes["form"] = formId }
+                    icon(Icon.LIST_NUMBERED, "pill-icon"); +Labels.SEQUENTIAL
+                }
+                // Normally a task waits on its open subtasks; this keeps it in Doing/Active anyway.
+                label(classes = "pill toggle task-type-only") {
+                    checkBoxInput(name = "activeWithSubtasks") { checked = t.activeWithSubtasks; attributes["form"] = formId }
+                    icon(Icon.BOLT, "pill-icon"); +Labels.ACTIVE_WITH_SUBTASKS
+                }
+            }
         }
         div(classes = "actions") {
             if (!isNew) button(type = ButtonType.submit, classes = "delete") {
