@@ -1,12 +1,12 @@
 /* Ledger palette from the Android app (ui/theme/Color.kt), with a dark variant. */
 :root {
-  --bg: #F0EAE0; --panel: #F7F4EE; --ink: #2B2318; --muted: #8A7A5C; --border: #DED5C1;
+  --bg: #F0EAE0; --panel: #F7F4EE; --ink: #2B2318; --muted: #8A7A5C; --border: #DED5C1; --tile: #EFE8DC;
   --accent: #2B4C7E; --accent-soft: #DFE6EF; --star: #C9A01E; --check: #B5A98C; --due-today: #C98A1A; --due-today-text: #A86F0C;
   --today: #93650C; --today-bg: #EEDFB8; --overdue: #96412B; --overdue-bg: #EEDACE; --chip: #E9E2D2;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1E1B16; --panel: #26221C; --ink: #ECE4D6; --muted: #A8997C; --border: #3A342A;
+    --bg: #1E1B16; --panel: #26221C; --ink: #ECE4D6; --muted: #A8997C; --border: #3A342A; --tile: #312C24;
     --accent: #8FB0E3; --accent-soft: #2A3445; --star: #D9B43A; --check: #6E6552; --due-today: #E0A33A; --due-today-text: #E6B45A;
     --today: #E2B252; --today-bg: #3D331D; --overdue: #E08A71; --overdue-bg: #3F2A22; --chip: #2E2922;
   }
@@ -62,6 +62,11 @@ main { flex: 1; min-width: 0; max-width: 860px; }
 .more .menu { position: absolute; right: 0; top: 24px; z-index: 5; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; display: flex; flex-direction: column; min-width: 150px; box-shadow: 0 4px 14px #0002; }
 .more .menu button { text-align: left; padding: 8px 12px; }
 .more .menu button:hover { background: var(--accent-soft); }
+.more .menu { min-width: 236px; padding-bottom: 10px; }
+.menu-label { font-size: 11px; color: var(--muted); letter-spacing: .04em; padding: 8px 14px 6px; }
+.tiles { display: flex; gap: 6px; padding: 0 14px; }
+.more .menu .tile { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; border-radius: 6px; background: var(--tile); color: var(--accent); font-size: 11px; }
+.tile .icon { width: 17px; height: 17px; }
 
 #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 14px; border-radius: 8px; display: none; gap: 14px; align-items: center; }
 #toast.show { display: flex; }

@@ -104,7 +104,10 @@ internal enum class Icon(val path: String) {
     SNOWFLAKE("M22 11h-4.17l3.24-3.24-1.41-1.42L15 11h-2V9l4.66-4.66-1.42-1.41L13 6.17V2h-2v4.17L7.76 2.93 6.34 4.34 11 9v2H9L4.34 6.34 2.93 7.76 6.17 11H2v2h4.17l-3.24 3.24 1.41 1.42L9 13h2v2l-4.66 4.66 1.42 1.41L11 17.83V22h2v-4.17l3.24 3.24 1.42-1.41L13 15v-2h2l4.66 4.66 1.41-1.42L17.83 13H22z"), // AcUnit
     PAUSE("M6 19h4V5H6v14zm8-14v14h4V5h-4z"),
     CHEVRON_RIGHT("M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"),
-    EXPAND_MORE("M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z")
+    EXPAND_MORE("M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"),
+    SCHEDULE("M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"),
+    BEDTIME("M12.34 2.02C6.59 1.82 2 6.42 2 12c0 5.52 4.48 10 10 10 3.71 0 6.93-2.02 8.66-5.02-7.51-.25-12.09-8.43-8.32-14.96z"),
+    DATE_RANGE("M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z")
 }
 
 internal fun FlowContent.icon(icon: Icon, classes: String, color: String? = null) = span(classes = "icon $classes") {
@@ -327,14 +330,20 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
         }
         details(classes = "more") {
             summary { attributes["aria-label"] = "Snooze"; +"⋯" }
+            // "Snooze" over three equal tiles, like the app's row menu.
             div(classes = "menu") {
-                listOf(Labels.SNOOZE_HOUR to "hour", Labels.SNOOZE_TOMORROW to "tomorrow", Labels.SNOOZE_WEEK to "week").forEach { (label, until) ->
-                    button {
-                        attributes["hx-post"] = "/tasks/${task.id}/snooze?until=$until&mode=$mode"
-                        attributes["hx-target"] = "#list"
-                        attributes["hx-swap"] = "outerHTML"
-                        +label
-                    }
+                div(classes = "menu-label") { +Labels.SNOOZE }
+                div(classes = "tiles") {
+                    listOf(Triple(Labels.SNOOZE_HOUR, "hour", Icon.SCHEDULE), Triple(Labels.SNOOZE_TOMORROW, "tomorrow", Icon.BEDTIME), Triple(Labels.SNOOZE_WEEK, "week", Icon.DATE_RANGE))
+                        .forEach { (label, until, tileIcon) ->
+                            button(classes = "tile") {
+                                attributes["hx-post"] = "/tasks/${task.id}/snooze?until=$until&mode=$mode"
+                                attributes["hx-target"] = "#list"
+                                attributes["hx-swap"] = "outerHTML"
+                                icon(tileIcon, "")
+                                span { +label }
+                            }
+                        }
                 }
             }
         }

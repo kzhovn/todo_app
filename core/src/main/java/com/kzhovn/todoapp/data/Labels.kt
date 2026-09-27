@@ -43,10 +43,11 @@ object Labels {
     const val ACTIVE = "Active"
     const val ALL = "All"
 
-    // A row's snooze menu
-    const val SNOOZE_HOUR = "Snooze 1 hour"
-    const val SNOOZE_TOMORROW = "Snooze to tomorrow"
-    const val SNOOZE_WEEK = "Snooze 1 week"
+    // A row's ⋯ menu: "Snooze" over three tiles
+    const val SNOOZE = "Snooze"
+    const val SNOOZE_HOUR = "1 hour"
+    const val SNOOZE_TOMORROW = "Tomorrow"
+    const val SNOOZE_WEEK = "1 week"
 
     // Completing a task that still has open subtasks
     const val COMPLETE_SUBTASKS_TOO = "Complete subtasks too"

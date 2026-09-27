@@ -1,5 +1,17 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import com.kzhovn.todoapp.ui.theme.LedgerTile
+import com.kzhovn.todoapp.ui.theme.LedgerSearchBackground
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.BorderStroke
 import com.kzhovn.todoapp.focus.FocusActivity
 import android.content.Intent
 import com.kzhovn.todoapp.data.DueStatus
@@ -60,7 +72,6 @@ import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -269,22 +280,57 @@ private fun TaskRow(
                 }
             }
         }
-        DropdownMenu(expanded = showSnoozeMenu, onDismissRequest = { showSnoozeMenu = false }) {
+        DropdownMenu(
+            expanded = showSnoozeMenu,
+            onDismissRequest = { showSnoozeMenu = false },
+            shape = RoundedCornerShape(8.dp),
+            containerColor = LedgerSearchBackground,
+            border = BorderStroke(1.dp, LedgerBorder)
+        ) {
             val context = LocalContext.current
             fun snooze(until: (now: Long) -> Long) {
                 showSnoozeMenu = false
                 onSnooze(task.id, until(System.currentTimeMillis()))
             }
-            DropdownMenuItem(text = { Text(Labels.SNOOZE_HOUR) }, onClick = { snooze { it + HOUR_MILLIS } })
-            // "Tomorrow" starts at the day rollover (4am by default), not 24 hours from now.
-            DropdownMenuItem(text = { Text(Labels.SNOOZE_TOMORROW) }, onClick = { snooze { nextRollover(it, AppSettings.rolloverHour(context)) } })
-            DropdownMenuItem(text = { Text(Labels.SNOOZE_WEEK) }, onClick = { snooze { it + WEEK_MILLIS } })
-            DropdownMenuItem(text = { Text(Labels.PIN) }, onClick = { showSnoozeMenu = false; PinnedTask.pin(context, task) })
-            DropdownMenuItem(text = { Text("Focus") }, onClick = {
-                showSnoozeMenu = false
-                context.startActivity(Intent(context, FocusActivity::class.java).putExtra(FocusActivity.EXTRA_TASK_ID, task.id))
-            })
+            Column(Modifier.width(236.dp)) {
+                Text(Labels.SNOOZE, fontSize = 11.sp, color = LedgerMuted, letterSpacing = 0.4.sp, modifier = Modifier.padding(start = 14.dp, top = 4.dp, bottom = 6.dp))
+                // Three equal tiles lined up with the rows' icons below.
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 10.dp)) {
+                    SnoozeTile(Labels.SNOOZE_HOUR, Icons.Filled.Schedule) { snooze { it + HOUR_MILLIS } }
+                    // "Tomorrow" starts at the day rollover (4am by default), not 24 hours from now.
+                    SnoozeTile(Labels.SNOOZE_TOMORROW, Icons.Filled.Bedtime) { snooze { nextRollover(it, AppSettings.rolloverHour(context)) } }
+                    SnoozeTile(Labels.SNOOZE_WEEK, Icons.Filled.DateRange) { snooze { it + WEEK_MILLIS } }
+                }
+                HorizontalDivider(color = LedgerBorder)
+                MenuRow(Labels.PIN, Icons.Filled.PushPin) { showSnoozeMenu = false; PinnedTask.pin(context, task) }
+                MenuRow("Focus", Icons.Filled.CenterFocusStrong) {
+                    showSnoozeMenu = false
+                    context.startActivity(Intent(context, FocusActivity::class.java).putExtra(FocusActivity.EXTRA_TASK_ID, task.id))
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun RowScope.SnoozeTile(label: String, icon: ImageVector, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.weight(1f).clip(RoundedCornerShape(6.dp)).background(LedgerTile).clickable(onClick = onClick).padding(vertical = 6.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = LedgerAccent, modifier = Modifier.size(17.dp))
+        Text(label, fontSize = 11.sp, color = LedgerAccent, modifier = Modifier.padding(top = 2.dp))
+    }
+}
+
+@Composable
+private fun MenuRow(label: String, icon: ImageVector, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().height(40.dp).clickable(onClick = onClick).padding(horizontal = 14.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = LedgerMuted, modifier = Modifier.size(16.dp))
+        Text(label, fontSize = 13.sp, color = LedgerInk, modifier = Modifier.padding(start = 10.dp))
     }
 }
 

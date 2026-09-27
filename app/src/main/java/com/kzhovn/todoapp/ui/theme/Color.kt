@@ -9,6 +9,8 @@ val LedgerSearchBackground = Color(0xFFF7F4EE)
 val LedgerInk = Color(0xFF2B2318)
 val LedgerMuted = Color(0xFF8A7A5C)
 val LedgerBorder = Color(0xFFDED5C1)
+// A faint tile on the cream panels, e.g. the row menu's snooze buttons.
+val LedgerTile = Color(0xFFEFE8DC)
 
 val LedgerAccent = Color(0xFF2B4C7E)
 val LedgerAccentInk = Color(0xFFFFFFFF)
