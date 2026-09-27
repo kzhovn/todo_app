@@ -99,28 +99,34 @@ fun formatChipDate(epochMillis: Long): String =
 fun formatTimeSuffix(epochMillis: Long): String =
     if (hasTime(epochMillis)) " " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(epochMillis)) else ""
 
-// Date first, then an optional time: dismissing the time dialog (or "No time") keeps the value
-// date-only, or keeps its existing time if it had one.
-fun pickDate(activity: Activity, currentValue: Long?, withTime: Boolean = true, onPicked: (Long) -> Unit) {
+// A date, then OK; a time only if asked for ("+ Time"), like MLO. A value that already has a time
+// keeps it on OK. "Today" jumps the calendar to today without closing.
+fun pickDate(activity: Activity, currentValue: Long?, withTime: Boolean = true, title: String? = null, onPicked: (Long) -> Unit) {
     val cal = Calendar.getInstance()
     if (currentValue != null) cal.timeInMillis = currentValue
     val existingTime = currentValue?.takeIf(::hasTime)
-    DatePickerDialog(
-        activity,
-        { _, year, month, day ->
-            val picked = Calendar.getInstance().apply { set(year, month, day) }.startOfDay()
-            onPicked(existingTime?.let { atTime(picked, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE)) } ?: picked)
-            if (!withTime) return@DatePickerDialog
-            TimePickerDialog(
-                activity,
-                { _, hour, minute -> onPicked(atTime(picked, hour, minute)) },
-                if (existingTime != null) cal.get(Calendar.HOUR_OF_DAY) else 9,
-                if (existingTime != null) cal.get(Calendar.MINUTE) else 0,
-                android.text.format.DateFormat.is24HourFormat(activity)
-            ).apply {
-                setButton(DialogInterface.BUTTON_NEUTRAL, "No time") { _, _ -> onPicked(picked) }
-            }.show()
-        },
-        cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)
-    ).apply { datePicker.firstDayOfWeek = Calendar.MONDAY }.show()
+    val dialog = DatePickerDialog(activity, null, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH))
+    dialog.datePicker.firstDayOfWeek = Calendar.MONDAY
+    title?.let(dialog::setTitle)
+    fun picked() = dialog.datePicker.let { Calendar.getInstance().apply { set(it.year, it.month, it.dayOfMonth) }.startOfDay() }
+    dialog.setButton(DialogInterface.BUTTON_POSITIVE, "OK") { _, _ ->
+        onPicked(existingTime?.let { atTime(picked(), cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE)) } ?: picked())
+    }
+    if (withTime) dialog.setButton(DialogInterface.BUTTON_NEGATIVE, if (existingTime != null) "Time" else "+ Time") { _, _ ->
+        val day = picked()
+        TimePickerDialog(
+            activity,
+            { _, hour, minute -> onPicked(atTime(day, hour, minute)) },
+            if (existingTime != null) cal.get(Calendar.HOUR_OF_DAY) else 9,
+            if (existingTime != null) cal.get(Calendar.MINUTE) else 0,
+            android.text.format.DateFormat.is24HourFormat(activity)
+        ).apply { setButton(DialogInterface.BUTTON_NEUTRAL, "No time") { _, _ -> onPicked(day) } }.show()
+    }
+    dialog.setButton(DialogInterface.BUTTON_NEUTRAL, "Today") { _, _ -> }
+    dialog.show()
+    // Set after show() so the button doesn't close the dialog.
+    dialog.getButton(DialogInterface.BUTTON_NEUTRAL).setOnClickListener {
+        val today = Calendar.getInstance()
+        dialog.datePicker.updateDate(today.get(Calendar.YEAR), today.get(Calendar.MONTH), today.get(Calendar.DAY_OF_MONTH))
+    }
 }

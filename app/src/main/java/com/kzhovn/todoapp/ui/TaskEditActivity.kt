@@ -334,7 +334,7 @@ class TaskEditActivity : ComponentActivity() {
                         label = Labels.START,
                         valueText = task.startDate?.let(::formatChipDate),
                         icon = Icons.Filled.Event,
-                        onClick = { pickDate(this@TaskEditActivity, task.startDate) { task = task.copy(startDate = it) } },
+                        onClick = { pickDate(this@TaskEditActivity, task.startDate, title = Labels.START) { task = task.copy(startDate = it) } },
                         onClear = { task = task.copy(startDate = null) },
                         showLabelWhenSet = false
                     )
@@ -343,7 +343,7 @@ class TaskEditActivity : ComponentActivity() {
                             label = Labels.DUE,
                             valueText = task.dueDate?.let(::formatChipDate),
                             icon = Icons.Filled.Flag,
-                            onClick = { pickDate(this@TaskEditActivity, task.dueDate) { task = task.copy(dueDate = it) } },
+                            onClick = { pickDate(this@TaskEditActivity, task.dueDate, title = Labels.DUE) { task = task.copy(dueDate = it) } },
                             onClear = { task = task.copy(dueDate = null) },
                             showLabelWhenSet = false
                         )

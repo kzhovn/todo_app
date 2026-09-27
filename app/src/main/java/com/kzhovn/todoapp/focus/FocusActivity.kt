@@ -1,7 +1,12 @@
 package com.kzhovn.todoapp.focus
 
+import com.kzhovn.todoapp.quickadd.QuickAddParser
+import com.kzhovn.todoapp.quickadd.QuickAddActivity
+import com.kzhovn.todoapp.data.Labels
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import android.widget.Toast
 import android.app.ActivityManager
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -18,7 +23,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -67,6 +72,13 @@ import kotlinx.coroutines.launch
 // reach. Leaving takes typing a random sentence; finishing the task offers the next one instead.
 // ponytail: pinning can still be undone with Android's own Back+Overview gesture; a real app
 // blocker (usage access + overlay) is on the backlog.
+// What to focus on next: Doing, or Active when Doing is empty. After finishing a step of something
+// sequential, the step that's now unblocked always comes first.
+internal fun nextFocusTasks(active: List<Task>, doing: List<Task>, finished: Task?, byId: Map<Long, Task>): List<Task> {
+    val nextStep = finished?.parentId?.takeIf { byId[it]?.sequential == true }?.let { parent -> active.firstOrNull { it.parentId == parent } }
+    return (listOfNotNull(nextStep) + doing.ifEmpty { active }).distinctBy { it.id }
+}
+
 class FocusActivity : ComponentActivity() {
     private var focusing = false
 
@@ -81,6 +93,7 @@ class FocusActivity : ComponentActivity() {
                 var candidates by remember { mutableStateOf<List<Task>?>(null) }
                 var askNext by remember { mutableStateOf(false) }
                 var leaving by remember { mutableStateOf<String?>(null) }
+                var adding by remember { mutableStateOf(false) }
                 val scope = rememberCoroutineScope()
 
                 fun focusOn(t: Task) {
@@ -92,11 +105,14 @@ class FocusActivity : ComponentActivity() {
                     if (!focusing) { focusing = true; startLockTask() }
                 }
 
-                // What's active, Doing's tasks first, for "pick a task".
-                suspend fun pickable(): List<Task> {
+                suspend fun pickable(finished: Task? = null): List<Task> {
                     val now = System.currentTimeMillis()
-                    val active = repository.getActiveTasks(now, minuteOfDay(now), dayOfWeekMask(now))
-                    return filterDoing(active, now).let { doing -> doing + (active - doing.toSet()) }
+                    val all = repository.getAllTasks()
+                    val byId = all.associateBy { it.id }
+                    val contexts = repository.getAllTaskContexts()
+                    val active = repository.getActiveTasksFrom(all, contexts, now, minuteOfDay(now), dayOfWeekMask(now))
+                    val doing = filterDoing(active, now) { resolveEffective(it, byId, contexts).effectiveDueDate }
+                    return nextFocusTasks(active, doing, finished, byId)
                 }
 
                 fun exit() {
@@ -139,11 +155,9 @@ class FocusActivity : ComponentActivity() {
                             }
                         }
                         Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            // Calls stay possible. Opening the dialer has to unpin; coming back here pins again.
-                            IconButton(onClick = {
-                                runCatching { stopLockTask() }
-                                startActivity(Intent(Intent.ACTION_DIAL))
-                            }) { Icon(Icons.Filled.Call, contentDescription = "Phone", tint = LedgerMuted) }
+                            // Capture a stray thought without leaving. A dialog here, not QuickAddActivity: that runs
+                            // in its own task, which a pinned screen won't open.
+                            IconButton(onClick = { adding = true }) { Icon(Icons.Filled.Add, contentDescription = "Add a task", tint = LedgerAccent) }
                             TextButton(onClick = { leaving = FocusPhrase.random() }) { Text("Leave focus", color = LedgerMuted) }
                         }
                     }
@@ -165,8 +179,40 @@ class FocusActivity : ComponentActivity() {
                         onDismissRequest = {},
                         title = { Text("Done!") },
                         text = { Text("Focus on the next task, or finish?") },
-                        confirmButton = { Button(onClick = { scope.launch { candidates = pickable() } }) { Text("Next task") } },
+                        confirmButton = { Button(onClick = { scope.launch { candidates = pickable(finished = task) } }) { Text("Next task") } },
                         dismissButton = { TextButton(onClick = { exit() }) { Text("I'm done") } }
+                    )
+                }
+
+                if (adding) {
+                    var text by remember { mutableStateOf("") }
+                    val add = {
+                        val parsed = QuickAddParser.parse(text)
+                        adding = false
+                        if (parsed.title.isNotBlank()) scope.launch {
+                            // Into Personal, like quick add with no folder chosen.
+                            val personal = repository.getFolders().firstOrNull { it.title.trim().equals(QuickAddActivity.DEFAULT_FOLDER, ignoreCase = true) }
+                            repository.createTask(parsed.copy(parentId = personal?.id))
+                            TodoWidget().updateAll(applicationContext)
+                            Toast.makeText(this@FocusActivity, "Added “${parsed.title}”", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    AlertDialog(
+                        onDismissRequest = { adding = false },
+                        title = { Text("Add a task") },
+                        text = {
+                            OutlinedTextField(
+                                value = text,
+                                onValueChange = { text = it },
+                                placeholder = { Text(Labels.TITLE) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { add() }),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        },
+                        confirmButton = { Button(onClick = add, enabled = text.isNotBlank()) { Text("Add") } },
+                        dismissButton = { TextButton(onClick = { adding = false }) { Text("Cancel") } }
                     )
                 }
 
@@ -205,7 +251,7 @@ class FocusActivity : ComponentActivity() {
         const val EXTRA_TASK_ID = "task_id"
     }
 
-    // Back from the dialer (or anywhere): pin again.
+    // Unpinned with Android's own gesture and back again: pin again.
     override fun onResume() {
         super.onResume()
         if (focusing && getSystemService(ActivityManager::class.java).lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) startLockTask()

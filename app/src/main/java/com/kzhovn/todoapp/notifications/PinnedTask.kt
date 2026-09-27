@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.notifications
 
+import com.kzhovn.todoapp.focus.FocusActivity
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -78,6 +79,11 @@ object PinnedTask {
             Intent(context, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, task.id),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val focus = PendingIntent.getActivity(
+            context, 3,
+            Intent(context, FocusActivity::class.java).putExtra(FocusActivity.EXTRA_TASK_ID, task.id),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(task.title)
@@ -97,6 +103,7 @@ object PinnedTask {
             // Broadcast actions (not activities) run without unlocking, so Complete works on the lock screen.
             .addAction(0, "Complete", action(ACTION_COMPLETE, 1))
             .addAction(0, "Unpin", action(ACTION_UNPIN, 2))
+            .addAction(0, "Focus", focus)
             .build()
         manager.notify(NOTIFICATION_ID, notification)
     }
