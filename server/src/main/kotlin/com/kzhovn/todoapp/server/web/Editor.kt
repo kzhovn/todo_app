@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.data.checklistItems
 import com.kzhovn.todoapp.recurrence.ordinal
 import com.kzhovn.todoapp.recurrence.WEEKDAY_NAMES
 import com.kzhovn.todoapp.recurrence.NTH_NAMES
@@ -191,6 +192,29 @@ fun Route.editorRoutes(service: TaskService) {
         }
         call.respondSubtasks(service, id)
     }
+    // A checklist's items: add ("milk, eggs" is two), uncheck all, clear checked.
+    post("/tasks/{id}/items") {
+        val id = call.taskId() ?: return@post
+        val text = call.receiveParameters()["text"].orEmpty()
+        if (service.get(id)?.type == TaskType.CHECKLIST) service.addItems(id, text)
+        call.respondSubtasks(service, id, focusAddItem = true)
+    }
+    post("/tasks/{id}/items/uncheck") {
+        val id = call.taskId() ?: return@post
+        service.uncheckAll(id)
+        call.respondSubtasks(service, id)
+    }
+    post("/tasks/{id}/items/clear") {
+        val id = call.taskId() ?: return@post
+        service.clearChecked(id)
+        call.respondSubtasks(service, id)
+    }
+    // Completing a checklist (on purpose, from its editor); unchecked items move to a new copy or are completed too.
+    post("/tasks/{id}/complete-list") {
+        val id = call.taskId() ?: return@post
+        service.completeChecklist(id, moveUncheckedToNewList = call.request.queryParameters["move"] == "1")
+        call.respondRedirect(call.mode().path)
+    }
     post("/tasks/{id}/subtasks/{sub}/toggle") {
         val id = call.taskId() ?: return@post
         call.parameters["sub"]?.toLongOrNull()?.let(service::get)?.takeIf { it.parentId == id }?.let {
@@ -254,8 +278,8 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     call.respondRedirect(mode.path)
 }
 
-private suspend fun io.ktor.server.application.ApplicationCall.respondSubtasks(service: TaskService, id: Long) =
-    respondText(createHTML().div { relatedSection(service, id, mode()) }, ContentType.Text.Html)
+private suspend fun io.ktor.server.application.ApplicationCall.respondSubtasks(service: TaskService, id: Long, focusAddItem: Boolean = false) =
+    respondText(createHTML().div { relatedSection(service, id, mode(), focusAddItem) }, ContentType.Text.Html)
 
 private fun Parameters.ids(name: String) = getAll(name).orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
 
@@ -545,6 +569,26 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
                 attributes["formnovalidate"] = ""
                 +Labels.DELETE
             }
+            // Checking the last item completes nothing; a checklist is completed here, on purpose.
+            if (!isNew && t.type == TaskType.CHECKLIST && !t.isComplete) {
+                val unchecked = service.tasks().count { it.parentId == t.id && !it.isComplete }
+                fun completeButton(move: Boolean, label: String) = button(type = ButtonType.submit, classes = "complete-list") {
+                    attributes["form"] = formId
+                    attributes["formaction"] = "/tasks/${t.id}/complete-list?mode=${v.mode.name}&move=${if (move) 1 else 0}"
+                    attributes["formnovalidate"] = ""
+                    +label
+                }
+                // With items unchecked, the same question as the phone's, in a popover.
+                if (unchecked == 0) completeButton(false, Labels.COMPLETE_LIST)
+                else details(classes = "pp complete-ask") {
+                    summary(classes = "complete-list") { +Labels.COMPLETE_LIST }
+                    div(classes = "pop") {
+                        p(classes = "hint") { +Labels.uncheckedItems(unchecked) }
+                        completeButton(true, Labels.MOVE_TO_NEW_LIST)
+                        completeButton(false, Labels.COMPLETE_THEM_TOO)
+                    }
+                }
+            }
             a(href = v.mode.path, classes = "cancel") { +"Cancel" }
             button(type = ButtonType.submit, classes = "primary") { attributes["form"] = formId; +Labels.SAVE }
         }
@@ -589,7 +633,8 @@ internal fun folderPath(folder: Task, byId: Map<Long, Task>): String =
 // Related tasks: subtasks, prerequisites (what this depends on) and dependents (what depends on
 // it), each added or unlinked at once via htmx. Filled into a div by the caller so the fragment's
 // root is #related, which htmx swaps.
-fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode) {
+// focusAddItem: after adding items, the new field is focused again, for typing a list in one go.
+fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddItem: Boolean = false) {
     this.id = "related"
     classes = setOf("related")
     val all = service.tasks()
@@ -608,8 +653,36 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode) {
     }
     fun FlowContent.unlink(url: String) = button(classes = "unlink") { htmx(url); attributes["aria-label"] = "Remove"; +"✕" }
 
+    val isChecklist = task.type == TaskType.CHECKLIST
+    if (isChecklist) {
+        // Items: a checkbox and a title each, open ones first, and a field that stays for the next one.
+        div(classes = "field-label section") { +Labels.ITEMS }
+        val items = checklistItems(id, all)
+        items.forEach { item ->
+            div(classes = "rel-row item") {
+                button(classes = if (item.isComplete) "check done" else "check") {
+                    htmx("/tasks/$id/subtasks/${item.id}/toggle?mode=$m")
+                    attributes["aria-label"] = if (item.isComplete) "Uncheck" else "Check"
+                    if (item.isComplete) icon(Icon.CHECK, "")
+                }
+                a(href = "/tasks/${item.id}?mode=$m", classes = if (item.isComplete) "done" else null) { +item.title }
+            }
+        }
+        form(classes = "inline add-item") {
+            htmx("/tasks/$id/items?mode=$m")
+            textInput(name = "text") { placeholder = "+ ${Labels.ADD_ITEM}"; attributes["autocomplete"] = "off"; if (focusAddItem) autoFocus = true }
+        }
+        if (items.any { it.isComplete }) div(classes = "adders") {
+            button(classes = "add-link") { htmx("/tasks/$id/items/uncheck?mode=$m"); +Labels.UNCHECK_ALL }
+            button(classes = "add-link") {
+                htmx("/tasks/$id/items/clear?mode=$m")
+                attributes["hx-confirm"] = Labels.clearChecked(items.count { it.isComplete })
+                +Labels.CLEAR_CHECKED
+            }
+        }
+    }
     div(classes = "field-label section") { +Labels.RELATED_TASKS }
-    all.filter { it.parentId == id }.sortedWith(TaskOrder).forEach { sub ->
+    all.filter { it.parentId == id && !isChecklist }.sortedWith(TaskOrder).forEach { sub ->
         row(Labels.SUBTASK, sub) {
             if (sub.type == TaskType.TASK) button(classes = if (sub.isComplete) "check done" else "check") {
                 htmx("/tasks/$id/subtasks/${sub.id}/toggle?mode=$m")
@@ -641,7 +714,7 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode) {
         }
     }
     div(classes = "adders") {
-        adder(Labels.ADD_SUBTASK, "/tasks/$id/subtasks?mode=$m", "child", "New subtask",
+        if (!isChecklist) adder(Labels.ADD_SUBTASK, "/tasks/$id/subtasks?mode=$m", "child", "New subtask",
             all.filter { it.id != id && it.type != TaskType.FOLDER && !it.isComplete && it.parentId != id && !wouldCreateCycle(id, it.id, byId) }.sortedBy { it.title.lowercase() })
         if (task.type != TaskType.FOLDER) {
             val otherEdges = edges.filter { it.taskId != id }

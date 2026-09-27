@@ -145,9 +145,9 @@ private fun LazyListScope.renderNodes(
 ) {
     nodes.forEach { node ->
         item(key = node.task.id) {
-            OutlinerRow(node, depth, node.task.id in collapsed, onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, allById, node.task.id in selectedIds)
+            OutlinerRow(node, depth, isFolded(node.task, collapsed), onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, allById, node.task.id in selectedIds)
         }
-        if (node.children.isNotEmpty() && node.task.id !in collapsed) {
+        if (node.children.isNotEmpty() && !isFolded(node.task, collapsed)) {
             renderNodes(node.children, depth + 1, collapsed, onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, allById, selectedIds)
         }
     }
@@ -290,8 +290,9 @@ private fun OutlinerRow(
                         modifier = Modifier.weight(1f).clickable { onEdit(task.id) }
                     )
                 }
-                TaskType.TASK, TaskType.PROJECT -> {
+                TaskType.TASK, TaskType.PROJECT, TaskType.CHECKLIST -> {
                     if (task.type == TaskType.PROJECT) ProjectMark(36.dp)
+                    else if (task.type == TaskType.CHECKLIST) node.children.let { items -> CountMark(items.count { it.task.isComplete }, items.size, touchSize = 36.dp) { onEdit(task.id) } }
                     else TaskCheckbox(checked = task.isComplete, due = task.dueDate?.takeUnless { task.isComplete }?.let { dueStatus(it, System.currentTimeMillis()) }, size = 20.dp, touchSize = 36.dp, onCheckedChange = { onCheck(task.id) })
                     Spacer(Modifier.width(6.dp))
                     Text(
@@ -313,5 +314,9 @@ private fun OutlinerRow(
         }
     }
 }
+
+// Checklists start folded (their items are clutter in the tree); the saved set holds the ones the
+// user flipped, so for a checklist being in it means unfolded.
+private fun isFolded(task: Task, flipped: Set<Long>) = (task.id in flipped) != (task.type == TaskType.CHECKLIST)
 
 private enum class DropZone { BEFORE, INTO, AFTER }

@@ -378,6 +378,20 @@ class WebTest {
     }
 
     @Test
+    fun `a checklist's items are added, kept out of Active, and moved on to a new list when completed`() = web {
+        val list = service.create(Task(title = "Groceries", type = TaskType.CHECKLIST))
+        client.submitForm("/tasks/${list.id}/items", parameters { append("text", "milk, eggs, bread") })
+        val items = service.tasks().filter { it.parentId == list.id }
+        assertEquals(setOf("milk", "eggs", "bread"), items.map { it.title }.toSet())
+        assertEquals(listOf("Groceries"), service.active().map { it.title })
+        service.complete(items.first { it.title == "milk" }.id)
+        client.post("/tasks/${list.id}/complete-list?move=1")
+        val fresh = service.tasks().single { it.title == "Groceries" && !it.isComplete }
+        assertEquals(setOf("eggs", "bread"), service.tasks().filter { it.parentId == fresh.id }.map { it.title }.toSet())
+        assertTrue(service.get(list.id)!!.isComplete)
+    }
+
+    @Test
     fun `active is sectioned by top-level folder, foldable per browser, no-folder only when needed`() = web {
         val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
         service.create(Task(title = "Fix bug", parentId = work.id))

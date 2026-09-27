@@ -1,5 +1,8 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.material3.TextButton
+import com.kzhovn.todoapp.data.splitItems
+import com.kzhovn.todoapp.data.checklistItems
 import com.kzhovn.todoapp.ui.theme.folderColors
 import com.kzhovn.todoapp.data.dueStatus
 import androidx.compose.runtime.getValue
@@ -157,6 +160,9 @@ class TaskEditActivity : ComponentActivity() {
             var pendingDependents by remember { mutableStateOf<List<String>>(emptyList()) }
             var showPendingDependentDialog by remember { mutableStateOf(false) }
             var pendingDependentTitle by remember { mutableStateOf("") }
+            // A checklist's "Clear checked" and "Complete list" questions.
+            var confirmClearChecked by remember { mutableStateOf(false) }
+            var askUncheckedItems by remember { mutableStateOf(0) }
             var showNewBlockerDialog by remember { mutableStateOf(false) }
             var newBlockerTitle by remember { mutableStateOf("") }
             var showSubtaskPicker by remember { mutableStateOf(false) }
@@ -438,9 +444,35 @@ class TaskEditActivity : ComponentActivity() {
                 }
 
                 // Subtasks, what this task depends on (prerequisites), and what depends on it.
-                SectionLabel(Labels.RELATED_TASKS)
-                val subtasks = remember(allTasks, taskId) { allTasks.filter { it.parentId == taskId && taskId != 0L }.sortedWith(TaskOrder) }
+                val isChecklist = task.type == TaskType.CHECKLIST
                 val openTask = { id: Long -> startActivity(Intent(this@TaskEditActivity, TaskEditActivity::class.java).putExtra(EXTRA_TASK_ID, id)) }
+                if (isChecklist) {
+                    // Items: a checkbox and a title each, open ones first; the add field stays for the next one.
+                    SectionLabel(Labels.ITEMS)
+                    val items = remember(allTasks, taskId) { if (taskId == 0L) emptyList() else checklistItems(taskId, allTasks) }
+                    items.forEach { item ->
+                        ItemRow(item.title, item.isComplete, onCheck = {
+                            scope.launch {
+                                repository.toggleComplete(item.id, System.currentTimeMillis())
+                                allTasks = repository.getAllTasks()
+                                TodoWidget().updateAll(applicationContext)
+                            }
+                        }) { scope.launch { repository.deleteTask(item); allTasks = repository.getAllTasks() } }
+                    }
+                    pendingSubtasks.forEachIndexed { index, title ->
+                        ItemRow(title, false, onCheck = null) { pendingSubtasks = pendingSubtasks.filterIndexed { i, _ -> i != index } }
+                    }
+                    AddItemField { text ->
+                        if (taskId == 0L) pendingSubtasks = pendingSubtasks + splitItems(text)
+                        else scope.launch { repository.addItems(taskId, text); allTasks = repository.getAllTasks(); TodoWidget().updateAll(applicationContext) }
+                    }
+                    if (items.any { it.isComplete }) Row {
+                        AddLink(Labels.UNCHECK_ALL) { scope.launch { repository.uncheckAll(taskId); allTasks = repository.getAllTasks(); TodoWidget().updateAll(applicationContext) } }
+                        AddLink(Labels.CLEAR_CHECKED) { confirmClearChecked = true }
+                    }
+                }
+                SectionLabel(Labels.RELATED_TASKS)
+                val subtasks = remember(allTasks, taskId) { allTasks.filter { it.parentId == taskId && taskId != 0L && !isChecklist }.sortedWith(TaskOrder) }
                 subtasks.forEach { sub ->
                     RelatedRow(Labels.SUBTASK, sub.title, done = sub.isComplete, onOpen = { openTask(sub.id) }) {
                         if (sub.type == TaskType.TASK) {
@@ -454,7 +486,7 @@ class TaskEditActivity : ComponentActivity() {
                         }
                     }
                 }
-                pendingSubtasks.forEachIndexed { index, title ->
+                if (!isChecklist) pendingSubtasks.forEachIndexed { index, title ->
                     RelatedRow(Labels.SUBTASK, title, onOpen = null) { RemoveButton { pendingSubtasks = pendingSubtasks.filterIndexed { i, _ -> i != index } } }
                 }
                 pendingChildIds.mapNotNull(allById::get).forEach { child ->
@@ -485,7 +517,7 @@ class TaskEditActivity : ComponentActivity() {
                 }
                 Spacer(Modifier.height(6.dp))
                 Row {
-                    AddLink(Labels.ADD_SUBTASK) { showSubtaskPicker = true }
+                    if (!isChecklist) AddLink(Labels.ADD_SUBTASK) { showSubtaskPicker = true }
                     // A folder can't be completed, so it neither waits on tasks nor has any waiting on it.
                     if (task.type != TaskType.FOLDER) {
                         AddLink(Labels.ADD_PREREQUISITE) { showPrereqPicker = true }
@@ -493,7 +525,7 @@ class TaskEditActivity : ComponentActivity() {
                     }
                 }
                 // Folders and tasks alike: only the first incomplete child counts as active.
-                Row(
+                if (!isChecklist) Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth().clickable { task = task.copy(sequential = !task.sequential) }.padding(vertical = 4.dp)
                 ) {
@@ -516,6 +548,12 @@ class TaskEditActivity : ComponentActivity() {
                         Icon(Icons.Filled.Delete, contentDescription = Labels.DELETE, tint = LedgerOverdue)
                     }
                     Spacer(Modifier.weight(1f))
+                    // Checking the last item completes nothing; a checklist is completed here, on purpose.
+                    if (isChecklist && taskId != 0L && !task.isComplete) TextButton(onClick = {
+                        val unchecked = allTasks.count { it.parentId == taskId && !it.isComplete }
+                        if (unchecked > 0) askUncheckedItems = unchecked
+                        else scope.launch { repository.completeChecklist(taskId, false, System.currentTimeMillis()); TodoWidget().updateAll(applicationContext); finish() }
+                    }) { Text(Labels.COMPLETE_LIST, color = LedgerAccent) }
                     Button(
                         onClick = onSave,
                         enabled = isLoaded && task.title.isNotBlank(),
@@ -524,6 +562,34 @@ class TaskEditActivity : ComponentActivity() {
                         Text(Labels.SAVE)
                     }
                 }
+            }
+
+            if (confirmClearChecked) {
+                val checked = allTasks.count { it.parentId == taskId && it.isComplete }
+                ConfirmDialog(
+                    title = Labels.clearChecked(checked),
+                    body = null,
+                    confirmLabel = Labels.CLEAR_CHECKED,
+                    onConfirm = {
+                        confirmClearChecked = false
+                        scope.launch { repository.clearChecked(taskId); allTasks = repository.getAllTasks(); TodoWidget().updateAll(applicationContext) }
+                    },
+                    onDismiss = { confirmClearChecked = false }
+                )
+            }
+
+            if (askUncheckedItems > 0) {
+                val complete = { moveToNewList: Boolean ->
+                    askUncheckedItems = 0
+                    scope.launch { repository.completeChecklist(taskId, moveToNewList, System.currentTimeMillis()); TodoWidget().updateAll(applicationContext); finish() }
+                }
+                AlertDialog(
+                    onDismissRequest = { askUncheckedItems = 0 },
+                    title = { Text(Labels.COMPLETE_LIST) },
+                    text = { Text(Labels.uncheckedItems(askUncheckedItems)) },
+                    confirmButton = { TextButton(onClick = { complete(true) }) { Text(Labels.MOVE_TO_NEW_LIST) } },
+                    dismissButton = { TextButton(onClick = { complete(false) }) { Text(Labels.COMPLETE_THEM_TOO) } }
+                )
             }
 
             if (showDeleteConfirm) {
@@ -788,6 +854,40 @@ class TaskEditActivity : ComponentActivity() {
         const val EXTRA_DRAFT = "draft"
         const val EXTRA_DRAFT_DEPENDS_ON = "draft_depends_on"
     }
+}
+
+// A checklist item: checkbox, title (struck through once checked), ✕. A pending one (the checklist
+// isn't saved yet) has no checkbox.
+@Composable
+private fun ItemRow(title: String, checked: Boolean, onCheck: (() -> Unit)?, onRemove: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp)) {
+        if (onCheck != null) TaskCheckbox(checked = checked, due = null, size = 18.dp, touchSize = 34.dp, onCheckedChange = onCheck)
+        else Spacer(Modifier.width(34.dp))
+        Text(
+            title, fontSize = 14.sp, color = if (checked) LedgerMuted else LedgerInk,
+            textDecoration = if (checked) TextDecoration.LineThrough else null, modifier = Modifier.weight(1f)
+        )
+        RemoveButton(onRemove)
+    }
+}
+
+// Stays focused after each add, for typing a list in one go; "milk, eggs" adds two.
+@Composable
+private fun AddItemField(onAdd: (String) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    BasicTextField(
+        value = text,
+        onValueChange = { text = it },
+        singleLine = true,
+        textStyle = TextStyle(fontSize = 14.sp, color = LedgerInk),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) { onAdd(text); text = "" } }),
+        modifier = Modifier.fillMaxWidth().padding(start = 34.dp, top = 6.dp, bottom = 6.dp),
+        decorationBox = { field ->
+            if (text.isEmpty()) Text("+ ${Labels.ADD_ITEM}", fontSize = 14.sp, color = LedgerMuted)
+            field()
+        }
+    )
 }
 
 @Composable

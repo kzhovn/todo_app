@@ -243,7 +243,8 @@ fun DIV.listContents(data: ListData) {
 private fun FlowContent.tree(data: ListData, parentId: Long?, depth: Int) {
     data.openChildren(parentId).forEach { item ->
         val hasChildren = data.openChildren(item.id).isNotEmpty()
-        val collapsed = hasChildren && item.id in data.collapsed
+        // Checklists start folded; the cookie holds the ones flipped, so for a checklist it means unfolded.
+        val collapsed = hasChildren && ((item.id in data.collapsed) != (item.type == TaskType.CHECKLIST))
         val node: DIV.() -> Unit = {
             classes = classes + "node"
             attributes["tabindex"] = "0"
@@ -293,6 +294,10 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
         val status = due?.let { dueStatus(it, data.now) }
         if (task.type == TaskType.PROJECT) {
             span(classes = "project") { attributes["title"] = "Project: completes when its steps are done"; icon(Icon.PROJECT, "") }
+        } else if (task.type == TaskType.CHECKLIST) {
+            // Ticked item by item, inside it; the row shows how far along it is and opens it.
+            val (done, total) = data.subtaskCounts(task) ?: (0 to 0)
+            a(href = "/tasks/${task.id}?mode=$mode", classes = "count") { attributes["title"] = Labels.CHECKLIST; +"$done/$total" }
         } else {
             button(classes = "check") {
                 // Due today: an orange ring; overdue: rust. Each with a pale fill of its own colour.
@@ -311,7 +316,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                 a(href = "/tasks/${task.id}?mode=$mode", classes = "edit") { +task.title }
                 // On the title's line, wrapping along with it.
                 due?.let { dueTail(it, status!!, data.now) }
-                data.subtaskCounts(task)?.let { (done, total) -> span(classes = "tail") { +" · $done/$total" } }
+                if (task.type != TaskType.CHECKLIST) data.subtaskCounts(task)?.let { (done, total) -> span(classes = "tail") { +" · $done/$total" } }
                 if (task.recurrenceType != null) span(classes = "badge") { attributes["title"] = "Recurring"; icon(Icon.REPEAT, "") }
             }
         }

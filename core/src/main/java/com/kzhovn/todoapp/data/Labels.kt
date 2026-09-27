@@ -17,6 +17,7 @@ object Labels {
     const val TASK = "Task"
     const val PROJECT = "Project"
     const val FOLDER = "Folder"
+    const val CHECKLIST = "Checklist"
 
     const val START = "Start"
     const val DUE = "Due"
@@ -65,7 +66,18 @@ object Labels {
     const val ADD_NEXT = "Add next"
     const val LATER = "Later"
 
-    val TYPES = listOf(TaskType.TASK to TASK, TaskType.PROJECT to PROJECT, TaskType.FOLDER to FOLDER)
+    val TYPES = listOf(TaskType.TASK to TASK, TaskType.PROJECT to PROJECT, TaskType.CHECKLIST to CHECKLIST, TaskType.FOLDER to FOLDER)
+
+    // A checklist's items
+    const val ITEMS = "Items"
+    const val ADD_ITEM = "Add item"
+    const val CLEAR_CHECKED = "Clear checked"
+    const val UNCHECK_ALL = "Uncheck all"
+    const val COMPLETE_LIST = "Complete list"
+    const val MOVE_TO_NEW_LIST = "Move them to a new list"
+    const val COMPLETE_THEM_TOO = "Complete them too"
+    fun uncheckedItems(count: Int) = "$count item${if (count == 1) " isn't" else "s aren't"} checked."
+    fun clearChecked(count: Int) = "Delete $count checked item${if (count == 1) "" else "s"}?"
 
     // Minutes before the due date; null is no reminder.
     val REMINDERS: List<Pair<Int?, String>> = listOf(

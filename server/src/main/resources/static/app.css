@@ -281,6 +281,8 @@ body.selecting #list .row:not([data-type="TASK"]), body.selecting #list .folder 
 .field-label.section { margin-top: 10px; }
 .editor-foot { padding: 0 24px 24px; }
 .in-order { display: flex; align-items: center; gap: 8px; color: var(--muted); cursor: pointer; margin: 4px 0 8px; }
+/* A checklist's items are ticked in any order, so no "in order" choice. */
+.editor:has(input[name=type][value=CHECKLIST]:checked) ~ .editor-foot .in-order { display: none; }
 .editor:has(input[name=type][value=FOLDER]:checked) ~ .editor-foot .seq-task,
 .editor:not(:has(input[name=type][value=FOLDER]:checked)) ~ .editor-foot .seq-folder { display: none; }
 .pill.manage { text-decoration: none; }
@@ -299,3 +301,13 @@ body.selecting #list .row:not([data-type="TASK"]), body.selecting #list .folder 
 .adder form.inline { margin-top: 0; }
 .new-subtasks, .new-dep { width: 100%; max-width: 520px; }
 .new-subtasks { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
+
+/* Checklists */
+.count { flex-shrink: 0; margin-left: 6px; min-width: 22px; text-align: center; font-size: 11px; font-weight: 500; color: var(--accent); border: 1px solid var(--border); border-radius: 999px; padding: 1px 6px; text-decoration: none; }
+.rel-row.item a { flex: 1; }
+.add-item input { width: 100%; border: none; background: transparent; padding: 6px 0 6px 30px; font: inherit; color: var(--ink); }
+.add-item input:focus { outline: none; }
+.complete-list { color: var(--accent); cursor: pointer; list-style: none; }
+.complete-ask .pop { bottom: 100%; top: auto; display: flex; flex-direction: column; align-items: stretch; gap: 4px; min-width: 200px; }
+.complete-ask .pop button { text-align: left; padding: 6px 8px; border-radius: 5px; }
+.complete-ask .pop button:hover { background: var(--tile); }

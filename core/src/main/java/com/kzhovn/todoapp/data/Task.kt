@@ -7,7 +7,7 @@ import kotlinx.serialization.Serializable
 
 // A PROJECT is completed as a whole once its subtasks are done; it has no checkbox of its own and
 // never shows in Active/Doing (its subtasks do).
-enum class TaskType { TASK, FOLDER, PROJECT }
+enum class TaskType { TASK, FOLDER, PROJECT, CHECKLIST }
 enum class RecurrenceType { RRULE, AFTER_COMPLETION }
 
 const val BACKBURNER_AFTER = 30L * 24 * 60 * 60 * 1000

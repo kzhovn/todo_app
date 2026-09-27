@@ -1,5 +1,10 @@
 package com.kzhovn.todoapp.widget
 
+import com.kzhovn.todoapp.data.isChecklistItem
+import androidx.glance.text.TextDecoration
+import androidx.glance.appwidget.state.updateAppWidgetState
+import androidx.glance.currentState
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.kzhovn.todoapp.sync.SyncWorker
 import com.kzhovn.todoapp.sync.SyncSettings
 import com.kzhovn.todoapp.R
@@ -78,6 +83,8 @@ enum class WidgetMode(val label: String) { DOING("Doing"), ACTIVE("Active"), ALL
 
 val WIDGET_MODE_KEY = stringPreferencesKey("mode")
 val WIDGET_FOLDER_KEY = longPreferencesKey("folder")
+// Rows whose subtasks/items are expanded in place, per widget.
+val WIDGET_EXPANDED_KEY = stringSetPreferencesKey("expanded")
 
 fun Preferences.widgetMode(): WidgetMode =
     this[WIDGET_MODE_KEY]?.let { runCatching { WidgetMode.valueOf(it) }.getOrNull() } ?: WidgetMode.DOING
@@ -100,7 +107,7 @@ class TodoWidget : GlanceAppWidget() {
             val allById = allTasks.associateBy { it.id }
             val contextsByTaskId = repository.getAllTaskContexts()
             val tasks = when (mode) {
-                WidgetMode.ALL -> allTasks.filter { it.type == TaskType.TASK && !it.isComplete }
+                WidgetMode.ALL -> allTasks.filter { (it.type == TaskType.TASK || it.type == TaskType.CHECKLIST) && !it.isComplete && !isChecklistItem(it, allById) }
                 else -> {
                     val active = repository.getActiveTasksFrom(allTasks, contextsByTaskId, now, minuteOfDay(now), dayOfWeekMask(now))
                     if (mode == WidgetMode.ACTIVE) active
@@ -183,8 +190,19 @@ class TodoWidget : GlanceAppWidget() {
                         Text("Nothing here", style = TextStyle(color = fixed(LedgerMuted), fontSize = 15.sp))
                     }
                 } else {
+                    val expanded = currentState(WIDGET_EXPANDED_KEY).orEmpty()
+                    // An expanded row's children follow it. Their item ids are negated: a subtask can also be a
+                    // row of its own in Doing, and ids must be unique in the list.
+                    val entries = rows.flatMap { row ->
+                        listOf(row.id to row) + if (row.id.toString() in expanded) row.children.map { -it.id to (row to it) } else emptyList()
+                    }
                     LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
-                        items(rows, itemId = { it.id }) { row -> WidgetRow(row) }
+                        items(entries, itemId = { it.first }) { (_, entry) ->
+                            when (entry) {
+                                is WidgetTaskRow -> WidgetRow(entry, entry.id.toString() in expanded)
+                                is Pair<*, *> -> WidgetChildRow(entry.first as WidgetTaskRow, entry.second as WidgetChild)
+                            }
+                        }
                     }
                 }
             }
@@ -198,11 +216,16 @@ class TodoWidget : GlanceAppWidget() {
 // The check/star glyphs are large (they're what you tap) but their boxes hug them, so the
 // buttons stay easy to hit without adding whitespace around the title.
 @androidx.compose.runtime.Composable
-private fun WidgetRow(row: WidgetTaskRow) {
+private fun WidgetRow(row: WidgetTaskRow, expanded: Boolean) {
+    val toggleExpanded = actionRunCallback<ToggleExpandedAction>(actionParametersOf(taskIdKey to row.id))
     Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
         // The folder colour bar, like the app's rows; row height is fixed by the 30dp tap boxes.
         Box(GlanceModifier.width(4.dp).height(30.dp).background(fixed(row.barColor ?: LedgerBorder))) {}
-        Box(
+        // A checklist: "5/8" in the checkbox's place, tapped to show its items in place.
+        if (row.isChecklist) Box(contentAlignment = Alignment.Center, modifier = GlanceModifier.size(width = 36.dp, height = 30.dp).clickable(toggleExpanded)) {
+            val (done, total) = row.subtasks ?: (0 to 0)
+            Text("$done/$total", style = TextStyle(color = fixed(LedgerAccent), fontSize = 11.sp, fontWeight = FontWeight.Medium), maxLines = 1)
+        } else Box(
             contentAlignment = Alignment.Center,
             modifier = GlanceModifier.size(width = 31.dp, height = 30.dp)
                 .clickable(actionRunCallback<ToggleCompleteAction>(actionParametersOf(taskIdKey to row.id)))
@@ -261,8 +284,13 @@ private fun WidgetRow(row: WidgetTaskRow) {
                 Text("▶ ${formatDuration(minutes)}", style = TextStyle(color = fixed(LedgerAccent), fontSize = 12.sp, fontWeight = FontWeight.Medium))
             }
         }
-        row.subtasks?.let { (done, total) ->
-            Text("$done/$total", style = TextStyle(color = fixed(LedgerMuted), fontSize = 11.sp), maxLines = 1)
+        // A task's subtask count doubles as the toggle that shows them in place, like a checklist's.
+        if (!row.isChecklist) row.subtasks?.let { (done, total) ->
+            Text(
+                "$done/$total " + if (expanded) "▴" else "▾",
+                style = TextStyle(color = fixed(LedgerMuted), fontSize = 11.sp), maxLines = 1,
+                modifier = GlanceModifier.height(30.dp).padding(horizontal = 3.dp, vertical = 8.dp).clickable(toggleExpanded)
+            )
         }
         if (row.isMaybe) {
             Box(contentAlignment = Alignment.Center, modifier = GlanceModifier.size(width = 34.dp, height = 30.dp)) {
@@ -281,6 +309,49 @@ private fun WidgetRow(row: WidgetTaskRow) {
                 )
             }
         }
+    }
+}
+
+// An expanded row's subtask or item: indented under it, ticked in place; checked ones faded and struck through.
+@androidx.compose.runtime.Composable
+private fun WidgetChildRow(parent: WidgetTaskRow, child: WidgetChild) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
+        Box(GlanceModifier.width(4.dp).height(26.dp).background(fixed(parent.barColor ?: LedgerBorder))) {}
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = GlanceModifier.padding(start = 14.dp).size(width = 28.dp, height = 26.dp)
+                .clickable(actionRunCallback<ToggleItemAction>(actionParametersOf(taskIdKey to child.id)))
+        ) {
+            if (child.isComplete) Text("✓", style = TextStyle(color = fixed(LedgerMuted), fontSize = 16.sp))
+            else Image(ImageProvider(R.drawable.widget_check), contentDescription = "Check", modifier = GlanceModifier.size(16.dp))
+        }
+        Text(
+            child.title,
+            style = TextStyle(
+                color = fixed(if (child.isComplete) LedgerMuted else LedgerInk), fontSize = 13.sp,
+                textDecoration = if (child.isComplete) TextDecoration.LineThrough else TextDecoration.None
+            ),
+            maxLines = 1, modifier = GlanceModifier.defaultWeight().padding(start = 2.dp, end = 6.dp)
+        )
+    }
+}
+
+class ToggleExpandedAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val id = parameters[taskIdKey]?.toString() ?: return
+        updateAppWidgetState(context, glanceId) { prefs ->
+            val open = prefs[WIDGET_EXPANDED_KEY].orEmpty()
+            prefs[WIDGET_EXPANDED_KEY] = if (id in open) open - id else open + id
+        }
+        TodoWidget().update(context, glanceId)
+    }
+}
+
+// Ticks just this subtask/item (no cascade, and checking a checklist's last item completes nothing).
+class ToggleItemAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        (context.applicationContext as TodoApp).repository.toggleComplete(parameters[taskIdKey] ?: return, System.currentTimeMillis())
+        TodoWidget().update(context, glanceId)
     }
 }
 

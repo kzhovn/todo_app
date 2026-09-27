@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.data.splitItems
+import com.kzhovn.todoapp.data.isChecklistItem
 import com.kzhovn.todoapp.repository.urgentFirst
 import com.kzhovn.todoapp.data.newTaskPositions
 import com.kzhovn.todoapp.data.ContextTimeWindow
@@ -91,7 +93,9 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     // Open tasks anywhere under the folder, for `.list <folder>`.
     fun openInFolder(folderId: Long): List<Task> {
         val ids = subtreeIds(folderId)
-        return tasks().filter { it.id in ids && it.id != folderId && it.type == TaskType.TASK && !it.isComplete }
+        val all = tasks()
+        val byId = all.associateBy { it.id }
+        return all.filter { it.id in ids && it.id != folderId && (it.type == TaskType.TASK || it.type == TaskType.CHECKLIST) && !it.isComplete && !isChecklistItem(it, byId) }
     }
 
     fun folders(): List<Task> = tasks().filter { it.type == TaskType.FOLDER }
@@ -312,6 +316,24 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun removeDependency(taskId: Long, dependsOnId: Long) = store.transaction {
         val row = liveRows().firstOrNull { it.id == taskId } ?: return@transaction
         store.write(TASKS, taskId, JsonObject(taskFields(row.toTask(), row.contextIds(), row.dependsOn() - dependsOnId) - DELETED_AT), clock())
+    }
+
+    // Checklists; mirror TaskRepository's addItems, clearChecked, uncheckAll and completeChecklist.
+    fun addItems(checklistId: Long, text: String) = store.transaction { splitItems(text).forEach { create(Task(title = it, parentId = checklistId)) } }
+
+    fun clearChecked(checklistId: Long) = store.transaction { tasks().filter { it.parentId == checklistId && it.isComplete }.forEach { delete(it.id) } }
+
+    fun uncheckAll(checklistId: Long) = store.transaction { tasks().filter { it.parentId == checklistId && it.isComplete }.forEach { uncomplete(it.id) } }
+
+    fun completeChecklist(checklistId: Long, moveUncheckedToNewList: Boolean) = store.transaction {
+        val row = liveRows().firstOrNull { it.id == checklistId } ?: return@transaction
+        val unchecked = tasks().filter { it.parentId == checklistId && !it.isComplete }
+        if (moveUncheckedToNewList && unchecked.isNotEmpty()) {
+            val copy = row.toTask().copy(id = newId(), position = null, recurrenceType = null, recurrenceRule = null)
+            store.write(TASKS, copy.id, taskFields(copy, row.contextIds(), emptySet()), clock())
+            unchecked.forEach { item -> update(item.id) { it.copy(parentId = copy.id) } }
+        }
+        completeWithDescendants(checklistId)
     }
 
     // Mirrors TaskRepository.completeWithDescendants: each goes through complete(), so a recurring

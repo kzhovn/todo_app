@@ -7,6 +7,7 @@ import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.data.isChecklistItem
 import com.kzhovn.todoapp.data.resolveEffective
 
 // Shared by every Active/Doing caller (app, widget, server) so all agree on "now" using the same
@@ -71,7 +72,9 @@ fun computeActiveTasks(
     }
 
     return all.filter { task ->
-        if (task.type != TaskType.TASK || task.isComplete || task.isMaybe || task.isExpired(now)) return@filter false
+        // A checklist is workable like a task (its open items never block it); its items aren't listed.
+        if (task.type != TaskType.TASK && task.type != TaskType.CHECKLIST) return@filter false
+        if (task.isComplete || task.isMaybe || task.isExpired(now) || isChecklistItem(task, allById)) return@filter false
         if (task.id in blockedByDependency || isSequentiallyBlocked(task)) return@filter false
         val effective = resolveEffective(task, allById, contextsByTaskId)
         (effective.effectiveStartDate == null || effective.effectiveStartDate <= now) &&

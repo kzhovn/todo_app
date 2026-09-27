@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.repository
 
+import com.kzhovn.todoapp.data.splitItems
 import com.kzhovn.todoapp.data.newTaskPositions
 import com.kzhovn.todoapp.data.folderColorAssignments
 import com.kzhovn.todoapp.data.SearchFilters
@@ -243,6 +244,30 @@ class TaskRepository(
 
     // Cascades completion to every active descendant first — each goes through markComplete
     // individually so a recurring descendant still spawns its own next instance.
+    // Checklist items: "milk, eggs" adds two, in order, at the end of the list.
+    suspend fun addItems(checklistId: Long, text: String) = splitItems(text).forEach { createTask(Task(title = it, parentId = checklistId)) }
+
+    // Checked items are gone for good (after asking): a groceries list would otherwise fill up with them.
+    suspend fun clearChecked(checklistId: Long) =
+        taskDao.getAllOnce().filter { it.parentId == checklistId && it.isComplete }.forEach { taskDao.deleteById(it.id) }
+
+    suspend fun uncheckAll(checklistId: Long) =
+        taskDao.getAllOnce().filter { it.parentId == checklistId && it.isComplete }.forEach { taskDao.update(it.copy(isComplete = false, completedAt = null)) }
+
+    // Completing a checklist with items still unchecked: they either move to a fresh copy of the
+    // list (same place, contexts and star), or are completed along with it.
+    suspend fun completeChecklist(checklistId: Long, moveUncheckedToNewList: Boolean, now: Long) {
+        val checklist = taskDao.getById(checklistId) ?: return
+        val unchecked = taskDao.getAllOnce().filter { it.parentId == checklistId && !it.isComplete }
+        if (moveUncheckedToNewList && unchecked.isNotEmpty()) {
+            val copy = checklist.copy(id = newId(), position = null, recurrenceType = null, recurrenceRule = null)
+            taskDao.insert(copy)
+            taskContextDao.getContextIdsForTask(checklistId).forEach { taskContextDao.assignContext(TaskContextCrossRef(copy.id, it)) }
+            unchecked.forEach { taskDao.update(it.copy(parentId = copy.id)) }
+        }
+        completeWithDescendants(checklistId, now)
+    }
+
     suspend fun completeWithDescendants(taskId: Long, now: Long) {
         taskDao.getDescendants(taskId)
             .filter { it.type != TaskType.FOLDER && !it.isComplete }

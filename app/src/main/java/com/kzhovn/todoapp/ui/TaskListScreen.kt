@@ -236,8 +236,12 @@ private fun TaskRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(Modifier.width(4.dp).fillMaxHeight().background(barColor))
-            if (task.type == TaskType.PROJECT) ProjectMark(36.dp)
-            else TaskCheckbox(checked = task.isComplete, due = status, touchSize = 36.dp, onCheckedChange = { onCheck(task.id) })
+            when (task.type) {
+                TaskType.PROJECT -> ProjectMark(36.dp)
+                // A checklist is ticked off item by item, inside it; its row shows how far along it is.
+                TaskType.CHECKLIST -> CountMark(subtasks?.first ?: 0, subtasks?.second ?: 0, touchSize = 36.dp) { onEdit(task.id) }
+                else -> TaskCheckbox(checked = task.isComplete, due = status, touchSize = 36.dp, onCheckedChange = { onCheck(task.id) })
+            }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
                     Text(
                         // A subtask reads "Parent: subtask", with the parent dimmer; tapping the parent
@@ -254,7 +258,7 @@ private fun TaskRow(
                                 val color = when (status) { DueStatus.OVERDUE -> LedgerOverdue; DueStatus.TODAY -> LedgerDueTodayText; else -> LedgerMuted }
                                 withStyle(SpanStyle(color = color, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · ${dueText(due, now)}") }
                             }
-                            if (subtasks != null && subtasks.second > 0) {
+                            if (subtasks != null && subtasks.second > 0 && task.type != TaskType.CHECKLIST) {
                                 withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · ${subtasks.first}/${subtasks.second}") }
                             }
                         },
@@ -344,6 +348,17 @@ const val BACKBURNER_ALPHA = 0.45f
 fun ProjectMark(size: Dp = 40.dp) {
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         Icon(Icons.Filled.AccountTree, contentDescription = "Project", tint = LedgerAccent, modifier = Modifier.size(size * 0.5f))
+    }
+}
+
+// A checklist's "3/8" (items checked of all), in the checkbox's place.
+@Composable
+fun CountMark(done: Int, total: Int, touchSize: Dp = 40.dp, onClick: () -> Unit) {
+    Box(Modifier.size(touchSize).clip(CircleShape).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        Text(
+            "$done/$total", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = LedgerAccent, maxLines = 1,
+            modifier = Modifier.border(1.dp, LedgerBorder, RoundedCornerShape(50)).padding(horizontal = 5.dp, vertical = 2.dp)
+        )
     }
 }
 
