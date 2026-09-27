@@ -88,9 +88,8 @@ object Labels {
     val TIMER_PRESETS = listOf(15, 30, 45, 60, 90)
 
 
-    // "Subtask options": a folder's or task's children done one at a time; a task that stays active
+    // Subtask options: a folder's or task's children done one at a time; a task that stays active
     // while its subtasks are open.
-    const val SUBTASK_OPTIONS = "Subtask options"
     const val SEQUENTIAL = "Sequential"
     const val ACTIVE_WITH_SUBTASKS = "Active with subtasks"
 

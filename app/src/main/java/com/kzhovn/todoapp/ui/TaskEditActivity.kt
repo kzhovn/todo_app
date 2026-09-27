@@ -427,11 +427,6 @@ class TaskEditActivity : ComponentActivity() {
 
                 SectionLabel(Labels.PROPERTIES)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // Hidden from Active and Doing; never starred, so turning it on unstars.
-                    if (task.type != TaskType.FOLDER) PropertyChip(
-                        label = Labels.MAYBE, valueText = Labels.MAYBE.takeIf { task.isMaybe }, icon = Icons.Filled.QuestionMark,
-                        onClick = { task = task.copy(isMaybe = !task.isMaybe, isStarred = task.isStarred && task.isMaybe) }, showLabelWhenSet = false
-                    )
                     PropertyChip(
                         label = Labels.FOLDER,
                         valueText = allById[task.parentId]?.title,
@@ -463,6 +458,11 @@ class TaskEditActivity : ComponentActivity() {
                             )
                         }
                     }
+                    // Hidden from Active and Doing; never starred, so turning it on unstars.
+                    if (task.type != TaskType.FOLDER) PropertyChip(
+                        label = Labels.MAYBE, valueText = Labels.MAYBE.takeIf { task.isMaybe }, icon = Icons.Filled.QuestionMark,
+                        onClick = { task = task.copy(isMaybe = !task.isMaybe, isStarred = task.isStarred && task.isMaybe) }, showLabelWhenSet = false
+                    )
                 }
 
                 // Subtasks, what this task depends on (prerequisites), and what depends on it.
@@ -546,30 +546,18 @@ class TaskEditActivity : ComponentActivity() {
                         AddLink(Labels.ADD_DEPENDENT) { showDependentPicker = true }
                     }
                 }
-                // Folded unless the task has subtasks; folded, it still says what's on. A checklist has neither
-                // option (its items are ticked in any order and never block it).
-                if (!isChecklist) {
-                    val hasSubtasks = subtasks.isNotEmpty() || pendingSubtasks.isNotEmpty() || pendingChildIds.isNotEmpty()
-                    var open by remember(hasSubtasks) { mutableStateOf(hasSubtasks) }
-                    val canStayActive = task.type == TaskType.TASK
-                    val on = listOfNotNull(Labels.SEQUENTIAL.takeIf { task.sequential }, Labels.ACTIVE_WITH_SUBTASKS.takeIf { canStayActive && task.activeWithSubtasks })
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 10.dp).clickable { open = !open }.padding(vertical = 4.dp)) {
-                        Icon(if (open) Icons.Filled.ExpandMore else Icons.Filled.ChevronRight, contentDescription = null, tint = LedgerMuted, modifier = Modifier.size(16.dp))
-                        Text(Labels.SUBTASK_OPTIONS, fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.padding(start = 2.dp))
-                        if (!open && on.isNotEmpty()) Text(" · " + on.joinToString(" · ") { it.lowercase() }, fontSize = 12.sp, color = LedgerAccent)
-                    }
-                    if (open) Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
-                        // Only the first incomplete child counts as active.
-                        PropertyChip(
-                            label = Labels.SEQUENTIAL, valueText = Labels.SEQUENTIAL.takeIf { task.sequential }, icon = Icons.Filled.FormatListNumbered,
-                            onClick = { task = task.copy(sequential = !task.sequential) }, showLabelWhenSet = false
-                        )
-                        // Normally a task waits on its open subtasks; this keeps it in Doing/Active anyway.
-                        if (canStayActive) PropertyChip(
-                            label = Labels.ACTIVE_WITH_SUBTASKS, valueText = Labels.ACTIVE_WITH_SUBTASKS.takeIf { task.activeWithSubtasks }, icon = Icons.Filled.Bolt,
-                            onClick = { task = task.copy(activeWithSubtasks = !task.activeWithSubtasks) }, showLabelWhenSet = false
-                        )
-                    }
+                // Subtask options. A checklist has neither (its items are ticked in any order and never block it).
+                if (!isChecklist) Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    // Only the first incomplete child counts as active.
+                    PropertyChip(
+                        label = Labels.SEQUENTIAL, valueText = Labels.SEQUENTIAL.takeIf { task.sequential }, icon = Icons.Filled.FormatListNumbered,
+                        onClick = { task = task.copy(sequential = !task.sequential) }, showLabelWhenSet = false
+                    )
+                    // Normally a task waits on its open subtasks; this keeps it in Doing/Active anyway.
+                    if (task.type == TaskType.TASK) PropertyChip(
+                        label = Labels.ACTIVE_WITH_SUBTASKS, valueText = Labels.ACTIVE_WITH_SUBTASKS.takeIf { task.activeWithSubtasks }, icon = Icons.Filled.Bolt,
+                        onClick = { task = task.copy(activeWithSubtasks = !task.activeWithSubtasks) }, showLabelWhenSet = false
+                    )
                 }
 
                 Spacer(Modifier.height(16.dp))

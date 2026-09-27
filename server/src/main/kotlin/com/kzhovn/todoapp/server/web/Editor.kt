@@ -510,8 +510,6 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
 
         div(classes = "field-label section") { +Labels.PROPERTIES }
         div(classes = "pills") {
-            // Hidden from Active and Doing.
-            label(classes = "pill toggle task-only") { checkBoxInput(name = "maybe") { checked = t.isMaybe }; span(classes = "maybe-mark") { +"?" }; +Labels.MAYBE }
             val parentLabel = byId[t.parentId]?.let { p -> if (p.type == TaskType.FOLDER) folderPath(p, byId) else "Subtask of “${p.title}”" }
             // A set folder shows in its own colour, like the app's chip; app.js follows the pick.
             val colors = folderColorsArgb(all).mapValues { "#%06X".format(it.value and 0xFFFFFF) }
@@ -532,6 +530,8 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
                 label(classes = "pill") { checkBoxInput(name = "ctx") { value = c.id.toString(); checked = c.id in v.shown.contextIds }; +"@${c.name}" }
             }
             a(href = "/contexts", classes = "pill manage") { +Labels.MANAGE_CONTEXTS }
+            // Hidden from Active and Doing.
+            label(classes = "pill toggle task-only") { checkBoxInput(name = "maybe") { checked = t.isMaybe }; span(classes = "maybe-mark") { +"?" }; +Labels.MAYBE }
         }
 
         // A new task has no id for the related-task actions yet, so its subtasks, prerequisite and
@@ -556,14 +556,8 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
     if (!isNew) div { relatedSection(service, t.id, v.mode) }
     // Outside the form (so Related tasks can sit above them), tied to it by the form attribute.
     div(classes = "editor-foot") {
-        // Folded unless the task has subtasks; folded, it still says what's on (CSS, from the pills).
-        details(classes = "subtask-options") {
-            if (!isNew && service.tasks().any { it.parentId == t.id }) attributes["open"] = ""
-            summary {
-                +Labels.SUBTASK_OPTIONS
-                span(classes = "on-seq") { +" · ${Labels.SEQUENTIAL.lowercase()}" }
-                span(classes = "on-active task-type-only") { +" · ${Labels.ACTIVE_WITH_SUBTASKS.lowercase()}" }
-            }
+        // Subtask options (none for a checklist, via CSS).
+        div(classes = "subtask-options") {
             div(classes = "pills") {
                 // Only the first incomplete child counts as active.
                 label(classes = "pill toggle") {
