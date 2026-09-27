@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.DrawerState
@@ -28,6 +29,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.contexts.ContextsActivity
+import com.kzhovn.todoapp.focus.FocusActivity
 import com.kzhovn.todoapp.sync.SyncSettingsActivity
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
@@ -57,6 +59,7 @@ fun AppDrawer(
         drawerContent = {
             ModalDrawerSheet {
                 Item("Search", Icons.Filled.Search, searchSelected, onSearch)
+                Item("Focus", Icons.Filled.CenterFocusStrong, false) { context.startActivity(Intent(context, FocusActivity::class.java)) }
                 Item("Review", Icons.Filled.BarChart, reviewSelected) {
                     if (!reviewSelected) context.startActivity(Intent(context, ReviewActivity::class.java))
                 }
