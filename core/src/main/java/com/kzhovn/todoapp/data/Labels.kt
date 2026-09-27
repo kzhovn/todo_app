@@ -89,6 +89,8 @@ object Labels {
     // A folder's "in order" makes its tasks one-at-a-time; a task's does the same for its subtasks.
     fun inOrder(type: TaskType) = if (type == TaskType.FOLDER) "Sequential (complete tasks in order)" else "Complete subtasks in order"
 
+    const val ACTIVE_WITH_SUBTASKS = "Active while subtasks are open"
+
     // Monday first, like both apps' day pickers; bits are Su=0..Sa=6.
     val WEEKDAYS = listOf(1 to "Mo", 2 to "Tu", 3 to "We", 4 to "Th", 5 to "Fr", 6 to "Sa", 0 to "Su")
 

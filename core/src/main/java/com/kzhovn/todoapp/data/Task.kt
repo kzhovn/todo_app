@@ -42,7 +42,9 @@ data class Task(
     // family). Stored so a folder keeps its colour when others come and go. See folderColorsArgb.
     val colorIndex: Int? = null,
     // A timed task ("1 hour of ticket work"): how long to spend, which its play button counts down.
-    val durationMinutes: Int? = null
+    val durationMinutes: Int? = null,
+    // Normally a task waits on its open subtasks (see computeActiveTasks); this keeps it active anyway.
+    @ColumnInfo(defaultValue = "0") val activeWithSubtasks: Boolean = false
 ) {
     fun isExpired(now: Long): Boolean = expiresAt != null && expiresAt <= now
 

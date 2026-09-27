@@ -281,6 +281,8 @@ body.selecting #list .row:not([data-type="TASK"]), body.selecting #list .folder 
 .field-label.section { margin-top: 10px; }
 .editor-foot { padding: 0 24px 24px; }
 .in-order { display: flex; align-items: center; gap: 8px; color: var(--muted); cursor: pointer; margin: 4px 0 8px; }
+/* Only a plain task waits on its subtasks, so only it gets "active while subtasks are open". */
+.editor:has(input[name=type]:not([value=TASK]):checked) ~ .editor-foot .task-type-only { display: none; }
 /* A checklist's items are ticked in any order, so no "in order" choice. */
 .editor:has(input[name=type][value=CHECKLIST]:checked) ~ .editor-foot .in-order { display: none; }
 .editor:has(input[name=type][value=FOLDER]:checked) ~ .editor-foot .seq-task,

@@ -14,7 +14,8 @@ class TaskOrderTest {
 
         assertEquals(listOf("b", "a", "c"), listOf(a, b, c).sortedWith(TaskOrder).map { it.title })
         val active = computeActiveTasks(listOf(parent, a, b, c), emptyMap(), emptyList(), emptyList(), emptyList(), now = 0L)
-        assertEquals(listOf("P", "b"), active.map { it.title })
+        // P waits on its open subtasks; of those, only the first in order is workable.
+        assertEquals(listOf("b"), active.map { it.title })
     }
 
     @Test

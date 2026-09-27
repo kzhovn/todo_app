@@ -76,6 +76,9 @@ fun computeActiveTasks(
         if (task.type != TaskType.TASK && task.type != TaskType.CHECKLIST) return@filter false
         if (task.isComplete || task.isMaybe || task.isExpired(now) || isChecklistItem(task, allById)) return@filter false
         if (task.id in blockedByDependency || isSequentiallyBlocked(task)) return@filter false
+        // A task waits on its open subtasks, as on a dependency, unless set not to. A checklist doesn't:
+        // its items are ticked off inside it.
+        if (task.type == TaskType.TASK && !task.activeWithSubtasks && childrenByParentId[task.id].orEmpty().any { it.type != TaskType.FOLDER && !it.isComplete && !it.isExpired(now) }) return@filter false
         val effective = resolveEffective(task, allById, contextsByTaskId)
         (effective.effectiveStartDate == null || effective.effectiveStartDate <= now) &&
             effective.effectiveContextIds.all(::isContextSatisfied)

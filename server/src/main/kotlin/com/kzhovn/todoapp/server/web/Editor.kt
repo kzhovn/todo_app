@@ -301,7 +301,8 @@ private fun parseForm(p: Parameters, base: EditState, recurrence: RecurrenceSele
         isMaybe = p["maybe"] != null,
         durationMinutes = p["duration"]?.toIntOrNull()?.takeIf { it > 0 },
         expiresAt = if (p["today"] != null) base.task.expiresAt ?: nextRollover(service.now(), service.rolloverHour()) else null,
-        sequential = p["sequential"] != null
+        sequential = p["sequential"] != null,
+        activeWithSubtasks = p["activeWithSubtasks"] != null
     )
     return EditState(task, p.ids("ctx"), base.dependsOn)
 }
@@ -364,7 +365,7 @@ private fun merge(base: EditState, form: EditState, current: EditState): EditSta
         title = pick { it.title }, type = pick { it.type }, isStarred = pick { it.isStarred },
         startDate = pick { it.startDate }, dueDate = pick { it.dueDate }, reminderOffsetMinutes = pick { it.reminderOffsetMinutes },
         parentId = pick { it.parentId }, recurrenceType = recurrenceType, recurrenceRule = recurrenceRule,
-        isMaybe = pick { it.isMaybe }, expiresAt = pick { it.expiresAt }, sequential = pick { it.sequential },
+        isMaybe = pick { it.isMaybe }, expiresAt = pick { it.expiresAt }, sequential = pick { it.sequential }, activeWithSubtasks = pick { it.activeWithSubtasks },
         durationMinutes = pick { it.durationMinutes }
     )
     return EditState(
@@ -561,6 +562,11 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
             checkBoxInput(name = "sequential") { checked = t.sequential; attributes["form"] = formId }
             span(classes = "seq-task") { +Labels.inOrder(TaskType.TASK) }
             span(classes = "seq-folder") { +Labels.inOrder(TaskType.FOLDER) }
+        }
+        // Normally a task waits on its open subtasks; this keeps it in Doing/Active anyway.
+        label(classes = "in-order task-type-only") {
+            checkBoxInput(name = "activeWithSubtasks") { checked = t.activeWithSubtasks; attributes["form"] = formId }
+            +Labels.ACTIVE_WITH_SUBTASKS
         }
         div(classes = "actions") {
             if (!isNew) button(type = ButtonType.submit, classes = "delete") {

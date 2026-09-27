@@ -536,6 +536,18 @@ class TaskEditActivity : ComponentActivity() {
                     )
                     Text(Labels.inOrder(task.type), fontSize = 13.sp, color = LedgerMuted)
                 }
+                // Normally a task waits on its open subtasks; this keeps it in Doing/Active anyway.
+                if (task.type == TaskType.TASK) Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { task = task.copy(activeWithSubtasks = !task.activeWithSubtasks) }.padding(vertical = 4.dp)
+                ) {
+                    Checkbox(
+                        checked = task.activeWithSubtasks,
+                        onCheckedChange = { task = task.copy(activeWithSubtasks = it) },
+                        colors = CheckboxDefaults.colors(checkedColor = LedgerAccent, uncheckedColor = LedgerCheckBorder)
+                    )
+                    Text(Labels.ACTIVE_WITH_SUBTASKS, fontSize = 13.sp, color = LedgerMuted)
+                }
 
                 Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
