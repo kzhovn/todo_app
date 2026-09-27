@@ -33,13 +33,3 @@ fun buildOutlinerTree(tasks: List<Task>, hideCompleted: Boolean = false): List<O
             }
     return build(null)
 }
-
-fun subtaskCounts(tasks: List<Task>): Map<Long, Pair<Int, Int>> {
-    val byParent = tasks.groupBy { it.parentId }
-    return tasks
-        .filter { byParent.containsKey(it.id) }
-        .associate { parent ->
-            val children = byParent[parent.id].orEmpty()
-            parent.id to (children.count { it.isComplete } to children.size)
-        }
-}

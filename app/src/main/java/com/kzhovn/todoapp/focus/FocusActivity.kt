@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.focus
 
+import com.kzhovn.todoapp.data.findFolder
 import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.quickadd.QuickAddParser
 import com.kzhovn.todoapp.quickadd.QuickAddActivity
@@ -189,7 +190,7 @@ class FocusActivity : ComponentActivity() {
                         adding = false
                         if (parsed.title.isNotBlank()) scope.launch {
                             // Into Personal, like quick add with no folder chosen.
-                            val personal = repository.getFolders().firstOrNull { it.title.trim().equals(DEFAULT_FOLDER, ignoreCase = true) }
+                            val personal = findFolder(repository.getFolders(), DEFAULT_FOLDER)
                             repository.createTask(parsed.copy(parentId = personal?.id))
                             Toast.makeText(this@FocusActivity, "Added “${parsed.title}”", Toast.LENGTH_SHORT).show()
                         }

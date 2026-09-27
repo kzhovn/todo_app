@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.quickadd
 
+import com.kzhovn.todoapp.data.findFolder
 import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.ui.theme.folderColors
 import com.kzhovn.todoapp.data.nextRollover
@@ -93,7 +94,7 @@ class QuickAddActivity : ComponentActivity() {
                 folders = repository.getFolders()
                 // With no folder asked for, new tasks land in Personal (if it exists), as Discord adds do.
                 folder = if (initialFolderId != null) folders.firstOrNull { it.id == initialFolderId }
-                else folders.firstOrNull { it.title.trim().equals(DEFAULT_FOLDER, ignoreCase = true) }
+                else findFolder(folders, DEFAULT_FOLDER)
                 dependsOnTitle = dependsOnId?.let { repository.getTask(it)?.title }
                 focus.requestFocus()
             }

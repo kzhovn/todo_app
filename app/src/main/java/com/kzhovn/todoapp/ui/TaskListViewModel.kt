@@ -1,5 +1,9 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.subtaskCounts
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.Job
 import com.kzhovn.todoapp.repository.urgentFirst
 import com.kzhovn.todoapp.data.stalledProjects
 import androidx.lifecycle.ViewModel
@@ -19,11 +23,25 @@ import kotlinx.coroutines.launch
 
 enum class TaskListMode { DOING, ACTIVE, ALL }
 
+// What the list shows: a tab, or search results. It reloads itself on any data change (`changes`,
+// from TodoApp.listInputChanges), so actions here and edits elsewhere (another screen, the widget, a
+// sync) all show up without each caller reloading.
 class TaskListViewModel(
     private val repository: TaskRepository,
     private val contextRepository: ContextRepository,
+    changes: Flow<Unit> = emptyFlow(),
     private val clock: () -> Long = System::currentTimeMillis
 ) : ViewModel() {
+    private sealed interface Shown {
+        data class Tab(val mode: TaskListMode) : Shown
+        data class Search(val query: String, val filters: SearchFilters) : Shown
+    }
+    private var shown: Shown = Shown.Tab(TaskListMode.DOING)
+    private var reloading: Job? = null
+
+    init {
+        viewModelScope.launch { changes.collect { reload() } }
+    }
 
     private val _tasks = MutableStateFlow<List<Task>>(emptyList())
     val tasks: StateFlow<List<Task>> = _tasks
@@ -41,29 +59,41 @@ class TaskListViewModel(
     val allContexts: StateFlow<Map<Long, TaskContext>> = _allContexts
 
     fun load(mode: TaskListMode) {
-        viewModelScope.launch {
-            val now = clock()
-            repository.purgeExpired(now)
-            val all = refreshSubtaskCounts()
-            _tasks.value = when (mode) {
-                TaskListMode.ALL -> all
-                // Overdue and due today first, like Doing (each folder section keeps that order).
-                TaskListMode.ACTIVE -> urgentFirst(
-                    repository.getActiveTasksFrom(all, _contextsByTaskId.value, now, minuteOfDay(now), dayOfWeekMask(now)),
-                    now
-                ) { resolveEffective(it, _allById.value, _contextsByTaskId.value).effectiveDueDate }
-                TaskListMode.DOING -> filterDoing(
-                    repository.getActiveTasksFrom(all, _contextsByTaskId.value, now, minuteOfDay(now), dayOfWeekMask(now)),
-                    now
-                ) { resolveEffective(it, _allById.value, _contextsByTaskId.value).effectiveDueDate }
+        shown = Shown.Tab(mode)
+        reload()
+    }
+
+    fun search(query: String, filters: SearchFilters = SearchFilters()) {
+        shown = Shown.Search(query, filters)
+        reload()
+    }
+
+    // A newer reload replaces one still running, so a slow load can't land after a newer one.
+    fun reload() {
+        reloading?.cancel()
+        reloading = viewModelScope.launch {
+            when (val s = shown) {
+                is Shown.Tab -> loadTab(s.mode)
+                is Shown.Search -> { refreshSubtaskCounts(); _tasks.value = repository.search(s.query, s.filters) }
             }
         }
     }
 
-    fun search(query: String, filters: SearchFilters = SearchFilters()) {
-        viewModelScope.launch {
-            refreshSubtaskCounts()
-            _tasks.value = repository.search(query, filters)
+    private suspend fun loadTab(mode: TaskListMode) {
+        val now = clock()
+        repository.purgeExpired(now)
+        val all = refreshSubtaskCounts()
+        _tasks.value = when (mode) {
+            TaskListMode.ALL -> all
+            // Overdue and due today first, like Doing (each folder section keeps that order).
+            TaskListMode.ACTIVE -> urgentFirst(
+                repository.getActiveTasksFrom(all, _contextsByTaskId.value, now, minuteOfDay(now), dayOfWeekMask(now)),
+                now
+            ) { resolveEffective(it, _allById.value, _contextsByTaskId.value).effectiveDueDate }
+            TaskListMode.DOING -> filterDoing(
+                repository.getActiveTasksFrom(all, _contextsByTaskId.value, now, minuteOfDay(now), dayOfWeekMask(now)),
+                now
+            ) { resolveEffective(it, _allById.value, _contextsByTaskId.value).effectiveDueDate }
         }
     }
 
@@ -71,25 +101,25 @@ class TaskListViewModel(
     private val _stalledProjects = MutableStateFlow<List<Task>>(emptyList())
     val stalledProjects: StateFlow<List<Task>> = _stalledProjects
 
-    fun completeProject(projectId: Long, mode: TaskListMode) {
+    fun completeProject(projectId: Long) {
         viewModelScope.launch {
             repository.markComplete(projectId, clock())
-            load(mode)
+            reload()
         }
     }
 
-    fun addSubtask(parentId: Long, title: String, mode: TaskListMode) {
+    fun addSubtask(parentId: Long, title: String) {
         if (title.isBlank()) return
         viewModelScope.launch {
             repository.createTask(Task(title = title, parentId = parentId))
-            load(mode)
+            reload()
         }
     }
 
-    fun move(taskId: Long, anchorId: Long, after: Boolean, mode: TaskListMode) {
+    fun move(taskId: Long, anchorId: Long, after: Boolean) {
         viewModelScope.launch {
             repository.moveNextTo(taskId, anchorId, after)
-            load(mode)
+            reload()
         }
     }
 
@@ -104,33 +134,33 @@ class TaskListViewModel(
         return all
     }
 
-    fun toggleStar(taskId: Long, mode: TaskListMode) {
+    fun toggleStar(taskId: Long) {
         viewModelScope.launch {
             repository.toggleStar(taskId)
-            load(mode)
+            reload()
         }
     }
 
-    fun snooze(taskId: Long, until: Long, mode: TaskListMode) {
+    fun snooze(taskId: Long, until: Long) {
         viewModelScope.launch {
             repository.snooze(taskId, until, clock())
-            load(mode)
+            reload()
         }
     }
 
-    fun reparent(taskId: Long, newParentId: Long?, mode: TaskListMode) {
+    fun reparent(taskId: Long, newParentId: Long?) {
         viewModelScope.launch {
             repository.reparent(taskId, newParentId)
-            load(mode)
+            reload()
         }
     }
 
-    fun requestComplete(taskId: Long, mode: TaskListMode, onNeedsDecision: (Long, Int) -> Unit) {
+    fun requestComplete(taskId: Long, onNeedsDecision: (Long, Int) -> Unit) {
         viewModelScope.launch {
             val task = repository.getTask(taskId) ?: return@launch
             if (task.isComplete) {
                 repository.toggleComplete(taskId, clock())
-                load(mode)
+                reload()
                 return@launch
             }
             val activeDescendants = repository.countActiveDescendants(taskId)
@@ -138,23 +168,23 @@ class TaskListViewModel(
                 onNeedsDecision(taskId, activeDescendants)
             } else {
                 repository.toggleComplete(taskId, clock())
-                load(mode)
+                reload()
             }
         }
     }
 
-    fun completeWithSubtasks(taskId: Long, mode: TaskListMode) {
+    fun completeWithSubtasks(taskId: Long) {
         viewModelScope.launch {
             repository.completeWithDescendants(taskId, clock())
-            load(mode)
+            reload()
         }
     }
 
-    fun completeAndPromoteSubtasks(taskId: Long, mode: TaskListMode) {
+    fun completeAndPromoteSubtasks(taskId: Long) {
         viewModelScope.launch {
             repository.promoteChildrenToTopLevel(taskId)
             repository.toggleComplete(taskId, clock())
-            load(mode)
+            reload()
         }
     }
 

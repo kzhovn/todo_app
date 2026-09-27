@@ -7,7 +7,6 @@ import com.kzhovn.todoapp.recurrence.WEEKDAY_NAMES
 import com.kzhovn.todoapp.recurrence.NTH_NAMES
 import com.kzhovn.todoapp.recurrence.recurrencePresets
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
-import com.kzhovn.todoapp.data.folderColorsArgb
 import com.kzhovn.todoapp.data.Task
 import kotlinx.html.summary
 import kotlinx.html.details
@@ -544,7 +543,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
         div(classes = "pills") {
             val parentLabel = byId[t.parentId]?.let { p -> if (p.type == TaskType.FOLDER) folderPath(p, byId) else "Subtask of “${p.title}”" }
             // A set folder shows in its own colour, like the app's chip; app.js follows the pick.
-            val colors = folderColorsArgb(all).mapValues { "#%06X".format(it.value and 0xFFFFFF) }
+            val colors = folderColorsHex(all)
             popPill(Labels.FOLDER, Icon.FOLDER, parentLabel, "select", "tinted", tint = t.parentId?.let(colors::get)) {
                 select {
                     name = "parent"

@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.widget
 
+import com.kzhovn.todoapp.data.subtaskCounts
 import androidx.glance.appwidget.updateAll
 import com.kzhovn.todoapp.data.isChecklistItem
 import androidx.glance.text.TextDecoration
@@ -69,7 +70,6 @@ import com.kzhovn.todoapp.repository.dayOfWeekMask
 import com.kzhovn.todoapp.repository.filterDoing
 import com.kzhovn.todoapp.repository.minuteOfDay
 import com.kzhovn.todoapp.ui.TaskEditActivity
-import com.kzhovn.todoapp.ui.subtaskCounts
 import com.kzhovn.todoapp.ui.theme.folderColors
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft

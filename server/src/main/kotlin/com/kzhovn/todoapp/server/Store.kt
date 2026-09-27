@@ -29,10 +29,9 @@ class Store(path: String) {
         }
     }
 
-    // Called after each row a client pushed is merged (not for bot writes), so the bot can mirror
-    // app-side changes back into Discord.
+    // Every row change, whether synced from a client or a server-side edit (web, bot), so the bot can
+    // mirror changes back into Discord.
     @Volatile
-    // Every row change, whether synced or a server-side edit (web, bot).
     var onChange: ((before: SyncRow?, after: SyncRow) -> Unit)? = null
 
     // Merged rows get fresh versions, so they come back in the response too — the client needs the
@@ -56,7 +55,7 @@ class Store(path: String) {
         return response
     }
 
-    // A server-side edit (from the bot): stamps whichever fields changed.
+    // A server-side edit (web, bot): stamps whichever fields changed.
     @Synchronized
     fun write(table: String, id: Long, fields: JsonObject, now: Long) {
         val current = get(table, id)

@@ -18,12 +18,13 @@ class ReminderScheduler(private val context: Context, private val alarmManager: 
     fun schedule(task: Task, now: Long = System.currentTimeMillis()) {
         val dueDate = task.dueDate
         val offsetMinutes = task.reminderOffsetMinutes
-        if (dueDate == null || offsetMinutes == null) {
+        // Saving a completed task (an edit, a bulk edit, an auto-save) mustn't bring its reminder back.
+        if (dueDate == null || offsetMinutes == null || task.isComplete) {
             cancel(task)
             return
         }
         val triggerAt = dueDate - offsetMinutes * 60_000L
-        // The date picker is date-only, so "due today" is already a past timestamp for most of the
+        // A date-only due date is midnight, so "due today" is already a past timestamp for most of the
         // day; setAndAllowWhileIdle would fire such an alarm immediately, on save.
         if (triggerAt <= now) {
             cancel(task)

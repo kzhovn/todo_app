@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.data.findFolder
 import com.kzhovn.todoapp.repository.blockerFor
 import com.kzhovn.todoapp.repository.applyTo
 import com.kzhovn.todoapp.repository.overridesInherited
@@ -107,7 +108,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     // Stores colour slots for folders without one (see folderColorAssignments), like the app does.
     fun ensureFolderColors() = folderColorAssignments(tasks()).forEach { t -> update(t.id) { it.copy(colorIndex = t.colorIndex) } }
 
-    fun findFolder(name: String): Task? = folders().firstOrNull { it.title.equals(name.trim(), ignoreCase = true) }
+    fun findFolder(name: String): Task? = findFolder(tasks(), name)
 
     // Placed like the app's createTask (see newTaskPositions).
     fun create(task: Task): Task = store.transaction {

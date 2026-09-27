@@ -7,7 +7,6 @@ import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
-import com.kzhovn.todoapp.data.folderColorsArgb
 import com.kzhovn.todoapp.data.sectionsByTopFolder
 import com.kzhovn.todoapp.data.walkParentChain
 import com.kzhovn.todoapp.data.dueStatus
@@ -286,7 +285,7 @@ private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode)
 private fun HTML.reviewPage(service: TaskService) = shellPage("Raspberry · Review", "/review") {
     val all = service.tasks()
     val byId = all.associateBy { it.id }
-    val colors = folderColorsArgb(all).mapValues { "#%06X".format(it.value and 0xFFFFFF) }
+    val colors = folderColorsHex(all)
     // Grouped and coloured by top-level folder, like the phone's Review.
     val colorOf = { folder: Task? -> folder?.let { colors[it.id] } ?: "var(--muted)" }
     val days = completionsByDay(all, service.now(), service.rolloverHour(), LIST_DAYS)

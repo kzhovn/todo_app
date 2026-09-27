@@ -38,6 +38,14 @@ class ReminderSchedulerTest {
     }
 
     @Test
+    fun `does not schedule a completed task, so saving one doesn't bring its reminder back`() {
+        val task = Task(id = 1, title = "Done", dueDate = futureDue, reminderOffsetMinutes = 30, isComplete = true)
+        scheduler.schedule(task)
+        val shadow: ShadowAlarmManager = shadowOf(alarmManager)
+        assertNull(shadow.nextScheduledAlarm)
+    }
+
+    @Test
     fun `schedules at dueDate minus the offset when both are set`() {
         val dueDate = futureDue
         val task = Task(id = 1, title = "Remind me", dueDate = dueDate, reminderOffsetMinutes = 30)

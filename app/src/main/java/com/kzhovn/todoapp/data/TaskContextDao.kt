@@ -44,9 +44,6 @@ interface TaskContextDao {
     @Insert
     suspend fun insertTimeWindow(window: ContextTimeWindow): Long
 
-    @Update
-    suspend fun updateTimeWindow(window: ContextTimeWindow)
-
     @Query("DELETE FROM context_time_windows WHERE id = :id")
     suspend fun deleteTimeWindow(id: Long)
 

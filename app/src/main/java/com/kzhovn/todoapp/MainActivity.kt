@@ -147,7 +147,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             LedgerTheme {
-            val viewModel = remember { TaskListViewModel(repository, contextRepository) }
+            val viewModel = remember { TaskListViewModel(repository, contextRepository, app.listInputChanges()) }
             val scope = rememberCoroutineScope()
             val snackbarHostState = remember { SnackbarHostState() }
             var selectedMode by remember { mutableStateOf(requestedMode.value ?: TaskListMode.DOING) }
@@ -163,8 +163,9 @@ class MainActivity : ComponentActivity() {
             // Non-null while in multi-select mode: the ids picked for a bulk edit.
             var selection by remember { mutableStateOf<Set<Long>?>(null) }
             BackHandler(enabled = selection != null) { selection = null }
-            // Reloads on tab change AND on every resume, so returning from QuickAddActivity
-            // (FAB) or TaskEditActivity (row tap) picks up whatever was just created or edited.
+            // What the list shows; it reloads itself on data changes (see TaskListViewModel). Resuming
+            // reloads too, since time passing (a start date arriving) changes Doing/Active without any write.
+            // In search mode the filters apply even with an empty query (every task matching them).
             LifecycleResumeEffect(selectedMode, searchMode, query, filters) {
                 if (searchMode) viewModel.search(query, filters) else viewModel.load(selectedMode)
                 onPauseOrDispose { }
@@ -177,12 +178,6 @@ class MainActivity : ComponentActivity() {
                     contexts = contextRepository.getAllContexts()
                 }
                 onPauseOrDispose { }
-            }
-            val pulls by app.syncClient.pulls.collectAsState()
-            // In search mode the filters apply even with an empty query (then it's "every task matching
-            // the filters"); the tabs only drive the list outside search.
-            LaunchedEffect(searchMode, query, filters, pulls) {
-                if (searchMode) viewModel.search(query, filters) else viewModel.load(selectedMode)
             }
 
             val lastDeleted by repository.lastDeleted.collectAsState()
@@ -199,7 +194,6 @@ class MainActivity : ComponentActivity() {
                 )
                 if (result == SnackbarResult.ActionPerformed) {
                     repository.undoDelete(deleted)
-                    if (searchMode) viewModel.search(query, filters) else viewModel.load(selectedMode)
                 } else {
                     repository.clearLastDeleted()
                 }
@@ -325,12 +319,12 @@ class MainActivity : ComponentActivity() {
                     var completeDecision by remember { mutableStateOf<Pair<Long, Int>?>(null) }
                     val onCheck: (Long) -> Unit = { id ->
                         if (selection != null) toggleSelected(id)
-                        else viewModel.requestComplete(id, selectedMode) { taskId, activeCount ->
+                        else viewModel.requestComplete(id) { taskId, activeCount ->
                             completeDecision = taskId to activeCount
                         }
                     }
                     val onStar: (Long) -> Unit = { id ->
-                        if (selection != null) toggleSelected(id) else viewModel.toggleStar(id, selectedMode)
+                        if (selection != null) toggleSelected(id) else viewModel.toggleStar(id)
                     }
                     val selectedIds = selection.orEmpty()
                     if (selectedMode == TaskListMode.ALL && !searchMode) {
@@ -341,8 +335,8 @@ class MainActivity : ComponentActivity() {
                             onEdit = onEdit,
                             onStar = onStar,
                             selectedIds = selectedIds,
-                            onReparent = { taskId, newParentId -> viewModel.reparent(taskId, newParentId, selectedMode) },
-                            onMove = { taskId, anchorId, after -> viewModel.move(taskId, anchorId, after, selectedMode) },
+                            onReparent = { taskId, newParentId -> viewModel.reparent(taskId, newParentId) },
+                            onMove = { taskId, anchorId, after -> viewModel.move(taskId, anchorId, after) },
                             onAddSubtask = { parentId ->
                                 startActivity(
                                     Intent(this@MainActivity, QuickAddActivity::class.java)
@@ -357,7 +351,7 @@ class MainActivity : ComponentActivity() {
                             onStar = onStar,
                             onEdit = onEdit,
                             selectedIds = selectedIds,
-                            onSnooze = { id, until -> viewModel.snooze(id, until, selectedMode) },
+                            onSnooze = { id, until -> viewModel.snooze(id, until) },
                             // The parent now waits on its new subtask, so in Doing a starred parent's subtask starts
                             // starred and takes its place there.
                             onAddSubtask = { parentId ->
@@ -383,7 +377,7 @@ class MainActivity : ComponentActivity() {
                             title = { Text(Labels.allSubtasksDone(project.title)) },
                             text = { Text(Labels.IS_PROJECT_COMPLETE) },
                             confirmButton = {
-                                Button(onClick = { viewModel.completeProject(project.id, selectedMode) }) { Text(Labels.COMPLETE_PROJECT) }
+                                Button(onClick = { viewModel.completeProject(project.id) }) { Text(Labels.COMPLETE_PROJECT) }
                             },
                             dismissButton = {
                                 Row {
@@ -402,7 +396,7 @@ class MainActivity : ComponentActivity() {
                             value = nextStepTitle,
                             onValueChange = { nextStepTitle = it },
                             onConfirm = {
-                                viewModel.addSubtask(project.id, nextStepTitle.trim(), selectedMode)
+                                viewModel.addSubtask(project.id, nextStepTitle.trim())
                                 nextStepFor = null
                             },
                             onDismiss = { nextStepFor = null }
@@ -415,14 +409,14 @@ class MainActivity : ComponentActivity() {
                             text = { Text(Labels.activeSubtasks(activeCount)) },
                             confirmButton = {
                                 Button(onClick = {
-                                    viewModel.completeWithSubtasks(taskId, selectedMode)
+                                    viewModel.completeWithSubtasks(taskId)
                                     completeDecision = null
                                 }) { Text(Labels.COMPLETE_SUBTASKS_TOO) }
                             },
                             dismissButton = {
                                 Row {
                                     Button(onClick = {
-                                        viewModel.completeAndPromoteSubtasks(taskId, selectedMode)
+                                        viewModel.completeAndPromoteSubtasks(taskId)
                                         completeDecision = null
                                     }) { Text(Labels.MOVE_SUBTASKS_OUT) }
                                     Spacer(Modifier.width(8.dp))

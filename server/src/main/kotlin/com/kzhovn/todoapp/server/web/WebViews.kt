@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskOrder
@@ -68,8 +69,8 @@ class ListData(
     val all: List<Task> = service.tasks()
     val byId = all.associateBy { it.id }
     private val contextIds = service.contextIdsByTask()
-    // The same colour families as the app (folderColorsArgb in :core).
-    private val folderColors = folderColorsArgb(all).mapValues { "#%06X".format(it.value and 0xFFFFFF) }
+    private val folderColors = folderColorsHex(all)
+    private val counts = subtaskCounts(all)
     private val children = all.groupBy { it.parentId }
     val tasks: List<Task> = when (mode) {
         ListMode.DOING -> service.doing()
@@ -81,13 +82,15 @@ class ListData(
     fun parentTitle(task: Task) = subtaskParentTitle(task, byId)
     fun folderColor(task: Task): String? = task.parentId?.let { parent -> walkParentChain(parent, byId) { folderColors[it] } }
     fun ownColor(folder: Task) = folderColors[folder.id]
-    fun subtaskCounts(task: Task): Pair<Int, Int>? =
-        children[task.id].orEmpty().filter { it.type != TaskType.FOLDER }.takeIf { it.isNotEmpty() }?.let { kids -> kids.count { it.isComplete } to kids.size }
+    fun subtaskCounts(task: Task): Pair<Int, Int>? = counts[task.id]
     fun openChildren(parentId: Long?) = children[parentId].orEmpty().filter { !it.isComplete }.sortedWith(TaskOrder)
 
     // One open project whose steps are all done, to ask about (the phone asks the same, one at a time).
     val stalled: Task? = stalledProjects(all).firstOrNull { it.id !in later }
 }
+
+// The same colour families as the app (folderColorsArgb in :core), as CSS colours.
+internal fun folderColorsHex(tasks: Collection<Task>): Map<Long, String> = folderColorsArgb(tasks).mapValues { "#%06X".format(it.value and 0xFFFFFF) }
 
 // The Material icons the phone uses (Icons.Filled.*), inlined so both clients look alike.
 internal enum class Icon(val path: String) {

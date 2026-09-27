@@ -109,8 +109,9 @@ class TaskListViewModelTest {
     fun `requestComplete reopens an already-complete task`() = runTest {
         val taskId = repository.createTask(Task(title = "Ship report"))
         repository.toggleComplete(taskId, now)
+        viewModel.load(TaskListMode.ALL) // it reloads whatever list is showing
 
-        viewModel.requestComplete(taskId, TaskListMode.ALL) { _, _ -> }
+        viewModel.requestComplete(taskId) { _, _ -> }
         advanceUntilIdle()
 
         assertEquals(false, viewModel.tasks.value.first { it.id == taskId }.isComplete)
@@ -122,7 +123,7 @@ class TaskListViewModelTest {
         repository.createTask(Task(title = "Book flight", parentId = parentId))
         var decision: Pair<Long, Int>? = null
 
-        viewModel.requestComplete(parentId, TaskListMode.ALL) { id, count -> decision = id to count }
+        viewModel.requestComplete(parentId) { id, count -> decision = id to count }
         advanceUntilIdle()
 
         assertEquals(parentId to 1, decision)
@@ -134,7 +135,7 @@ class TaskListViewModelTest {
         val taskId = repository.createTask(Task(title = "Ship report"))
         var decisionCalled = false
 
-        viewModel.requestComplete(taskId, TaskListMode.ALL) { _, _ -> decisionCalled = true }
+        viewModel.requestComplete(taskId) { _, _ -> decisionCalled = true }
         advanceUntilIdle()
 
         assertEquals(false, decisionCalled)

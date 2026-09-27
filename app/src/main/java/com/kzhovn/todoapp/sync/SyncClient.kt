@@ -8,8 +8,6 @@ import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TodoDatabase
 import com.kzhovn.todoapp.notifications.ReminderScheduler
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -37,10 +35,6 @@ class SyncClient(
     private val mutex = Mutex()
     private val sql get() = db.openHelper.writableDatabase
 
-    // Bumped whenever a pull changes local data, so open screens know to reload.
-    private val _pulls = MutableStateFlow(0)
-    val pulls: StateFlow<Int> = _pulls
-
     private data class Key(val table: String, val id: Long)
 
     private class ApplyResult(val applied: List<Task>, val removed: List<Task>, val changedRows: Int)
@@ -56,7 +50,6 @@ class SyncClient(
         val result = db.withTransaction { apply(response, pushedTs) }
         result.applied.forEach { if (it.isComplete) reminders.cancel(it) else reminders.schedule(it) }
         result.removed.forEach(reminders::cancel)
-        if (result.changedRows > 0) _pulls.value++
         result.changedRows
     }
 

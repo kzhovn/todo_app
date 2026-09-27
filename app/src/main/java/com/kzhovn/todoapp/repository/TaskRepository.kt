@@ -187,13 +187,6 @@ class TaskRepository(
         reminderScheduler.schedule(task)
     }
 
-    suspend fun setDueDate(taskId: Long, dueDate: Long?) {
-        val task = taskDao.getById(taskId) ?: return
-        val updated = task.copy(dueDate = dueDate)
-        taskDao.update(updated)
-        reminderScheduler.schedule(updated)
-    }
-
     suspend fun removeDependency(taskId: Long, dependsOnTaskId: Long) = taskDao.removeDependency(taskId, dependsOnTaskId)
 
     suspend fun addDependency(taskId: Long, dependsOnTaskId: Long) =
