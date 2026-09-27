@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.widget
 
+import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.subtaskCounts
 import androidx.glance.appwidget.updateAll
 import com.kzhovn.todoapp.data.isChecklistItem
@@ -108,7 +109,7 @@ class TodoWidget : GlanceAppWidget() {
             val allById = allTasks.associateBy { it.id }
             val contextsByTaskId = repository.getAllTaskContexts()
             val tasks = when (mode) {
-                WidgetMode.ALL -> allTasks.filter { (it.type == TaskType.TASK || it.type == TaskType.CHECKLIST) && !it.isComplete && !isChecklistItem(it, allById) }
+                WidgetMode.ALL -> allTasks.filter { it.type.isDoable && !it.isComplete && !isChecklistItem(it, allById) }
                 else -> {
                     val active = repository.getActiveTasksFrom(allTasks, contextsByTaskId, now, minuteOfDay(now), dayOfWeekMask(now))
                     if (mode == WidgetMode.ACTIVE) active

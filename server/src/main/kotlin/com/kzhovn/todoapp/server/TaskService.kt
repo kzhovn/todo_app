@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.searchTasks
 import com.kzhovn.todoapp.data.findFolder
 import com.kzhovn.todoapp.repository.blockerFor
@@ -97,7 +98,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         val ids = subtreeIds(folderId)
         val all = tasks()
         val byId = all.associateBy { it.id }
-        return all.filter { it.id in ids && it.id != folderId && (it.type == TaskType.TASK || it.type == TaskType.CHECKLIST) && !it.isComplete && !isChecklistItem(it, byId) }
+        return all.filter { it.id in ids && it.id != folderId && it.type.isDoable && !it.isComplete && !isChecklistItem(it, byId) }
     }
 
     fun folders(): List<Task> = tasks().filter { it.type == TaskType.FOLDER }
@@ -186,7 +187,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         // A folder can't be completed, so it can't wait on anything.
         val edges = dependencyEdges().filter { it.taskId != task.id }
         val deps = if (folder) emptySet() else dependsOn.filterTo(mutableSetOf()) {
-            it != task.id && byId[it]?.type.let { t -> t == TaskType.TASK || t == TaskType.PROJECT } && !wouldCreateDependencyCycle(it, task.id, edges)
+            it != task.id && byId[it]?.type.let { t -> t != null && (t.isDoable || t == TaskType.PROJECT) } && !wouldCreateDependencyCycle(it, task.id, edges)
         }
         val contexts = contexts().map { it.id }.toSet().let { known -> contextIds.filterTo(mutableSetOf()) { it in known } }
         store.write(TASKS, task.id, JsonObject(taskFields(saved, contexts, deps) - DELETED_AT), clock())
@@ -321,13 +322,13 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     // Open projects whose steps are all done: time to complete them or add the next step.
     fun stalled(): List<Task> = stalledProjects(tasks())
 
-    // Folders are skipped (none of the bulk properties apply); see BulkEdit.applyTo, shared with the app.
+    // Only tasks and checklists (isDoable; none of the bulk properties apply to folders or projects); see BulkEdit.applyTo, shared with the app.
     fun applyBulkEdit(ids: Collection<Long>, change: BulkEdit) = store.transaction {
         val byId = tasks().associateBy { it.id }
         val edges = dependencyEdges()
         val contexts = contextIdsByTask()
         for (id in ids) {
-            val task = byId[id]?.takeIf { it.type == TaskType.TASK } ?: continue
+            val task = byId[id]?.takeIf { it.type.isDoable } ?: continue
             val blocker = change.blockerFor(id, edges)
             edit(change.applyTo(task, byId), contexts[id].orEmpty() + change.addContextIds - change.removeContextIds, dependsOn(id) + listOfNotNull(blocker))
         }

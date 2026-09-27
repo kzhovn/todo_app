@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.isDoable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import com.kzhovn.todoapp.ui.theme.LedgerTile
@@ -137,8 +138,8 @@ fun TaskListScreen(
         // The bar shows the nearest folder ancestor's color, even for a subtask of a task.
         val barColor = task.parentId?.let { walkParentChain(it, allById) { id -> colors[id] } } ?: LedgerBorder
         val row = @Composable { TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, task.id in selectedIds, subtaskParentTitle(task, allById), onCheck, onStar, onEdit, onSnooze) }
-        // Swipe right to add a subtask, as in the All tree. A checklist's are items, added in its editor.
-        if (task.type == TaskType.CHECKLIST) row() else SwipeToAddSubtask({ onAddSubtask(task.id) }, row)
+        // Swipe right to add a subtask (a checklist's are items), as in the All tree.
+        SwipeToAddSubtask({ onAddSubtask(task.id) }, row)
         if (!last) HorizontalDivider(color = LedgerBorder)
     }
 

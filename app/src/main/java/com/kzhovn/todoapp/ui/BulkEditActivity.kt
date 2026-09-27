@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.isDoable
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -124,7 +125,7 @@ class BulkEditActivity : ComponentActivity() {
                 if (showDependencyPicker) {
                     TaskPickerDialog(
                         title = "All selected tasks depend on…",
-                        tasks = allTasks.filter { it.type == TaskType.TASK && !it.isComplete && it.id !in taskIds },
+                        tasks = allTasks.filter { it.type.isDoable && !it.isComplete && it.id !in taskIds },
                         onPick = { edit = edit.copy(dependsOnId = it.id); showDependencyPicker = false },
                         onCreateNew = null,
                         onDismiss = { showDependencyPicker = false }

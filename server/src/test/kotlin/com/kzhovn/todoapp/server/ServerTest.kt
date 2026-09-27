@@ -229,6 +229,14 @@ class ServerTest {
     }
 
     @Test
+    fun `a task can wait on a checklist, and an edit keeps that`() {
+        val packing = service.create(Task(title = "Packing", type = TaskType.CHECKLIST))
+        val leave = service.create(Task(title = "Leave"))
+        service.edit(leave, emptySet(), setOf(packing.id))
+        assertEquals(setOf(packing.id), service.dependsOn(leave.id))
+    }
+
+    @Test
     fun `completing from Discord completes everything under the task`() {
         logic.onAdd(1L, "u", "-- pack")
         val id = service.tasks().single().id

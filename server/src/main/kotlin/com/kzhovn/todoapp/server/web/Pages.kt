@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.SearchFilters
@@ -226,8 +227,8 @@ private fun parseBulk(p: Parameters): BulkEdit {
 private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode) = shellPage("Raspberry · Edit tasks", mode.path) {
     val all = service.tasks()
     val byId = all.associateBy { it.id }
-    // Folders and projects are skipped, as on the phone: none of the bulk properties apply.
-    val tasks = ids.mapNotNull(byId::get).filter { it.type == TaskType.TASK }
+    // Only tasks and checklists, as on the phone: none of the bulk properties apply to folders or projects.
+    val tasks = ids.mapNotNull(byId::get).filter { it.type.isDoable }
     val contexts = service.contexts().sortedBy { it.name.lowercase() }
     fun FlowContent.choice(label: String, name: String, options: List<Pair<String, String>>) = field(label, "") {
         div(classes = "pills") {
@@ -269,7 +270,7 @@ private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode)
             select {
                 name = "dependsOn"
                 option { value = ""; +"Nothing new" }
-                all.filter { it.type == TaskType.TASK && !it.isComplete && it.id !in ids }.sortedBy { it.title.lowercase() }
+                all.filter { it.type.isDoable && !it.isComplete && it.id !in ids }.sortedBy { it.title.lowercase() }
                     .forEach { option { value = it.id.toString(); +it.title } }
             }
         }

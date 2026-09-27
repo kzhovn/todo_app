@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.repository
 
+import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.searchTasks
 import com.kzhovn.todoapp.data.planMoveNextTo
 import com.kzhovn.todoapp.data.splitItems
@@ -242,13 +243,13 @@ class TaskRepository(
         markComplete(taskId, now)
     }
 
-    // Folders are skipped: none of the bulk properties apply to them. A move or dependency that
+    // Only tasks and checklists (isDoable): none of the bulk properties apply to folders or projects. A move or dependency that
     // would create a cycle is skipped for that task rather than failing the whole edit.
     suspend fun applyBulkEdit(taskIds: Collection<Long>, edit: BulkEdit) {
         val allById = taskDao.getAllOnce().associateBy { it.id }
         val edges = taskDao.getAllDependencies()
         for (id in taskIds) {
-            val task = allById[id]?.takeIf { it.type == TaskType.TASK } ?: continue
+            val task = allById[id]?.takeIf { it.type.isDoable } ?: continue
             updateTask(edit.applyTo(task, allById))
             if (edit.addContextIds.isNotEmpty() || edit.removeContextIds.isNotEmpty()) {
                 val current = taskContextDao.getContextIdsForTask(id).toSet()

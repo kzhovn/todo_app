@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp
 
+import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import androidx.compose.foundation.layout.height
@@ -305,10 +306,10 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
-                    // In select mode every tap on a row toggles its selection instead. Folders are
-                    // skipped: none of the bulk-editable properties apply to them.
+                    // In select mode every tap on a row toggles its selection instead. Only tasks and
+                    // checklists can be picked: none of the bulk-editable properties apply to folders or projects.
                     val toggleSelected: (Long) -> Unit = { id ->
-                        if (viewModel.allById.value[id]?.type == TaskType.TASK) {
+                        if (viewModel.allById.value[id]?.type?.isDoable == true) {
                             selection = selection?.let { if (id in it) it - id else it + id }
                         }
                     }

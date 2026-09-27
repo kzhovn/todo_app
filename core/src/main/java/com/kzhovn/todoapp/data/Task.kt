@@ -8,6 +8,10 @@ import kotlinx.serialization.Serializable
 // A PROJECT is completed as a whole once its subtasks are done; it has no checkbox of its own and
 // never shows in Active/Doing (its subtasks do).
 enum class TaskType { TASK, FOLDER, PROJECT, CHECKLIST }
+
+// Something you do and tick off: a task or a checklist. Not a folder, nor a project (which completes
+// by its steps). What lists, pickers, dependencies and bulk edit deal in.
+val TaskType.isDoable: Boolean get() = this == TaskType.TASK || this == TaskType.CHECKLIST
 enum class RecurrenceType { RRULE, AFTER_COMPLETION }
 
 const val BACKBURNER_AFTER = 30L * 24 * 60 * 60 * 1000

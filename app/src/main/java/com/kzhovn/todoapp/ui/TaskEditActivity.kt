@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.isDoable
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
@@ -233,7 +234,7 @@ class TaskEditActivity : ComponentActivity() {
                 val task = vm.task
                 val candidates = remember(vm.allTasks, vm.dependencyEdges, task.id) {
                     vm.allTasks.filter {
-                        it.id != task.id && it.type == TaskType.TASK && !it.isComplete &&
+                        it.id != task.id && it.type.isDoable && !it.isComplete &&
                             (task.id == 0L || vm.dependencyEdges.none { e -> e.taskId == it.id && e.dependsOnTaskId == task.id }) && it.id !in vm.pendingDependentIds &&
                             !wouldCreateDependencyCycle(task.id, it.id, vm.dependencyEdges)
                     }
@@ -265,7 +266,7 @@ class TaskEditActivity : ComponentActivity() {
                 val task = vm.task
                 val candidates = remember(vm.allTasks, vm.dependencyEdges, task.id, vm.dependencyIds) {
                     vm.allTasks.filter {
-                        it.id != task.id && it.type == TaskType.TASK && !it.isComplete && it.id !in vm.dependencyIds &&
+                        it.id != task.id && it.type.isDoable && !it.isComplete && it.id !in vm.dependencyIds &&
                             !wouldCreateDependencyCycle(it.id, task.id, vm.dependencyEdges)
                     }
                 }

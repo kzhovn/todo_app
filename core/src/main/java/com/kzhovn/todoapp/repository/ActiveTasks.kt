@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.repository
 
+import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.Task
@@ -73,7 +74,7 @@ fun computeActiveTasks(
 
     return all.filter { task ->
         // A checklist is workable like a task (its open items never block it); its items aren't listed.
-        if (task.type != TaskType.TASK && task.type != TaskType.CHECKLIST) return@filter false
+        if (!task.type.isDoable) return@filter false
         if (task.isComplete || task.isMaybe || task.isExpired(now) || isChecklistItem(task, allById)) return@filter false
         if (task.id in blockedByDependency || isSequentiallyBlocked(task)) return@filter false
         // A task waits on its open subtasks, as on a dependency, unless set not to. A checklist doesn't:

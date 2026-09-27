@@ -32,4 +32,12 @@ class ChecklistTest {
         assertEquals(listOf("milk", "eggs"), checklistItems(1, all).map { it.title })
         assertEquals(listOf("milk", "eggs", "bread"), splitItems(" milk, eggs,,bread "))
     }
+
+    @Test
+    fun `a checklist can be waited on, like a task`() {
+        val packed = groceries.copy(id = 20, title = "Packing")
+        val leave = Task(id = 21, title = "Leave")
+        val active = computeActiveTasks(listOf(packed, leave), emptyMap(), emptyList(), emptyList(), listOf(com.kzhovn.todoapp.data.TaskDependency(21, 20)), now)
+        assertEquals(listOf("Packing"), active.map { it.title })
+    }
 }
