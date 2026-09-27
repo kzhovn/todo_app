@@ -101,11 +101,9 @@ class QuickAddActivity : ComponentActivity() {
 
             fun buildTask(): Task {
                 val parsed = QuickAddParser.parse(title)
-                return Task(
-                    title = parsed.title,
+                // Everything the parser found, plus what's set on the chips.
+                return parsed.copy(
                     isStarred = starred,
-                    isMaybe = parsed.isMaybe,
-                    durationMinutes = parsed.durationMinutes,
                     // Chip values are an explicit, later user action, so they override whatever
                     // the shorthand parser found in the title text.
                     startDate = startDate ?: parsed.startDate,

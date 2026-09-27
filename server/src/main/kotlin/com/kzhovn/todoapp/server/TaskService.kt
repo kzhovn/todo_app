@@ -77,18 +77,14 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
             dependencies = rows.flatMap { row -> row.dependsOn().map { TaskDependency(row.id, it) } },
             now = clock()
         )
-        val byId = rows.associate { it.id to it.toTask() }
-        val contexts = contextsByTaskId(rows)
-        return urgentFirst(if (folderId == null) active else active.filter { it.id in subtreeIds(folderId) }, clock()) {
-            resolveEffective(it, byId, contexts).effectiveDueDate
-        }
+        return urgentFirst(if (folderId == null) active else active.filter { it.id in subtreeIds(folderId) }, clock(), rows.associate { it.id to it.toTask() }, contextsByTaskId(rows))
     }
 
     fun doing(folderId: Long? = null): List<Task> {
         val rows = liveRows()
         val byId = rows.associate { it.id to it.toTask() }
         val contexts = contextsByTaskId(rows)
-        return filterDoing(active(folderId), clock()) { resolveEffective(it, byId, contexts).effectiveDueDate }
+        return filterDoing(active(folderId), clock(), byId, contexts)
     }
 
     fun effectiveDueDate(task: Task): Long? {

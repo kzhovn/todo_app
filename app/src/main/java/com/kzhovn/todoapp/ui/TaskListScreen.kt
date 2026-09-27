@@ -136,11 +136,9 @@ fun TaskListScreen(
         val effective = remember(task, allById, contextsByTaskId) { resolveEffective(task, allById, contextsByTaskId) }
         // The bar shows the nearest folder ancestor's color, even for a subtask of a task.
         val barColor = task.parentId?.let { walkParentChain(it, allById) { id -> colors[id] } } ?: LedgerBorder
+        val row = @Composable { TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, task.id in selectedIds, subtaskParentTitle(task, allById), onCheck, onStar, onEdit, onSnooze) }
         // Swipe right to add a subtask, as in the All tree. A checklist's are items, added in its editor.
-        if (task.type == TaskType.CHECKLIST) TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, task.id in selectedIds, subtaskParentTitle(task, allById), onCheck, onStar, onEdit, onSnooze)
-        else SwipeToAddSubtask({ onAddSubtask(task.id) }) {
-            TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, task.id in selectedIds, subtaskParentTitle(task, allById), onCheck, onStar, onEdit, onSnooze)
-        }
+        if (task.type == TaskType.CHECKLIST) row() else SwipeToAddSubtask({ onAddSubtask(task.id) }, row)
         if (!last) HorizontalDivider(color = LedgerBorder)
     }
 
@@ -153,7 +151,7 @@ fun TaskListScreen(
                 val sectionId = folder?.id ?: 0L
                 val isFolded = sectionId in folded
                 item(key = "section-$sectionId") {
-                    SectionHeader(folder?.title ?: "No folder", folder?.let { colors[it.id] }, sectionTasks.size, isFolded) {
+                    SectionHeader(folder?.title ?: Labels.NO_FOLDER, folder?.let { colors[it.id] }, sectionTasks.size, isFolded) {
                         folded = if (isFolded) folded - sectionId else folded + sectionId
                         scope.launch { prefs.setSectionFolded(sectionId, !isFolded) }
                     }

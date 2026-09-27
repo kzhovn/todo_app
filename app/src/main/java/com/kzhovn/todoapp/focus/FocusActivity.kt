@@ -111,7 +111,7 @@ class FocusActivity : ComponentActivity() {
                     val byId = all.associateBy { it.id }
                     val contexts = repository.getAllTaskContexts()
                     val active = repository.getActiveTasksFrom(all, contexts, now, minuteOfDay(now), dayOfWeekMask(now))
-                    val doing = filterDoing(active, now) { resolveEffective(it, byId, contexts).effectiveDueDate }
+                    val doing = filterDoing(active, now, byId, contexts)
                     return nextFocusTasks(active, doing, finished, byId)
                 }
 

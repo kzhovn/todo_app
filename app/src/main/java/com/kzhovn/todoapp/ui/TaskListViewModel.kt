@@ -11,7 +11,6 @@ import androidx.lifecycle.viewModelScope
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskContext
-import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.repository.ContextRepository
 import com.kzhovn.todoapp.repository.TaskRepository
 import com.kzhovn.todoapp.repository.dayOfWeekMask
@@ -79,6 +78,9 @@ class TaskListViewModel(
         }
     }
 
+    private suspend fun active(all: List<Task>, now: Long) =
+        repository.getActiveTasksFrom(all, _contextsByTaskId.value, now, minuteOfDay(now), dayOfWeekMask(now))
+
     private suspend fun loadTab(mode: TaskListMode) {
         val now = clock()
         repository.purgeExpired(now)
@@ -86,14 +88,8 @@ class TaskListViewModel(
         _tasks.value = when (mode) {
             TaskListMode.ALL -> all
             // Overdue and due today first, like Doing (each folder section keeps that order).
-            TaskListMode.ACTIVE -> urgentFirst(
-                repository.getActiveTasksFrom(all, _contextsByTaskId.value, now, minuteOfDay(now), dayOfWeekMask(now)),
-                now
-            ) { resolveEffective(it, _allById.value, _contextsByTaskId.value).effectiveDueDate }
-            TaskListMode.DOING -> filterDoing(
-                repository.getActiveTasksFrom(all, _contextsByTaskId.value, now, minuteOfDay(now), dayOfWeekMask(now)),
-                now
-            ) { resolveEffective(it, _allById.value, _contextsByTaskId.value).effectiveDueDate }
+            TaskListMode.ACTIVE -> urgentFirst(active(all, now), now, _allById.value, _contextsByTaskId.value)
+            TaskListMode.DOING -> filterDoing(active(all, now), now, _allById.value, _contextsByTaskId.value)
         }
     }
 

@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.Labels
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,7 +15,7 @@ import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 
-// Shared by TaskEditActivity (editing an existing task: needs cycle protection + "No folder" +
+// Shared by TaskEditActivity (editing an existing task: needs cycle protection + Labels.NO_FOLDER +
 // inline folder creation) and QuickAddActivity (creating a brand-new task: needs none of those,
 // since a not-yet-created task can never be its own ancestor).
 @Composable
@@ -40,7 +41,7 @@ fun FolderPickerDialog(
             Column {
                 if (showNoFolderOption) {
                     Text(
-                        "No folder",
+                        Labels.NO_FOLDER,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onPick(null) }

@@ -124,8 +124,9 @@ fun OutlinerScreen(
         }
     }
 
+    val actions = OutlinerActions(::toggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt)
     LazyColumn(state = listState, modifier = Modifier.onGloballyPositioned { listBounds = it.boundsInRoot() }) {
-        renderNodes(tree, depth = 0, collapsed = collapsed, onToggle = ::toggle, onCheck = onCheck, onEdit = onEdit, onStar = onStar, onReparent = onReparent, onAddSubtask = onAddSubtask, onMove = onMove, onDragAt = onDragAt, allById = allById, selectedIds = selectedIds)
+        renderNodes(tree, depth = 0, collapsed = collapsed, actions = actions, allById = allById, selectedIds = selectedIds)
     }
 }
 
@@ -133,26 +134,31 @@ private fun LazyListScope.renderNodes(
     nodes: List<OutlinerNode>,
     depth: Int,
     collapsed: Set<Long>,
-    onToggle: (Long) -> Unit,
-    onCheck: (Long) -> Unit,
-    onEdit: (Long) -> Unit,
-    onStar: (Long) -> Unit,
-    onReparent: (Long, Long) -> Unit,
-    onAddSubtask: (Long) -> Unit,
-    onMove: (Long, Long, Boolean) -> Unit,
-    onDragAt: (Float?) -> Unit,
+    actions: OutlinerActions,
     allById: Map<Long, Task>,
     selectedIds: Set<Long>
 ) {
     nodes.forEach { node ->
         item(key = node.task.id) {
-            OutlinerRow(node, depth, isFolded(node.task, collapsed), onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, allById, node.task.id in selectedIds)
+            OutlinerRow(node, depth, isFolded(node.task, collapsed), actions, allById, node.task.id in selectedIds)
         }
         if (node.children.isNotEmpty() && !isFolded(node.task, collapsed)) {
-            renderNodes(node.children, depth + 1, collapsed, onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, allById, selectedIds)
+            renderNodes(node.children, depth + 1, collapsed, actions, allById, selectedIds)
         }
     }
 }
+
+// Everything a row can do, passed down the tree as one.
+private data class OutlinerActions(
+    val onToggle: (Long) -> Unit,
+    val onCheck: (Long) -> Unit,
+    val onEdit: (Long) -> Unit,
+    val onStar: (Long) -> Unit,
+    val onReparent: (Long, Long) -> Unit,
+    val onAddSubtask: (Long) -> Unit,
+    val onMove: (Long, Long, Boolean) -> Unit,
+    val onDragAt: (Float?) -> Unit
+)
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -160,17 +166,11 @@ private fun OutlinerRow(
     node: OutlinerNode,
     depth: Int,
     isCollapsed: Boolean,
-    onToggle: (Long) -> Unit,
-    onCheck: (Long) -> Unit,
-    onEdit: (Long) -> Unit,
-    onStar: (Long) -> Unit,
-    onReparent: (Long, Long) -> Unit,
-    onAddSubtask: (Long) -> Unit,
-    onMove: (Long, Long, Boolean) -> Unit,
-    onDragAt: (Float?) -> Unit,
+    actions: OutlinerActions,
     allById: Map<Long, Task>,
     selected: Boolean
 ) {
+    val (onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt) = actions
     val task = node.task
     val hasChildren = node.children.isNotEmpty()
     val indent = (8 + depth * 18).dp

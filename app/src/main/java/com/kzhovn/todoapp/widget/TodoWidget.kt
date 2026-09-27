@@ -112,7 +112,7 @@ class TodoWidget : GlanceAppWidget() {
                 else -> {
                     val active = repository.getActiveTasksFrom(allTasks, contextsByTaskId, now, minuteOfDay(now), dayOfWeekMask(now))
                     if (mode == WidgetMode.ACTIVE) active
-                    else filterDoing(active, now) { resolveEffective(it, allById, contextsByTaskId).effectiveDueDate }
+                    else filterDoing(active, now, allById, contextsByTaskId)
                 }
             }.filter { folderId == null || isUnder(it, folderId, allById) }
             val folderName = folderId?.let { allById[it]?.title }
