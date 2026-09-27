@@ -285,9 +285,10 @@ class TaskRepository(
     }
 
     // Detaches this task's direct children (only direct — any grandchildren stay nested under
-    // their own now-top-level parent) so they survive as independent tasks.
+    // their own now-top-level parent) so they survive as independent tasks. Like reparent, they land
+    // at the end of the top level (a stale position from the old list would misplace them).
     suspend fun promoteChildrenToTopLevel(taskId: Long) {
-        taskDao.getChildren(taskId).forEach { child -> taskDao.update(child.copy(parentId = null)) }
+        taskDao.getChildren(taskId).forEach { child -> taskDao.update(child.copy(parentId = null, position = null)) }
     }
 }
 

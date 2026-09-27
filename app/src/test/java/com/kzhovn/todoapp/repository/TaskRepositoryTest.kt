@@ -301,10 +301,13 @@ class TaskRepositoryTest {
     fun `promoteChildrenToTopLevel detaches direct children`() = runBlocking {
         val parentId = repository.createTask(Task(title = "Plan trip"))
         val childId = repository.createTask(Task(title = "Book flight", parentId = parentId))
+        repository.updateTask(repository.getTask(childId)!!.copy(position = 1)) // as after a reorder
 
         repository.promoteChildrenToTopLevel(parentId)
 
         assertNull(repository.getTask(childId)!!.parentId)
+        // Its position among the old siblings would misplace it at the top level.
+        assertNull(repository.getTask(childId)!!.position)
     }
 
     @Test
