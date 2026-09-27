@@ -408,4 +408,25 @@ class ServerTest {
         val emoji = older.lines.single().emoji!!
         assertTrue(logic.onReaction(98L, emoji, added = false) is ReactionOutcome.EditList)
     }
+
+    @Test
+    fun `completing in the app or on the web takes the task's emoji reaction off its newest list`() {
+        val mirrored = mutableListOf<SourceReaction>()
+        store.onChange = { before, after -> mirrored += logic.listReactions(before, after) }
+        val a = service.create(Task(title = "A", isStarred = true))
+        val chunk = logic.listChunks(service.doing()).single()
+        logic.recordList(7L, 99L, chunk)
+        val emoji = chunk.lines.single().emoji!!
+
+        service.complete(a.id)
+        assertEquals(listOf(SourceReaction(7L, 99L, emoji, add = false)), mirrored)
+        assertTrue(logic.renderList(99L)!!.contains("~~A~~ $emoji")) // the line keeps its emoji
+        service.uncomplete(a.id)
+        assertEquals(SourceReaction(7L, 99L, emoji, add = true), mirrored.last())
+
+        // Done from Discord (tapping the emoji): the user's tap already shows it.
+        mirrored.clear()
+        logic.onReaction(99L, emoji, added = true)
+        assertEquals(emptyList<SourceReaction>(), mirrored)
+    }
 }

@@ -77,7 +77,7 @@ data class MessageLink(
 
 data class ListChunk(val content: String, val emojis: List<String>, val lines: List<ListLine>)
 
-// A reaction the bot should add to (or remove from) a task's source message.
+// A reaction the bot should add to (or remove from) a message: a task's source message, or a list.
 data class SourceReaction(val channelId: Long, val messageId: Long, val emoji: String, val add: Boolean)
 
 sealed interface ReactionOutcome {
@@ -244,6 +244,18 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         if (after.table != TASKS || before == null) return null
         if (before.toTask().isComplete == after.toTask().isComplete && before.isDeleted == after.isDeleted) return null
         return newestList(after.id)
+    }
+
+    // Completed or deleted in the app or on the web: the newest list showing the task drops the bot's
+    // reaction for its emoji, so only open tasks can be tapped. The struck line keeps the emoji. Undoing
+    // puts the reaction back. (Done from Discord, the user's own tap already shows it.)
+    fun listReactions(before: SyncRow?, after: SyncRow): List<SourceReaction> {
+        if (after.table != TASKS || before == null || handlingDiscord.get()) return emptyList()
+        val done = after.isDeleted || after.toTask().isComplete
+        if (done == (before.isDeleted || before.toTask().isComplete)) return emptyList()
+        val (channelId, messageId) = newestList(after.id) ?: return emptyList()
+        val emoji = link(messageId)?.lines?.firstOrNull { it.taskId == after.id }?.emoji ?: return emptyList()
+        return listOf(SourceReaction(channelId, messageId, emoji, add = !done))
     }
 
     fun renderList(messageId: Long): String? = link(messageId)?.lines?.takeIf { it.isNotEmpty() }?.let(::render)

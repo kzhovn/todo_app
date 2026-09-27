@@ -96,7 +96,7 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
             ).addEventListeners(bot).build()
             // ponytail: DM channels aren't cached by createLight, so this only mirrors onto server channels.
             store.onChange = { before, after ->
-                bot.logic.sourceReactions(before, after).forEach { r ->
+                (bot.logic.sourceReactions(before, after) + bot.logic.listReactions(before, after)).forEach { r ->
                     jda.getChannelById(MessageChannel::class.java, r.channelId)?.let { channel ->
                         val emoji = Emoji.fromUnicode(r.emoji)
                         (if (r.add) channel.addReactionById(r.messageId, emoji) else channel.removeReactionById(r.messageId, emoji)).queue()
