@@ -218,24 +218,8 @@ private fun OutlinerRow(
     }
 
     // Swiping right adds a subtask (works whether or not the row already has children, so it
-    // doesn't compete with the fold chevron). The row always snaps back; nothing is dismissed.
-    val swipe = rememberSwipeToDismissBoxState(confirmValueChange = {
-        if (it == SwipeToDismissBoxValue.StartToEnd) onAddSubtask(task.id)
-        false
-    })
-    SwipeToDismissBox(
-        state = swipe,
-        enableDismissFromEndToStart = false,
-        backgroundContent = {
-            Row(
-                Modifier.fillMaxSize().background(LedgerAccentSoft).padding(start = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = null, tint = LedgerAccent)
-                Text("Subtask", color = LedgerAccent, fontSize = 14.sp)
-            }
-        }
-    ) {
+    // doesn't compete with the fold chevron).
+    SwipeToAddSubtask({ onAddSubtask(task.id) }) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -320,3 +304,26 @@ private fun OutlinerRow(
 private fun isFolded(task: Task, flipped: Set<Long>) = (task.id in flipped) != (task.type == TaskType.CHECKLIST)
 
 private enum class DropZone { BEFORE, INTO, AFTER }
+
+// Swipe a row right to add a subtask under it; the row always snaps back, nothing is dismissed.
+// Shared by the All tree and the Doing/Active lists.
+@Composable
+fun SwipeToAddSubtask(onAdd: () -> Unit, content: @Composable () -> Unit) {
+    val swipe = rememberSwipeToDismissBoxState(confirmValueChange = {
+        if (it == SwipeToDismissBoxValue.StartToEnd) onAdd()
+        false
+    })
+    SwipeToDismissBox(
+        state = swipe,
+        enableDismissFromEndToStart = false,
+        backgroundContent = {
+            Row(
+                Modifier.fillMaxSize().background(LedgerAccentSoft).padding(start = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, tint = LedgerAccent)
+                Text("Subtask", color = LedgerAccent, fontSize = 14.sp)
+            }
+        }
+    ) { content() }
+}

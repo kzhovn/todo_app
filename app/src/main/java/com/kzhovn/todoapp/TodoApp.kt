@@ -1,5 +1,9 @@
 package com.kzhovn.todoapp
 
+import androidx.glance.appwidget.updateAll
+import com.kzhovn.todoapp.widget.TodoWidget
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.SupervisorJob
 import com.kzhovn.todoapp.data.MIGRATION_9_10
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.conflate
@@ -76,6 +80,12 @@ class TodoApp : Application() {
         if (SyncSettings.config(this) != null) SyncWorker.ensurePeriodic(this)
         TaskTimer.restore(this)
         startWifiMonitor()
+        // Every widget redraws when tasks, contexts or dependencies change, from anywhere (the app, a
+        // sync, another widget). A widget only watches the data while its own session is alive, so
+        // an idle one would otherwise keep showing the old list.
+        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+            listInputChanges().debounce(300).collect { TodoWidget().updateAll(this@TodoApp) }
+        }
         // Push shortly after any local edit, from any screen or the widget. Pull-applies clear
         // their own dirty marks, so they don't re-trigger this.
         database.invalidationTracker.addObserver(object : InvalidationTracker.Observer(TRACKED_TABLES) {

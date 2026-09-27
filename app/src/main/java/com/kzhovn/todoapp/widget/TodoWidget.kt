@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.widget
 
+import androidx.glance.appwidget.updateAll
 import com.kzhovn.todoapp.data.isChecklistItem
 import androidx.glance.text.TextDecoration
 import androidx.glance.appwidget.state.updateAppWidgetState
@@ -358,6 +359,8 @@ class ToggleItemAction : ActionCallback {
 class SyncNowAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         if (SyncSettings.config(context) != null) SyncWorker.requestSoon(context, delaySeconds = 0)
+        // Redraw every widget from fresh data now, too; whatever the sync brings in redraws them again.
+        TodoWidget().updateAll(context)
     }
 }
 

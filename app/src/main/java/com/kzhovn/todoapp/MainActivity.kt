@@ -369,6 +369,16 @@ class MainActivity : ComponentActivity() {
                             onEdit = onEdit,
                             selectedIds = selectedIds,
                             onSnooze = { id, until -> viewModel.snooze(id, until, selectedMode) },
+                            // The parent now waits on its new subtask, so in Doing a starred parent's subtask starts
+                            // starred and takes its place there.
+                            onAddSubtask = { parentId ->
+                                val starred = selectedMode == TaskListMode.DOING && viewModel.allById.value[parentId]?.isStarred == true
+                                startActivity(
+                                    Intent(this@MainActivity, QuickAddActivity::class.java)
+                                        .putExtra(QuickAddActivity.EXTRA_PARENT_ID, parentId)
+                                        .putExtra(QuickAddActivity.EXTRA_STARRED, starred)
+                                )
+                            },
                             sectioned = selectedMode == TaskListMode.ACTIVE && !searchMode
                         )
                     }
