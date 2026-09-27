@@ -13,8 +13,12 @@ fun newTaskPositions(all: List<Task>, new: Task): Map<Long, Long> {
     if (parent != null && (parent.type != TaskType.FOLDER || parent.sequential)) return emptyMap()
     val siblings = all.filter { it.parentId == new.parentId && it.id != new.id }.sortedWith(TaskOrder).toMutableList()
     siblings.add(siblings.takeWhile { it.type == TaskType.FOLDER }.size, new)
-    return siblings.withIndex().filter { (i, t) -> t.position != i + 1L || t.id == new.id }.associate { (i, t) -> t.id to i + 1L }
+    return renumber(siblings, new.id)
 }
+
+// The positions to write so `siblings` read 1..n in order: those that changed, plus the task being placed.
+private fun renumber(siblings: List<Task>, placedId: Long): Map<Long, Long> =
+    siblings.withIndex().filter { (i, t) -> t.position != i + 1L || t.id == placedId }.associate { (i, t) -> t.id to i + 1L }
 
 // A move right before/after `anchorId`, under the anchor's parent: that sibling list renumbered 1..n
 // (renumbering never runs out of room between neighbours, and rewrites only a few rows at one user's
@@ -29,8 +33,7 @@ fun planMoveNextTo(all: List<Task>, taskId: Long, anchorId: Long, after: Boolean
     if (parentId != null && wouldCreateCycle(parentId, taskId, byId)) return null
     val siblings = all.filter { it.parentId == parentId && it.id != taskId }.sortedWith(TaskOrder).toMutableList()
     siblings.add(siblings.indexOf(anchor) + if (after) 1 else 0, task)
-    val positions = siblings.withIndex().filter { (i, t) -> t.position != i + 1L || t.id == taskId }.associate { (i, t) -> t.id to i + 1L }
-    return Move(parentId, positions)
+    return Move(parentId, renumber(siblings, taskId))
 }
 
 // Open projects whose subtasks are all done: time to complete the project or add the next step.

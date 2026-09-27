@@ -1,5 +1,8 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.data.clockTime
+import com.kzhovn.todoapp.data.resolveEffective
+import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.ContextType
@@ -151,24 +154,24 @@ private fun HTML.searchPage(service: TaskService, p: Parameters) = shellPage("Ra
             value = p["q"].orEmpty(); placeholder = "Search tasks…"; attributes["autofocus"] = ""; attributes["autocomplete"] = "off"
         }
         div(classes = "pills") {
-            label(classes = "pill") { checkBoxInput(name = "starred") { checked = p["starred"] != null }; +"Starred" }
-            label(classes = "pill") { checkBoxInput(name = "completed") { checked = p["completed"] != null }; +"Completed" }
+            label(classes = "pill") { checkBoxInput(name = "starred") { checked = p["starred"] != null }; +Labels.STARRED }
+            label(classes = "pill") { checkBoxInput(name = "completed") { checked = p["completed"] != null }; +Labels.COMPLETED }
             select {
                 name = "folder"
-                option { value = ""; +"Any folder" }
+                option { value = ""; +"Any ${Labels.FOLDER.lowercase()}" }
                 service.folders().sortedBy { it.title.lowercase() }.forEach { f ->
                     option { value = f.id.toString(); selected = p["folder"] == f.id.toString(); +f.title }
                 }
             }
             select {
                 name = "context"
-                option { value = ""; +"Any context" }
+                option { value = ""; +"Any ${Labels.CONTEXT.lowercase()}" }
                 service.contexts().sortedBy { it.name.lowercase() }.forEach { c ->
                     option { value = c.id.toString(); selected = p["context"] == c.id.toString(); +"@${c.name}" }
                 }
             }
-            label(classes = "date-filter") { +"Due after "; dateInput(name = "after") { value = p["after"].orEmpty() } }
-            label(classes = "date-filter") { +"Due before "; dateInput(name = "before") { value = p["before"].orEmpty() } }
+            label(classes = "date-filter") { +"${Labels.DUE_AFTER} "; dateInput(name = "after") { value = p["after"].orEmpty() } }
+            label(classes = "date-filter") { +"${Labels.DUE_BEFORE} "; dateInput(name = "before") { value = p["before"].orEmpty() } }
         }
     }
     div { searchResults(service, p) }
@@ -178,7 +181,9 @@ private fun DIV.searchResults(service: TaskService, p: Parameters) {
     id = "results"
     classes = setOf("results")
     val results = service.search(p["q"].orEmpty(), p.searchFilters())
-    val byId = service.tasks().associateBy { it.id }
+    val all = service.tasks()
+    val byId = all.associateBy { it.id }
+    val counts = subtaskCounts(all)
     val contextNames = service.contexts().associate { it.id to it.name }
     val contextIds = service.contextIdsByTask()
     val now = service.now()
@@ -193,10 +198,13 @@ private fun DIV.searchResults(service: TaskService, p: Parameters) {
                 attributes["hx-swap"] = "outerHTML"
                 attributes["aria-label"] = if (task.isComplete) "Mark not done" else "Complete"
                 if (task.isComplete) icon(Icon.CHECK, "")
+            } else if (task.type == TaskType.CHECKLIST) {
+                val (done, total) = counts[task.id] ?: (0 to 0)
+                a(href = "/tasks/${task.id}?mode=ALL", classes = "count") { attributes["title"] = Labels.CHECKLIST; +"$done/$total" }
             } else span(classes = "project") { icon(Icon.PROJECT, "") }
             a(href = "/tasks/${task.id}?mode=ALL", classes = if (task.isComplete) "done" else null) { +task.title }
             div(classes = "meta") {
-                task.dueDate?.takeUnless { task.isComplete }?.let { dueTail(it, dueStatus(it, now), now) }
+                resolveEffective(task, byId, contextIds).effectiveDueDate?.takeUnless { task.isComplete }?.let { dueTail(it, dueStatus(it, now), now) }
                 byId[task.parentId]?.let { span { +(if (it.type == TaskType.FOLDER) it.title else "↳ ${it.title}") } }
                 contextIds[task.id].orEmpty().mapNotNull(contextNames::get).forEach { span { +"@$it" } }
                 if (task.isStarred) span(classes = "starred") { +"★" }
@@ -378,15 +386,10 @@ private fun describe(context: TaskContext, windows: List<ContextTimeWindow>): St
     ContextType.PLACE -> "Wifi: ${context.wifiSsid}"
     ContextType.TIME -> windows.joinToString(", ") { w ->
         val days = if (w.daysMask == ContextTimeWindow.ALL_DAYS) "every day"
-        else WEEKDAYS.filter { (bit, _) -> w.daysMask and (1 shl bit) != 0 }.joinToString(" ") { it.second }
-        "${hhmm(w.windowStartMinute)}–${hhmm(w.windowEndMinute)} $days"
+        else Labels.WEEKDAYS.filter { (bit, _) -> w.daysMask and (1 shl bit) != 0 }.joinToString(" ") { it.second }
+        "${clockTime(w.windowStartMinute)}–${clockTime(w.windowEndMinute)} $days"
     }
 }
-
-private fun hhmm(minutes: Int) = "%02d:%02d".format(minutes / 60, minutes % 60)
-
-// Monday first, like the phone's pickers; bits are Su=0..Sa=6.
-private val WEEKDAYS = listOf(1 to "Mo", 2 to "Tu", 3 to "We", 4 to "Th", 5 to "Fr", 6 to "Sa", 0 to "Su")
 
 private fun HTML.contextsPage(service: TaskService, form: ContextForm) = shellPage("Raspberry · Contexts", "/contexts") {
     div(classes = "contexts") {
@@ -422,14 +425,14 @@ private fun HTML.contextsPage(service: TaskService, form: ContextForm) = shellPa
             div(classes = "field time-only") {
                 span(classes = "field-label") { +"Windows (an end before the start runs past midnight)" }
                 // Existing windows plus two blank rows; save and reopen to add more.
-                val rows = form.windows.map { Triple(hhmm(it.windowStartMinute), hhmm(it.windowEndMinute), it.daysMask) } +
+                val rows = form.windows.map { Triple(clockTime(it.windowStartMinute), clockTime(it.windowEndMinute), it.daysMask) } +
                     List(2) { Triple("", "", ContextTimeWindow.ALL_DAYS) }
                 rows.forEachIndexed { i, (start, end, mask) ->
                     div(classes = "window-row") {
                         timeInput(name = "start") { value = start }
                         +"–"
                         timeInput(name = "end") { value = end }
-                        WEEKDAYS.forEach { (bit, label) ->
+                        Labels.WEEKDAYS.forEach { (bit, label) ->
                             label(classes = "pill") { checkBoxInput(name = "days$i") { value = bit.toString(); checked = mask and (1 shl bit) != 0 }; +label }
                         }
                     }

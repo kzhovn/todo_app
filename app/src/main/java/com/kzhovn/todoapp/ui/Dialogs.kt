@@ -24,17 +24,14 @@ import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.ui.theme.LedgerOverdue
 
-// Shared by every "are you sure?" dialog. destructive = true (the common case) paints the confirm
-// button LedgerOverdue/white, matching the visual weight a delete/remove action needs; pass false
-// for a confirm that isn't itself destructive but still needs a two-button choice.
+// Shared by every "are you sure?" dialog; the confirm button is painted as the destructive action.
 @Composable
 fun ConfirmDialog(
     title: String,
     body: String?,
     confirmLabel: String,
     onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-    destructive: Boolean = true
+    onDismiss: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -43,20 +40,15 @@ fun ConfirmDialog(
         confirmButton = {
             Button(
                 onClick = onConfirm,
-                colors = if (destructive) {
-                    ButtonDefaults.buttonColors(containerColor = LedgerOverdue, contentColor = Color.White)
-                } else {
-                    ButtonDefaults.buttonColors()
-                }
+                colors = ButtonDefaults.buttonColors(containerColor = LedgerOverdue, contentColor = Color.White)
             ) { Text(confirmLabel) }
         },
         dismissButton = { Button(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
-// Shared by every "one text field, Add/Cancel" dialog. A controlled component: the caller owns
-// `value`'s backing state (matching how newSubtaskTitle/newFolderName are already held today), so
-// onConfirm decides what to do with the current value, including resetting it afterward.
+// Shared by every "one text field, Add/Cancel" dialog. The caller owns `value`'s state, so onConfirm
+// decides what to do with it, including resetting it.
 @Composable
 fun TextInputDialog(
     title: String,

@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.notifications
 
+import com.kzhovn.todoapp.data.countdown
 import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -123,8 +124,7 @@ object TaskTimer {
             .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
         if (s.isPaused) {
-            val left = s.remainingMillis / 1000
-            builder.setContentText("Paused · %d:%02d left".format(left / 60, left % 60))
+            builder.setContentText("Paused · ${countdown(s.remainingMillis)} left")
                 .addAction(0, "Resume", broadcast(context, ACTION_RESUME, s.taskId, 1))
         } else {
             // The system draws the live countdown to endsAt.

@@ -50,10 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.AppSettings
 import com.kzhovn.todoapp.TodoApp
-import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.repository.DayCompletions
 import com.kzhovn.todoapp.repository.completionsByDay
-import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
 import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk

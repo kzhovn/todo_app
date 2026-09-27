@@ -25,14 +25,13 @@ class OutlinerPreferencesTest {
     @Test
     fun `folder is not collapsed by default`() = runBlocking {
         val prefs = OutlinerPreferences(ApplicationProvider.getApplicationContext())
-        assertFalse(prefs.isCollapsed(1L))
+        assertTrue(prefs.collapsedIds().isEmpty())
     }
 
     @Test
     fun `setCollapsed true persists and is readable`() = runBlocking {
         val prefs = OutlinerPreferences(ApplicationProvider.getApplicationContext())
         prefs.setCollapsed(1L, true)
-        assertTrue(prefs.isCollapsed(1L))
         assertEquals(setOf(1L), prefs.collapsedIds())
     }
 
@@ -41,6 +40,6 @@ class OutlinerPreferencesTest {
         val prefs = OutlinerPreferences(ApplicationProvider.getApplicationContext())
         prefs.setCollapsed(2L, true)
         prefs.setCollapsed(2L, false)
-        assertFalse(prefs.isCollapsed(2L))
+        assertFalse(2L in prefs.collapsedIds())
     }
 }

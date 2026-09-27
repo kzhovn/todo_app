@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.Labels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -43,35 +44,35 @@ fun FilterPanel(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        SelectablePill(label = "Starred", selected = filters.starredOnly, fontSize = 13.sp, horizontalPadding = 8.dp, verticalPadding = 4.dp) {
+        SelectablePill(label = Labels.STARRED, selected = filters.starredOnly, fontSize = 13.sp, horizontalPadding = 8.dp, verticalPadding = 4.dp) {
             onFiltersChange(filters.copy(starredOnly = !filters.starredOnly))
         }
-        SelectablePill(label = "Completed", selected = filters.includeCompleted, fontSize = 13.sp, horizontalPadding = 8.dp, verticalPadding = 4.dp) {
+        SelectablePill(label = Labels.COMPLETED, selected = filters.includeCompleted, fontSize = 13.sp, horizontalPadding = 8.dp, verticalPadding = 4.dp) {
             onFiltersChange(filters.copy(includeCompleted = !filters.includeCompleted))
         }
         DropdownChip(
-            label = "Folder",
+            label = Labels.FOLDER,
             icon = Icons.Filled.Folder,
             selected = folders.firstOrNull { it.id == filters.folderId }?.title,
             options = folders.sortedBy { it.title.lowercase() }.map { it.id to it.title },
             onPick = { onFiltersChange(filters.copy(folderId = it)) }
         )
         DropdownChip(
-            label = "Context",
+            label = Labels.CONTEXT,
             icon = Icons.Filled.AlternateEmail,
             selected = contexts.firstOrNull { it.id == filters.contextId }?.name,
             options = contexts.sortedBy { it.name.lowercase() }.map { it.id to it.name },
             onPick = { onFiltersChange(filters.copy(contextId = it)) }
         )
         PropertyChip(
-            label = "Due after",
+            label = Labels.DUE_AFTER,
             valueText = filters.dueAfter?.let(::formatChipDate),
             icon = Icons.Filled.Event,
             onClick = { pickDate(activity, filters.dueAfter, withTime = false) { onFiltersChange(filters.copy(dueAfter = it)) } },
             onClear = { onFiltersChange(filters.copy(dueAfter = null)) }
         )
         PropertyChip(
-            label = "Due before",
+            label = Labels.DUE_BEFORE,
             valueText = filters.dueBefore?.let(::formatChipDate),
             icon = Icons.Filled.Flag,
             onClick = { pickDate(activity, filters.dueBefore, withTime = false) { onFiltersChange(filters.copy(dueBefore = it)) } },

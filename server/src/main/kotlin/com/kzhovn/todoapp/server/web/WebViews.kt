@@ -1,12 +1,11 @@
 package com.kzhovn.todoapp.server.web
 
+import kotlinx.html.HTMLTag
 import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.TaskType
-import com.kzhovn.todoapp.data.deadline
-import com.kzhovn.todoapp.data.hasTime
 import com.kzhovn.todoapp.data.DueStatus
 import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.data.dueText
@@ -48,10 +47,6 @@ import kotlinx.html.summary
 import kotlinx.html.textInput
 import kotlinx.html.title
 import kotlinx.html.unsafe
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
-import java.util.Locale
 
 enum class ListMode(val label: String) { DOING(Labels.DOING), ACTIVE(Labels.ACTIVE), ALL(Labels.ALL) }
 
@@ -91,6 +86,13 @@ class ListData(
 
 // The same colour families as the app (folderColorsArgb in :core), as CSS colours.
 internal fun folderColorsHex(tasks: Collection<Task>): Map<Long, String> = folderColorsArgb(tasks).mapValues { "#%06X".format(it.value and 0xFFFFFF) }
+
+// An htmx request whose response replaces `target` (the list, by default).
+internal fun HTMLTag.hx(verb: String, url: String, target: String = "#list") {
+    attributes["hx-$verb"] = url
+    attributes["hx-target"] = target
+    attributes["hx-swap"] = "outerHTML"
+}
 
 // The Material icons the phone uses (Icons.Filled.*), inlined so both clients look alike.
 internal enum class Icon(val path: String) {
@@ -194,14 +196,7 @@ fun HTML.shellPage(title: String, current: String, listMode: ListMode? = null, t
 }
 
 private fun FlowContent.syntaxKey() = div(classes = "key") {
-    listOf(
-        "-d fri · due 3pm" to "due (and time)",
-        "-s tomorrow · start mon 9am" to "start",
-        "today, tomorrow, mon–sun, next fri, 2026-10-01" to "dates",
-        "5pm, 9:30am, 14:00" to "times",
-        "ends with ?" to "maybe",
-        "n · g d / g a / g t · ?" to "keys"
-    ).forEach { (syntax, meaning) -> div { span(classes = "mono") { +syntax }; +" $meaning" } }
+    (Labels.QUICK_ADD_SYNTAX + ("n · g d / g a / g t · ?" to "keys")).forEach { (syntax, meaning) -> div { span(classes = "mono") { +syntax }; +" $meaning" } }
 }
 
 // Filled into a div by the caller, so a fragment response can have this div as its root (htmx
@@ -225,9 +220,7 @@ fun DIV.listContents(data: ListData) {
             val folded = sectionId in data.folded
             div(classes = "section") {
                 button(classes = "section-toggle") {
-                    attributes["hx-get"] = "/list/active?fold=$sectionId"
-                    attributes["hx-target"] = "#list"
-                    attributes["hx-swap"] = "outerHTML"
+                    hx("get", "/list/active?fold=$sectionId")
                     attributes["aria-expanded"] = (!folded).toString()
                     // A divider: "Work · 5" centered between two rules in the folder's colour.
                     folder?.let { data.ownColor(it) }?.let { style = "--rule: $it" }
@@ -278,9 +271,7 @@ private fun FlowContent.tree(data: ListData, parentId: Long?, depth: Int) {
 private fun FlowContent.chevron(id: Long, hasChildren: Boolean, collapsed: Boolean) {
     if (!hasChildren) return span(classes = "chevron") {}
     button(classes = "chevron") {
-        attributes["hx-get"] = "/list/all?toggle=$id"
-        attributes["hx-target"] = "#list"
-        attributes["hx-swap"] = "outerHTML"
+        hx("get", "/list/all?toggle=$id")
         attributes["tabindex"] = "-1"
         attributes["aria-label"] = if (collapsed) "Expand" else "Collapse"
         icon(if (collapsed) Icon.CHEVRON_RIGHT else Icon.EXPAND_MORE, "")
@@ -307,9 +298,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
             button(classes = "check") {
                 // Due today: an orange ring; overdue: rust. Each with a pale fill of its own colour.
                 when (status) { DueStatus.OVERDUE -> classes = classes + "overdue"; DueStatus.TODAY -> classes = classes + "today"; else -> {} }
-                attributes["hx-post"] = "/tasks/${task.id}/complete?mode=$mode"
-                attributes["hx-target"] = "#list"
-                attributes["hx-swap"] = "outerHTML"
+                hx("post", "/tasks/${task.id}/complete?mode=$mode")
                 attributes["aria-label"] = "Complete"
             }
         }
@@ -347,9 +336,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                     listOf(Triple(Labels.SNOOZE_HOUR, "hour", Icon.SCHEDULE), Triple(Labels.SNOOZE_TOMORROW, "tomorrow", Icon.BEDTIME), Triple(Labels.SNOOZE_WEEK, "week", Icon.DATE_RANGE))
                         .forEach { (label, until, tileIcon) ->
                             button(classes = "tile") {
-                                attributes["hx-post"] = "/tasks/${task.id}/snooze?until=$until&mode=$mode"
-                                attributes["hx-target"] = "#list"
-                                attributes["hx-swap"] = "outerHTML"
+                                hx("post", "/tasks/${task.id}/snooze?until=$until&mode=$mode")
                                 icon(tileIcon, "")
                                 span { +label }
                             }
@@ -361,9 +348,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
             span(classes = "maybe") { attributes["title"] = "Maybe"; +"?" }
         } else {
             button(classes = if (task.isStarred) "star on" else "star") {
-                attributes["hx-post"] = "/tasks/${task.id}/star?mode=$mode"
-                attributes["hx-target"] = "#list"
-                attributes["hx-swap"] = "outerHTML"
+                hx("post", "/tasks/${task.id}/star?mode=$mode")
                 attributes["aria-label"] = "Star"
                 // Starred: a gold outline over a pale gold fill (CSS), like the due checkboxes.
                 icon(Icon.STAR, "")
@@ -381,9 +366,7 @@ fun DIV.deletedToastContents(task: Task, mode: ListMode) {
     classes = setOf("show")
     span { +"Deleted “${task.title}”" }
     button {
-        attributes["hx-post"] = "/tasks/${task.id}/restore?mode=${mode.name}"
-        attributes["hx-target"] = "#list"
-        attributes["hx-swap"] = "outerHTML"
+        hx("post", "/tasks/${task.id}/restore?mode=${mode.name}")
         +"Undo"
     }
 }
@@ -391,18 +374,13 @@ fun DIV.deletedToastContents(task: Task, mode: ListMode) {
 // The phone's "all subtasks done" prompt: complete the project, add its next step, or not now.
 private fun FlowContent.stalledPrompt(project: Task, mode: ListMode) = div(classes = "stalled") {
     val m = mode.name
-    fun htmx(tag: kotlinx.html.HTMLTag, verb: String, url: String) {
-        tag.attributes["hx-$verb"] = url
-        tag.attributes["hx-target"] = "#list"
-        tag.attributes["hx-swap"] = "outerHTML"
-    }
     span { +"${Labels.allSubtasksDone(project.title)}. ${Labels.IS_PROJECT_COMPLETE}" }
-    button(classes = "primary") { htmx(this, "post", "/tasks/${project.id}/complete?mode=$m"); +Labels.COMPLETE_PROJECT }
+    button(classes = "primary") { hx("post", "/tasks/${project.id}/complete?mode=$m"); +Labels.COMPLETE_PROJECT }
     form(classes = "inline") {
-        htmx(this, "post", "/tasks/${project.id}/next?mode=$m")
+        hx("post", "/tasks/${project.id}/next?mode=$m")
         textInput(name = "text") { placeholder = "${Labels.ADD_NEXT}…"; attributes["autocomplete"] = "off" }
     }
-    button { htmx(this, "get", "/list/${mode.name.lowercase()}?later=${project.id}"); +Labels.LATER }
+    button { hx("get", "/list/${mode.name.lowercase()}?later=${project.id}"); +Labels.LATER }
 }
 
 // Asks what to do with a task's open subtasks before completing it. `url` is the completing
@@ -415,9 +393,7 @@ fun DIV.askSubtasksToast(task: Task, open: Int, url: String, target: String, inc
     val sep = if ('?' in url) '&' else '?'
     listOf("complete" to Labels.COMPLETE_SUBTASKS_TOO, "promote" to Labels.MOVE_SUBTASKS_OUT).forEach { (choice, label) ->
         button {
-            attributes["hx-post"] = "$url${sep}subtasks=$choice"
-            attributes["hx-target"] = target
-            attributes["hx-swap"] = "outerHTML"
+            hx("post", "$url${sep}subtasks=$choice", target)
             include?.let { attributes["hx-include"] = it }
             +label
         }
@@ -440,9 +416,7 @@ fun DIV.undoToastContents(task: Task, mode: ListMode) {
     classes = setOf("show")
     span { +"Completed “${task.title}”" }
     button {
-        attributes["hx-post"] = "/tasks/${task.id}/uncomplete?mode=${mode.name}"
-        attributes["hx-target"] = "#list"
-        attributes["hx-swap"] = "outerHTML"
+        hx("post", "/tasks/${task.id}/uncomplete?mode=${mode.name}")
         +"Undo"
     }
 }

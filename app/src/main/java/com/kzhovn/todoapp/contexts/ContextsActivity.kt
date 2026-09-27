@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.contexts
 
+import com.kzhovn.todoapp.data.clockTime
 import androidx.core.content.ContextCompat
 import androidx.compose.material3.TextButton
 import androidx.activity.result.contract.ActivityResultContracts
@@ -59,8 +60,6 @@ import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerOverdue
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
 import kotlinx.coroutines.launch
-import java.util.Calendar
-import java.util.Locale
 
 class ContextsActivity : ComponentActivity() {
     // "Allow all the time" location, so place contexts update while the app is in the background.
@@ -182,6 +181,8 @@ class ContextsActivity : ComponentActivity() {
                             } else {
                                 wifiSsid = ssid
                                 wifiSsidError = null
+                                // Captured from the network the phone is on, so the place holds right now.
+                                editingIsCurrentlySatisfied = true
                             }
                         }) {
                             Text(wifiSsid?.let { "Network: $it" } ?: "Use current network")
@@ -240,10 +241,9 @@ class ContextsActivity : ComponentActivity() {
                                 } else {
                                     contextRepository.createContext(contextToSave)
                                 }
-                                if (type == ContextType.TIME) {
-                                    contextRepository.getTimeWindows(savedId).forEach { contextRepository.removeTimeWindow(it.id) }
-                                    windows.forEach { contextRepository.addTimeWindow(it.copy(id = 0, contextId = savedId)) }
-                                }
+                                // Replaced wholesale; a context switched to a place just drops its old ones.
+                                contextRepository.getTimeWindows(savedId).forEach { contextRepository.removeTimeWindow(it.id) }
+                                if (type == ContextType.TIME) windows.forEach { contextRepository.addTimeWindow(it.copy(id = 0, contextId = savedId)) }
                                 refresh()
                                 resetForm()
                             }
@@ -291,12 +291,12 @@ private fun WindowRow(
 ) {
     Column(modifier = Modifier.padding(vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = { pickTime(activity) { onChange(window.copy(windowStartMinute = it)) } }) {
-                Text(minuteToLabel(window.windowStartMinute))
+            Button(onClick = { pickTime(activity, window.windowStartMinute) { onChange(window.copy(windowStartMinute = it)) } }) {
+                Text(clockTime(window.windowStartMinute))
             }
             Spacer(Modifier.width(8.dp))
-            Button(onClick = { pickTime(activity) { onChange(window.copy(windowEndMinute = it)) } }) {
-                Text(minuteToLabel(window.windowEndMinute))
+            Button(onClick = { pickTime(activity, window.windowEndMinute) { onChange(window.copy(windowEndMinute = it)) } }) {
+                Text(clockTime(window.windowEndMinute))
             }
             Spacer(Modifier.width(8.dp))
             Icon(
@@ -310,17 +310,7 @@ private fun WindowRow(
     }
 }
 
-private fun pickTime(activity: android.app.Activity, onPicked: (Int) -> Unit) {
-    val cal = Calendar.getInstance()
-    TimePickerDialog(
-        activity,
-        { _, hour, minute -> onPicked(hour * 60 + minute) },
-        cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), true
-    ).show()
-}
-
-private fun minuteToLabel(minuteOfDay: Int): String {
-    val h = minuteOfDay / 60
-    val m = minuteOfDay % 60
-    return String.format(Locale.US, "%02d:%02d", h, m)
+// Opens on the window's current time.
+private fun pickTime(activity: android.app.Activity, minuteOfDay: Int, onPicked: (Int) -> Unit) {
+    TimePickerDialog(activity, { _, hour, minute -> onPicked(hour * 60 + minute) }, minuteOfDay / 60, minuteOfDay % 60, true).show()
 }

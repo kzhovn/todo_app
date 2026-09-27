@@ -117,8 +117,8 @@
   });
   document.addEventListener("dragend", () => { dragId = null; clearDrop(); });
 
-  // --- Bulk edit. "Select" makes clicks in the list pick task rows (folders and projects are skipped,
-  // as on the phone); "Edit selected" opens the bulk editor. Captured before htmx sees the click, so
+  // --- Bulk edit. "Select" makes clicks in the list pick tasks and checklists (folders and projects
+  // are skipped, as on the phone); "Edit selected" opens the bulk editor. Captured before htmx sees the click, so
   // a picked row's checkbox or star doesn't fire.
   const selected = new Set();
   const selecting = () => document.body.classList.contains("selecting");
@@ -145,7 +145,7 @@
     if (!selecting() || !e.target.closest("#list")) return;
     e.preventDefault();
     e.stopPropagation();
-    const row = e.target.closest(".row[data-type='TASK']");
+    const row = e.target.closest(".row[data-type='TASK'], .row[data-type='CHECKLIST']");
     if (!row) return;
     const id = row.dataset.taskId;
     if (!selected.delete(id)) selected.add(id);

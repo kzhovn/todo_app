@@ -47,6 +47,21 @@ object Labels {
     const val ADD_PREREQUISITE = "+ Prerequisite"
     const val ADD_DEPENDENT = "+ Dependent task"
 
+    // Search filters
+    const val STARRED = "Starred"
+    const val COMPLETED = "Completed"
+    const val DUE_AFTER = "Due after"
+    const val DUE_BEFORE = "Due before"
+
+    // Quick add's cheat sheet (the phone's drawer, the web's sidebar)
+    val QUICK_ADD_SYNTAX = listOf(
+        "-d fri · due 3pm" to "due date (and time)",
+        "-s tomorrow · start mon 9am" to "start date",
+        "today, tomorrow, mon–sun, next fri, 2026-10-01" to "dates",
+        "5pm, 9:30am, 14:00" to "times",
+        "ends with ?" to "maybe",
+    )
+
     const val SAVE = "Save"
     const val DELETE = "Delete"
 
@@ -93,7 +108,6 @@ object Labels {
 
     val TIMER_PRESETS = listOf(15, 30, 45, 60, 90)
 
-
     // Subtask options: a folder's or task's children done one at a time; a task that stays active
     // while its subtasks are open.
     const val SEQUENTIAL = "Sequential"
@@ -124,6 +138,6 @@ object Labels {
         }
     }
 
-    private fun unitName(unit: RecurrenceUnit) = when (unit) { RecurrenceUnit.DAY -> "day"; RecurrenceUnit.WEEK -> "week"; RecurrenceUnit.MONTH -> "month" }
+    fun unitName(unit: RecurrenceUnit) = when (unit) { RecurrenceUnit.DAY -> "day"; RecurrenceUnit.WEEK -> "week"; RecurrenceUnit.MONTH -> "month" }
     private fun plural(n: Int, word: String) = "$n $word${if (n == 1) "" else "s"}"
 }

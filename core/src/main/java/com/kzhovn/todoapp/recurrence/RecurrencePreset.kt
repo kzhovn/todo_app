@@ -2,7 +2,6 @@ package com.kzhovn.todoapp.recurrence
 
 import com.kzhovn.todoapp.data.RecurrenceType
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -130,5 +129,3 @@ val WEEKDAY_NAMES = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 val NTH_NAMES = listOf(1 to "first", 2 to "second", 3 to "third", 4 to "fourth", -1 to "last")
 
 fun ordinal(n: Int): String = "$n" + if (n % 100 in 11..13) "th" else when (n % 10) { 1 -> "st"; 2 -> "nd"; 3 -> "rd"; else -> "th" }
-
-internal fun LocalDate.toEpochMillis(): Long = atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()

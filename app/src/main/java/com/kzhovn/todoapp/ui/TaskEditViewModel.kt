@@ -120,7 +120,8 @@ class TaskEditViewModel(
         // Only subtasks that override a changed field need asking; the rest already follow it.
         val overriding = if (changed.isEmpty()) emptyList() else repository.descendantsOverriding(taskId, changed)
         if (overriding.isEmpty()) return null
-        return Question.UpdateSubtasks(overriding, changed.filterTo(mutableSetOf()) { f -> overriding.any { overrides(it, f) } })
+        // Named in the question: only the fields some subtask actually overrides.
+        return Question.UpdateSubtasks(overriding, changed.filterTo(mutableSetOf()) { repository.descendantsOverriding(taskId, setOf(it)).isNotEmpty() })
     }
 
     // The task as it will be stored. Folders don't carry task-only fields or relations: a due date
@@ -209,13 +210,4 @@ class TaskEditViewModel(
     suspend fun descendantCount(): Int = if (isNew) 0 else repository.countDescendants(taskId)
 
     fun delete(onDone: () -> Unit) = viewModelScope.launch { repository.deleteTask(task); onDone() }
-}
-
-// Whether a subtask sets its own value for an inherited field (dates/icon here; contexts are checked
-// by the repository, which knows the assignments).
-private fun overrides(task: Task, field: InheritedField): Boolean = when (field) {
-    InheritedField.START -> task.startDate != null
-    InheritedField.DUE -> task.dueDate != null
-    InheritedField.ICON -> task.icon != null
-    InheritedField.CONTEXTS -> true
 }

@@ -2,12 +2,11 @@ package com.kzhovn.todoapp.repository
 
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.Task
-import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.isChecklistItem
 import java.util.Calendar
 
 // One "day" of completions. Days follow the rollover hour, so a task finished at 1am (with a 4am
-// rollover) counts toward the previous day, matching "Just for today".
+// rollover) counts toward the previous day, matching "Today only".
 data class DayCompletions(val dayStart: Long, val tasks: List<Task>)
 
 // The last `days` days, newest first, including days with nothing completed.

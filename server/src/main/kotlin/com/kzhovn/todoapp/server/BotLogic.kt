@@ -27,7 +27,7 @@ val HELP = """
 **Adding**
 `-- call mom` a task (starred, in Personal)
 `--work: send report` into the folder Work
-`--d: shower` just for today (gone at day rollover)
+`--d: shower` today only (gone at day rollover)
 `-- x -d fri` / `due fri 5pm` / `due 3pm` due date and time
 `-- x -s tomorrow` / `start mon 9am` start date
 `-- x?` a maybe (hidden from Active, never starred)

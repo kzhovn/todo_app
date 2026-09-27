@@ -118,8 +118,8 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
                     if (channel != null) {
                         if (doing.isEmpty()) channel.sendMessage(EMPTY_DIGEST).queue() else bot.postList(channel, doing)
                     }
-                    val nudges = bot.logic.dueNudges()
-                    if (channel != null) nudges.forEach { (task, days) ->
+                    // Only with somewhere to post: working them out marks them as sent.
+                    if (channel != null) bot.logic.dueNudges().forEach { (task, days) ->
                         channel.sendMessage(bot.logic.nudgeText(task, days)).queue { sent ->
                             bot.logic.recordNudge(sent.idLong, task.id)
                             sent.addReaction(Emoji.fromUnicode(MOVE_OUT)).queue()

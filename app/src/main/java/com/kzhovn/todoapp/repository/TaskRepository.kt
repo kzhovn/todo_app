@@ -260,7 +260,7 @@ class TaskRepository(
         }
     }
 
-    // Deletes "just for today" tasks (and anything under them) once their day has rolled over.
+    // Deletes "Today only" tasks (and anything under them) once their day has rolled over.
     // Bypasses deleteTask so it doesn't offer an undo for something the user didn't just do.
     suspend fun purgeExpired(now: Long) {
         taskDao.getAllOnce().filter { it.isExpired(now) }.forEach { task ->

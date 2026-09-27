@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.recurrence
 
+import com.kzhovn.todoapp.quickadd.startOfDay
 import com.kzhovn.todoapp.data.RecurrenceType
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.newId
@@ -77,9 +78,7 @@ object RecurrenceEngine {
         }
     }
 
-    private fun startOfDay(ms: Long) = java.util.Calendar.getInstance().apply {
-        timeInMillis = ms; set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
-    }.timeInMillis
+    private fun startOfDay(ms: Long) = java.util.Calendar.getInstance().apply { timeInMillis = ms }.startOfDay()
 
     private fun nextRRuleOccurrence(dtStart: Long, rrule: String, after: Long): Long? {
         val recurrenceRule = RecurrenceRule(rrule)

@@ -56,7 +56,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     fun get(id: Long): Task? = store.get(TASKS, id)?.takeUnless { it.isDeleted }?.toTask()?.takeUnless { it.isExpired(clock()) }
 
-    // Deletes "just for today" tasks whose day is over, so the phone drops them too even if it was
+    // Deletes "Today only" tasks whose day is over, so the phone drops them too even if it was
     // offline at rollover. Reads already hide them; this makes it permanent.
     fun purgeExpired() = store.transaction {
         val now = clock()

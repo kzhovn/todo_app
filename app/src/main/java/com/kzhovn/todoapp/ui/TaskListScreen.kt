@@ -1,6 +1,6 @@
 package com.kzhovn.todoapp.ui
 
-import com.kzhovn.todoapp.data.isDoable
+import com.kzhovn.todoapp.data.countdown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import com.kzhovn.todoapp.ui.theme.LedgerTile
@@ -105,8 +105,6 @@ import com.kzhovn.todoapp.ui.theme.LedgerOverdue
 import com.kzhovn.todoapp.ui.theme.LedgerStar
 import com.kzhovn.todoapp.ui.theme.folderColors
 import com.kzhovn.todoapp.data.walkParentChain
-import com.kzhovn.todoapp.data.deadline
-import java.util.Calendar
 
 @Composable
 fun TaskListScreen(
@@ -224,11 +222,8 @@ private fun TaskRow(
     val now = System.currentTimeMillis()
     val due = effective.effectiveDueDate?.takeUnless { task.isComplete }
     val status = due?.let { dueStatus(it, now) }
-    // DropdownMenu is Popup-based (SubcomposeLayout internally) and can't answer the intrinsic
-    // width queries an IntrinsicSize.Min row needs from its children, so it must live outside
-    // the Row below as a plain sibling rather than nested inside one of the Row's children.
     // A month-old maybe is dimmed (backburner) but stays listed.
-    val dim = if (task.isBackburner(System.currentTimeMillis())) BACKBURNER_ALPHA else 1f
+    val dim = if (task.isBackburner(now)) BACKBURNER_ALPHA else 1f
     Box(Modifier.background(if (selected) LedgerAccentSoft else Color.Transparent).alpha(dim)) {
         Row(
             // LazyColumn measures items with unbounded height, so fillMaxHeight() alone is a no-op
@@ -247,37 +242,37 @@ private fun TaskRow(
                 else -> TaskCheckbox(checked = task.isComplete, due = status, touchSize = 36.dp, onCheckedChange = { onCheck(task.id) })
             }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
-                    Text(
-                        // A subtask reads "Parent: subtask", with the parent dimmer; tapping the parent
-                        // opens the parent (a link, so the rest of the row keeps its own tap/long-press).
-                        text = buildAnnotatedString {
-                            val parentId = task.parentId
-                            if (parentTitle != null && parentId != null) {
-                                val style = TextLinkStyles(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal))
-                                withLink(LinkAnnotation.Clickable("parent", style) { onEdit(parentId) }) { append("$parentTitle: ") }
-                            }
-                            append(task.title)
-                            // One line with the title (it wraps along), in the due colour.
-                            if (due != null) {
-                                val color = when (status) { DueStatus.OVERDUE -> LedgerOverdue; DueStatus.TODAY -> LedgerDueTodayText; else -> LedgerMuted }
-                                withStyle(SpanStyle(color = color, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · ${dueText(due, now)}") }
-                            }
-                            if (subtasks != null && subtasks.second > 0 && task.type != TaskType.CHECKLIST) {
-                                withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · ${subtasks.first}/${subtasks.second}") }
-                            }
-                        },
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 16.sp,
-                        textDecoration = if (task.isComplete) TextDecoration.LineThrough else null,
-                        color = if (task.isComplete) LedgerMuted else LedgerInk,
-                        modifier = Modifier
-                            .weight(1f)
-                            .combinedClickable(onClick = { onEdit(task.id) }, onLongClick = { showSnoozeMenu = true })
-                    )
-                    if (task.recurrenceType != null) {
-                        Spacer(Modifier.width(4.dp))
-                        RecurrenceBadge()
-                    }
+                Text(
+                    // A subtask reads "Parent: subtask", with the parent dimmer; tapping the parent
+                    // opens the parent (a link, so the rest of the row keeps its own tap/long-press).
+                    text = buildAnnotatedString {
+                        val parentId = task.parentId
+                        if (parentTitle != null && parentId != null) {
+                            val style = TextLinkStyles(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal))
+                            withLink(LinkAnnotation.Clickable("parent", style) { onEdit(parentId) }) { append("$parentTitle: ") }
+                        }
+                        append(task.title)
+                        // One line with the title (it wraps along), in the due colour.
+                        if (due != null) {
+                            val color = when (status) { DueStatus.OVERDUE -> LedgerOverdue; DueStatus.TODAY -> LedgerDueTodayText; else -> LedgerMuted }
+                            withStyle(SpanStyle(color = color, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · ${dueText(due, now)}") }
+                        }
+                        if (subtasks != null && subtasks.second > 0 && task.type != TaskType.CHECKLIST) {
+                            withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · ${subtasks.first}/${subtasks.second}") }
+                        }
+                    },
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 16.sp,
+                    textDecoration = if (task.isComplete) TextDecoration.LineThrough else null,
+                    color = if (task.isComplete) LedgerMuted else LedgerInk,
+                    modifier = Modifier
+                        .weight(1f)
+                        .combinedClickable(onClick = { onEdit(task.id) }, onLongClick = { showSnoozeMenu = true })
+                )
+                if (task.recurrenceType != null) {
+                    Spacer(Modifier.width(4.dp))
+                    RecurrenceBadge()
+                }
             }
             task.durationMinutes?.let { TimerButton(task, it) }
             if (task.isMaybe) {
@@ -288,6 +283,9 @@ private fun TaskRow(
                 }
             }
         }
+        // DropdownMenu is Popup-based (SubcomposeLayout internally) and can't answer the intrinsic
+        // width queries an IntrinsicSize.Min row needs from its children, so it lives outside the Row
+        // as a plain sibling.
         DropdownMenu(
             expanded = showSnoozeMenu,
             onDismissRequest = { showSnoozeMenu = false },
@@ -401,11 +399,6 @@ fun TimerButton(task: Task, minutes: Int) {
         )
         Text(text, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = LedgerAccent)
     }
-}
-
-private fun countdown(millis: Long): String {
-    val s = (millis.coerceAtLeast(0) + 999) / 1000
-    return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
 }
 
 // Starred: a gold outline over a pale gold fill, like the due checkboxes; unstarred: a grey outline.

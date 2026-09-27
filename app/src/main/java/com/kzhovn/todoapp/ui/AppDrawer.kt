@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.Labels
 import android.content.Intent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -76,22 +77,15 @@ fun AppDrawer(
 // Cheat sheet for quick-add syntax, at the bottom of the drawer.
 @Composable
 private fun QuickAddKey() {
-    val rows = listOf(
-        "-d fri · due 3pm" to "due date (and time)",
-        "-s tomorrow · start mon 9am" to "start date",
-        "today, tomorrow, mon–sun, next fri, 2026-10-01" to "dates",
-        "5pm, 9:30am, 14:00" to "times",
-        "ends with ?" to "maybe",
-    )
     val discord = listOf(
         "--work: …" to "into a folder (else Personal)",
-        "--d: …" to "just for today",
+        "--d: …" to Labels.TODAY_ONLY.lowercase(),
         "reply to a todo" to "it depends on the new one",
         "✅ ❌ ⭐" to "complete / delete / star",
     )
     Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
         Text("Quick add", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerMuted)
-        rows.forEach { (syntax, meaning) -> KeyRow(syntax, meaning) }
+        Labels.QUICK_ADD_SYNTAX.forEach { (syntax, meaning) -> KeyRow(syntax, meaning) }
         Spacer(Modifier.height(8.dp))
         Text("Discord (.help for more)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerMuted)
         discord.forEach { (syntax, meaning) -> KeyRow(syntax, meaning) }

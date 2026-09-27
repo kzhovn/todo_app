@@ -20,3 +20,6 @@ fun atTime(epochMillis: Long, hour: Int, minute: Int): Long = Calendar.getInstan
 fun deadline(dueDate: Long): Long =
     if (hasTime(dueDate)) dueDate
     else Calendar.getInstance().apply { timeInMillis = dueDate; add(Calendar.DAY_OF_YEAR, 1) }.timeInMillis
+
+// A minute of the day as "09:30" (time-context windows).
+fun clockTime(minuteOfDay: Int): String = "%02d:%02d".format(minuteOfDay / 60, minuteOfDay % 60)

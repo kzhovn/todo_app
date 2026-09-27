@@ -52,7 +52,6 @@ import kotlinx.html.DIV
 import kotlinx.html.FlowContent
 import kotlinx.html.FormMethod
 import kotlinx.html.HTML
-import kotlinx.html.InputType
 import kotlinx.html.a
 import kotlinx.html.button
 import kotlinx.html.checkBoxInput
@@ -60,7 +59,6 @@ import kotlinx.html.classes
 import kotlinx.html.dateInput
 import kotlinx.html.div
 import kotlinx.html.form
-import kotlinx.html.h2
 import kotlinx.html.hiddenInput
 import kotlinx.html.id
 import kotlinx.html.input
@@ -189,7 +187,7 @@ fun Route.editorRoutes(service: TaskService) {
         val parsed = QuickAddParser.parse(params["text"].orEmpty())
         val task = service.get(id)
         if (parsed.title.isNotBlank() && task != null) {
-            val folderId = task.parentId?.takeIf { service.get(it)?.type == TaskType.FOLDER }
+            val folderId = service.folderIdOf(task)
             service.addDependency(id, service.create(parsed.copy(parentId = folderId)).id)
         }
         call.respondSubtasks(service, id)
@@ -213,7 +211,7 @@ fun Route.editorRoutes(service: TaskService) {
         val parsed = QuickAddParser.parse(params["text"].orEmpty())
         val task = service.get(id)
         if (parsed.title.isNotBlank() && task != null) {
-            val folderId = task.parentId?.takeIf { service.get(it)?.type == TaskType.FOLDER }
+            val folderId = service.folderIdOf(task)
             service.addDependency(service.create(parsed.copy(parentId = folderId)).id, id)
         }
         call.respondSubtasks(service, id)
@@ -283,7 +281,7 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
 
     // A new task's prerequisite and dependent, typed in the form: made in its folder, as related work
     // usually belongs together.
-    val folderId = merged.task.parentId?.takeIf { service.get(it)?.type == TaskType.FOLDER }
+    val folderId = service.folderIdOf(merged.task)
     fun createTyped(text: String) = QuickAddParser.parse(text).takeIf { it.title.isNotBlank() }?.let { service.create(it.copy(parentId = folderId)).id }
     val blocker = createTyped(newDep)
     val dependsOn = merged.dependsOn + listOfNotNull(blocker)
@@ -400,6 +398,9 @@ private fun merge(base: EditState, form: EditState, current: EditState): EditSta
 
 private fun localDateTime(millis: Long) = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
 
+// The folder a task sits directly in, where its new related tasks go (related work usually belongs together).
+private fun TaskService.folderIdOf(task: Task): Long? = task.parentId?.takeIf { get(it)?.type == TaskType.FOLDER }
+
 private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Raspberry · ${v.shown.task.title.ifBlank { "New ${v.shown.task.type.name.lowercase()}" }}", v.mode.path) {
     val t = v.shown.task
     val isNew = t.id == 0L
@@ -499,7 +500,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
                             }
                         }
                         div(classes = "rep-month") {
-                            val day = java.time.Instant.ofEpochMilli(anchor).atZone(java.time.ZoneId.systemDefault()).dayOfMonth
+                            val day = localDateTime(anchor).dayOfMonth
                             label { radioInput(name = "monthly") { value = "day"; checked = r.monthlyNth == null }; +"On the ${ordinal(day)}" }
                             label {
                                 radioInput(name = "monthly") { value = "nth"; checked = r.monthlyNth != null }; +"On the "
@@ -512,7 +513,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
                             label { radioInput(name = "ends") { value = "never"; checked = r.until == null && r.count == null }; +"Never" }
                             label {
                                 radioInput(name = "ends") { value = "until"; checked = r.until != null }; +"On "
-                                dateInput(name = "until") { value = r.until?.let { java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString() }.orEmpty() }
+                                dateInput(name = "until") { value = r.until?.let { localDateTime(it).toLocalDate().toString() }.orEmpty() }
                             }
                             label {
                                 radioInput(name = "ends") { value = "count"; checked = r.count != null }; +"After "
@@ -683,11 +684,7 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
     val byId = all.associateBy { it.id }
     val task = byId[id] ?: return
     val m = mode.name
-    fun kotlinx.html.HTMLTag.htmx(url: String) {
-        attributes["hx-post"] = url
-        attributes["hx-target"] = "#related"
-        attributes["hx-swap"] = "outerHTML"
-    }
+    fun kotlinx.html.HTMLTag.htmx(url: String) = hx("post", url, "#related")
     fun FlowContent.row(kind: String, t: Task, trailing: FlowContent.() -> Unit) = div(classes = "rel-row") {
         span(classes = "rel-kind") { +kind }
         a(href = "/tasks/${t.id}?mode=$m", classes = if (t.isComplete) "done" else null) { +t.title }

@@ -35,7 +35,7 @@ data class Task(
     val reminderOffsetMinutes: Int? = null,
     // "?" in the UI: a someday-maybe, hidden from Active/Doing. Never starred (see starRule).
     @ColumnInfo(defaultValue = "0") val isMaybe: Boolean = false,
-    // Set for "just for today" tasks: the day rollover after creation. Past it, the task is hidden
+    // Set for "Today only" tasks: the day rollover after creation. Past it, the task is hidden
     // and then deleted (unlike ordinary completed tasks, which are kept forever).
     val expiresAt: Long? = null,
     // Manual order among siblings (1, 2, 3... after a reorder); null sorts by creation. See TaskOrder.

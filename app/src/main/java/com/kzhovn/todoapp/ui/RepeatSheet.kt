@@ -108,7 +108,8 @@ private fun Builder(s: RecurrenceSelection, anchor: Long, onChange: (RecurrenceS
         if (schedule) Text("Every", fontSize = 14.sp, color = LedgerInk, modifier = Modifier.padding(end = 8.dp))
         CompactNumberField(s.n) { onChange(s.copy(n = it)) }
         Spacer(Modifier.width(8.dp))
-        listOf(RecurrenceUnit.DAY to "day", RecurrenceUnit.WEEK to "week", RecurrenceUnit.MONTH to "month").forEach { (unit, name) ->
+        RecurrenceUnit.entries.forEach { unit ->
+            val name = Labels.unitName(unit)
             SelectablePill(if (s.n == 1) name else "${name}s", s.unit == unit) { onChange(s.copy(unit = unit)) }
         }
     }

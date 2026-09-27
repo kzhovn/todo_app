@@ -19,3 +19,7 @@ fun <T> walkParentChain(startId: Long, allById: Map<Long, Task>, visit: (Long) -
 // descendant (directly, as its own parent, or transitively through any chain length).
 fun wouldCreateCycle(candidateId: Long, editingTaskId: Long, allById: Map<Long, Task>): Boolean =
     walkParentChain(candidateId, allById) { id -> true.takeIf { id == editingTaskId } } ?: false
+
+// Is the task somewhere below ancestorId (at any depth)?
+fun isUnder(task: Task, ancestorId: Long, allById: Map<Long, Task>): Boolean =
+    task.parentId?.let { wouldCreateCycle(it, ancestorId, allById) } == true

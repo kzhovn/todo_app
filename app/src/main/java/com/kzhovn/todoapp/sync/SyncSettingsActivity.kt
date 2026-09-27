@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.sync
 
+import com.kzhovn.todoapp.data.Labels
 import android.app.TimePickerDialog
 import android.os.Bundle
 import androidx.compose.foundation.clickable
@@ -63,7 +64,7 @@ class SyncSettingsActivity : ComponentActivity() {
                             }, rolloverHour, 0, true).show()
                         }
                     )
-                    Text("\"Just for today\" tasks are deleted at this time.", color = LedgerMuted, fontSize = 12.sp)
+                    Text("“${Labels.TODAY_ONLY}” tasks are deleted at this time.", color = LedgerMuted, fontSize = 12.sp)
                     Spacer(Modifier.height(20.dp))
                     Text("Sync", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = LedgerInk)
                     Spacer(Modifier.height(12.dp))

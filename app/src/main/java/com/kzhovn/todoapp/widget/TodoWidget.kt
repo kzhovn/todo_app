@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.widget
 
+import com.kzhovn.todoapp.data.isUnder
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.subtaskCounts
 import androidx.glance.appwidget.updateAll
@@ -63,9 +64,7 @@ import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.MainActivity
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
-import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.resolveEffective
-import com.kzhovn.todoapp.data.walkParentChain
 import com.kzhovn.todoapp.quickadd.QuickAddActivity
 import com.kzhovn.todoapp.repository.dayOfWeekMask
 import com.kzhovn.todoapp.repository.filterDoing
@@ -161,7 +160,7 @@ class TodoWidget : GlanceAppWidget() {
                         maxLines = 1,
                         modifier = GlanceModifier.defaultWeight().clickable(actionStartActivity(configIntent))
                     )
-                    // Syncs now; the list redraws on its own once the pull lands (see the Room Flow above).
+                    // Syncs now; the list redraws on its own once the pull lands (see `updates` above).
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = GlanceModifier.size(32.dp).clickable(actionRunCallback<SyncNowAction>())
@@ -210,9 +209,6 @@ class TodoWidget : GlanceAppWidget() {
             }
         }
     }
-
-    private fun isUnder(task: Task, folderId: Long, allById: Map<Long, Task>): Boolean =
-        task.parentId?.let { parent -> walkParentChain(parent, allById) { id -> true.takeIf { id == folderId } } } ?: false
 }
 
 // The check/star glyphs are large (they're what you tap) but their boxes hug them, so the

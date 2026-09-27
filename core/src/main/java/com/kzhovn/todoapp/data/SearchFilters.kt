@@ -14,7 +14,7 @@ data class SearchFilters(
 fun searchTasks(all: Collection<Task>, contextsByTaskId: Map<Long, Set<Long>>, query: String, filters: SearchFilters): List<Task> {
     val byId = all.associateBy { it.id }
     val folderId = filters.folderId
-    fun inFolder(t: Task) = folderId == null || t.parentId?.let { walkParentChain(it, byId) { id -> true.takeIf { id == folderId } } } == true
+    fun inFolder(t: Task) = folderId == null || isUnder(t, folderId, byId)
     return all.filter { t ->
         t.type != TaskType.FOLDER && t.title.contains(query.trim(), ignoreCase = true) &&
             (filters.includeCompleted || !t.isComplete) &&

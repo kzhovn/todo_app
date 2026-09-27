@@ -3,7 +3,6 @@ package com.kzhovn.todoapp.focus
 import com.kzhovn.todoapp.data.findFolder
 import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.quickadd.QuickAddParser
-import com.kzhovn.todoapp.quickadd.QuickAddActivity
 import com.kzhovn.todoapp.data.Labels
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
@@ -68,10 +67,6 @@ import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
 import kotlinx.coroutines.launch
 
-// One task, full screen, with the app pinned (Android's screen pinning) so other apps are out of
-// reach. Leaving takes typing a random sentence; finishing the task offers the next one instead.
-// ponytail: pinning can still be undone with Android's own Back+Overview gesture; a real app
-// blocker (usage access + overlay) is on the backlog.
 // What to focus on next: Doing, or Active when Doing is empty. After finishing a step of something
 // sequential, the step that's now unblocked always comes first.
 internal fun nextFocusTasks(active: List<Task>, doing: List<Task>, finished: Task?, byId: Map<Long, Task>): List<Task> {
@@ -79,6 +74,10 @@ internal fun nextFocusTasks(active: List<Task>, doing: List<Task>, finished: Tas
     return (listOfNotNull(nextStep) + doing.ifEmpty { active }).distinctBy { it.id }
 }
 
+// One task, full screen, with the app pinned (Android's screen pinning) so other apps are out of
+// reach. Leaving takes typing a random sentence; finishing the task offers the next one instead.
+// ponytail: pinning can still be undone with Android's own Back+Overview gesture; a real app
+// blocker (usage access + overlay) is on the backlog.
 class FocusActivity : ComponentActivity() {
     private var focusing = false
 

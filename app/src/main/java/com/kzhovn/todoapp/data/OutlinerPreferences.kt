@@ -11,11 +11,6 @@ private val Context.outlinerDataStore by preferencesDataStore(name = "outliner_p
 class OutlinerPreferences(private val context: Context) {
     private val collapsedKey = stringSetPreferencesKey("collapsed_folder_ids")
 
-    suspend fun isCollapsed(folderId: Long): Boolean {
-        val prefs = context.outlinerDataStore.data.first()
-        return prefs[collapsedKey]?.contains(folderId.toString()) == true
-    }
-
     suspend fun setCollapsed(folderId: Long, collapsed: Boolean) {
         context.outlinerDataStore.edit { prefs ->
             val current = prefs[collapsedKey] ?: emptySet()

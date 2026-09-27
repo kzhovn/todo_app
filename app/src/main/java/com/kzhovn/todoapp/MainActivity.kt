@@ -2,13 +2,6 @@ package com.kzhovn.todoapp
 
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.Labels
-import com.kzhovn.todoapp.ui.theme.LedgerInk
-import androidx.compose.foundation.layout.height
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.SpanStyle
 import com.kzhovn.todoapp.ui.TextInputDialog
 import androidx.compose.material.icons.filled.AccountTree
 import android.Manifest
@@ -38,18 +31,13 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -75,16 +63,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
-import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.contexts.ContextsActivity
-import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.ui.BulkEditActivity
 import com.kzhovn.todoapp.ui.AppDrawer
-import androidx.compose.material.icons.filled.BarChart
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.filled.Checklist
 import com.kzhovn.todoapp.sync.SyncSettings
-import com.kzhovn.todoapp.sync.SyncSettingsActivity
 import com.kzhovn.todoapp.sync.SyncWorker
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
@@ -171,8 +155,8 @@ class MainActivity : ComponentActivity() {
                 if (searchMode) viewModel.search(query, filters) else viewModel.load(selectedMode)
                 onPauseOrDispose { }
             }
-            // FAB long-press can create a folder/context without leaving this activity, so
-            // resume (not just initial composition) must re-pull to pick up the new one.
+            // Folders and contexts are made on other screens (the FAB's long-press menu), so coming
+            // back re-pulls them.
             LifecycleResumeEffect(Unit) {
                 scope.launch {
                     folders = repository.getFolders()
@@ -446,7 +430,7 @@ class MainActivity : ComponentActivity() {
 }
 
 // Material3's FloatingActionButton doesn't expose long-press, so this re-implements its look
-// with Surface + combinedClickable to add the "+Contexts/+Folder" menu trigger.
+// with Surface + combinedClickable to add the long-press create menu.
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun QuickAddFab(onClick: () -> Unit, onLongClick: () -> Unit) {
