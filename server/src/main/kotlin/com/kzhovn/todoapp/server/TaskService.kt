@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.data.searchTasks
 import com.kzhovn.todoapp.data.findFolder
 import com.kzhovn.todoapp.repository.blockerFor
 import com.kzhovn.todoapp.repository.applyTo
@@ -163,20 +164,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         store.write(CONTEXTS, id, JsonObject(mapOf(DELETED_AT to JsonPrimitive(now))), now)
     }
 
-    // Mirrors TaskDao.searchFiltered, including its quirk that the folder filter matches only
-    // tasks directly in that folder.
-    fun search(query: String, filters: SearchFilters): List<Task> {
-        val contexts = contextIdsByTask()
-        return tasks().filter { t ->
-            t.type != TaskType.FOLDER && t.title.contains(query.trim(), ignoreCase = true) &&
-                (filters.includeCompleted || !t.isComplete) &&
-                (filters.folderId == null || t.parentId == filters.folderId) &&
-                (!filters.starredOnly || t.isStarred) &&
-                filters.dueAfter.let { after -> after == null || t.dueDate.let { it != null && it >= after } } &&
-                filters.dueBefore.let { before -> before == null || t.dueDate.let { it != null && it <= before } } &&
-                (filters.contextId == null || filters.contextId in contexts[t.id].orEmpty())
-        }.sortedBy { it.id }
-    }
+    fun search(query: String, filters: SearchFilters): List<Task> = searchTasks(tasks(), contextIdsByTask(), query, filters)
 
     fun dependsOn(id: Long): Set<Long> = store.get(TASKS, id)?.dependsOn().orEmpty()
 

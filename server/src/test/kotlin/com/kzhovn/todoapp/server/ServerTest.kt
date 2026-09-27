@@ -229,6 +229,16 @@ class ServerTest {
     }
 
     @Test
+    fun `completing from Discord completes everything under the task`() {
+        logic.onAdd(1L, "u", "-- pack")
+        val id = service.tasks().single().id
+        val sub = service.create(Task(title = "socks", parentId = id))
+        logic.onReaction(1L, DONE, added = true)
+        assertTrue(service.get(id)!!.isComplete)
+        assertTrue(service.get(sub.id)!!.isComplete)
+    }
+
+    @Test
     fun `editing the message only rewrites fields whose parse changed`() {
         logic.onAdd(1L, "u", "-- call mom -d tomorrow")
         val id = service.tasks().single().id
@@ -273,7 +283,8 @@ class ServerTest {
         logic.onAdd(901L, "u", "-- gather receipts\n-- fill forms", replyToMessageId = 900L)
         val steps = service.tasks().filter { it.parentId == stuck.id }
         assertEquals(listOf("gather receipts", "fill forms"), steps.map { it.title })
-        assertTrue(steps.none { it.isStarred })
+        // Taxes now waits on its steps, so the first takes its place in Doing.
+        assertEquals(listOf(true, false), steps.map { it.isStarred })
 
         logic.onReaction(900L, MOVE_OUT, added = true)
         assertFalse(service.get(stuck.id)!!.isStarred)

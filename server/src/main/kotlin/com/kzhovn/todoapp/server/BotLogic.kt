@@ -150,11 +150,12 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         )
     }
 
-    // Replying to a nudge with `--` lines turns each into a subtask of the stuck task. They aren't
-    // starred, so breaking a task up doesn't flood Doing.
+    // Replying to a nudge with `--` lines turns each into a subtask of the stuck task. The task now
+    // waits on them, so the first step is starred to take its place in Doing; the rest aren't, so
+    // breaking a task up doesn't flood Doing.
     private fun breakUp(taskId: Long, content: String): Boolean {
         val steps = content.lines().map { it.trim() }.mapNotNull(::parseAdd)
-        steps.forEach { service.create(it.copy(parentId = taskId, isStarred = false)) }
+        steps.forEachIndexed { i, step -> service.create(step.copy(parentId = taskId, isStarred = i == 0)) }
         return steps.isNotEmpty()
     }
 
@@ -191,7 +192,8 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         val sourceTask = link?.taskId
         if (sourceTask != null) {
             when (emoji) {
-                DONE -> if (added) service.complete(sourceTask) else service.uncomplete(sourceTask)
+                // No room for the subtask question here: ✅ completes everything under it, like the widget.
+                DONE -> if (added) service.completeWithDescendants(sourceTask) else service.uncomplete(sourceTask)
                 DELETE -> if (added) service.delete(sourceTask) else service.restore(sourceTask)
                 STAR -> service.setStarred(sourceTask, added)
             }
@@ -199,7 +201,7 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         }
         val line = link?.lines?.firstOrNull { it.emoji == emoji }
         if (line != null) {
-            if (added) service.complete(line.taskId) else service.uncomplete(line.taskId)
+            if (added) service.completeWithDescendants(line.taskId) else service.uncomplete(line.taskId)
             // The task's newest list is refreshed through listToRefresh; an older one reacted on isn't.
             return if (newestList(line.taskId)?.second == messageId) ReactionOutcome.None else ReactionOutcome.EditList(render(link.lines))
         }

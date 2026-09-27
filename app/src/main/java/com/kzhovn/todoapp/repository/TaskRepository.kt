@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.repository
 
+import com.kzhovn.todoapp.data.searchTasks
 import com.kzhovn.todoapp.data.planMoveNextTo
 import com.kzhovn.todoapp.data.splitItems
 import com.kzhovn.todoapp.data.newTaskPositions
@@ -201,15 +202,7 @@ class TaskRepository(
     }
 
     suspend fun search(query: String, filters: SearchFilters = SearchFilters()): List<Task> =
-        taskDao.searchFiltered(
-            query = query,
-            includeCompleted = filters.includeCompleted,
-            folderId = filters.folderId,
-            starredOnly = filters.starredOnly,
-            dueAfter = filters.dueAfter,
-            dueBefore = filters.dueBefore,
-            contextId = filters.contextId
-        )
+        searchTasks(taskDao.getAllOnce(), getAllTaskContexts(), query, filters)
 
     suspend fun getAllDependencyEdges(): List<TaskDependency> = taskDao.getAllDependencies()
 
