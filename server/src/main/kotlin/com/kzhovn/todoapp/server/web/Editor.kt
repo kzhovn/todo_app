@@ -396,15 +396,10 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
             }
         }
 
-        // The title wraps (up to four lines), with Maybe and the star inside the box by the first line.
-        // A maybe is never starred; app.js unticks the other when one is ticked.
+        // The title wraps (up to four lines), with the star inside the box by the first line. A starred
+        // task is never a maybe (Maybe is under Properties); app.js unticks the other when one is ticked.
         div(classes = "title-box") {
             textArea(classes = "title-input") { name = "title"; rows = "1"; placeholder = Labels.TITLE; required = true; +t.title }
-            label(classes = "flag-toggle maybe-toggle task-only") {
-                attributes["title"] = Labels.MAYBE
-                checkBoxInput(name = "maybe") { checked = t.isMaybe }
-                span { +"?" }
-            }
             label(classes = "flag-toggle star-toggle task-only") {
                 attributes["title"] = Labels.STAR
                 checkBoxInput(name = "starred") { checked = t.isStarred }
@@ -419,6 +414,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
         }
 
         // Everything about when, as pills that open a small popover (app.js keeps their text current).
+        div(classes = "field-label section") { +Labels.TIMING }
         div(classes = "pills when") {
             datePill(Labels.START, "start", Icon.CALENDAR, t.startDate, "")
             datePill(Labels.DUE, "due", Icon.FLAG, t.dueDate, "task-only")
@@ -512,8 +508,10 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
             }
         }
 
-        div(classes = "field-label section") { +Labels.FOLDER_AND_CONTEXTS }
+        div(classes = "field-label section") { +Labels.PROPERTIES }
         div(classes = "pills") {
+            // Hidden from Active and Doing.
+            label(classes = "pill toggle task-only") { checkBoxInput(name = "maybe") { checked = t.isMaybe }; span(classes = "maybe-mark") { +"?" }; +Labels.MAYBE }
             val parentLabel = byId[t.parentId]?.let { p -> if (p.type == TaskType.FOLDER) folderPath(p, byId) else "Subtask of “${p.title}”" }
             // A set folder shows in its own colour, like the app's chip; app.js follows the pick.
             val colors = folderColorsArgb(all).mapValues { "#%06X".format(it.value and 0xFFFFFF) }
@@ -539,7 +537,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
         // A new task has no id for the related-task actions yet, so its subtasks, prerequisite and
         // dependent are typed here and created on save.
         if (isNew) {
-            div(classes = "field-label section") { +Labels.RELATED_TASKS }
+            div(classes = "field-label section") { +Labels.RELATED }
             field(Labels.SUBTASK, "") {
                 textArea(classes = "new-subtasks") { name = "newSubtasks"; rows = "3"; placeholder = "One per line"; +v.newSubtasks }
             }
@@ -698,7 +696,7 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
             }
         }
     }
-    div(classes = "field-label section") { +Labels.RELATED_TASKS }
+    div(classes = "field-label section") { +Labels.RELATED }
     all.filter { it.parentId == id && !isChecklist }.sortedWith(TaskOrder).forEach { sub ->
         row(Labels.SUBTASK, sub) {
             if (sub.type == TaskType.TASK) button(classes = if (sub.isComplete) "check done" else "check") {

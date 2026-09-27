@@ -263,8 +263,7 @@ body.selecting #list .row:not([data-type="TASK"]), body.selecting #list .folder 
 .title-input { flex: 1; border: 0 !important; background: none !important; padding: 8px 0 !important; font: inherit; font-size: 18px; font-weight: 600; color: var(--ink); resize: none; field-sizing: content; min-height: 1.4em; max-height: calc(4 * 1.4em + 16px); overflow-y: auto; line-height: 1.4; outline: none; }
 .flag-toggle { cursor: pointer; width: 34px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .flag-toggle input { display: none; }
-.maybe-toggle span { font-weight: 700; font-size: 19px; color: var(--check); }
-.maybe-toggle:has(input:checked) span { color: var(--accent); }
+.maybe-mark { font-weight: 700; }
 .pill-icon { width: 14px; height: 14px; margin-right: 4px; vertical-align: -2px; }
 .pp { position: relative; display: inline-block; }
 .pp > summary { list-style: none; display: inline-flex; align-items: center; }

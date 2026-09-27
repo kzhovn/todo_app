@@ -27,12 +27,13 @@ object Labels {
     const val TODAY_ONLY = "Today only"
     const val AFTER_COMPLETION = "After completion"
 
-    const val FOLDER_AND_CONTEXTS = "Folder and contexts"
+    const val TIMING = "Timing"
+    const val PROPERTIES = "Properties"
     const val NO_FOLDER = "No folder"
     const val CONTEXT = "Context"
     const val MANAGE_CONTEXTS = "Manage contexts…"
 
-    const val RELATED_TASKS = "Related tasks"
+    const val RELATED = "Related"
     const val SUBTASK = "Subtask"
     const val PREREQUISITE = "Prerequisite"
     const val DEPENDENT = "Dependent"

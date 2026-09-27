@@ -1,5 +1,11 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import com.kzhovn.todoapp.focus.FocusActivity
+import androidx.compose.material.icons.filled.QuestionMark
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Bolt
@@ -116,7 +122,7 @@ import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.launch
 
 class TaskEditActivity : ComponentActivity() {
-    @OptIn(ExperimentalLayoutApi::class)
+    @OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as TodoApp
@@ -286,21 +292,31 @@ class TaskEditActivity : ComponentActivity() {
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {
-                // Title box: pin in front, then Maybe and the star after. It wraps (up to four lines),
-                // with the icons staying level with the first line.
+                // Title box: pin in front, the star after; the title wraps (up to four lines). Everything is
+                // centred on one 44dp line, so a one-line title sits level with the icons.
                 val canPin = task.type == TaskType.TASK && !task.isComplete
                 Row(
-                    verticalAlignment = Alignment.Top,
-                    modifier = Modifier.fillMaxWidth().border(1.dp, LedgerBorder, RoundedCornerShape(6.dp)).padding(horizontal = 4.dp)
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).border(1.dp, LedgerBorder, RoundedCornerShape(6.dp)).padding(horizontal = 2.dp)
                 ) {
                     if (canPin) {
-                        IconButton(onClick = {
-                            if (taskId != 0L) { if (pinned) PinnedTask.unpin(this@TaskEditActivity) else PinnedTask.pin(this@TaskEditActivity, task) }
-                            pinned = !pinned
-                        }) {
-                            Icon(Icons.Filled.PushPin, contentDescription = Labels.PIN, tint = if (pinned) LedgerAccent else LedgerMuted, modifier = Modifier.size(20.dp))
+                        // Tap pins; press and hold opens focus mode on this task (once it's saved).
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(36.dp).clip(CircleShape).combinedClickable(
+                                onClick = {
+                                    if (taskId != 0L) { if (pinned) PinnedTask.unpin(this@TaskEditActivity) else PinnedTask.pin(this@TaskEditActivity, task) }
+                                    pinned = !pinned
+                                },
+                                onLongClick = {
+                                    if (taskId != 0L) startActivity(Intent(this@TaskEditActivity, FocusActivity::class.java).putExtra(FocusActivity.EXTRA_TASK_ID, taskId))
+                                    else Toast.makeText(this@TaskEditActivity, "Save the task to focus on it", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        ) {
+                            Icon(Icons.Filled.PushPin, contentDescription = Labels.PIN, tint = if (pinned) LedgerAccent else LedgerMuted, modifier = Modifier.size(19.dp))
                         }
-                        Box(Modifier.padding(top = 10.dp).width(1.dp).height(28.dp).background(LedgerBorder))
+                        Box(Modifier.width(1.dp).height(24.dp).background(LedgerBorder))
                     }
                     BasicTextField(
                         value = task.title,
@@ -312,17 +328,14 @@ class TaskEditActivity : ComponentActivity() {
                             focusManager.clearFocus()
                             if (isLoaded && task.title.isNotBlank()) onSave()
                         }),
-                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 11.dp),
+                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 10.dp),
                         decorationBox = { field ->
                             if (task.title.isEmpty()) Text(Labels.TITLE, fontSize = 17.sp, color = LedgerMuted)
                             field()
                         }
                     )
+                    // A starred task is never a maybe: turning either on turns the other off (Maybe is under Properties).
                     if (task.type != TaskType.FOLDER) {
-                        // A maybe is never starred: turning either on turns the other off.
-                        IconButton(onClick = { task = task.copy(isMaybe = !task.isMaybe, isStarred = task.isStarred && task.isMaybe) }) {
-                            Text("?", fontWeight = FontWeight.Bold, fontSize = 19.sp, color = if (task.isMaybe) LedgerAccent else LedgerMuted)
-                        }
                         IconButton(onClick = { task = task.copy(isStarred = !task.isStarred, isMaybe = task.isMaybe && task.isStarred) }) {
                             StarIcon(task.isStarred)
                         }
@@ -338,7 +351,7 @@ class TaskEditActivity : ComponentActivity() {
                 }
 
                 // Everything about when: dates, reminder, repeat, timer, and "today only".
-                Spacer(Modifier.height(12.dp))
+                SectionLabel(Labels.TIMING)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     PropertyChip(
                         label = Labels.START,
@@ -412,8 +425,13 @@ class TaskEditActivity : ComponentActivity() {
                     }
                 }
 
-                SectionLabel(Labels.FOLDER_AND_CONTEXTS)
+                SectionLabel(Labels.PROPERTIES)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Hidden from Active and Doing; never starred, so turning it on unstars.
+                    if (task.type != TaskType.FOLDER) PropertyChip(
+                        label = Labels.MAYBE, valueText = Labels.MAYBE.takeIf { task.isMaybe }, icon = Icons.Filled.QuestionMark,
+                        onClick = { task = task.copy(isMaybe = !task.isMaybe, isStarred = task.isStarred && task.isMaybe) }, showLabelWhenSet = false
+                    )
                     PropertyChip(
                         label = Labels.FOLDER,
                         valueText = allById[task.parentId]?.title,
@@ -475,7 +493,7 @@ class TaskEditActivity : ComponentActivity() {
                         AddLink(Labels.CLEAR_CHECKED) { confirmClearChecked = true }
                     }
                 }
-                SectionLabel(Labels.RELATED_TASKS)
+                SectionLabel(Labels.RELATED)
                 val subtasks = remember(allTasks, taskId) { allTasks.filter { it.parentId == taskId && taskId != 0L && !isChecklist }.sortedWith(TaskOrder) }
                 subtasks.forEach { sub ->
                     RelatedRow(Labels.SUBTASK, sub.title, done = sub.isComplete, onOpen = { openTask(sub.id) }) {
