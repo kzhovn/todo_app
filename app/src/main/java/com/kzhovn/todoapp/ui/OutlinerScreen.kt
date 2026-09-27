@@ -14,6 +14,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Rect
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.rememberSwipeToDismissBoxState
@@ -325,5 +326,8 @@ fun SwipeToAddSubtask(onAdd: () -> Unit, content: @Composable () -> Unit) {
                 Text("Subtask", color = LedgerAccent, fontSize = 14.sp)
             }
         }
-    ) { content() }
+    ) {
+        // Opaque, so the "+ Subtask" behind it only shows while swiping.
+        Box(Modifier.background(LedgerBackground)) { content() }
+    }
 }
