@@ -103,12 +103,33 @@ main { flex: 1; min-width: 0; max-width: 860px; }
 .error { color: var(--overdue); background: var(--overdue-bg); padding: 8px 12px; border-radius: 6px; margin: 0; }
 .ask { background: var(--today-bg); padding: 10px 12px; border-radius: 6px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .ask p { margin: 0; width: 100%; }
-.rep-n { width: 64px; }
-.repeat:has(option[value="NONE"]:checked) .rep-n { display: none; }
-.repeat:not(:has(option[value="CALENDAR"]:checked)) :is(.rep-unit, .rep-wd) { display: none; }
-.repeat:not(:has(option[value="WEEK"]:checked)) .rep-wd { display: none; }
-.repeat:not(:has(option[value="AFTER_COMPLETION_N_DAYS"]:checked)) .rep-after { display: none; }
+.rep-n { width: 56px; }
+.rep { display: flex; flex-direction: column; min-width: 300px; }
+.rep-presets { display: flex; flex-direction: column; }
+.rep-preset { text-align: left; padding: 8px 10px; border-radius: 5px; font-size: 13px; color: var(--ink); }
+.rep-preset:hover { background: var(--tile); }
+.rep-preset.on { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.rep-open { color: var(--muted); }
+.rep-builder { display: none; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); margin-top: 6px; padding-top: 10px; }
+.rep.building .rep-builder { display: flex; }
+.rep .seg { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.rep .seg label { flex: 1; text-align: center; padding: 6px 0; font-size: 12px; color: var(--muted); cursor: pointer; }
+.rep .seg label:has(:checked) { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.rep .seg input, .rep .pill input { display: none; }
+.rep .seg .rep-none { display: none; }
+.rep-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; }
+.rep .pill:has(:checked) { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .rep-wd { display: flex; gap: 4px; width: 100%; }
+.rep-month, .rep-ends { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.rep-ends .menu-label { padding: 4px 0 0; }
+.rep-preview { background: var(--tile); border-radius: 6px; padding: 8px 10px; font-size: 12px; }
+.rep-preview .menu-label { display: block; padding: 0 0 2px; }
+/* Which parts show: after completion has no "Every", days, month choice or end; a schedule's
+   weekdays only for weeks, its month choice only for months. */
+.rep:has([name=repeat][value=AFTER_COMPLETION_N_DAYS]:checked) :is(.rep-sched, .rep-wd, .rep-month, .rep-ends) { display: none; }
+.rep:has([name=repeat][value=CALENDAR]:checked) .rep-after { display: none; }
+.rep:not(:has([name=unit][value=WEEK]:checked)) .rep-wd { display: none; }
+.rep:not(:has([name=unit][value=MONTH]:checked)) .rep-month { display: none; }
 /* Folders have no due date, repeat, dependencies or maybe (the server clears them too). */
 .editor:has(input[name=type][value=FOLDER]:checked) .task-only { display: none; }
 /* Like the phone, reminders are for tasks: a project completes when its steps do. */

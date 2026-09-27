@@ -1,5 +1,10 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.recurrence.ordinal
+import com.kzhovn.todoapp.recurrence.WEEKDAY_NAMES
+import com.kzhovn.todoapp.recurrence.NTH_NAMES
+import com.kzhovn.todoapp.recurrence.recurrencePresets
+import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 import com.kzhovn.todoapp.data.folderColorsArgb
 import com.kzhovn.todoapp.data.Task
 import kotlinx.html.summary
@@ -106,6 +111,12 @@ private data class EditorView(
 )
 
 fun Route.editorRoutes(service: TaskService) {
+    get("/repeat-preview") {
+        val p = call.request.queryParameters
+        val anchor = dateTime(p["startDate"], p["startTime"]) ?: dateTime(p["dueDate"], p["dueTime"]) ?: service.now()
+        call.respondText(createHTML().div { repeatPreview(parseRecurrence(p), anchor, service.now()) }.removePrefix("<div>").removeSuffix("</div>"), ContentType.Text.Html)
+    }
+
     get("/tasks/{id}") {
         val state = call.taskId()?.let(service::editState) ?: return@get call.respond(HttpStatusCode.NotFound)
         val recurrence = recurrenceSelectionFromTask(state.task.recurrenceType, state.task.recurrenceRule)
@@ -274,15 +285,44 @@ private fun parseForm(p: Parameters, base: EditState, recurrence: RecurrenceSele
 // Normalised so that an untouched picker compares equal to the task's own rule.
 private fun parseRecurrence(p: Parameters): RecurrenceSelection {
     val n = p["n"]?.toIntOrNull()?.coerceIn(1, 999) ?: 1
+    val unit = p["unit"]?.let { runCatching { RecurrenceUnit.valueOf(it) }.getOrNull() } ?: RecurrenceUnit.DAY
     return when (p["repeat"]?.let { runCatching { RecurrencePreset.valueOf(it) }.getOrNull() }) {
         RecurrencePreset.CALENDAR -> {
-            val unit = p["unit"]?.let { runCatching { RecurrenceUnit.valueOf(it) }.getOrNull() } ?: RecurrenceUnit.DAY
             val mask = if (unit != RecurrenceUnit.WEEK) 0 else p.getAll("wd").orEmpty().mapNotNull { it.toIntOrNull()?.takeIf { d -> d in 0..6 } }.fold(0) { m, d -> m or (1 shl d) }
-            RecurrenceSelection(RecurrencePreset.CALENDAR, n, unit, mask)
+            val nth = if (unit == RecurrenceUnit.MONTH && p["monthly"] == "nth") p["nth"]?.toIntOrNull()?.takeIf { it in -1..4 && it != 0 } ?: 1 else null
+            RecurrenceSelection(
+                RecurrencePreset.CALENDAR, n, unit, mask,
+                monthlyNth = nth,
+                monthlyWeekday = if (nth == null) 6 else p["mwd"]?.toIntOrNull()?.coerceIn(0, 6) ?: 6,
+                until = if (p["ends"] == "until") dateTime(p["until"], null) else null,
+                count = if (p["ends"] == "count") p["count"]?.toIntOrNull()?.coerceIn(1, 999) else null
+            )
         }
-        RecurrencePreset.AFTER_COMPLETION_N_DAYS -> RecurrenceSelection(RecurrencePreset.AFTER_COMPLETION_N_DAYS, n)
+        RecurrencePreset.AFTER_COMPLETION_N_DAYS -> RecurrenceSelection(RecurrencePreset.AFTER_COMPLETION_N_DAYS, n, unit)
         else -> RecurrenceSelection(RecurrencePreset.NONE)
     }
+}
+
+// A preset's form values, which app.js copies into the builder's fields.
+private fun presetFields(r: RecurrenceSelection): String = buildList {
+    add("\"repeat\":\"${r.preset.name}\""); add("\"n\":\"${r.n}\""); add("\"unit\":\"${r.unit.name}\"")
+    add("\"wd\":[${(0..6).filter { r.weekdaysMask and (1 shl it) != 0 }.joinToString(",") { "\"$it\"" }}]")
+    add("\"monthly\":\"${if (r.monthlyNth == null) "day" else "nth"}\""); add("\"ends\":\"never\"")
+}.joinToString(",", "{", "}")
+
+// "Next: Sat Oct 3 · Sat Nov 7 · Sat Dec 5"; re-rendered (hx) on every change in the popover. It
+// also carries the pill's text (data-summary), read by app.js.
+private fun FlowContent.repeatPreview(r: RecurrenceSelection, anchor: Long, now: Long) = div(classes = "rep-preview") {
+    attributes["hx-get"] = "/repeat-preview"
+    attributes["hx-trigger"] = "change from:closest .pop, input changed delay:300ms from:closest .pop"
+    attributes["hx-include"] = "closest form"
+    attributes["hx-swap"] = "outerHTML"
+    attributes["hx-sync"] = "this:replace" // a newer change wins over an in-flight one
+    attributes["data-summary"] = Labels.repeat(r).orEmpty()
+    val (type, rule) = r.toTaskFields()
+    val next = if (type == null || rule == null) emptyList() else RecurrenceEngine.preview(type, rule, anchor, now)
+    span(classes = "menu-label") { +if (r.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS) "If done today" else "Next" }
+    +next.joinToString(" · ") { java.text.SimpleDateFormat("EEE MMM d", java.util.Locale.US).format(java.util.Date(it)) }.ifEmpty { "No more" }
 }
 
 // A date without a time is local midnight (see hasTime).
@@ -366,22 +406,67 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
                 p(classes = "hint") { +"Rings on your phone, counted back from the due date (from midnight if it has no time)." }
             }
             val r = v.recurrence
+            // Presets on top (one click); "After completion…" and "Custom…" open the builder below.
+            // The preview and the pill's text come from /repeat-preview, so the wording is Labels.repeat's.
+            val anchor = t.startDate ?: t.dueDate ?: service.now()
+            val presets = recurrencePresets(anchor)
+            val building = r.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS || (r.preset == RecurrencePreset.CALENDAR && presets.none { it.second == r })
             popPill(Labels.REPEAT, Icon.REPEAT, Labels.repeat(r) ?: t.recurrenceType?.let { "Custom" }, "repeat", "repeat task-only") {
-                select {
-                    name = "repeat"
-                    listOf(RecurrencePreset.NONE to "None", RecurrencePreset.CALENDAR to "Every", RecurrencePreset.AFTER_COMPLETION_N_DAYS to "After completion")
-                        .forEach { (preset, label) -> option { value = preset.name; selected = r.preset == preset; +label } }
-                }
-                numberInput(name = "n", classes = "rep-n") { value = r.n.toString(); min = "1"; max = "999" }
-                select(classes = "rep-unit") {
-                    name = "unit"
-                    listOf(RecurrenceUnit.DAY to "day(s)", RecurrenceUnit.WEEK to "week(s)", RecurrenceUnit.MONTH to "month(s)")
-                        .forEach { (unit, label) -> option { value = unit.name; selected = r.unit == unit; +label } }
-                }
-                span(classes = "rep-after") { +"days after completion" }
-                div(classes = "rep-wd") {
-                    Labels.WEEKDAYS.forEach { (bit, label) ->
-                        label(classes = "pill") { checkBoxInput(name = "wd") { value = bit.toString(); checked = r.weekdaysMask and (1 shl bit) != 0 }; +label }
+                div(classes = if (building) "rep building" else "rep") {
+                    div(classes = "rep-presets") {
+                        (listOf("Don't repeat" to RecurrenceSelection(RecurrencePreset.NONE)) + presets).forEach { (label, preset) ->
+                            button(type = ButtonType.button, classes = if (preset == r) "rep-preset on" else "rep-preset") { attributes["data-set"] = presetFields(preset); +label }
+                        }
+                        button(type = ButtonType.button, classes = "rep-preset rep-open") {
+                            attributes["data-set"] = presetFields(if (r.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS) r else RecurrenceSelection(RecurrencePreset.AFTER_COMPLETION_N_DAYS, n = 3))
+                            +"${Labels.AFTER_COMPLETION}…"
+                        }
+                        button(type = ButtonType.button, classes = "rep-preset rep-open") {
+                            attributes["data-set"] = presetFields(if (r.preset == RecurrencePreset.CALENDAR) r else RecurrenceSelection(RecurrencePreset.CALENDAR, unit = RecurrenceUnit.WEEK))
+                            +"Custom…"
+                        }
+                    }
+                    div(classes = "rep-builder") {
+                        div(classes = "seg") {
+                            label(classes = "rep-none") { radioInput(name = "repeat") { value = RecurrencePreset.NONE.name; checked = r.preset == RecurrencePreset.NONE } }
+                            label { radioInput(name = "repeat") { value = RecurrencePreset.CALENDAR.name; checked = r.preset == RecurrencePreset.CALENDAR }; +"On a schedule" }
+                            label { radioInput(name = "repeat") { value = RecurrencePreset.AFTER_COMPLETION_N_DAYS.name; checked = r.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS }; +Labels.AFTER_COMPLETION }
+                        }
+                        div(classes = "rep-line") {
+                            span(classes = "rep-sched") { +"Every" }
+                            numberInput(name = "n", classes = "rep-n") { value = r.n.toString(); min = "1"; max = "999" }
+                            listOf(RecurrenceUnit.DAY to "days", RecurrenceUnit.WEEK to "weeks", RecurrenceUnit.MONTH to "months").forEach { (unit, name) ->
+                                label(classes = "pill") { radioInput(name = "unit") { value = unit.name; checked = r.unit == unit }; +name }
+                            }
+                            span(classes = "rep-after") { +"after completion" }
+                        }
+                        div(classes = "rep-wd") {
+                            Labels.WEEKDAYS.forEach { (bit, label) ->
+                                label(classes = "pill") { checkBoxInput(name = "wd") { value = bit.toString(); checked = r.weekdaysMask and (1 shl bit) != 0 }; +label }
+                            }
+                        }
+                        div(classes = "rep-month") {
+                            val day = java.time.Instant.ofEpochMilli(anchor).atZone(java.time.ZoneId.systemDefault()).dayOfMonth
+                            label { radioInput(name = "monthly") { value = "day"; checked = r.monthlyNth == null }; +"On the ${ordinal(day)}" }
+                            label {
+                                radioInput(name = "monthly") { value = "nth"; checked = r.monthlyNth != null }; +"On the "
+                                select { name = "nth"; NTH_NAMES.forEach { (n, name) -> option { value = n.toString(); selected = (r.monthlyNth ?: 1) == n; +name } } }
+                                select { name = "mwd"; WEEKDAY_NAMES.forEachIndexed { i, name -> option { value = i.toString(); selected = r.monthlyWeekday == i; +name } } }
+                            }
+                        }
+                        div(classes = "rep-ends") {
+                            span(classes = "menu-label") { +"Ends" }
+                            label { radioInput(name = "ends") { value = "never"; checked = r.until == null && r.count == null }; +"Never" }
+                            label {
+                                radioInput(name = "ends") { value = "until"; checked = r.until != null }; +"On "
+                                dateInput(name = "until") { value = r.until?.let { java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString() }.orEmpty() }
+                            }
+                            label {
+                                radioInput(name = "ends") { value = "count"; checked = r.count != null }; +"After "
+                                numberInput(name = "count", classes = "rep-n") { value = (r.count ?: 10).toString(); min = "1"; max = "999" }; +" times"
+                            }
+                        }
+                        repeatPreview(r, anchor, service.now())
                     }
                 }
                 if (t.recurrenceType != null && r.preset == RecurrencePreset.NONE) {

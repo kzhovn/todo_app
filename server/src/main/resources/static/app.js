@@ -270,15 +270,25 @@
     return `${MONTHS[m - 1]} ${d} ${h % 12 || 12}:${String(min).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
   };
   const duration = (m) => (m < 60 ? `${m}m` : m % 60 === 0 ? `${m / 60}h` : `${Math.floor(m / 60)}h ${m % 60}m`);
-  const repeatText = (pop) => {
-    const preset = pop.querySelector("[name=repeat]").value, n = +pop.querySelector("[name=n]").value || 1;
-    if (preset === "NONE") return null;
-    if (preset === "AFTER_COMPLETION_N_DAYS") return `${n} day${n === 1 ? "" : "s"} after completion`;
-    const unit = pop.querySelector("[name=unit]").value.toLowerCase();
-    const every = n === 1 ? `Every ${unit}` : `Every ${n} ${unit}s`;
-    const days = [...pop.querySelectorAll("[name=wd]:checked")].map((c) => c.parentElement.textContent.trim()).join(" ");
-    return unit === "week" && days ? `${every} · ${days}` : every;
-  };
+  // The server words it (Labels.repeat), in the preview it re-renders on each change.
+  const repeatText = (pop) => pop.querySelector(".rep-preview")?.dataset.summary || null;
+  document.addEventListener("htmx:afterSwap", (e) => { const pp = e.target.closest?.(".pp[data-kind=repeat]"); if (pp) refreshPill(pp); });
+  // A repeat preset fills the builder's fields; a plain one also closes the popover, "…" ones open the builder.
+  document.addEventListener("click", (e) => {
+    const preset = e.target.closest(".rep-preset");
+    if (!preset) return;
+    const rep = preset.closest(".rep"), set = JSON.parse(preset.dataset.set);
+    for (const [name, value] of Object.entries(set)) {
+      rep.querySelectorAll(`[name="${name}"]`).forEach((i) => {
+        if (i.type === "radio" || i.type === "checkbox") i.checked = Array.isArray(value) ? value.includes(i.value) : i.value === value;
+        else i.value = value;
+      });
+    }
+    rep.querySelectorAll(".rep-preset").forEach((b) => b.classList.toggle("on", b === preset));
+    rep.classList.toggle("building", preset.classList.contains("rep-open"));
+    rep.closest(".pop").dispatchEvent(new Event("change", { bubbles: true }));
+    if (!preset.classList.contains("rep-open")) preset.closest(".pp").open = false;
+  });
   function pillValue(pp) {
     const pop = pp.querySelector(".pop");
     switch (pp.dataset.kind) {
@@ -310,7 +320,13 @@
     if (clear) {
       e.preventDefault(); // don't also open the popover
       const pp = clear.closest(".pp");
-      pp.querySelectorAll(".pop input").forEach((i) => { if (i.type === "checkbox") i.checked = false; else i.value = ""; });
+      // Radios go back to their group's first choice (for Repeat, "don't repeat").
+      pp.querySelectorAll(".pop input").forEach((i) => {
+        if (i.type === "checkbox") i.checked = false;
+        else if (i.type === "radio") i.checked = i === pp.querySelector(`.pop input[name="${i.name}"]`);
+        else i.value = "";
+      });
+      pp.querySelector(".pop").dispatchEvent(new Event("change", { bubbles: true }));
       pp.querySelectorAll(".pop select").forEach((s) => { s.selectedIndex = 0; });
       refreshPill(pp);
       pp.open = false;

@@ -13,15 +13,20 @@ object RecurrenceEngine {
         val type = task.recurrenceType ?: return null
         val rule = task.recurrenceRule ?: return null
         val nextStart = when (type) {
-            RecurrenceType.AFTER_COMPLETION -> completedAt + TimeUnit.DAYS.toMillis(rule.toLong())
+            RecurrenceType.AFTER_COMPLETION -> afterCompletion(rule, completedAt) ?: return null
             RecurrenceType.RRULE -> nextRRuleOccurrence(task.startDate ?: completedAt, rule, completedAt)
                 ?: return null
         }
+        // "After N times": each new instance starts the rule afresh from its own date, so the count
+        // left is carried down one per instance, and the last instance spawns nothing.
+        val count = if (type == RecurrenceType.RRULE) Regex("COUNT=(\\d+)").find(rule)?.groupValues?.get(1)?.toInt() else null
+        if (count != null && count <= 1) return null
+        val nextRule = if (count != null) rule.replace("COUNT=$count", "COUNT=${count - 1}") else rule
         // Keep the start-to-due gap constant across recurrences instead of freezing dueDate at its
         // original (now stale) absolute timestamp.
         val startAnchor = task.startDate ?: completedAt
         val nextDueDate = task.dueDate?.plus(nextStart - startAnchor)
-        return task.copy(id = newId(), startDate = nextStart, dueDate = nextDueDate, isComplete = false, completedAt = null)
+        return task.copy(id = newId(), startDate = nextStart, dueDate = nextDueDate, isComplete = false, completedAt = null, recurrenceRule = nextRule)
     }
 
     // The instance that completing `completed` spawned, if it still exists unedited. Un-completing
@@ -50,6 +55,31 @@ object RecurrenceEngine {
             sub.id to copy
         }
     }
+
+    // The Repeat sheet's preview: the next few dates a schedule lands on, starting from `anchor`, or
+    // for "after completion", when the next one would be if finished at `now`.
+    fun preview(type: RecurrenceType, rule: String, anchor: Long, now: Long, count: Int = 3): List<Long> = when (type) {
+        RecurrenceType.AFTER_COMPLETION -> listOfNotNull(afterCompletion(rule, now))
+        RecurrenceType.RRULE -> runCatching {
+            val iterator = RecurrenceRule(rule).iterator(anchor, TimeZone.getDefault())
+            generateSequence { if (iterator.hasNext()) iterator.next().timestamp else null }
+                .dropWhile { it < startOfDay(now) }.take(count).toList()
+        }.getOrDefault(emptyList())
+    }
+
+    // "3" days, "2w" weeks, "1m" months (calendar months: Jan 31 + 1m is Feb's last day).
+    private fun afterCompletion(rule: String, completedAt: Long): Long? {
+        val n = rule.trimEnd('w', 'm').toIntOrNull() ?: return null
+        return when (rule.last()) {
+            'w' -> completedAt + TimeUnit.DAYS.toMillis(7L * n)
+            'm' -> java.util.Calendar.getInstance().apply { timeInMillis = completedAt; add(java.util.Calendar.MONTH, n) }.timeInMillis
+            else -> completedAt + TimeUnit.DAYS.toMillis(n.toLong())
+        }
+    }
+
+    private fun startOfDay(ms: Long) = java.util.Calendar.getInstance().apply {
+        timeInMillis = ms; set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis
 
     private fun nextRRuleOccurrence(dtStart: Long, rrule: String, after: Long): Long? {
         val recurrenceRule = RecurrenceRule(rrule)

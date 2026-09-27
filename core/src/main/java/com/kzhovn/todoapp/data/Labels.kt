@@ -1,5 +1,8 @@
 package com.kzhovn.todoapp.data
 
+import com.kzhovn.todoapp.recurrence.WEEKDAY_NAMES
+import com.kzhovn.todoapp.recurrence.NTH_NAMES
+import com.kzhovn.todoapp.recurrence.WEEKDAYS_MASK
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
 import com.kzhovn.todoapp.recurrence.RecurrenceSelection
 import com.kzhovn.todoapp.recurrence.RecurrenceUnit
@@ -21,6 +24,7 @@ object Labels {
     const val REPEAT = "Repeat"
     const val TIMER = "Timer"
     const val TODAY_ONLY = "Today only"
+    const val AFTER_COMPLETION = "After completion"
 
     const val FOLDER_AND_CONTEXTS = "Folder and contexts"
     const val NO_FOLDER = "No folder"
@@ -76,15 +80,28 @@ object Labels {
     // Monday first, like both apps' day pickers; bits are Su=0..Sa=6.
     val WEEKDAYS = listOf(1 to "Mo", 2 to "Tu", 3 to "We", 4 to "Th", 5 to "Fr", 6 to "Sa", 0 to "Su")
 
-    // The Repeat pill's text: "Every day", "Every 2 weeks · Mo Th", "3 days after completion".
+    // The Repeat pill's text: "Every weekday", "Every 2 weeks · Mo Th", "Every month · first Sat",
+    // "3 days after completion", with any end: "· until Dec 31", "· 10 times".
     fun repeat(selection: RecurrenceSelection): String? = when (selection.preset) {
         RecurrencePreset.NONE -> null
-        RecurrencePreset.AFTER_COMPLETION_N_DAYS -> "${selection.n} day${if (selection.n == 1) "" else "s"} after completion"
+        RecurrencePreset.AFTER_COMPLETION_N_DAYS -> "${plural(selection.n, unitName(selection.unit))} after completion"
         RecurrencePreset.CALENDAR -> {
-            val unit = when (selection.unit) { RecurrenceUnit.DAY -> "day"; RecurrenceUnit.WEEK -> "week"; RecurrenceUnit.MONTH -> "month" }
+            val unit = unitName(selection.unit)
             val every = if (selection.n == 1) "Every $unit" else "Every ${selection.n} ${unit}s"
             val days = WEEKDAYS.filter { (bit, _) -> selection.weekdaysMask and (1 shl bit) != 0 }.joinToString(" ") { it.second }
-            if (selection.unit == RecurrenceUnit.WEEK && days.isNotEmpty()) "$every · $days" else every
+            val rule = when {
+                selection.unit == RecurrenceUnit.WEEK && selection.n == 1 && selection.weekdaysMask == WEEKDAYS_MASK -> "Every weekday"
+                selection.unit == RecurrenceUnit.WEEK && days.isNotEmpty() -> "$every · $days"
+                selection.unit == RecurrenceUnit.MONTH && selection.monthlyNth != null ->
+                    "$every · ${NTH_NAMES.first { it.first == selection.monthlyNth }.second} ${WEEKDAY_NAMES[selection.monthlyWeekday]}"
+                else -> every
+            }
+            val ends = selection.until?.let { " · until " + java.text.SimpleDateFormat("MMM d", java.util.Locale.US).format(java.util.Date(it)) }
+                ?: selection.count?.let { " · ${plural(it, "time")}" }.orEmpty()
+            rule + ends
         }
     }
+
+    private fun unitName(unit: RecurrenceUnit) = when (unit) { RecurrenceUnit.DAY -> "day"; RecurrenceUnit.WEEK -> "week"; RecurrenceUnit.MONTH -> "month" }
+    private fun plural(n: Int, word: String) = "$n $word${if (n == 1) "" else "s"}"
 }

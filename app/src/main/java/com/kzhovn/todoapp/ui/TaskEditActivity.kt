@@ -645,47 +645,11 @@ class TaskEditActivity : ComponentActivity() {
             }
 
             if (showRepeatDialog) {
-                AlertDialog(
-                    onDismissRequest = { showRepeatDialog = false },
-                    title = { Text(Labels.REPEAT) },
-                    text = {
-                        Column {
-                            Row {
-                                LabelOptions(
-                                    options = listOf(RecurrencePreset.NONE to "None", RecurrencePreset.CALENDAR to "Every", RecurrencePreset.AFTER_COMPLETION_N_DAYS to "After completion"),
-                                    selected = recurrence.preset,
-                                    onSelect = { preset -> recurrence = recurrence.copy(preset = preset) }
-                                )
-                            }
-                            if (recurrence.preset == RecurrencePreset.CALENDAR) {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                                    Text("Every", fontSize = 12.sp, color = LedgerMuted)
-                                    Spacer(Modifier.width(6.dp))
-                                    CompactNumberField(value = recurrence.n) { n -> recurrence = recurrence.copy(n = n) }
-                                    Spacer(Modifier.width(6.dp))
-                                    LabelOptions(
-                                        options = listOf(RecurrenceUnit.DAY to "day(s)", RecurrenceUnit.WEEK to "week(s)", RecurrenceUnit.MONTH to "month(s)"),
-                                        selected = recurrence.unit,
-                                        trailingPadding = 8.dp,
-                                        verticalPadding = 0.dp,
-                                        onSelect = { unit -> recurrence = recurrence.copy(unit = unit) }
-                                    )
-                                }
-                                if (recurrence.unit == RecurrenceUnit.WEEK) {
-                                    Spacer(Modifier.height(8.dp))
-                                    DayOfWeekToggle(recurrence.weekdaysMask) { mask -> recurrence = recurrence.copy(weekdaysMask = mask) }
-                                }
-                            }
-                            if (recurrence.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS) {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                                    CompactNumberField(value = recurrence.n) { n -> recurrence = recurrence.copy(n = n) }
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("days after completion", fontSize = 12.sp, color = LedgerMuted)
-                                }
-                            }
-                        }
-                    },
-                    confirmButton = { Button(onClick = { showRepeatDialog = false }) { Text("Done") } }
+                RepeatSheet(
+                    current = recurrence,
+                    anchor = task.startDate ?: task.dueDate ?: System.currentTimeMillis(),
+                    onDone = { recurrence = it; showRepeatDialog = false },
+                    onDismiss = { showRepeatDialog = false }
                 )
             }
 
@@ -824,45 +788,6 @@ class TaskEditActivity : ComponentActivity() {
         const val EXTRA_DRAFT = "draft"
         const val EXTRA_DRAFT_DEPENDS_ON = "draft_depends_on"
     }
-}
-
-@Composable
-private fun <T> LabelOptions(
-    options: List<Pair<T, String>>,
-    selected: T,
-    trailingPadding: Dp = 12.dp,
-    verticalPadding: Dp = 4.dp,
-    onSelect: (T) -> Unit
-) {
-    options.forEach { (value, label) ->
-        Text(
-            label,
-            fontSize = 12.sp,
-            color = if (selected == value) LedgerAccent else LedgerMuted,
-            modifier = Modifier
-                .clickable { onSelect(value) }
-                .padding(end = trailingPadding, top = verticalPadding, bottom = verticalPadding)
-        )
-    }
-}
-
-@Composable
-private fun CompactNumberField(value: Int, onValueChange: (Int) -> Unit) {
-    var text by remember(value) { mutableStateOf(value.toString()) }
-    BasicTextField(
-        value = text,
-        onValueChange = { new ->
-            text = new
-            new.toIntOrNull()?.takeIf { it > 0 }?.let(onValueChange)
-        },
-        singleLine = true,
-        textStyle = TextStyle(fontSize = 14.sp, color = LedgerInk),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        modifier = Modifier
-            .width(44.dp)
-            .border(1.dp, LedgerBorder, RoundedCornerShape(4.dp))
-            .padding(horizontal = 8.dp, vertical = 8.dp)
-    )
 }
 
 @Composable
