@@ -1,5 +1,8 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.combinedClickable
@@ -203,13 +206,15 @@ class TaskEditActivity : ComponentActivity() {
             // As loaded, to tell which inherited fields this edit changes.
             var original by remember { mutableStateOf<Task?>(null) }
             var originalContextIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+            var originalDependencyIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
             // A project needs a first step; asked on save when it has none.
             var askFirstSubtask by remember { mutableStateOf(false) }
             var firstSubtaskTitle by remember { mutableStateOf("") }
             // Subtasks with their own value for a changed inherited field, pending "update them too?".
             var pendingInherit by remember { mutableStateOf<Pair<List<Task>, Set<InheritedField>>?>(null) }
 
-            fun save(clearOn: List<Task>, fields: Set<InheritedField>, firstSubtask: String?) {
+            // leave: close the editor after saving (Save, Back); false for an auto-save while it stays open.
+            fun save(clearOn: List<Task>, fields: Set<InheritedField>, firstSubtask: String?, leave: Boolean = true) {
                 val toSave: Task
                 val dependenciesToSave: Set<Long>
                 if (task.type == TaskType.FOLDER) {
@@ -236,9 +241,16 @@ class TaskEditActivity : ComponentActivity() {
                     pendingDependents.forEach { repository.addDependency(repository.createTask(QuickAddParser.parse(it).copy(parentId = folderId)), savedId) }
                     if (taskId == 0L && pinned) PinnedTask.pin(this@TaskEditActivity, toSave.copy(id = savedId))
                     TodoWidget().updateAll(applicationContext)
-                    finish()
+                    if (leave) finish()
+                    else { task = toSave; original = toSave; originalContextIds = contextsToSave; originalDependencyIds = dependenciesToSave; loadedRecurrence = recurrence }
                 }
             }
+
+            // Auto-save only writes what changed: rewriting unchanged fields would bump their sync clocks
+            // and could undo an edit made meanwhile on another device.
+            fun isDirty(): Boolean =
+                if (taskId == 0L) task.title.isNotBlank()
+                else original != null && (task != original || selectedContextIds != originalContextIds || selectedDependencyIds != originalDependencyIds || recurrence != loadedRecurrence)
 
             val onSave: () -> Unit = {
                 val hasSubtasks = pendingSubtasks.isNotEmpty() || pendingChildIds.isNotEmpty() || allTasks.any { it.parentId == taskId && taskId != 0L }
@@ -262,6 +274,25 @@ class TaskEditActivity : ComponentActivity() {
                 }
             }
 
+            // Back saves instead of discarding (Delete is how to throw a new task away).
+            BackHandler(enabled = isLoaded) { if (isDirty() && task.title.isNotBlank()) onSave() else finish() }
+            // Switching away (another app, or a screen opened from here) saves an existing task in place.
+            // Skipped when saving would need a question first (a project's first step, updating subtasks).
+            LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+                if (taskId == 0L || !isLoaded || isFinishing || !isDirty() || task.title.isBlank()) return@LifecycleEventEffect
+                if (task.type == TaskType.PROJECT && allTasks.none { it.parentId == taskId }) return@LifecycleEventEffect
+                val before = original ?: return@LifecycleEventEffect
+                val changed = buildSet {
+                    if (task.startDate != before.startDate) add(InheritedField.START)
+                    if (task.dueDate != before.dueDate) add(InheritedField.DUE)
+                    if (task.icon != before.icon) add(InheritedField.ICON)
+                    if (selectedContextIds != originalContextIds) add(InheritedField.CONTEXTS)
+                }
+                scope.launch {
+                    if (changed.isEmpty() || repository.descendantsOverriding(taskId, changed).isEmpty()) save(emptyList(), emptySet(), null, leave = false)
+                }
+            }
+
             LaunchedEffect(taskId) {
                 if (taskId == 0L) {
                     intent.getStringExtra(EXTRA_DRAFT)?.let { task = SyncJson.decodeFromString(Task.serializer(), it) }
@@ -277,6 +308,7 @@ class TaskEditActivity : ComponentActivity() {
                     selectedContextIds = contextRepository.getContextsForTask(taskId).map { it.id }.toSet()
                     original = task
                     originalContextIds = selectedContextIds
+                    originalDependencyIds = selectedDependencyIds
                     isLoaded = true
                 }
                 allTasks = repository.getAllTasks()
@@ -328,7 +360,7 @@ class TaskEditActivity : ComponentActivity() {
                             focusManager.clearFocus()
                             if (isLoaded && task.title.isNotBlank()) onSave()
                         }),
-                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 10.dp),
+                        modifier = Modifier.weight(1f).padding(start = 8.dp, end = 2.dp, top = 10.dp, bottom = 10.dp),
                         decorationBox = { field ->
                             if (task.title.isEmpty()) Text(Labels.TITLE, fontSize = 17.sp, color = LedgerMuted)
                             field()
@@ -336,9 +368,10 @@ class TaskEditActivity : ComponentActivity() {
                     )
                     // A starred task is never a maybe: turning either on turns the other off (Maybe is under Properties).
                     if (task.type != TaskType.FOLDER) {
-                        IconButton(onClick = { task = task.copy(isStarred = !task.isStarred, isMaybe = task.isMaybe && task.isStarred) }) {
-                            StarIcon(task.isStarred)
-                        }
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(38.dp).clip(CircleShape).clickable { task = task.copy(isStarred = !task.isStarred, isMaybe = task.isMaybe && task.isStarred) }
+                        ) { StarIcon(task.isStarred) }
                     }
                 }
 

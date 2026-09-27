@@ -392,6 +392,23 @@ class WebTest {
     }
 
     @Test
+    fun `auto-save writes a change in place, but leaves one needing a question to Save`() = web {
+        val task = service.create(Task(title = "Call the dentist"))
+        client.submitForm("/tasks/${task.id}/autosave", parameters {
+            append("base", taskFields(task, emptySet(), emptySet()).toString())
+            append("title", "Call the dentist today"); append("type", "TASK")
+        }).bodyAsText().let { assertTrue(it.contains("Saved")) }
+        assertEquals("Call the dentist today", service.get(task.id)!!.title)
+
+        val project = service.create(Task(title = "Paint", type = TaskType.PROJECT))
+        client.submitForm("/tasks/${project.id}/autosave", parameters {
+            append("base", taskFields(project, emptySet(), emptySet()).toString())
+            append("title", "Paint the fence"); append("type", "PROJECT")
+        }).bodyAsText().let { assertTrue(it.contains("press Save")) }
+        assertEquals("Paint", service.get(project.id)!!.title) // a project needs its first step, asked on Save
+    }
+
+    @Test
     fun `active is sectioned by top-level folder, foldable per browser, no-folder only when needed`() = web {
         val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
         service.create(Task(title = "Fix bug", parentId = work.id))

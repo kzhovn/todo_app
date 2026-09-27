@@ -134,6 +134,30 @@ fun Route.editorRoutes(service: TaskService) {
     }
     post("/tasks/new") { saveTask(service, id = null) }
     post("/tasks/{id}") { saveTask(service, call.taskId() ?: return@post call.respond(HttpStatusCode.NotFound)) }
+    // Auto-save, a moment after each change in an open editor. Writes only what changed (so another
+    // device's edit made meanwhile isn't undone), and skips anything that needs a question first
+    // (a project's first step, updating subtasks), leaving that to Save. Replies with the new base.
+    post("/tasks/{id}/autosave") {
+        val id = call.taskId() ?: return@post
+        val current = service.editState(id) ?: return@post call.respond(HttpStatusCode.NoContent)
+        val params = call.receiveParameters()
+        val base = decodeState(id, params["base"]) ?: current
+        val form = parseForm(params, base, parseRecurrence(params), service)
+        val merged = merge(base, form, current)
+        val needsQuestion = (merged.task.type == TaskType.PROJECT && service.tasks().none { it.parentId == id }) ||
+            listOf(form.task.startDate != base.task.startDate, form.task.dueDate != base.task.dueDate, form.contextIds != base.contextIds).any { it } &&
+            service.descendantsOverriding(id, InheritedField.entries.toSet()).isNotEmpty()
+        val status = when {
+            form.task.title.isBlank() || merged == current -> null
+            needsQuestion -> "Not saved: press Save"
+            else -> { service.edit(merged.task, merged.contextIds, merged.dependsOn); "Saved" }
+        }
+        val stored = if (status == "Saved") service.editState(id) ?: current else base
+        call.respondText(createHTML().div {
+            hiddenInput(name = "base") { this.id = "base"; value = stored.encode(); attributes["form"] = "editor-form"; attributes["hx-swap-oob"] = "true" }
+            span { this.id = "save-status"; attributes["hx-swap-oob"] = "true"; status?.let { +it } }
+        }, ContentType.Text.Html)
+    }
 
     // No confirmation: the list it lands on offers Undo instead.
     post("/tasks/{id}/delete") {
@@ -383,9 +407,18 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
     val all = service.tasks()
     val byId = all.associateBy { it.id }
     val formId = "editor-form"
+    // An open task saves itself a moment after each change (see /autosave); the form still submits
+    // normally on Save, so this lives on its own element.
+    if (!isNew) div {
+        attributes["hx-post"] = "/tasks/${t.id}/autosave?mode=${v.mode.name}"
+        attributes["hx-trigger"] = "change delay:700ms from:.editor, change delay:700ms from:.editor-foot, input changed delay:1200ms from:.title-input"
+        attributes["hx-include"] = "#$formId"
+        attributes["hx-swap"] = "none"
+        attributes["hx-sync"] = "this:replace"
+    }
     form(action = "/tasks/${if (isNew) "new" else t.id}?mode=${v.mode.name}", method = FormMethod.post, classes = "editor") {
         id = formId
-        hiddenInput(name = "base") { value = v.base }
+        hiddenInput(name = "base") { id = "base"; value = v.base }
         v.error?.let { p(classes = "error") { +it } }
         v.ask?.let { (count, fields) ->
             div(classes = "ask") {
@@ -598,6 +631,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
                     }
                 }
             }
+            span(classes = "hint") { id = "save-status" }
             a(href = v.mode.path, classes = "cancel") { +"Cancel" }
             button(type = ButtonType.submit, classes = "primary") { attributes["form"] = formId; +Labels.SAVE }
         }
