@@ -406,6 +406,14 @@ class WebTest {
             append("title", "Paint the fence"); append("type", "PROJECT")
         }).bodyAsText().let { assertTrue(it.contains("press Save")) }
         assertEquals("Paint", service.get(project.id)!!.title) // a project needs its first step, asked on Save
+
+        // A subtask with its own due date doesn't hold up a change to the start date (Save wouldn't ask).
+        val parent = service.create(Task(title = "Trip"))
+        service.create(Task(title = "Book", parentId = parent.id, dueDate = 1_800_000_000_000L))
+        client.submitForm("/tasks/${parent.id}/autosave", parameters {
+            append("base", taskFields(parent, emptySet(), emptySet()).toString())
+            append("title", "Trip"); append("type", "TASK"); append("startDate", "2026-10-01")
+        }).bodyAsText().let { assertTrue(it.contains("Saved")) }
     }
 
     @Test

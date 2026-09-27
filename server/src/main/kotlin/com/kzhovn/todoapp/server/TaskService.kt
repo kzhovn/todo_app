@@ -1,5 +1,9 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.repository.blockerFor
+import com.kzhovn.todoapp.repository.applyTo
+import com.kzhovn.todoapp.repository.overridesInherited
+import com.kzhovn.todoapp.data.planMoveNextTo
 import com.kzhovn.todoapp.data.splitItems
 import com.kzhovn.todoapp.data.isChecklistItem
 import com.kzhovn.todoapp.repository.urgentFirst
@@ -210,22 +214,10 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         update(id) { it.copy(parentId = newParentId, position = null) }
     }
 
-    // Moves a task right before/after anchorId, under the anchor's parent, and renumbers that sibling
-    // list 1..n. Mirrors TaskRepository.moveNextTo: renumbering never runs out of room between
-    // neighbours, and rewrites only a few rows at one user's scale.
+    // See planMoveNextTo (shared with the app's TaskRepository.moveNextTo).
     fun moveNextTo(id: Long, anchorId: Long, after: Boolean) = store.transaction {
-        val all = tasks()
-        val byId = all.associateBy { it.id }
-        val task = byId[id] ?: return@transaction
-        val anchor = byId[anchorId]?.takeIf { it.id != id } ?: return@transaction
-        val parentId = anchor.parentId
-        if (parentId != null && wouldCreateCycle(parentId, id, byId)) return@transaction
-        val siblings = all.filter { it.parentId == parentId && it.id != id }.sortedWith(TaskOrder).toMutableList()
-        siblings.add(siblings.indexOf(anchor) + if (after) 1 else 0, task.copy(parentId = parentId))
-        siblings.forEachIndexed { index, sibling ->
-            val position = index + 1L
-            if (sibling.position != position || sibling.id == id) update(sibling.id) { it.copy(parentId = parentId, position = position) }
-        }
+        val move = planMoveNextTo(tasks(), id, anchorId, after) ?: return@transaction
+        move.positions.forEach { (taskId, position) -> update(taskId) { it.copy(parentId = move.parentId, position = position) } }
     }
 
     // The outliner's moves, among the open siblings the tree shows (completed ones are hidden there).
@@ -252,20 +244,12 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     }
 
     // Subtasks that set their own value for one of these inherited fields, and so wouldn't follow
-    // a change to it on this task. Mirrors TaskRepository.descendantsOverriding.
+    // a change to it on this task (see overridesInherited).
     fun descendantsOverriding(id: Long, fields: Set<InheritedField>): List<Task> {
         val rows = liveRows().associateBy { it.id }
-        return (subtreeIds(id) - id).mapNotNull { rows[it] }.filter { row ->
-            val d = row.toTask()
-            fields.any { field ->
-                when (field) {
-                    InheritedField.START -> d.startDate != null
-                    InheritedField.DUE -> d.dueDate != null
-                    InheritedField.ICON -> d.icon != null
-                    InheritedField.CONTEXTS -> row.contextIds().isNotEmpty()
-                }
-            }
-        }.map { it.toTask() }
+        return (subtreeIds(id) - id).mapNotNull { rows[it] }
+            .filter { row -> val d = row.toTask(); fields.any { overridesInherited(d, row.contextIds(), it) } }
+            .map { it.toTask() }
     }
 
     // Clears those fields on the given tasks, so they inherit from their ancestors again.
@@ -352,29 +336,15 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     // Open projects whose steps are all done: time to complete them or add the next step.
     fun stalled(): List<Task> = stalledProjects(tasks())
 
-    // Mirrors TaskRepository.applyBulkEdit. Folders are skipped (none of the bulk properties apply),
-    // and a move or dependency that would make a loop is skipped for that task.
+    // Folders are skipped (none of the bulk properties apply); see BulkEdit.applyTo, shared with the app.
     fun applyBulkEdit(ids: Collection<Long>, change: BulkEdit) = store.transaction {
         val byId = tasks().associateBy { it.id }
         val edges = dependencyEdges()
         val contexts = contextIdsByTask()
         for (id in ids) {
             val task = byId[id]?.takeIf { it.type == TaskType.TASK } ?: continue
-            val target = change.moveTo?.folderId
-            val parentId = when {
-                change.moveTo == null -> task.parentId
-                target != null && wouldCreateCycle(target, id, byId) -> task.parentId
-                else -> target
-            }
-            val updated = task.copy(
-                isStarred = change.starred ?: task.isStarred,
-                isMaybe = change.maybe ?: task.isMaybe,
-                startDate = change.startDate.let { if (it != null) it.date else task.startDate },
-                dueDate = change.dueDate.let { if (it != null) it.date else task.dueDate },
-                parentId = parentId
-            )
-            val blocker = change.dependsOnId?.takeIf { it != id && !wouldCreateDependencyCycle(it, id, edges) }
-            edit(updated, contexts[id].orEmpty() + change.addContextIds - change.removeContextIds, dependsOn(id) + listOfNotNull(blocker))
+            val blocker = change.blockerFor(id, edges)
+            edit(change.applyTo(task, byId), contexts[id].orEmpty() + change.addContextIds - change.removeContextIds, dependsOn(id) + listOfNotNull(blocker))
         }
     }
 

@@ -8,12 +8,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
-import androidx.glance.appwidget.updateAll
 import com.kzhovn.todoapp.R
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.ui.TaskEditActivity
-import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -122,7 +120,6 @@ class PinnedTaskReceiver : BroadcastReceiver() {
                         // Like the widget: no room for the subtask dialog, so subtasks complete too.
                         app.repository.completeWithDescendants(taskId, System.currentTimeMillis())
                         PinnedTask.unpin(context)
-                        TodoWidget().updateAll(context)
                     } finally {
                         pending.finish()
                     }

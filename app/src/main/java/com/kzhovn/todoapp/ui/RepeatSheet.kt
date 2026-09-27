@@ -152,9 +152,9 @@ private fun Builder(s: RecurrenceSelection, anchor: Long, onChange: (RecurrenceS
     val (type, rule) = s.toTaskFields()
     val next = if (type == null || rule == null) emptyList() else RecurrenceEngine.preview(type, rule, anchor, now)
     Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(LedgerTile).padding(10.dp)) {
-        Text(if (schedule) "NEXT" else "IF DONE TODAY", fontSize = 10.sp, color = LedgerMuted, letterSpacing = 0.5.sp)
+        Text(Labels.repeatPreviewLabel(afterCompletion = !schedule).uppercase(), fontSize = 10.sp, color = LedgerMuted, letterSpacing = 0.5.sp)
         Text(
-            next.joinToString(" · ") { SimpleDateFormat("EEE MMM d", Locale.US).format(Date(it)) }.ifEmpty { "No more" },
+            Labels.repeatPreview(next),
             fontSize = 13.sp, color = LedgerInk, modifier = Modifier.padding(top = 2.dp)
         )
     }

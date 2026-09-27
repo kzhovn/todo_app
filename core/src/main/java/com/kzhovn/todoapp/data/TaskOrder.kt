@@ -16,6 +16,23 @@ fun newTaskPositions(all: List<Task>, new: Task): Map<Long, Long> {
     return siblings.withIndex().filter { (i, t) -> t.position != i + 1L || t.id == new.id }.associate { (i, t) -> t.id to i + 1L }
 }
 
+// A move right before/after `anchorId`, under the anchor's parent: that sibling list renumbered 1..n
+// (renumbering never runs out of room between neighbours, and rewrites only a few rows at one user's
+// scale). Null when the task or anchor is missing, or the move would put a task inside itself.
+data class Move(val parentId: Long?, val positions: Map<Long, Long>)
+
+fun planMoveNextTo(all: List<Task>, taskId: Long, anchorId: Long, after: Boolean): Move? {
+    val byId = all.associateBy { it.id }
+    val task = byId[taskId] ?: return null
+    val anchor = byId[anchorId]?.takeIf { it.id != taskId } ?: return null
+    val parentId = anchor.parentId
+    if (parentId != null && wouldCreateCycle(parentId, taskId, byId)) return null
+    val siblings = all.filter { it.parentId == parentId && it.id != taskId }.sortedWith(TaskOrder).toMutableList()
+    siblings.add(siblings.indexOf(anchor) + if (after) 1 else 0, task)
+    val positions = siblings.withIndex().filter { (i, t) -> t.position != i + 1L || t.id == taskId }.associate { (i, t) -> t.id to i + 1L }
+    return Move(parentId, positions)
+}
+
 // Open projects whose subtasks are all done: time to complete the project or add the next step.
 fun stalledProjects(tasks: List<Task>): List<Task> {
     val openChildren = tasks.filter { !it.isComplete && it.type != TaskType.FOLDER }.groupBy { it.parentId }

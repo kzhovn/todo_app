@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.repository
 
+import com.kzhovn.todoapp.data.planMoveNextTo
 import com.kzhovn.todoapp.data.splitItems
 import com.kzhovn.todoapp.data.newTaskPositions
 import com.kzhovn.todoapp.data.folderColorAssignments
@@ -10,10 +11,7 @@ import com.kzhovn.todoapp.data.TaskDao
 import com.kzhovn.todoapp.data.TaskContextCrossRef
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
-import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.newId
-import com.kzhovn.todoapp.data.wouldCreateCycle
-import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
 import com.kzhovn.todoapp.notifications.ReminderScheduler
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -77,38 +75,21 @@ class TaskRepository(
         taskDao.update(task.copy(parentId = newParentId, position = null))
     }
 
-    // Moves a task right before/after `anchorId`, under the anchor's parent, and renumbers that whole
-    // sibling list 1..n. Renumbering (rather than squeezing a value between neighbours) never runs
-    // out of room; it rewrites a few rows per move, which is nothing at one user's scale.
+    // See planMoveNextTo (shared with the server).
     suspend fun moveNextTo(taskId: Long, anchorId: Long, after: Boolean) {
         val all = taskDao.getAllOnce()
-        val byId = all.associateBy { it.id }
-        val task = byId[taskId] ?: return
-        val anchor = byId[anchorId]?.takeIf { it.id != taskId } ?: return
-        val parentId = anchor.parentId
-        if (parentId != null && wouldCreateCycle(parentId, taskId, byId)) return
-        val siblings = all.filter { it.parentId == parentId && it.id != taskId }.sortedWith(TaskOrder).toMutableList()
-        siblings.add(siblings.indexOf(anchor) + if (after) 1 else 0, task.copy(parentId = parentId))
-        siblings.forEachIndexed { index, sibling ->
-            val position = index + 1L
-            if (sibling.position != position || sibling.id == taskId) taskDao.update(sibling.copy(position = position))
-        }
+        val move = planMoveNextTo(all, taskId, anchorId, after) ?: return
+        all.forEach { t -> move.positions[t.id]?.let { taskDao.update(t.copy(parentId = move.parentId, position = it)) } }
     }
 
     suspend fun getDescendants(taskId: Long): List<Task> = taskDao.getDescendants(taskId)
 
     // Subtasks that set their own value for one of these inherited fields, and so wouldn't follow
-    // a change to it on this task.
+    // a change to it on this task (see overridesInherited).
     suspend fun descendantsOverriding(taskId: Long, fields: Set<InheritedField>): List<Task> =
         taskDao.getDescendants(taskId).filter { d ->
-            fields.any { field ->
-                when (field) {
-                    InheritedField.START -> d.startDate != null
-                    InheritedField.DUE -> d.dueDate != null
-                    InheritedField.ICON -> d.icon != null
-                    InheritedField.CONTEXTS -> taskContextDao.getContextIdsForTask(d.id).isNotEmpty()
-                }
-            }
+            val contexts = taskContextDao.getContextIdsForTask(d.id).toSet()
+            fields.any { overridesInherited(d, contexts, it) }
         }
 
     // Clears those fields on the given tasks, so they inherit from their ancestors again.
@@ -242,8 +223,6 @@ class TaskRepository(
     suspend fun countActiveDescendants(taskId: Long): Int =
         taskDao.getDescendants(taskId).count { it.type != TaskType.FOLDER && !it.isComplete }
 
-    // Cascades completion to every active descendant first — each goes through markComplete
-    // individually so a recurring descendant still spawns its own next instance.
     // Checklist items: "milk, eggs" adds two, in order, at the end of the list.
     suspend fun addItems(checklistId: Long, text: String) = splitItems(text).forEach { createTask(Task(title = it, parentId = checklistId)) }
 
@@ -268,6 +247,8 @@ class TaskRepository(
         completeWithDescendants(checklistId, now)
     }
 
+    // Cascades completion to every active descendant first — each goes through markComplete
+    // individually so a recurring descendant still spawns its own next instance.
     suspend fun completeWithDescendants(taskId: Long, now: Long) {
         taskDao.getDescendants(taskId)
             .filter { it.type != TaskType.FOLDER && !it.isComplete }
@@ -282,28 +263,13 @@ class TaskRepository(
         val edges = taskDao.getAllDependencies()
         for (id in taskIds) {
             val task = allById[id]?.takeIf { it.type == TaskType.TASK } ?: continue
-            val target = edit.moveTo?.folderId
-            val parentId = when {
-                edit.moveTo == null -> task.parentId
-                target != null && wouldCreateCycle(target, id, allById) -> task.parentId
-                else -> target
-            }
-            updateTask(
-                task.copy(
-                    isStarred = edit.starred ?: task.isStarred,
-                    isMaybe = edit.maybe ?: task.isMaybe,
-                    startDate = edit.startDate.let { if (it != null) it.date else task.startDate },
-                    dueDate = edit.dueDate.let { if (it != null) it.date else task.dueDate },
-                    parentId = parentId
-                )
-            )
+            updateTask(edit.applyTo(task, allById))
             if (edit.addContextIds.isNotEmpty() || edit.removeContextIds.isNotEmpty()) {
                 val current = taskContextDao.getContextIdsForTask(id).toSet()
                 (edit.addContextIds - current).forEach { taskContextDao.assignContext(TaskContextCrossRef(id, it)) }
                 (edit.removeContextIds intersect current).forEach { taskContextDao.unassignContext(id, it) }
             }
-            edit.dependsOnId?.takeIf { it != id && !wouldCreateDependencyCycle(it, id, edges) }
-                ?.let { taskDao.insertDependency(TaskDependency(id, it)) }
+            edit.blockerFor(id, edges)?.let { taskDao.insertDependency(TaskDependency(id, it)) }
         }
     }
 

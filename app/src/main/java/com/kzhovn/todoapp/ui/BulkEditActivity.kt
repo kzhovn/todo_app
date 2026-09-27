@@ -26,7 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
@@ -39,7 +38,6 @@ import com.kzhovn.todoapp.ui.theme.LedgerBackground
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
-import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.launch
 
 // Edits the properties that make sense across many tasks at once. Every row starts at "Keep", so
@@ -109,7 +107,6 @@ class BulkEditActivity : ComponentActivity() {
                     Button(enabled = taskIds.isNotEmpty() && edit != BulkEdit(), onClick = {
                         lifecycleScope.launch {
                             app.repository.applyBulkEdit(taskIds, edit)
-                            TodoWidget().updateAll(applicationContext)
                             Toast.makeText(this@BulkEditActivity, "Updated ${taskIds.size} tasks", Toast.LENGTH_SHORT).show()
                             finish()
                         }

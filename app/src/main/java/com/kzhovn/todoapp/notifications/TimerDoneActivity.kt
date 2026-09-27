@@ -28,7 +28,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.formatDuration
@@ -39,7 +38,6 @@ import com.kzhovn.todoapp.ui.theme.LedgerBackground
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
-import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.launch
 
 // "Time's up" for a timed task: is it done? Done completes it; Not yet asks how much more time and
@@ -75,7 +73,6 @@ class TimerDoneActivity : ComponentActivity() {
                                     lifecycleScope.launch {
                                         // As the notification's Done: subtasks complete too.
                                         app.repository.completeWithDescendants(taskId, System.currentTimeMillis())
-                                        TodoWidget().updateAll(applicationContext)
                                         finish()
                                     }
                                 },

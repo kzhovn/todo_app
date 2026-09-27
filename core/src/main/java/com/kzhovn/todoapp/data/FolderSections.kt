@@ -1,5 +1,8 @@
 package com.kzhovn.todoapp.data
 
+// Where a new task goes when no folder is given (quick add, the bot, the web), if a folder by this name exists.
+const val DEFAULT_FOLDER = "Personal"
+
 // Active's foldable sections: each task under its outermost folder, in the All tree's folder order,
 // then the folderless ones (a null folder). Sections with no tasks are left out.
 fun sectionsByTopFolder(tasks: List<Task>, byId: Map<Long, Task>): List<Pair<Task?, List<Task>>> {

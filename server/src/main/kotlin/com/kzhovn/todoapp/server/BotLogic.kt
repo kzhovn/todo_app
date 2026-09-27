@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.data.hasTime
@@ -45,8 +46,6 @@ Tap an item's emoji to complete it (un-tap to undo).
 With the morning digest, anything in Doing for 3+ days gets a message (again every 3 days):
 🔽 moves it out (unstars it); reply with `-- step` lines to break it into subtasks.
 """.trimIndent()
-// Adds without a `folder:` prefix land here, if a folder with this name exists.
-const val DEFAULT_FOLDER = "Personal"
 // `--d: shower` (or rusabot's `--daily:`) makes a task that expires at the next day rollover.
 private val DAILY_PREFIXES = setOf("d", "daily")
 private const val MAX_REACTIONS = 20 // Discord's per-message limit on distinct reactions

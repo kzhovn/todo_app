@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.quickadd.QuickAddParser
@@ -24,7 +25,6 @@ import kotlinx.html.div
 import kotlinx.html.stream.createHTML
 
 private const val HOUR_MS = 60 * 60 * 1000L
-internal const val DEFAULT_FOLDER = "Personal" // matches the app's quick add
 
 // No login here: Caddy's basic_auth guards every web page, and Main only mounts these routes when the
 // server listens on loopback, i.e. is reachable solely through Caddy.

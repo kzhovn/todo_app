@@ -1,7 +1,6 @@
 package com.kzhovn.todoapp.sync
 
 import android.content.Context
-import androidx.glance.appwidget.updateAll
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
@@ -12,7 +11,6 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.kzhovn.todoapp.AppSettings
 import com.kzhovn.todoapp.TodoApp
-import com.kzhovn.todoapp.widget.TodoWidget
 import java.util.concurrent.TimeUnit
 
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -22,7 +20,6 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         app.repository.purgeExpired(System.currentTimeMillis())
         val outcome = runCatching { app.syncClient.sync(config) }
         SyncSettings.recordResult(app, outcome)
-        if ((outcome.getOrNull() ?: 0) > 0) TodoWidget().updateAll(app)
         // Only the periodic chain re-arms itself, so on-demand syncs never grow it.
         if (inputData.getBoolean(KEY_PERIODIC, false)) enqueue(app, PERIODIC, PERIOD_MINUTES, ExistingWorkPolicy.APPEND_OR_REPLACE)
         return Result.success()

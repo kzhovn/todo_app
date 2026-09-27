@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.focus
 
+import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.quickadd.QuickAddParser
 import com.kzhovn.todoapp.quickadd.QuickAddActivity
 import com.kzhovn.todoapp.data.Labels
@@ -45,7 +46,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.glance.appwidget.updateAll
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.dueStatus
@@ -65,7 +65,6 @@ import com.kzhovn.todoapp.ui.theme.LedgerBackground
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
-import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.launch
 
 // One task, full screen, with the app pinned (Android's screen pinning) so other apps are out of
@@ -147,7 +146,6 @@ class FocusActivity : ComponentActivity() {
                                     scope.launch {
                                         repository.completeWithDescendants(t.id, System.currentTimeMillis())
                                         if (TaskTimer.state.value?.taskId == t.id) TaskTimer.stop(this@FocusActivity)
-                                        TodoWidget().updateAll(applicationContext)
                                         askNext = true
                                     }
                                 }
@@ -191,9 +189,8 @@ class FocusActivity : ComponentActivity() {
                         adding = false
                         if (parsed.title.isNotBlank()) scope.launch {
                             // Into Personal, like quick add with no folder chosen.
-                            val personal = repository.getFolders().firstOrNull { it.title.trim().equals(QuickAddActivity.DEFAULT_FOLDER, ignoreCase = true) }
+                            val personal = repository.getFolders().firstOrNull { it.title.trim().equals(DEFAULT_FOLDER, ignoreCase = true) }
                             repository.createTask(parsed.copy(parentId = personal?.id))
-                            TodoWidget().updateAll(applicationContext)
                             Toast.makeText(this@FocusActivity, "Added “${parsed.title}”", Toast.LENGTH_SHORT).show()
                         }
                     }

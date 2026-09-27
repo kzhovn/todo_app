@@ -27,6 +27,12 @@ object Labels {
     const val TODAY_ONLY = "Today only"
     const val AFTER_COMPLETION = "After completion"
 
+    // The Repeat builder's preview: "Next: Sat Oct 3 · Sat Nov 7", or for after completion, when the
+    // next one would be if finished today.
+    fun repeatPreviewLabel(afterCompletion: Boolean) = if (afterCompletion) "If done today" else "Next"
+    fun repeatPreview(dates: List<Long>): String =
+        dates.joinToString(" · ") { java.text.SimpleDateFormat("EEE MMM d", java.util.Locale.US).format(java.util.Date(it)) }.ifEmpty { "No more" }
+
     const val TIMING = "Timing"
     const val PROPERTIES = "Properties"
     const val NO_FOLDER = "No folder"

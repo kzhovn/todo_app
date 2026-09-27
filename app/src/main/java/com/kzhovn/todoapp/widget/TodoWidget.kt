@@ -352,7 +352,6 @@ class ToggleExpandedAction : ActionCallback {
 class ToggleItemAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         (context.applicationContext as TodoApp).repository.toggleComplete(parameters[taskIdKey] ?: return, System.currentTimeMillis())
-        TodoWidget().update(context, glanceId)
     }
 }
 
@@ -384,7 +383,6 @@ class ToggleCompleteAction : ActionCallback {
         } else {
             repository.toggleComplete(taskId, now)
         }
-        TodoWidget().update(context, glanceId)
     }
 }
 
@@ -393,6 +391,5 @@ class ToggleStarAction : ActionCallback {
         val taskId = parameters[taskIdKey] ?: return
         val repository = (context.applicationContext as TodoApp).repository
         repository.toggleStar(taskId)
-        TodoWidget().update(context, glanceId)
     }
 }

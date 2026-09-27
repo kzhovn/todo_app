@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.repository.changedInheritedFields
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.activity.compose.BackHandler
@@ -94,7 +95,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.contexts.ContextsActivity
@@ -121,7 +121,6 @@ import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerOverdue
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
-import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.launch
 
 class TaskEditActivity : ComponentActivity() {
@@ -240,7 +239,6 @@ class TaskEditActivity : ComponentActivity() {
                     val folderId = toSave.parentId?.takeIf { id -> allTasks.any { it.id == id && it.type == TaskType.FOLDER } }
                     pendingDependents.forEach { repository.addDependency(repository.createTask(QuickAddParser.parse(it).copy(parentId = folderId)), savedId) }
                     if (taskId == 0L && pinned) PinnedTask.pin(this@TaskEditActivity, toSave.copy(id = savedId))
-                    TodoWidget().updateAll(applicationContext)
                     if (leave) finish()
                     else { task = toSave; original = toSave; originalContextIds = contextsToSave; originalDependencyIds = dependenciesToSave; loadedRecurrence = recurrence }
                 }
@@ -259,12 +257,7 @@ class TaskEditActivity : ComponentActivity() {
                     askFirstSubtask = true
                 } else {
                     val before = original
-                    val changed = if (before == null) emptySet() else buildSet {
-                        if (task.startDate != before.startDate) add(InheritedField.START)
-                        if (task.dueDate != before.dueDate) add(InheritedField.DUE)
-                        if (task.icon != before.icon) add(InheritedField.ICON)
-                        if (selectedContextIds != originalContextIds) add(InheritedField.CONTEXTS)
-                    }
+                    val changed = if (before == null) emptySet() else changedInheritedFields(before, task, originalContextIds, selectedContextIds)
                     scope.launch {
                         // Only subtasks that override a changed field need asking; the rest already follow it.
                         val overriding = if (changed.isEmpty()) emptyList() else repository.descendantsOverriding(taskId, changed)
@@ -282,12 +275,7 @@ class TaskEditActivity : ComponentActivity() {
                 if (taskId == 0L || !isLoaded || isFinishing || !isDirty() || task.title.isBlank()) return@LifecycleEventEffect
                 if (task.type == TaskType.PROJECT && allTasks.none { it.parentId == taskId }) return@LifecycleEventEffect
                 val before = original ?: return@LifecycleEventEffect
-                val changed = buildSet {
-                    if (task.startDate != before.startDate) add(InheritedField.START)
-                    if (task.dueDate != before.dueDate) add(InheritedField.DUE)
-                    if (task.icon != before.icon) add(InheritedField.ICON)
-                    if (selectedContextIds != originalContextIds) add(InheritedField.CONTEXTS)
-                }
+                val changed = changedInheritedFields(before, task, originalContextIds, selectedContextIds)
                 scope.launch {
                     if (changed.isEmpty() || repository.descendantsOverriding(taskId, changed).isEmpty()) save(emptyList(), emptySet(), null, leave = false)
                 }
@@ -510,7 +498,6 @@ class TaskEditActivity : ComponentActivity() {
                             scope.launch {
                                 repository.toggleComplete(item.id, System.currentTimeMillis())
                                 allTasks = repository.getAllTasks()
-                                TodoWidget().updateAll(applicationContext)
                             }
                         }) { scope.launch { repository.deleteTask(item); allTasks = repository.getAllTasks() } }
                     }
@@ -519,10 +506,10 @@ class TaskEditActivity : ComponentActivity() {
                     }
                     AddItemField { text ->
                         if (taskId == 0L) pendingSubtasks = pendingSubtasks + splitItems(text)
-                        else scope.launch { repository.addItems(taskId, text); allTasks = repository.getAllTasks(); TodoWidget().updateAll(applicationContext) }
+                        else scope.launch { repository.addItems(taskId, text); allTasks = repository.getAllTasks() }
                     }
                     if (items.any { it.isComplete }) Row {
-                        AddLink(Labels.UNCHECK_ALL) { scope.launch { repository.uncheckAll(taskId); allTasks = repository.getAllTasks(); TodoWidget().updateAll(applicationContext) } }
+                        AddLink(Labels.UNCHECK_ALL) { scope.launch { repository.uncheckAll(taskId); allTasks = repository.getAllTasks() } }
                         AddLink(Labels.CLEAR_CHECKED) { confirmClearChecked = true }
                     }
                 }
@@ -535,7 +522,6 @@ class TaskEditActivity : ComponentActivity() {
                                 scope.launch {
                                     repository.toggleComplete(sub.id, System.currentTimeMillis())
                                     allTasks = repository.getAllTasks()
-                                    TodoWidget().updateAll(applicationContext)
                                 }
                             })
                         }
@@ -608,7 +594,7 @@ class TaskEditActivity : ComponentActivity() {
                     if (isChecklist && taskId != 0L && !task.isComplete) TextButton(onClick = {
                         val unchecked = allTasks.count { it.parentId == taskId && !it.isComplete }
                         if (unchecked > 0) askUncheckedItems = unchecked
-                        else scope.launch { repository.completeChecklist(taskId, false, System.currentTimeMillis()); TodoWidget().updateAll(applicationContext); finish() }
+                        else scope.launch { repository.completeChecklist(taskId, false, System.currentTimeMillis()); finish() }
                     }) { Text(Labels.COMPLETE_LIST, color = LedgerAccent) }
                     Button(
                         onClick = onSave,
@@ -628,7 +614,7 @@ class TaskEditActivity : ComponentActivity() {
                     confirmLabel = Labels.CLEAR_CHECKED,
                     onConfirm = {
                         confirmClearChecked = false
-                        scope.launch { repository.clearChecked(taskId); allTasks = repository.getAllTasks(); TodoWidget().updateAll(applicationContext) }
+                        scope.launch { repository.clearChecked(taskId); allTasks = repository.getAllTasks() }
                     },
                     onDismiss = { confirmClearChecked = false }
                 )
@@ -637,7 +623,7 @@ class TaskEditActivity : ComponentActivity() {
             if (askUncheckedItems > 0) {
                 val complete = { moveToNewList: Boolean ->
                     askUncheckedItems = 0
-                    scope.launch { repository.completeChecklist(taskId, moveToNewList, System.currentTimeMillis()); TodoWidget().updateAll(applicationContext); finish() }
+                    scope.launch { repository.completeChecklist(taskId, moveToNewList, System.currentTimeMillis()); finish() }
                 }
                 AlertDialog(
                     onDismissRequest = { askUncheckedItems = 0 },
@@ -660,7 +646,6 @@ class TaskEditActivity : ComponentActivity() {
                         // A new task isn't saved yet: deleting it just discards it.
                         if (taskId == 0L) finish() else scope.launch {
                             repository.deleteTask(task)
-                            TodoWidget().updateAll(applicationContext)
                             finish()
                         }
                     },
@@ -715,7 +700,6 @@ class TaskEditActivity : ComponentActivity() {
                         else scope.launch {
                             repository.reparent(picked.id, task.id)
                             allTasks = repository.getAllTasks()
-                            TodoWidget().updateAll(applicationContext)
                         }
                     },
                     onCreateNew = {
@@ -747,7 +731,6 @@ class TaskEditActivity : ComponentActivity() {
                         else scope.launch {
                             repository.addDependency(picked.id, task.id)
                             allDependencyEdges = repository.getAllDependencyEdges()
-                            TodoWidget().updateAll(applicationContext)
                             Toast.makeText(this@TaskEditActivity, "“${picked.title}” now depends on this", Toast.LENGTH_SHORT).show()
                         }
                     },

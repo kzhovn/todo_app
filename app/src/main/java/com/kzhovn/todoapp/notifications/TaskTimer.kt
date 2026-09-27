@@ -9,11 +9,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import androidx.glance.appwidget.updateAll
 import com.kzhovn.todoapp.R
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
-import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -190,7 +188,6 @@ class TaskTimerReceiver : BroadcastReceiver() {
                     try {
                         // Like the pinned task's Complete: no room for the subtask question here.
                         (context.applicationContext as TodoApp).repository.completeWithDescendants(taskId, System.currentTimeMillis())
-                        TodoWidget().updateAll(context)
                     } finally {
                         pending.finish()
                     }

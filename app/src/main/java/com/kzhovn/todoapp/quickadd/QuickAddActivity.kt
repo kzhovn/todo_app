@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.quickadd
 
+import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.ui.theme.folderColors
 import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.data.Labels
@@ -47,7 +48,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.glance.appwidget.updateAll
 import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
@@ -62,7 +62,6 @@ import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerSearchBackground
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
-import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.launch
 
 // A bottom-sheet overlay (MLO-style). Launched from the widget it runs in its own task
@@ -126,7 +125,6 @@ class QuickAddActivity : ComponentActivity() {
                 lifecycleScope.launch {
                     val id = repository.createTask(task)
                     dependsOnId?.let { repository.addDependency(id, it) }
-                    TodoWidget().updateAll(applicationContext)
                     if (keepOpen) {
                         Toast.makeText(this@QuickAddActivity, "Added “${task.title}”", Toast.LENGTH_SHORT).show()
                     } else {
@@ -254,7 +252,6 @@ class QuickAddActivity : ComponentActivity() {
         const val EXTRA_PARENT_ID = "parent_id"
         const val EXTRA_FOLDER_ID = "folder_id"
         const val EXTRA_DEPENDS_ON = "depends_on"
-        const val DEFAULT_FOLDER = "Personal"
         const val EXTRA_STARRED = "starred"
     }
 }

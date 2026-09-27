@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.repository.changedInheritedFields
 import com.kzhovn.todoapp.data.checklistItems
 import com.kzhovn.todoapp.recurrence.ordinal
 import com.kzhovn.todoapp.recurrence.WEEKDAY_NAMES
@@ -11,6 +12,7 @@ import com.kzhovn.todoapp.data.Task
 import kotlinx.html.summary
 import kotlinx.html.details
 import com.kzhovn.todoapp.data.formatDuration
+import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.TaskType
@@ -144,9 +146,9 @@ fun Route.editorRoutes(service: TaskService) {
         val base = decodeState(id, params["base"]) ?: current
         val form = parseForm(params, base, parseRecurrence(params), service)
         val merged = merge(base, form, current)
+        val changed = changedInheritedFields(base.task, form.task, base.contextIds, form.contextIds)
         val needsQuestion = (merged.task.type == TaskType.PROJECT && service.tasks().none { it.parentId == id }) ||
-            listOf(form.task.startDate != base.task.startDate, form.task.dueDate != base.task.dueDate, form.contextIds != base.contextIds).any { it } &&
-            service.descendantsOverriding(id, InheritedField.entries.toSet()).isNotEmpty()
+            (changed.isNotEmpty() && service.descendantsOverriding(id, changed).isNotEmpty())
         val status = when {
             form.task.title.isBlank() || merged == current -> null
             needsQuestion -> "Not saved: press Save"
@@ -273,11 +275,8 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     if (needsFirstStep && firstStep.isBlank()) {
         return reshow(view.copy(needFirstStep = true, error = "A project needs a first step."))
     }
-    val changed = if (id == null) emptySet() else buildSet {
-        if (form.task.startDate != base.task.startDate) add(InheritedField.START)
-        if (form.task.dueDate != base.task.dueDate) add(InheritedField.DUE)
-        if (form.contextIds != base.contextIds) add(InheritedField.CONTEXTS)
-    }.filterTo(mutableSetOf()) { service.descendantsOverriding(id, setOf(it)).isNotEmpty() }
+    val changed = if (id == null) emptySet() else changedInheritedFields(base.task, form.task, base.contextIds, form.contextIds)
+        .filterTo(mutableSetOf()) { service.descendantsOverriding(id, setOf(it)).isNotEmpty() }
     val overriding = if (id == null || changed.isEmpty()) emptyList() else service.descendantsOverriding(id, changed)
     val inherit = params["inherit"]
     if (changed.isNotEmpty() && inherit == null) return reshow(view.copy(ask = overriding.size to changed))
@@ -370,8 +369,8 @@ private fun FlowContent.repeatPreview(r: RecurrenceSelection, anchor: Long, now:
     attributes["data-summary"] = Labels.repeat(r).orEmpty()
     val (type, rule) = r.toTaskFields()
     val next = if (type == null || rule == null) emptyList() else RecurrenceEngine.preview(type, rule, anchor, now)
-    span(classes = "menu-label") { +if (r.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS) "If done today" else "Next" }
-    +next.joinToString(" · ") { java.text.SimpleDateFormat("EEE MMM d", java.util.Locale.US).format(java.util.Date(it)) }.ifEmpty { "No more" }
+    span(classes = "menu-label") { +Labels.repeatPreviewLabel(afterCompletion = r.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS) }
+    +Labels.repeatPreview(next)
 }
 
 // A date without a time is local midnight (see hasTime).
