@@ -105,9 +105,10 @@ class FocusActivity : ComponentActivity() {
                     finish()
                 }
 
-                // The running timer's task, else the pinned one, else ask.
+                // The task it was opened on, else the running timer's, else the pinned one, else ask.
                 LaunchedEffect(Unit) {
-                    val id = TaskTimer.state.value?.taskId ?: PinnedTask.pinnedId(this@FocusActivity)
+                    val id = intent.getLongExtra(EXTRA_TASK_ID, 0L).takeIf { it != 0L }
+                        ?: TaskTimer.state.value?.taskId ?: PinnedTask.pinnedId(this@FocusActivity)
                     val current = id?.let { repository.getTask(it) }?.takeUnless { it.isComplete }
                     if (current != null) focusOn(current) else candidates = pickable()
                 }
@@ -198,6 +199,10 @@ class FocusActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    companion object {
+        const val EXTRA_TASK_ID = "task_id"
     }
 
     // Back from the dialer (or anywhere): pin again.

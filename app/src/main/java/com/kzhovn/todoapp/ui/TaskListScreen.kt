@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.focus.FocusActivity
+import android.content.Intent
 import com.kzhovn.todoapp.data.DueStatus
 import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.data.dueText
@@ -278,6 +280,10 @@ private fun TaskRow(
             DropdownMenuItem(text = { Text(Labels.SNOOZE_TOMORROW) }, onClick = { snooze { nextRollover(it, AppSettings.rolloverHour(context)) } })
             DropdownMenuItem(text = { Text(Labels.SNOOZE_WEEK) }, onClick = { snooze { it + WEEK_MILLIS } })
             DropdownMenuItem(text = { Text(Labels.PIN) }, onClick = { showSnoozeMenu = false; PinnedTask.pin(context, task) })
+            DropdownMenuItem(text = { Text("Focus") }, onClick = {
+                showSnoozeMenu = false
+                context.startActivity(Intent(context, FocusActivity::class.java).putExtra(FocusActivity.EXTRA_TASK_ID, task.id))
+            })
         }
     }
 }
