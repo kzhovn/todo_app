@@ -167,6 +167,7 @@ form.inline button { padding: 6px 10px; border: 1px solid var(--border); border-
 .result { padding: 8px 0; border-bottom: 1px solid var(--border); }
 .result a { color: var(--ink); text-decoration: none; font-weight: 600; }
 .result a:hover { text-decoration: underline; }
+.row.done .edit { color: var(--muted); text-decoration: line-through; font-weight: 400; }
 .result a.done { color: var(--muted); text-decoration: line-through; font-weight: 400; }
 .starred { color: var(--star); }
 

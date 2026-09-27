@@ -1,9 +1,6 @@
-package com.kzhovn.todoapp.ui
+package com.kzhovn.todoapp.data
 
-import com.kzhovn.todoapp.data.TaskOrder
-import com.kzhovn.todoapp.data.Task
-import com.kzhovn.todoapp.data.TaskType
-
+// The All tree, shared by the phone and the web.
 sealed class OutlinerNode {
     abstract val task: Task
     abstract val children: List<OutlinerNode>

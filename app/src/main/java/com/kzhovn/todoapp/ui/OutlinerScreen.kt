@@ -1,5 +1,8 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.OutlinerNode
+import com.kzhovn.todoapp.data.buildOutlinerTree
+import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.dueStatus
 import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalDensity
@@ -94,6 +97,7 @@ fun OutlinerScreen(
 
     val tree = remember(tasks) { buildOutlinerTree(tasks, hideCompleted = true) }
     val allById = remember(tasks) { tasks.associateBy { it.id } }
+    val counts = remember(tasks) { subtaskCounts(tasks) }
 
     fun toggle(folderId: Long) {
         val nowCollapsed = folderId !in collapsed
@@ -125,7 +129,7 @@ fun OutlinerScreen(
 
     val actions = OutlinerActions(::toggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt)
     LazyColumn(state = listState, modifier = Modifier.onGloballyPositioned { listBounds = it.boundsInRoot() }) {
-        renderNodes(tree, depth = 0, collapsed = collapsed, actions = actions, allById = allById, selectedIds = selectedIds)
+        renderNodes(tree, depth = 0, collapsed = collapsed, actions = actions, allById = allById, counts = counts, selectedIds = selectedIds)
     }
 }
 
@@ -135,14 +139,15 @@ private fun LazyListScope.renderNodes(
     collapsed: Set<Long>,
     actions: OutlinerActions,
     allById: Map<Long, Task>,
+    counts: Map<Long, Pair<Int, Int>>,
     selectedIds: Set<Long>
 ) {
     nodes.forEach { node ->
         item(key = node.task.id) {
-            OutlinerRow(node, depth, isFolded(node.task, collapsed), actions, allById, node.task.id in selectedIds)
+            OutlinerRow(node, depth, isFolded(node.task, collapsed), actions, allById, counts[node.task.id], node.task.id in selectedIds)
         }
         if (node.children.isNotEmpty() && !isFolded(node.task, collapsed)) {
-            renderNodes(node.children, depth + 1, collapsed, actions, allById, selectedIds)
+            renderNodes(node.children, depth + 1, collapsed, actions, allById, counts, selectedIds)
         }
     }
 }
@@ -167,6 +172,8 @@ private fun OutlinerRow(
     isCollapsed: Boolean,
     actions: OutlinerActions,
     allById: Map<Long, Task>,
+    // (checked, all) items of a checklist; the tree itself only shows the open ones.
+    itemCounts: Pair<Int, Int>?,
     selected: Boolean
 ) {
     val (onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt) = actions
@@ -276,7 +283,7 @@ private fun OutlinerRow(
                 }
                 TaskType.TASK, TaskType.PROJECT, TaskType.CHECKLIST -> {
                     if (task.type == TaskType.PROJECT) ProjectMark(36.dp)
-                    else if (task.type == TaskType.CHECKLIST) node.children.let { items -> CountMark(items.count { it.task.isComplete }, items.size, touchSize = 36.dp) { onEdit(task.id) } }
+                    else if (task.type == TaskType.CHECKLIST) CountMark(itemCounts?.first ?: 0, itemCounts?.second ?: 0, touchSize = 36.dp) { onEdit(task.id) }
                     else TaskCheckbox(checked = task.isComplete, due = task.dueDate?.takeUnless { task.isComplete }?.let { dueStatus(it, System.currentTimeMillis()) }, size = 20.dp, touchSize = 36.dp, onCheckedChange = { onCheck(task.id) })
                     Spacer(Modifier.width(6.dp))
                     Text(

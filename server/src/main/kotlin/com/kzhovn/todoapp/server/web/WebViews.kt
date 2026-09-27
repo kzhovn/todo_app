@@ -1,10 +1,11 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.data.OutlinerNode
+import com.kzhovn.todoapp.data.buildOutlinerTree
 import kotlinx.html.HTMLTag
 import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
-import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.DueStatus
 import com.kzhovn.todoapp.data.dueStatus
@@ -66,7 +67,6 @@ class ListData(
     private val contextIds = service.contextIdsByTask()
     private val folderColors = folderColorsHex(all)
     private val counts = subtaskCounts(all)
-    private val children = all.groupBy { it.parentId }
     val tasks: List<Task> = when (mode) {
         ListMode.DOING -> service.doing()
         ListMode.ACTIVE -> service.active()
@@ -78,7 +78,9 @@ class ListData(
     fun folderColor(task: Task): String? = task.parentId?.let { parent -> walkParentChain(parent, byId) { folderColors[it] } }
     fun ownColor(folder: Task) = folderColors[folder.id]
     fun subtaskCounts(task: Task): Pair<Int, Int>? = counts[task.id]
-    fun openChildren(parentId: Long?) = children[parentId].orEmpty().filter { !it.isComplete }.sortedWith(TaskOrder)
+    // As the phone's: completed tasks drop out (their open subtasks move up); completed checklists
+    // and projects stay, struck through.
+    val tree: List<OutlinerNode> by lazy { buildOutlinerTree(all, hideCompleted = true) }
 
     // One open project whose steps are all done, to ask about (the phone asks the same, one at a time).
     val stalled: Task? = stalledProjects(all).firstOrNull { it.id !in later }
@@ -210,7 +212,7 @@ fun DIV.listContents(data: ListData) {
     attributes["hx-swap"] = "outerHTML"
     data.stalled?.let { stalledPrompt(it, data.mode) }
     if (data.mode == ListMode.ALL) {
-        tree(data, parentId = null, depth = 0)
+        tree(data, data.tree, parentId = null, depth = 0)
     } else if (data.tasks.isEmpty()) {
         p(classes = "empty") { +"Nothing here" }
     } else if (data.mode == ListMode.ACTIVE) {
@@ -238,17 +240,19 @@ fun DIV.listContents(data: ListData) {
 }
 
 // The All tree, as flat rows in outline order (app.js's keys and drag work off data-*).
-private fun FlowContent.tree(data: ListData, parentId: Long?, depth: Int) {
-    data.openChildren(parentId).forEach { item ->
-        val hasChildren = data.openChildren(item.id).isNotEmpty()
+// parentId: the row this one sits under on screen (for ← in app.js), not necessarily its own parent.
+private fun FlowContent.tree(data: ListData, nodes: List<OutlinerNode>, parentId: Long?, depth: Int) {
+    nodes.forEach { node ->
+        val item = node.task
+        val hasChildren = node.children.isNotEmpty()
         // Checklists start folded; the cookie holds the ones flipped, so for a checklist it means unfolded.
         val collapsed = hasChildren && ((item.id in data.collapsed) != (item.type == TaskType.CHECKLIST))
-        val node: DIV.() -> Unit = {
+        val outline: DIV.() -> Unit = {
             classes = classes + "node"
             attributes["tabindex"] = "0"
             attributes["draggable"] = "true"
             attributes["data-id"] = item.id.toString()
-            attributes["data-parent"] = item.parentId?.toString().orEmpty()
+            attributes["data-parent"] = parentId?.toString().orEmpty()
             attributes["data-depth"] = depth.toString()
             attributes["data-kind"] = item.type.name.lowercase()
             if (hasChildren) attributes["data-collapsed"] = collapsed.toString()
@@ -257,14 +261,14 @@ private fun FlowContent.tree(data: ListData, parentId: Long?, depth: Int) {
         if (item.type == TaskType.FOLDER) {
             div(classes = "folder") {
                 style = "padding-left: ${depth * 18}px"
-                node()
+                outline()
                 icon(Icon.FOLDER, "folder-icon", data.ownColor(item))
                 a(href = "/tasks/${item.id}?mode=ALL", classes = "edit") { +item.title }
             }
         } else {
-            taskRow(data, item, depth, node)
+            taskRow(data, item, depth, outline)
         }
-        if (!collapsed) tree(data, item.id, depth + 1)
+        if (!collapsed) tree(data, node.children, item.id, depth + 1)
     }
 }
 
@@ -284,6 +288,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
         attributes["data-task-id"] = task.id.toString()
         attributes["data-type"] = task.type.name
         if (task.isBackburner(data.now)) classes = classes + "dim"
+        if (task.isComplete) classes = classes + "done"
         style = "padding-left: ${depth * 18}px; border-left-color: ${data.folderColor(task) ?: "var(--border)"}"
         outlineNode?.invoke(this)
         val due = data.effectiveDue(task)?.takeUnless { task.isComplete }

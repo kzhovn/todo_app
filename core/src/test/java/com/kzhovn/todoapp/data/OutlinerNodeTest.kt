@@ -1,8 +1,5 @@
-package com.kzhovn.todoapp.ui
+package com.kzhovn.todoapp.data
 
-import com.kzhovn.todoapp.data.Task
-import com.kzhovn.todoapp.data.subtaskCounts
-import com.kzhovn.todoapp.data.TaskType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

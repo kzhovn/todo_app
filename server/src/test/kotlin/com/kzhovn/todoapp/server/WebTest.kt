@@ -70,6 +70,20 @@ class WebTest {
     }
 
     @Test
+    fun `the All tree hides completed tasks as the phone does`() = web {
+        val done = service.create(Task(title = "Old milestone"))
+        service.create(Task(title = "Next step", parentId = done.id))
+        val list = service.create(Task(type = TaskType.CHECKLIST, title = "Packing"))
+        service.complete(done.id)
+        service.completeChecklist(list.id, moveUncheckedToNewList = false)
+        val all = client.get("/list/all").bodyAsText()
+        assertFalse(all.contains(">Old milestone<"))
+        assertTrue(all.contains(">Next step<")) // its open subtask moves up
+        assertTrue(all.contains(">Packing<")) // a completed checklist stays, struck through
+        assertTrue(all.substring(all.lastIndexOf("class=\"row", all.indexOf(">Packing<"))).startsWith("class=\"row done"))
+    }
+
+    @Test
     fun `editing applies only what the form changed, keeping edits synced in meanwhile`() = web {
         val task = service.create(Task(title = "Water plants"))
         val base = taskFields(task, emptySet(), emptySet()).toString()
