@@ -4,9 +4,9 @@
 (() => {
   let pendingG = false;
   const go = { d: "/doing", a: "/active", t: "/all" };
-  const help = "n  quick add\ng d / g a / g t  Doing / Active / All\nEsc  leave the text box\n\n" +
+  const help = "n  jump to quick add\ng, then d / a / t  go to Doing / Active / All\nEsc  leave a text box, close the task panel, or leave focus\n\n" +
     "All tree (click a row first):\n↑ ↓  move between rows    ← →  fold / unfold\nEnter  new task below    Tab / Shift-Tab  indent / outdent\n" +
-    "Space  complete    Alt-↑ / Alt-↓  move up / down\ne  edit    s  star\nDrag a row: top or bottom edge to reorder, middle to nest";
+    "Space  complete    Alt-↑ / Alt-↓  move up / down\ne  edit    s  star    f  focus\nDrag a row: top or bottom edge to reorder, middle to nest";
   document.addEventListener("keydown", (e) => {
     const typing = e.target.closest("input, textarea, select");
     if (e.key === "Escape" && typing) { e.target.blur(); return; }

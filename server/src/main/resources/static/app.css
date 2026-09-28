@@ -37,6 +37,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .shortcuts > summary::-webkit-details-marker { display: none; }
 .shortcuts > summary:hover { background: var(--tile); color: var(--ink); }
 .key { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; padding: 6px 10px 0; }
+.key-head { margin-top: 6px; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
 .mono { font-family: ui-monospace, Menlo, monospace; color: var(--ink); }
 .workspace { flex: 1; min-width: 0; display: flex; }
 .page { flex: 1; min-width: 0; }

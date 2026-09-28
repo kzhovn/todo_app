@@ -61,6 +61,7 @@ object Labels {
         "today, tomorrow, mon–sun, next fri, 2026-10-01" to "dates",
         "5pm, 9:30am, 14:00" to "times",
         "ends with ?" to "maybe",
+        "1 hour of …, 30m of …" to "timed task (a play button counts it down)",
     )
 
     const val SAVE = "Save"

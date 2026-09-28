@@ -297,8 +297,18 @@ private fun HTML.shell(
     div { id = "timer"; attributes["hidden"] = "" }
 }
 
+private val KEYS = listOf(
+    "n" to "jump to quick add",
+    "g, then d / a / t" to "go to Doing / Active / All",
+    "Esc" to "leave a text box, close the task panel, or leave focus",
+    "?" to "every shortcut, including the All tree's",
+)
+
 private fun FlowContent.syntaxKey() = div(classes = "key") {
-    (Labels.QUICK_ADD_SYNTAX + ("n · g d / g a / g t · ?" to "keys")).forEach { (syntax, meaning) -> div { span(classes = "mono") { +syntax }; +" $meaning" } }
+    div(classes = "key-head") { +"Quick add" }
+    Labels.QUICK_ADD_SYNTAX.forEach { (syntax, meaning) -> div { span(classes = "mono") { +syntax }; +" $meaning" } }
+    div(classes = "key-head") { +"Keys (not while typing)" }
+    KEYS.forEach { (keys, meaning) -> div { span(classes = "mono") { +keys }; +" $meaning" } }
 }
 
 // Filled into a div by the caller, so a fragment response can have this div as its root (htmx
