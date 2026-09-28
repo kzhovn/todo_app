@@ -93,6 +93,8 @@ class FocusActivity : ComponentActivity() {
                 var askNext by remember { mutableStateOf(false) }
                 var leaving by remember { mutableStateOf<String?>(null) }
                 var adding by remember { mutableStateOf(false) }
+                // Adding from the "Focus on" picker: the new task is the one to focus on.
+                var addToFocus by remember { mutableStateOf(false) }
                 val scope = rememberCoroutineScope()
 
                 fun focusOn(t: Task) {
@@ -161,12 +163,13 @@ class FocusActivity : ComponentActivity() {
                     }
                 }
 
-                candidates?.let { list ->
+                // Hidden while a new task is being typed; cancelling that brings it back.
+                if (!adding) candidates?.let { list ->
                     TaskPickerDialog(
                         title = "Focus on",
                         tasks = list,
                         onPick = { candidates = null; askNext = false; focusOn(it) },
-                        onCreateNew = null,
+                        onCreateNew = { adding = true; addToFocus = true },
                         // Nothing picked: with no task yet there's nothing to focus on; after one, it's the "done" choice.
                         onDismiss = { candidates = null; if (task == null || askNext) exit() }
                     )
@@ -184,19 +187,28 @@ class FocusActivity : ComponentActivity() {
 
                 if (adding) {
                     var text by remember { mutableStateOf("") }
+                    val focusOnIt = addToFocus
+                    val close = { adding = false; addToFocus = false }
                     val add = {
                         val parsed = QuickAddParser.parse(text)
-                        adding = false
+                        close()
                         if (parsed.title.isNotBlank()) scope.launch {
                             // Into Personal, like quick add with no folder chosen.
                             val personal = findFolder(repository.getFolders(), DEFAULT_FOLDER)
-                            repository.createTask(parsed.copy(parentId = personal?.id))
-                            Toast.makeText(this@FocusActivity, "Added “${parsed.title}”", Toast.LENGTH_SHORT).show()
+                            val id = repository.createTask(parsed.copy(parentId = personal?.id))
+                            val created = repository.getTask(id)
+                            if (focusOnIt && created != null) {
+                                candidates = null
+                                askNext = false
+                                focusOn(created)
+                            } else {
+                                Toast.makeText(this@FocusActivity, "Added “${parsed.title}”", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     }
                     AlertDialog(
-                        onDismissRequest = { adding = false },
-                        title = { Text("Add a task") },
+                        onDismissRequest = close,
+                        title = { Text(if (focusOnIt) "New task to focus on" else "Add a task") },
                         text = {
                             OutlinedTextField(
                                 value = text,
@@ -208,8 +220,8 @@ class FocusActivity : ComponentActivity() {
                                 modifier = Modifier.fillMaxWidth()
                             )
                         },
-                        confirmButton = { Button(onClick = add, enabled = text.isNotBlank()) { Text("Add") } },
-                        dismissButton = { TextButton(onClick = { adding = false }) { Text("Cancel") } }
+                        confirmButton = { Button(onClick = add, enabled = text.isNotBlank()) { Text(if (focusOnIt) "Focus" else "Add") } },
+                        dismissButton = { TextButton(onClick = close) { Text("Cancel") } }
                     )
                 }
 
