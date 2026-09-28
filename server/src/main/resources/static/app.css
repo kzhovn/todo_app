@@ -15,16 +15,45 @@
 body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
 
+/* Desktop layout: the sidebar, the page (a list), and the detail panel (the task editor). The sidebar
+   and panel stay in place, each scrolling on its own, while the list scrolls with the page. */
 .shell { display: flex; min-height: 100vh; }
-.sidebar { width: 240px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--border); padding: 16px; display: flex; flex-direction: column; gap: 14px; }
-.sidebar h1 { margin: 0; font-size: 20px; }
-.sidebar nav { display: flex; flex-direction: column; gap: 2px; }
-.sidebar nav a { color: var(--ink); text-decoration: none; padding: 6px 10px; border-radius: 6px; }
-.sidebar nav a.current { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.quickadd input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit; }
-.key { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; margin-top: auto; }
+.sidebar { width: 230px; flex-shrink: 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; background: var(--panel); border-right: 1px solid var(--border); padding: 16px 12px; display: flex; flex-direction: column; gap: 2px; }
+.brand { display: flex; align-items: center; gap: 9px; margin: 0 6px 12px; font-size: 19px; font-weight: 700; color: var(--ink); text-decoration: none; }
+.brand img { width: 22px; height: 22px; border-radius: 6px; }
+.quickadd { margin-bottom: 10px; }
+.quickadd input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
+.nav { display: flex; flex-direction: column; gap: 1px; }
+.nav a { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 7px; color: var(--ink); text-decoration: none; font-size: 14px; }
+.nav a:hover { background: var(--tile); }
+.nav a.current { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.nav .n { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--muted); }
+.nav a.current .n { color: var(--accent); }
+.nav-label { margin: 16px 10px 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.fdot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; background: var(--muted); }
+.folders a { white-space: nowrap; }
+.shortcuts { margin-top: auto; padding-top: 12px; }
+.shortcuts > summary { cursor: pointer; list-style: none; padding: 7px 10px; border-radius: 7px; font-size: 13px; color: var(--muted); }
+.shortcuts > summary::-webkit-details-marker { display: none; }
+.shortcuts > summary:hover { background: var(--tile); color: var(--ink); }
+.key { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; padding: 6px 10px 0; }
 .mono { font-family: ui-monospace, Menlo, monospace; color: var(--ink); }
-main { flex: 1; min-width: 0; max-width: 860px; }
+.workspace { flex: 1; min-width: 0; display: flex; }
+.page { flex: 1; min-width: 0; }
+.detail { width: 460px; flex-shrink: 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; background: var(--panel); border-left: 1px solid var(--border); }
+.detail:empty { display: none; }
+.detail-close { position: absolute; top: 14px; right: 14px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--muted); text-decoration: none; }
+.detail-close:hover { background: var(--tile); color: var(--ink); }
+.detail .editor { padding-top: 48px; }
+/* The list's header: its name and count, bulk selection, and New. */
+.list-head { display: flex; align-items: center; gap: 10px; padding: 18px 20px 10px; position: sticky; top: 0; z-index: 4; background: var(--bg); border-bottom: 1px solid var(--border); }
+.list-head h2 { margin: 0; font-size: 20px; }
+.list-head .list-count { color: var(--muted); font-size: 15px; }
+.list-head .list-tools { margin-left: auto; padding: 0; }
+.new-menu .pop { left: auto; right: 0; min-width: 160px; flex-direction: column; align-items: stretch; gap: 2px; padding: 6px; }
+.new-menu .pop a { padding: 6px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; }
+.new-menu .pop a:hover { background: var(--accent-soft); color: var(--accent); }
+#list .row.current, #list .folder.current { background: var(--accent-soft); }
 
 .list { padding: 8px 0; }
 .empty { color: var(--muted); padding: 24px; }
@@ -77,12 +106,17 @@ main { flex: 1; min-width: 0; max-width: 860px; }
 #toast.show { display: flex; }
 #toast button { color: var(--accent-soft); font-weight: 700; }
 
+/* Narrower windows: the panel floats over the list instead of beside it. */
+@media (max-width: 1150px) {
+  .detail { position: fixed; top: 0; right: 0; z-index: 20; width: min(460px, 100vw); box-shadow: -10px 0 30px #0003; }
+}
 /* Phone browsers: the sidebar becomes a header above the list. */
 @media (max-width: 700px) {
   .shell { flex-direction: column; }
-  .sidebar { width: auto; border-right: 0; border-bottom: 1px solid var(--border); }
-  .sidebar nav { flex-direction: row; }
-  .key { display: none; }
+  .sidebar { position: static; height: auto; width: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+  .nav { flex-direction: row; flex-wrap: wrap; }
+  .nav-label, .folders, .shortcuts { display: none; }
+  .list-head { position: static; }
 }
 
 /* Task editor */
@@ -214,8 +248,8 @@ form.inline button { padding: 6px 10px; border: 1px solid var(--border); border-
 .list-tools .bulk-edit { display: none; background: var(--accent); color: var(--panel); padding: 4px 10px; border-radius: 6px; font-weight: 600; }
 .list-tools .bulk-edit:disabled { opacity: .5; cursor: default; }
 body.selecting .list-tools .bulk-edit { display: inline-block; }
-body.selecting #list .row[data-type="TASK"] { cursor: pointer; }
-body.selecting #list .row:not([data-type="TASK"]), body.selecting #list .folder { opacity: .5; }
+body.selecting #list .row:is([data-type="TASK"], [data-type="CHECKLIST"]) { cursor: pointer; }
+body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body.selecting #list .folder { opacity: .5; }
 #list .row.selected { background: var(--accent-soft); }
 .stalled { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 12px; padding: 10px 12px; background: var(--today-bg); border-radius: 8px; }
 .stalled > span { width: 100%; }
@@ -224,20 +258,11 @@ body.selecting #list .row:not([data-type="TASK"]), body.selecting #list .folder 
 .stalled input[type=text] { flex: 1; min-width: 160px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
 #toast.question { flex-wrap: wrap; max-width: calc(100vw - 32px); }
 #toast .dismiss { color: var(--bg); font-weight: 400; opacity: .7; }
-.new-links { font-size: 13px; color: var(--muted); display: flex; gap: 10px; }
-.new-links a { color: var(--accent); text-decoration: none; }
-.new-links a:hover { text-decoration: underline; }
 .result { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
 .result .check, .result .project { margin-left: 0; margin-top: 2px; display: flex; align-items: center; justify-content: center; }
 .result .meta { width: 100%; padding-left: 30px; }
 .bulk h1 { font-size: 20px; margin: 0; }
 
-
-/* Doing / Active / All as top tabs, like the phone's tab row */
-.tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--panel); position: sticky; top: 0; z-index: 4; }
-.tabs a { flex: 1; text-align: center; padding: 12px 8px; color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; border-bottom: 2px solid transparent; }
-.tabs a:hover { color: var(--ink); }
-.tabs a.current { color: var(--accent); border-bottom-color: var(--accent); }
 
 /* Active's folder sections */
 .section-toggle { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 14px 6px 2px; color: var(--muted); font-size: 12px; }

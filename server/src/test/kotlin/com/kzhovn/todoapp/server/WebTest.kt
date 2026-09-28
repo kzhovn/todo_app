@@ -8,6 +8,8 @@ import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.request.header
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.parameters
@@ -66,7 +68,9 @@ class WebTest {
         val projectRow = all.substring(all.lastIndexOf("class=\"row", title), title)
         assertTrue(projectRow.contains("class=\"project\""))
         assertFalse(projectRow.contains("class=\"check"))
-        assertTrue(client.get("/doing").bodyAsText().contains("href=\"/tasks/${project.id}?mode=DOING\" class=\"parent\">Wool coat: </a>"))
+        val doing = client.get("/doing").bodyAsText()
+        assertTrue(doing.contains("href=\"/tasks/${project.id}?mode=DOING\" class=\"parent\""))
+        assertTrue(doing.contains(">Wool coat: </a>"))
     }
 
     @Test
@@ -509,5 +513,27 @@ class WebTest {
         assertEquals(a.id, service.pinned()?.id)
         service.complete(a.id)
         assertEquals(null, service.pinned()) // done: no longer pinned
+    }
+
+    @Test
+    fun `a folder's view shows just its tasks, quick add lands there, and a task opens beside its list`() = web {
+        val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
+        val home = service.create(Task(type = TaskType.FOLDER, title = "Home"))
+        val report = service.create(Task(title = "Send report", parentId = work.id))
+        service.create(Task(title = "Dishes", parentId = home.id))
+
+        val view = client.get("/all?folder=${work.id}").bodyAsText()
+        assertTrue(view.contains(">Send report<"))
+        assertFalse(view.contains(">Dishes<"))
+        assertTrue(view.contains("href=\"/all?folder=${work.id}\" class=\"current\"")) // the folder is highlighted in the sidebar
+
+        client.post("/quickadd?folder=${work.id}") { header(HttpHeaders.ContentType, ContentType.Application.FormUrlEncoded.toString()); setBody("text=Book+room&mode=ALL") }
+        assertEquals(work.id, service.tasks().single { it.title == "Book room" }.parentId)
+
+        // The editor comes with its list, the task's row marked, and closes back to the folder's view.
+        val editor = client.get("/tasks/${report.id}?mode=ALL&folder=${work.id}").bodyAsText()
+        assertTrue(editor.contains("id=\"list\""))
+        assertTrue(Regex("class=\"row[^\"]*current").containsMatchIn(editor))
+        assertTrue(editor.contains("class=\"detail-close\"") && editor.contains("href=\"/all?folder=${work.id}\" class=\"detail-close\""))
     }
 }

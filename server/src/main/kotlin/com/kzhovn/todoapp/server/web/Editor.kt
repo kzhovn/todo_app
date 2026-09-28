@@ -98,6 +98,7 @@ private fun TaskService.editState(id: Long): EditState? =
 
 private data class EditorView(
     val mode: ListMode,
+    val list: ListData, // shown beside the editor; also where Save, Cancel and Delete return to
     val shown: EditState,
     val recurrence: RecurrenceSelection,
     val base: String,
@@ -121,16 +122,17 @@ fun Route.editorRoutes(service: TaskService) {
     get("/tasks/{id}") {
         val state = call.taskId()?.let(service::editState) ?: return@get call.respond(HttpStatusCode.NotFound)
         val recurrence = recurrenceSelectionFromTask(state.task.recurrenceType, state.task.recurrenceRule)
-        call.respondHtml { editorPage(service, EditorView(call.mode(), state, recurrence, state.encode())) }
+        call.respondHtml { editorPage(service, EditorView(call.mode(), call.listData(service, call.mode(), selected = state.task.id), state, recurrence, state.encode())) }
     }
 
-    // A blank editor, like the phone's "+ Project" / "+ Folder". A new task goes in Personal, as quick
-    // add's do; a project or folder starts at the top.
+    // A blank editor, like the phone's "+ Project" / "+ Folder". Made from a folder's view, it goes in
+    // that folder; otherwise a new task goes in Personal, as quick add's do, and a project or folder
+    // starts at the top.
     get("/tasks/new") {
         val type = call.request.queryParameters["type"]?.let { runCatching { TaskType.valueOf(it) }.getOrNull() } ?: TaskType.TASK
-        val parent = if (type == TaskType.TASK) service.findFolder(DEFAULT_FOLDER)?.id else null
+        val parent = call.folder() ?: if (type == TaskType.TASK) service.findFolder(DEFAULT_FOLDER)?.id else null
         val state = EditState(Task(title = "", type = type, parentId = parent), emptySet(), emptySet())
-        call.respondHtml { editorPage(service, EditorView(call.mode(), state, RecurrenceSelection(RecurrencePreset.NONE), state.encode())) }
+        call.respondHtml { editorPage(service, EditorView(call.mode(), call.listData(service, call.mode()), state, RecurrenceSelection(RecurrencePreset.NONE), state.encode())) }
     }
     post("/tasks/new") { saveTask(service, id = null) }
     post("/tasks/{id}") { saveTask(service, call.taskId() ?: return@post call.respond(HttpStatusCode.NotFound)) }
@@ -162,7 +164,8 @@ fun Route.editorRoutes(service: TaskService) {
     // No confirmation: the list it lands on offers Undo instead.
     post("/tasks/{id}/delete") {
         call.taskId()?.let(service::delete)
-        call.respondRedirect("${call.mode().path}?deleted=${call.taskId()}")
+        val back = call.listPath()
+        call.respondRedirect("$back${if ('?' in back) '&' else '?'}deleted=${call.taskId()}")
     }
     post("/tasks/{id}/restore") {
         call.taskId()?.let(service::restore)
@@ -237,7 +240,7 @@ fun Route.editorRoutes(service: TaskService) {
     post("/tasks/{id}/complete-list") {
         val id = call.taskId() ?: return@post
         service.completeChecklist(id, moveUncheckedToNewList = call.request.queryParameters["move"] == "1")
-        call.respondRedirect(call.mode().path)
+        call.respondRedirect(call.listPath())
     }
     post("/tasks/{id}/subtasks/{sub}/toggle") {
         val id = call.taskId() ?: return@post
@@ -252,7 +255,7 @@ fun Route.editorRoutes(service: TaskService) {
 private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     val mode = call.mode()
     // Deleted elsewhere while the editor was open.
-    val current = if (id == null) null else service.editState(id) ?: return call.respondRedirect(mode.path)
+    val current = if (id == null) null else service.editState(id) ?: return call.respondRedirect(call.listPath())
     val params = call.receiveParameters()
     val base = decodeState(id ?: 0, params["base"]) ?: current ?: EditState(Task(title = ""), emptySet(), emptySet())
     val recurrence = parseRecurrence(params)
@@ -261,7 +264,7 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     val newSubtasks = params["newSubtasks"].orEmpty().lines().map { it.trim() }.filter { it.isNotEmpty() }
     val newDep = params["newDep"]?.trim().orEmpty()
     val newDependent = params["newDependent"]?.trim().orEmpty()
-    val view = EditorView(mode, form, recurrence, base.encode(), firstStep = firstStep, newSubtasks = params["newSubtasks"].orEmpty(), newDep = newDep, newDependent = newDependent)
+    val view = EditorView(mode, call.listData(service, mode, selected = id), form, recurrence, base.encode(), firstStep = firstStep, newSubtasks = params["newSubtasks"].orEmpty(), newDep = newDep, newDependent = newDependent)
     suspend fun reshow(v: EditorView) = call.respondHtml { editorPage(service, v) }
 
     if (form.task.title.isBlank()) return reshow(view.copy(error = "A title is required."))
@@ -296,7 +299,7 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     if (needsFirstStep) service.create(Task(title = firstStep, parentId = savedId))
     newSubtasks.forEach { service.create(QuickAddParser.parse(it).copy(parentId = savedId)) }
     createTyped(newDependent)?.let { service.addDependency(it, savedId) }
-    call.respondRedirect(mode.path)
+    call.respondRedirect(call.listPath())
 }
 
 private suspend fun io.ktor.server.application.ApplicationCall.respondSubtasks(service: TaskService, id: Long, focusAddItem: Boolean = false) =
@@ -401,7 +404,14 @@ private fun localDateTime(millis: Long) = Instant.ofEpochMilli(millis).atZone(Zo
 // The folder a task sits directly in, where its new related tasks go (related work usually belongs together).
 private fun TaskService.folderIdOf(task: Task): Long? = task.parentId?.takeIf { get(it)?.type == TaskType.FOLDER }
 
-private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Raspberry · ${v.shown.task.title.ifBlank { "New ${v.shown.task.type.name.lowercase()}" }}", v.mode.path) {
+private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage(
+    service, "Raspberry · ${v.shown.task.title.ifBlank { "New ${v.shown.task.type.name.lowercase()}" }}", v.list.path, v.list,
+    detail = { editorPanel(service, v) }
+) { listColumn(v.list) }
+
+// The editor, in the detail panel beside the list. ✕ (or Esc) closes it, back to the list alone.
+private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
+    a(href = v.list.path, classes = "detail-close") { attributes["aria-label"] = "Close"; +"✕" }
     val t = v.shown.task
     val isNew = t.id == 0L
     val all = service.tasks()
@@ -410,13 +420,13 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
     // An open task saves itself a moment after each change (see /autosave); the form still submits
     // normally on Save, so this lives on its own element.
     if (!isNew) div {
-        attributes["hx-post"] = "/tasks/${t.id}/autosave?mode=${v.mode.name}"
+        attributes["hx-post"] = "/tasks/${t.id}/autosave?mode=${v.list.q}"
         attributes["hx-trigger"] = "change delay:700ms from:.editor, change delay:700ms from:.editor-foot, input changed delay:1200ms from:.title-input"
         attributes["hx-include"] = "#$formId"
         attributes["hx-swap"] = "none"
         attributes["hx-sync"] = "this:replace"
     }
-    form(action = "/tasks/${if (isNew) "new" else t.id}?mode=${v.mode.name}", method = FormMethod.post, classes = "editor") {
+    form(action = "/tasks/${if (isNew) "new" else t.id}?mode=${v.list.q}", method = FormMethod.post, classes = "editor") {
         id = formId
         hiddenInput(name = "base") { id = "base"; value = v.base }
         v.error?.let { p(classes = "error") { +it } }
@@ -600,7 +610,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
         div(classes = "actions") {
             if (!isNew) button(type = ButtonType.submit, classes = "delete") {
                 attributes["form"] = formId
-                attributes["formaction"] = "/tasks/${t.id}/delete?mode=${v.mode.name}"
+                attributes["formaction"] = "/tasks/${t.id}/delete?mode=${v.list.q}"
                 attributes["formnovalidate"] = ""
                 +Labels.DELETE
             }
@@ -609,7 +619,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
                 val unchecked = service.tasks().count { it.parentId == t.id && !it.isComplete }
                 fun completeButton(move: Boolean, label: String) = button(type = ButtonType.submit, classes = "complete-list") {
                     attributes["form"] = formId
-                    attributes["formaction"] = "/tasks/${t.id}/complete-list?mode=${v.mode.name}&move=${if (move) 1 else 0}"
+                    attributes["formaction"] = "/tasks/${t.id}/complete-list?mode=${v.list.q}&move=${if (move) 1 else 0}"
                     attributes["formnovalidate"] = ""
                     +label
                 }
@@ -625,7 +635,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
                 }
             }
             span(classes = "hint") { id = "save-status" }
-            a(href = v.mode.path, classes = "cancel") { +"Cancel" }
+            a(href = v.list.path, classes = "cancel") { +"Cancel" }
             button(type = ButtonType.submit, classes = "primary") { attributes["form"] = formId; +Labels.SAVE }
         }
     }

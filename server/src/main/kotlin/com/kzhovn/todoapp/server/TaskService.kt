@@ -131,12 +131,14 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     fun pinned(): Task? = pinnedTask(tasks())
 
-    // Quick add from the web or the desktop tray: parsed like the app's, into Personal. Added while
-    // looking at Doing, it starts starred so it shows up right there, like the Doing widget's.
-    fun quickAdd(text: String, fromDoing: Boolean): Task? {
+    // Quick add from the web or the desktop tray: parsed like the app's, into Personal (or the folder
+    // being looked at). Added while looking at Doing, it starts starred so it shows up right there,
+    // like the Doing widget's.
+    fun quickAdd(text: String, fromDoing: Boolean, folderId: Long? = null): Task? {
         val parsed = QuickAddParser.parse(text)
         if (parsed.title.isBlank()) return null
-        return create(parsed.copy(parentId = findFolder(DEFAULT_FOLDER)?.id, isStarred = parsed.isStarred || fromDoing))
+        val folder = folderId?.takeIf { get(it)?.type == TaskType.FOLDER } ?: findFolder(DEFAULT_FOLDER)?.id
+        return create(parsed.copy(parentId = folder, isStarred = parsed.isStarred || fromDoing))
     }
 
     fun setStarred(id: Long, starred: Boolean) = update(id) { it.copy(isStarred = starred) }

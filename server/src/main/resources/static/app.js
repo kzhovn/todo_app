@@ -10,6 +10,8 @@
   document.addEventListener("keydown", (e) => {
     const typing = e.target.closest("input, textarea, select");
     if (e.key === "Escape" && typing) { e.target.blur(); return; }
+    // Esc closes the task panel, back to the list alone.
+    if (e.key === "Escape" && !typing) { const close = document.querySelector("#detail .detail-close"); if (close) { location.href = close.href; return; } }
     if (typing || e.ctrlKey || e.metaKey) return;
     const node = e.target.closest(".node");
     if (node && outlineKey(e, node)) { e.preventDefault(); return; }
@@ -152,6 +154,16 @@
     paintSelection();
   }, true);
   document.addEventListener("htmx:afterSwap", paintSelection);
+
+  // The row whose task is open in the panel stays highlighted, also after the list refreshes itself
+  // or another task is opened in the panel (the URL is the task's).
+  const markCurrent = () => {
+    const id = location.pathname.match(/^\/tasks\/(\d+)/)?.[1];
+    document.querySelectorAll("#list .row, #list .folder").forEach((r) =>
+      r.classList.toggle("current", !!id && (r.dataset.taskId ?? r.dataset.id) === id));
+  };
+  document.addEventListener("htmx:afterSettle", markCurrent);
+  window.addEventListener("popstate", () => setTimeout(markCurrent));
 
   // --- Timed tasks. One countdown at a time per browser, kept in localStorage so it survives reloads
   // and moving between pages; the phone has its own (TaskTimer). At zero it asks whether the task is

@@ -1,5 +1,14 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.widget.TodoWidgetPresenter
+import com.kzhovn.todoapp.data.isUnder
+import com.kzhovn.todoapp.data.isChecklistItem
+import com.kzhovn.todoapp.data.isDoable
+import com.kzhovn.todoapp.data.TaskOrder
+import kotlinx.html.h2
+import kotlinx.html.img
+import kotlinx.html.A
+import kotlinx.html.ASIDE
 import kotlinx.html.ButtonType
 import com.kzhovn.todoapp.data.OutlinerNode
 import com.kzhovn.todoapp.data.buildOutlinerTree
@@ -54,15 +63,25 @@ enum class ListMode(val label: String) { DOING(Labels.DOING), ACTIVE(Labels.ACTI
 
 
 // Everything a list needs, computed once per request from the live task set. `collapsed`: the All
-// tree's folded nodes; `later`: stalled projects put off for now. Both are per browser.
+// tree's folded nodes; `later`: stalled projects put off for now. Both are per browser. `folder`: the
+// All tree shows just this folder's contents (a folder in the sidebar). `selected`: the task open in
+// the detail panel, highlighted in the list.
 class ListData(
     service: TaskService,
     val mode: ListMode,
     val collapsed: Set<Long> = emptySet(),
     later: Set<Long> = emptySet(),
     val folded: Set<Long> = emptySet(), // Active's folded folder sections; 0 = no folder
-    val now: Long = service.now()
+    val now: Long = service.now(),
+    val folder: Long? = null,
+    val selected: Long? = null
 ) {
+    // This list in a URL's query ("mode=ALL&folder=12" goes in as `?mode=$q`), so an action on a row
+    // re-renders the same view; `path` is the page itself.
+    val q: String get() = mode.name + (folder?.let { "&folder=$it" } ?: "")
+    val path: String get() = mode.path + (folder?.let { "?folder=$it" } ?: "")
+    val title: String get() = folder?.let { byId[it]?.title } ?: mode.label
+
     val all: List<Task> = service.tasks()
     val byId = all.associateBy { it.id }
     private val contextIds = service.contextIdsByTask()
@@ -82,6 +101,12 @@ class ListData(
     // As the phone's: completed tasks drop out (their open subtasks move up); completed checklists
     // and projects stay, struck through.
     val tree: List<OutlinerNode> by lazy { buildOutlinerTree(all, hideCompleted = true) }
+
+    // The tree's top level for this view: a folder's contents, or everything.
+    val roots: List<OutlinerNode> by lazy {
+        fun find(nodes: List<OutlinerNode>): OutlinerNode? = nodes.firstNotNullOfOrNull { if (it.task.id == folder) it else find(it.children) }
+        if (folder == null) tree else find(tree)?.children.orEmpty()
+    }
 
     // One open project whose steps are all done, to ask about (the phone asks the same, one at a time).
     val stalled: Task? = stalledProjects(all).firstOrNull { it.id !in later }
@@ -144,55 +169,106 @@ fun HTML.page(title: String, content: BODY.() -> Unit) {
 }
 
 // deleted: a task just deleted from the editor, offered back with an Undo toast.
-fun HTML.listPage(data: ListData, deleted: Task? = null) = shellPage("Raspberry · ${data.mode.label}", data.mode.path, data.mode, toast = deleted?.let { { deletedToastContents(it, data.mode) } }) {
-    // Bulk edit: app.js turns on selection, where clicking task rows picks them instead.
-    div(classes = "list-tools") {
-        attributes["data-mode"] = data.mode.name
-        span(classes = "selection-count") {}
-        button(classes = "select-toggle") { +"Select" }
-        button(classes = "bulk-edit") { +"Edit selected" }
+fun HTML.listPage(service: TaskService, data: ListData, deleted: Task? = null) =
+    shellPage(service, "Raspberry · ${data.title}", data.path, data, toast = deleted?.let { { deletedToastContents(it, data.q) } }) { listColumn(data) }
+
+// The list column: a header (the list's name, bulk selection, New) over the list itself.
+fun FlowContent.listColumn(data: ListData) {
+    div(classes = "list-head") {
+        h2 { +data.title }
+        if (data.mode != ListMode.ALL) span(classes = "list-count") { +data.tasks.size.toString() }
+        // Bulk edit: app.js turns on selection, where clicking task rows picks them instead.
+        div(classes = "list-tools") {
+            attributes["data-mode"] = data.mode.name
+            span(classes = "selection-count") {}
+            button(classes = "select-toggle") { +"Select" }
+            button(classes = "bulk-edit") { +"Edit selected" }
+        }
+        details(classes = "pp new-menu") {
+            summary(classes = "pill") { +"New ▾" }
+            div(classes = "pop") {
+                listOf(TaskType.TASK, TaskType.PROJECT, TaskType.CHECKLIST, TaskType.FOLDER).forEach { type ->
+                    a(href = "/tasks/new?type=${type.name}&mode=${data.q}") { +Labels.TYPES.first { it.first == type }.second }
+                }
+            }
+        }
     }
     div { listContents(data) }
 }
 
 val ListMode.path get() = "/${name.lowercase()}"
 
-// current: the nav path to highlight. listMode: the list on this page, which quick add re-renders;
-// on pages without one, quick add just confirms with a toast.
-fun HTML.shellPage(title: String, current: String, listMode: ListMode? = null, toast: (DIV.() -> Unit)? = null, content: MAIN.() -> Unit) = page(title) {
+// The sidebar's counts, and its folders (top level, in tree order) with their open tasks.
+private class SideNav(service: TaskService) {
+    val all = service.tasks()
+    private val byId = all.associateBy { it.id }
+    val counts = mapOf(ListMode.DOING to service.doing().size, ListMode.ACTIVE to service.active().size, ListMode.ALL to TodoWidgetPresenter.allOpen(all, byId).size)
+    val colors = folderColorsHex(all)
+    val folders = all.filter { it.type == TaskType.FOLDER && it.parentId == null }.sortedWith(TaskOrder).map { folder ->
+        folder to all.count { it.type.isDoable && !it.isComplete && !isChecklistItem(it, byId) && isUnder(it, folder.id, byId) }
+    }
+}
+
+// Every page: the sidebar (quick add, the lists, folders, the other screens), then the page's own
+// column, then the detail panel (the task editor; empty, and hidden, elsewhere). `current`: the path
+// to highlight. `list`: the list on this page, which quick add re-renders; on pages without one,
+// quick add just confirms with a toast.
+fun HTML.shellPage(
+    service: TaskService,
+    title: String,
+    current: String,
+    list: ListData? = null,
+    toast: (DIV.() -> Unit)? = null,
+    detail: (ASIDE.() -> Unit)? = null,
+    content: DIV.() -> Unit
+) = page(title) {
+    val nav = SideNav(service)
     div(classes = "shell") {
         aside(classes = "sidebar") {
-            h1 { +"Raspberry" }
-            // The phone's menu: the lists themselves are tabs above the content, as in the app.
-            nav {
-                listOf("/search" to "Search", "/review" to "Review", "/contexts" to "Contexts")
-                    .forEach { (path, label) -> a(href = path, classes = if (path == current) "current" else null) { +label } }
-            }
-            // Same parser as the app's quick add; new tasks default to the Personal folder.
+            a(href = "/doing", classes = "brand") { img(src = "/static/icon-32.png", alt = "") ; +"Raspberry" }
+            // Same parser as the app's quick add; new tasks go in Personal, or in the folder on screen.
             form(classes = "quickadd") {
-                attributes["hx-post"] = "/quickadd"
-                if (listMode != null) {
+                attributes["hx-post"] = "/quickadd" + (list?.folder?.let { "?folder=$it" } ?: "")
+                if (list != null) {
                     attributes["hx-target"] = "#list"
                     attributes["hx-swap"] = "outerHTML"
-                    hiddenInput(name = "mode") { value = listMode.name }
+                    hiddenInput(name = "mode") { value = list.mode.name }
                 } else {
                     attributes["hx-swap"] = "none"
                 }
                 textInput(name = "text") { id = "quickadd"; placeholder = "Add a task… (n)"; attributes["autocomplete"] = "off" }
             }
-            div(classes = "new-links") {
-                +"New "
-                listOf("TASK" to "task", "PROJECT" to "project", "FOLDER" to "folder").forEach { (type, label) ->
-                    a(href = "/tasks/new?type=$type&mode=${(listMode ?: ListMode.DOING).name}") { +label }
+            nav(classes = "nav") {
+                ListMode.entries.forEach { m ->
+                    a(href = m.path, classes = if (m.path == current) "current" else null) { +m.label; span(classes = "n") { +nav.counts.getValue(m).toString() } }
                 }
             }
-            syntaxKey()
-        }
-        main {
-            nav(classes = "tabs") {
-                ListMode.entries.forEach { m -> a(href = m.path, classes = if (m.path == current) "current" else null) { +m.label } }
+            if (nav.folders.isNotEmpty()) {
+                div(classes = "nav-label") { +"Folders" }
+                nav(classes = "nav folders") {
+                    nav.folders.forEach { (folder, open) ->
+                        val path = "/all?folder=${folder.id}"
+                        a(href = path, classes = if (path == current) "current" else null) {
+                            span(classes = "fdot") { nav.colors[folder.id]?.let { style = "background: $it" } }
+                            +folder.title
+                            span(classes = "n") { +open.toString() }
+                        }
+                    }
+                }
             }
-            content()
+            div(classes = "nav-label") { +"More" }
+            nav(classes = "nav") {
+                listOf("/search" to "Search", "/review" to "Review", "/contexts" to "Contexts")
+                    .forEach { (path, label) -> a(href = path, classes = if (path == current) "current" else null) { +label } }
+            }
+            details(classes = "shortcuts") {
+                summary { +"Shortcuts and syntax" }
+                syntaxKey()
+            }
+        }
+        div(classes = "workspace") {
+            div(classes = "page") { content() }
+            aside(classes = "detail") { id = "detail"; detail?.invoke(this) }
         }
     }
     div { id = "toast"; toast?.invoke(this) }
@@ -210,12 +286,13 @@ private fun FlowContent.syntaxKey() = div(classes = "key") {
 fun DIV.listContents(data: ListData) {
     classes = if (data.mode == ListMode.ALL) setOf("list", "outline") else setOf("list")
     id = "list"
-    attributes["hx-get"] = "/list/${data.mode.name.lowercase()}"
+    attributes["hx-get"] = "/list/${data.mode.name.lowercase()}" + (data.folder?.let { "?folder=$it" } ?: "")
     attributes["hx-trigger"] = "every 60s[document.visibilityState==='visible'], visibilitychange[document.visibilityState==='visible'] from:document"
     attributes["hx-swap"] = "outerHTML"
-    data.stalled?.let { stalledPrompt(it, data.mode) }
+    data.stalled?.let { stalledPrompt(it, data.mode, data.q) }
     if (data.mode == ListMode.ALL) {
-        tree(data, data.tree, parentId = null, depth = 0)
+        if (data.roots.isEmpty()) p(classes = "empty") { +"Nothing here" }
+        tree(data, data.roots, parentId = null, depth = 0)
     } else if (data.tasks.isEmpty()) {
         p(classes = "empty") { +"Nothing here" }
     } else if (data.mode == ListMode.ACTIVE) {
@@ -259,14 +336,14 @@ private fun FlowContent.tree(data: ListData, nodes: List<OutlinerNode>, parentId
             attributes["data-depth"] = depth.toString()
             attributes["data-kind"] = item.type.name.lowercase()
             if (hasChildren) attributes["data-collapsed"] = collapsed.toString()
-            chevron(item.id, hasChildren, collapsed)
+            chevron(item.id, hasChildren, collapsed, data.folder)
         }
         if (item.type == TaskType.FOLDER) {
-            div(classes = "folder") {
+            div(classes = if (item.id == data.selected) "folder current" else "folder") {
                 style = "padding-left: ${depth * 18}px"
                 outline()
                 icon(Icon.FOLDER, "folder-icon", data.ownColor(item))
-                a(href = "/tasks/${item.id}?mode=ALL", classes = "edit") { +item.title }
+                a(href = "/tasks/${item.id}?mode=${data.q}", classes = "edit") { openInPanel(); +item.title }
             }
         } else {
             taskRow(data, item, depth, outline)
@@ -275,10 +352,10 @@ private fun FlowContent.tree(data: ListData, nodes: List<OutlinerNode>, parentId
     }
 }
 
-private fun FlowContent.chevron(id: Long, hasChildren: Boolean, collapsed: Boolean) {
+private fun FlowContent.chevron(id: Long, hasChildren: Boolean, collapsed: Boolean, folder: Long?) {
     if (!hasChildren) return span(classes = "chevron") {}
     button(classes = "chevron") {
-        hx("get", "/list/all?toggle=$id")
+        hx("get", "/list/all?toggle=$id" + (folder?.let { "&folder=$it" } ?: ""))
         attributes["tabindex"] = "-1"
         attributes["aria-label"] = if (collapsed) "Expand" else "Collapse"
         icon(if (collapsed) Icon.CHEVRON_RIGHT else Icon.EXPAND_MORE, "")
@@ -286,9 +363,10 @@ private fun FlowContent.chevron(id: Long, hasChildren: Boolean, collapsed: Boole
 }
 
 private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineNode: (DIV.() -> Unit)? = null) {
-    val mode = data.mode.name
+    val mode = data.q
     div(classes = "row") {
         attributes["data-task-id"] = task.id.toString()
+        if (task.id == data.selected) classes = classes + "current"
         attributes["data-type"] = task.type.name
         if (task.isBackburner(data.now)) classes = classes + "dim"
         if (task.isComplete) classes = classes + "done"
@@ -314,8 +392,8 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
             div(classes = "title") {
                 // In the All tree indentation already shows nesting; flat lists say "Parent: subtask".
                 // The parent part opens the parent's editor, as the title opens the subtask's.
-                if (data.mode != ListMode.ALL) data.parentTitle(task)?.let { a(href = "/tasks/${task.parentId}?mode=$mode", classes = "parent") { +"$it: " } }
-                a(href = "/tasks/${task.id}?mode=$mode", classes = "edit") { +task.title }
+                if (data.mode != ListMode.ALL) data.parentTitle(task)?.let { a(href = "/tasks/${task.parentId}?mode=$mode", classes = "parent") { openInPanel(); +"$it: " } }
+                a(href = "/tasks/${task.id}?mode=$mode", classes = "edit") { openInPanel(); +task.title }
                 // On the title's line, wrapping along with it.
                 due?.let { dueTail(it, status!!, data.now) }
                 if (task.type != TaskType.CHECKLIST) data.subtaskCounts(task)?.let { (done, total) -> span(classes = "tail") { +" · $done/$total" } }
@@ -376,18 +454,28 @@ internal fun FlowContent.dueTail(due: Long, status: DueStatus, now: Long) = span
     +" · ${dueText(due, now)}"
 }
 
-fun DIV.deletedToastContents(task: Task, mode: ListMode) {
+// Opens a link's page in the detail panel, keeping the list as it is (the URL still changes, so reload
+// and back work). The page itself renders the list and the panel, for opening it directly.
+internal fun A.openInPanel() {
+    attributes["hx-get"] = href.orEmpty()
+    attributes["hx-select"] = "#detail"
+    attributes["hx-target"] = "#detail"
+    attributes["hx-swap"] = "outerHTML"
+    attributes["hx-push-url"] = "true"
+}
+
+fun DIV.deletedToastContents(task: Task, q: String) {
     classes = setOf("show")
     span { +"Deleted “${task.title}”" }
     button {
-        hx("post", "/tasks/${task.id}/restore?mode=${mode.name}")
+        hx("post", "/tasks/${task.id}/restore?mode=$q")
         +"Undo"
     }
 }
 
 // The phone's "all subtasks done" prompt: complete the project, add its next step, or not now.
-private fun FlowContent.stalledPrompt(project: Task, mode: ListMode) = div(classes = "stalled") {
-    val m = mode.name
+private fun FlowContent.stalledPrompt(project: Task, mode: ListMode, q: String) = div(classes = "stalled") {
+    val m = q
     span { +"${Labels.allSubtasksDone(project.title)}. ${Labels.IS_PROJECT_COMPLETE}" }
     button(classes = "primary") { hx("post", "/tasks/${project.id}/complete?mode=$m"); +Labels.COMPLETE_PROJECT }
     form(classes = "inline") {
@@ -438,13 +526,13 @@ fun DIV.addedToastContents(task: Task) {
 }
 
 // Shown out-of-band after completing, with a one-click undo.
-fun DIV.undoToastContents(task: Task, mode: ListMode) {
+fun DIV.undoToastContents(task: Task, q: String) {
     id = "toast"
     attributes["hx-swap-oob"] = "true"
     classes = setOf("show")
     span { +"Completed “${task.title}”" }
     button {
-        hx("post", "/tasks/${task.id}/uncomplete?mode=${mode.name}")
+        hx("post", "/tasks/${task.id}/uncomplete?mode=$q")
         +"Undo"
     }
 }

@@ -143,7 +143,7 @@ private fun Parameters.searchFilters() = SearchFilters(
     dueBefore = dateTime(this["before"], null)
 )
 
-private fun HTML.searchPage(service: TaskService, p: Parameters) = shellPage("Raspberry · Search", "/search") {
+private fun HTML.searchPage(service: TaskService, p: Parameters) = shellPage(service, "Raspberry · Search", "/search") {
     // Works as a plain GET form; htmx re-runs it as you type.
     form(action = "/search", method = FormMethod.get, classes = "search") {
         attributes["hx-get"] = "/search/results"
@@ -232,7 +232,7 @@ private fun parseBulk(p: Parameters): BulkEdit {
     )
 }
 
-private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode) = shellPage("Raspberry · Edit tasks", mode.path) {
+private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode) = shellPage(service, "Raspberry · Edit tasks", mode.path) {
     val all = service.tasks()
     val byId = all.associateBy { it.id }
     // Only tasks and checklists, as on the phone: none of the bulk properties apply to folders or projects.
@@ -291,7 +291,7 @@ private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode)
 
 // --- Review
 
-private fun HTML.reviewPage(service: TaskService) = shellPage("Raspberry · Review", "/review") {
+private fun HTML.reviewPage(service: TaskService) = shellPage(service, "Raspberry · Review", "/review") {
     val all = service.tasks()
     val byId = all.associateBy { it.id }
     val colors = folderColorsHex(all)
@@ -391,7 +391,7 @@ private fun describe(context: TaskContext, windows: List<ContextTimeWindow>): St
     }
 }
 
-private fun HTML.contextsPage(service: TaskService, form: ContextForm) = shellPage("Raspberry · Contexts", "/contexts") {
+private fun HTML.contextsPage(service: TaskService, form: ContextForm) = shellPage(service, "Raspberry · Contexts", "/contexts") {
     div(classes = "contexts") {
         h1 { +"Contexts" }
         p(classes = "hint") { +"Tasks with a context are active only while it holds: on a wifi network (the phone checks), or within a time window." }

@@ -38,7 +38,7 @@ fun Route.webRoutes(service: TaskService) {
     ListMode.entries.forEach { mode ->
         get("/${mode.name.lowercase()}") {
             val deleted = call.request.queryParameters["deleted"]?.toLongOrNull()?.let(service::deletedTask)
-            call.respondHtml { listPage(call.listData(service, mode), deleted) }
+            call.respondHtml { listPage(service, call.listData(service, mode), deleted) }
         }
         // ?toggle folds/unfolds an All-tree node, ?fold an Active section; ?later puts off a stalled
         // project's prompt.
@@ -93,11 +93,11 @@ fun Route.webRoutes(service: TaskService) {
         val open = service.activeDescendantCount(id)
         if (open > 0 && choice == null) {
             return@post call.respondList(service, mode, extra = createHTML().div {
-                askSubtasksToast(task, open, "/tasks/$id/complete?mode=${mode.name}", target = "#list")
+                askSubtasksToast(task, open, "/tasks/$id/complete?mode=${call.listQuery()}", target = "#list")
             })
         }
         service.completeOrDecide(id, choice)
-        call.respondList(service, mode, extra = createHTML().div { undoToastContents(task, mode) })
+        call.respondList(service, mode, extra = createHTML().div { undoToastContents(task, call.listQuery()) })
     }
     post("/tasks/{id}/uncomplete") { call.taskId()?.let(service::uncomplete); call.respondList(service, call.mode()) }
     post("/tasks/{id}/pin") {
@@ -134,7 +134,7 @@ fun Route.webRoutes(service: TaskService) {
         val params = call.receiveParameters()
         val text = params["text"].orEmpty()
         val mode = params["mode"]?.let { runCatching { ListMode.valueOf(it) }.getOrNull() }
-        val created = service.quickAdd(text, fromDoing = mode == ListMode.DOING)
+        val created = service.quickAdd(text, fromDoing = mode == ListMode.DOING, folderId = call.folder())
         if (mode != null) return@post call.respondList(service, mode)
         call.respondText(created?.let { t -> createHTML().div { addedToastContents(t) } }.orEmpty(), ContentType.Text.Html)
     }
@@ -153,9 +153,14 @@ internal fun ApplicationCall.taskId() = parameters["id"]?.toLongOrNull()
 internal fun ApplicationCall.mode() =
     request.queryParameters["mode"]?.let { runCatching { ListMode.valueOf(it) }.getOrNull() } ?: ListMode.DOING
 
-internal fun ApplicationCall.listData(service: TaskService, mode: ListMode): ListData {
+// A folder's view of the All tree (?folder=), which every action on it carries along.
+internal fun ApplicationCall.folder() = request.queryParameters["folder"]?.toLongOrNull()
+internal fun ApplicationCall.listQuery() = mode().name + (folder()?.let { "&folder=$it" } ?: "")
+internal fun ApplicationCall.listPath() = mode().path + (folder()?.let { "?folder=$it" } ?: "")
+
+internal fun ApplicationCall.listData(service: TaskService, mode: ListMode, selected: Long? = null): ListData {
     service.ensureFolderColors()
-    return ListData(service, mode, ids(COLLAPSED), ids(LATER), ids(SECTIONS))
+    return ListData(service, mode, ids(COLLAPSED), ids(LATER), ids(SECTIONS), folder = folder(), selected = selected)
 }
 
 internal suspend fun ApplicationCall.respondList(service: TaskService, mode: ListMode, extra: String? = null) =
