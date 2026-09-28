@@ -98,11 +98,20 @@ object QuickAddParser {
         }
         val flags = pinRegex.findAll(text).map { it.groupValues[1].lowercase() }.toSet()
         text = text.replace(pinRegex, "")
+        text = text.replace(Regex("\\s+"), " ").trim()
+        // A "?" or "*" ending the title itself (after the flags and phrases above are stripped) marks a
+        // maybe or a star; one elsewhere, like "update(?) bug", is just part of the title. A maybe is
+        // never starred.
+        var isMaybe = false
+        var isStarred = false
+        while (text.endsWith("?") || text.endsWith("*")) {
+            if (text.endsWith("?")) isMaybe = true else isStarred = true
+            text = text.dropLast(1).trimEnd()
+        }
         var minutes = tildeRegex.find(text)?.takeIf { it.groupValues[1].isNotEmpty() || it.groupValues[2].isNotEmpty() }?.let { m ->
-            text = text.removeRange(m.range)
+            text = text.removeRange(m.range).replace(Regex("\\s+"), " ").trim()
             ((m.groupValues[1].toDoubleOrNull() ?: 0.0) * 60 + (m.groupValues[2].toIntOrNull() ?: 0)).toInt().takeIf { it > 0 }
         }
-        text = text.replace(Regex("\\s+"), " ").trim()
 
         val items = itemsRegex.matchEntire(text)?.let { m -> text = m.groupValues[1]; splitItems(m.groupValues[2]) }
         durationRegex.matchEntire(text)?.let { m ->
@@ -114,14 +123,6 @@ object QuickAddParser {
             }
             val of = (hours * 60 + (m.groupValues[2].ifEmpty { m.groupValues[3] }.ifEmpty { "0" }).toInt()).toInt()
             if (of > 0) { minutes = minutes ?: of; text = m.groupValues[4].trim() }
-        }
-        // A "?" or "*" ending the title itself (after everything else is stripped) marks a maybe or a
-        // star; one elsewhere, like "update(?) bug", is just part of the title. A maybe is never starred.
-        var isMaybe = false
-        var isStarred = false
-        while (text.endsWith("?") || text.endsWith("*")) {
-            if (text.endsWith("?")) isMaybe = true else isStarred = true
-            text = text.dropLast(1).trimEnd()
         }
 
         val (recurrenceType, recurrenceRule) = repeat?.toTaskFields() ?: (null to null)

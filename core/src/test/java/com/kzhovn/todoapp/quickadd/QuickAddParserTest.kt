@@ -210,5 +210,10 @@ class QuickAddParserTest {
         assertEquals(com.kzhovn.todoapp.data.TaskType.CHECKLIST, packing.task!!.type)
         assertEquals(listOf("passport", "charger", "toothbrush"), packing.items)
         assertNotNull(packing.task!!.dueDate)
+
+        // A star or maybe after the items or a duration still counts.
+        val starredList = read("groceries [milk, eggs]*")
+        assertEquals(Triple("groceries", true, 2), Triple(starredList.task!!.title, starredList.task!!.isStarred, starredList.items.size))
+        assertEquals(Triple("read book", 30, true), read("read book ~30m*").task!!.let { Triple(it.title, it.durationMinutes, it.isStarred) })
     }
 }
