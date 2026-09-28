@@ -109,7 +109,8 @@ private data class EditorView(
     val firstStep: String = "",
     val newSubtasks: String = "", // a new task's subtasks, one per line, created with it
     val newDep: String = "", // a new task this one depends on
-    val newDependent: String = "" // a new task that depends on this one
+    val newDependent: String = "", // a new task that depends on this one
+    val pin: Boolean = false // a new task's pin, applied when it's saved
 )
 
 fun Route.editorRoutes(service: TaskService) {
@@ -264,7 +265,7 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     val newSubtasks = params["newSubtasks"].orEmpty().lines().map { it.trim() }.filter { it.isNotEmpty() }
     val newDep = params["newDep"]?.trim().orEmpty()
     val newDependent = params["newDependent"]?.trim().orEmpty()
-    val view = EditorView(mode, call.listData(service, mode, selected = id), form, recurrence, base.encode(), firstStep = firstStep, newSubtasks = params["newSubtasks"].orEmpty(), newDep = newDep, newDependent = newDependent)
+    val view = EditorView(mode, call.listData(service, mode, selected = id), form, recurrence, base.encode(), firstStep = firstStep, newSubtasks = params["newSubtasks"].orEmpty(), newDep = newDep, newDependent = newDependent, pin = params["pin"] != null)
     suspend fun reshow(v: EditorView) = call.respondHtml { editorPage(service, v) }
 
     if (form.task.title.isBlank()) return reshow(view.copy(error = "A title is required."))
@@ -297,6 +298,7 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     }
     if (inherit == "update") service.clearInherited(overriding, changed)
     if (needsFirstStep) service.create(Task(title = firstStep, parentId = savedId))
+    if (id == null && params["pin"] != null) service.pin(savedId)
     newSubtasks.forEach { service.create(QuickAddParser.parse(it).copy(parentId = savedId)) }
     createTyped(newDependent)?.let { service.addDependency(it, savedId) }
     call.respondRedirect(call.listPath())
@@ -442,7 +444,9 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
         // The title wraps (up to four lines), with the star inside the box by the first line. A starred
         // task is never a maybe (Maybe is under Properties); app.js unticks the other when one is ticked.
         div(classes = "title-box") {
-            if (!isNew && t.type == TaskType.TASK && !t.isComplete) pinToggle(t.id, service.pinned()?.id == t.id)
+            // An existing task pins at once, like the phone's; a new one when it's saved.
+            if (isNew) label(classes = "pin-toggle") { attributes["title"] = Labels.PIN; checkBoxInput(name = "pin") { checked = v.pin }; icon(Icon.PUSH_PIN, "") }
+            else if (t.type == TaskType.TASK && !t.isComplete) pinToggle(t.id, service.pinned()?.id == t.id)
             textArea(classes = "title-input") { name = "title"; rows = "1"; placeholder = Labels.TITLE; required = true; +t.title }
             label(classes = "flag-toggle star-toggle task-only") {
                 attributes["title"] = Labels.STAR

@@ -100,7 +100,11 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .menu-row .icon { width: 16px; height: 16px; color: var(--muted); }
 .pin-toggle { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; color: var(--muted); flex-shrink: 0; }
 .pin-toggle .icon { width: 19px; height: 19px; }
-.pin-toggle.on { color: var(--accent); }
+.pin-toggle.on, .pin-toggle:has(input:checked) { color: var(--accent); }
+.pin-toggle input { display: none; }
+label.pin-toggle { cursor: pointer; }
+/* Only a task is pinned (as on the phone): the pin goes when the type is switched away from Task. */
+.editor:has(input[name=type]:not([value=TASK]):checked) .pin-toggle { display: none; }
 
 #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 14px; border-radius: 8px; display: none; gap: 14px; align-items: center; }
 #toast.show { display: flex; }

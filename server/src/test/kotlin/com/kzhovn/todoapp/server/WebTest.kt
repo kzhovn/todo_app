@@ -536,4 +536,13 @@ class WebTest {
         assertTrue(Regex("class=\"row[^\"]*current").containsMatchIn(editor))
         assertTrue(editor.contains("class=\"detail-close\"") && editor.contains("href=\"/all?folder=${work.id}\" class=\"detail-close\""))
     }
+
+    @Test
+    fun `a new task can be pinned from the editor, pinned when it's saved`() = web {
+        assertTrue(client.get("/tasks/new?type=TASK").bodyAsText().contains("name=\"pin\""))
+        client.submitForm("/tasks/new", parameters { append("title", "Write draft"); append("type", "TASK"); append("pin", "on") })
+        assertEquals("Write draft", service.pinned()?.title)
+        client.submitForm("/tasks/new", parameters { append("title", "Unpinned"); append("type", "TASK") })
+        assertEquals("Write draft", service.pinned()?.title)
+    }
 }
