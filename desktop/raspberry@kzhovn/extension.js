@@ -217,12 +217,14 @@ class Indicator extends PanelMenu.Button {
         if (this._adding && this._entry?.get_stage()) this._entry.grab_key_focus();
     }
 
+    // Title (opens it), checkbox (completes it), then the pin, which unpins it.
     _pinnedRow(pinned) {
         const row = new St.BoxLayout({style_class: 'rb-pinned'});
-        row.add_child(new St.Icon({icon_name: 'view-pin-symbolic', style_class: 'rb-pin-icon'}));
         row.add_child(this._titleButton(pinned.title, () => this._open(`/tasks/${pinned.id}?mode=DOING`)));
         row.add_child(this._check(null, () => this._post(`/api/tasks/${pinned.id}/complete`)));
-        row.add_child(this._iconButton('window-close-symbolic', 'rb-tool', () => this._post('/api/unpin')));
+        const unpin = this._iconButton('view-pin-symbolic', 'rb-tool rb-unpin', () => this._post('/api/unpin'));
+        unpin.accessible_name = 'Unpin';
+        row.add_child(unpin);
         return row;
     }
 

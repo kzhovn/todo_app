@@ -19,7 +19,7 @@
 .rb-entry .hint-text { color: #8A7A5C; }
 
 .rb-pinned { background-color: #DFE6EF; border-radius: 6px; margin: 0 2px 4px; padding-left: 8px; spacing: 4px; }
-.rb-pin-icon { icon-size: 14px; color: #2B4C7E; }
+.rb-unpin { color: #2B4C7E; }
 
 .rb-scroll { max-height: 480px; }
 .rb-row { min-height: 30px; }
