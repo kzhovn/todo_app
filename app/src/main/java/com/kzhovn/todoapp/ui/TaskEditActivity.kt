@@ -1,5 +1,8 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import com.kzhovn.todoapp.data.isDoable
 import android.content.Intent
 import android.os.Bundle
@@ -142,7 +145,14 @@ class TaskEditActivity : ComponentActivity() {
             scope.launch { if (vm.questionBeforeSave() == null) vm.saveEdits { _, _ -> } }
         }
 
-        Column(Modifier.fillMaxSize().background(LedgerBackground).verticalScroll(rememberScrollState()).padding(16.dp)) {
+        // A tap on empty space leaves the text field being edited (Compose keeps focus otherwise), which
+        // also folds an open note back into its preview.
+        val focusManager = LocalFocusManager.current
+        Column(
+            Modifier.fillMaxSize().background(LedgerBackground)
+                .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }
+                .verticalScroll(rememberScrollState()).padding(16.dp)
+        ) {
             TitleBox(
                 vm, pinned,
                 onTogglePin = {

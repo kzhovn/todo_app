@@ -53,6 +53,12 @@
     notes.classList.add("editing");
     notes.querySelector(".notes-input").focus();
   });
+  // Clicking anywhere else leaves the note (even where a click doesn't move focus, as on some
+  // WebKit buttons), which folds it back into its preview below.
+  document.addEventListener("pointerdown", (e) => {
+    const open = document.querySelector(".notes.editing");
+    if (open && !open.contains(e.target)) open.querySelector(".notes-input").blur();
+  });
   document.addEventListener("focusout", (e) => {
     if (!e.target.matches(".notes-input")) return;
     const notes = e.target.closest(".notes"), text = e.target.value.trim();
