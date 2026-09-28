@@ -51,7 +51,10 @@
     const notes = e.target.closest(".notes");
     if (!notes || e.target.closest("a") || !e.target.closest(".notes-preview, .more")) return;
     notes.classList.add("editing");
-    notes.querySelector(".notes-input").focus();
+    // The cursor at the end, ready to add to the note.
+    const input = notes.querySelector(".notes-input");
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
   });
   // Clicking anywhere else leaves the note (even where a click doesn't move focus, as on some
   // WebKit buttons), which folds it back into its preview below.

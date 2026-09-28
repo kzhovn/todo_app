@@ -23,7 +23,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,13 +69,16 @@ internal fun NotesArea(notes: String, titleFocused: Boolean, onChange: (String?)
         return
     }
     val requester = remember { FocusRequester() }
+    // Opened from the preview, the cursor starts at the end, ready to add to the note.
+    var field by remember(editing) { mutableStateOf(TextFieldValue(notes, TextRange(notes.length))) }
     BasicTextField(
-        value = notes,
-        onValueChange = { onChange(it.ifEmpty { null }) },
+        value = field,
+        onValueChange = { field = it; onChange(it.text.ifEmpty { null }) },
         textStyle = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, color = LedgerInk),
         modifier = padding.focusRequester(requester).onFocusChanged { f ->
-            // Done editing: back to the collapsed preview.
-            if (focused && !f.isFocused) editing = false
+            // In the field (an empty note too, so the first letter typed doesn't swap it for the
+            // preview) until focus leaves; then back to the collapsed preview.
+            if (f.isFocused) editing = true else if (focused) editing = false
             focused = f.isFocused
         },
         decorationBox = { field ->
