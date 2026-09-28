@@ -111,6 +111,8 @@ fun DIV.focusBody(service: TaskService, session: Task) {
     subtaskParentTitle(session, byId)?.let { p(classes = "focus-sub") { +it } }
     h1(classes = "focus-title") { +session.title }
     service.effectiveDueDate(session)?.let { p(classes = "focus-sub") { +dueText(it, service.now()) } }
+    // The note: what to ask, the number to call.
+    session.notes?.takeIf { it.isNotBlank() }?.let { div(classes = "focus-notes") { linkified(it) } }
     // A checklist: its items, big, to tick off one by one.
     if (session.type == TaskType.CHECKLIST) div(classes = "focus-items") {
         checklistItems(session.id, all).forEach { item ->

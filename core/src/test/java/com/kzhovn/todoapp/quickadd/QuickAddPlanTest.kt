@@ -41,4 +41,11 @@ class QuickAddPlanTest {
         assertEquals(setOf(7L, 8L), both.contextIds)
         assertEquals("email bob @nowhere a@b.com", both.task!!.title)
     }
+
+    @Test
+    fun `contexts come from the title, not the note`() {
+        val add = plan("fix sink @home // ask @home about parts")
+        assertEquals(setOf(7L), add.contextIds)
+        assertEquals("fix sink" to "ask @home about parts", add.task!!.title to add.task!!.notes)
+    }
 }

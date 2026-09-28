@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.data.notesMatch
 import kotlinx.html.noScript
 import com.kzhovn.todoapp.data.clockTime
 import com.kzhovn.todoapp.data.resolveEffective
@@ -209,6 +210,9 @@ private fun DIV.searchResults(service: TaskService, p: Parameters) {
                 a(href = "/tasks/${task.id}?mode=ALL", classes = "count") { attributes["title"] = Labels.CHECKLIST; +"$done/$total" }
             } else span(classes = "project") { icon(Icon.PROJECT, "") }
             a(href = "/tasks/${task.id}?mode=ALL", classes = if (task.isComplete) "done" else null) { +task.title }
+            if (!task.notes.isNullOrBlank()) span(classes = "has-notes") { attributes["title"] = "Has notes"; icon(Icon.NOTES, "") }
+            // Found by its notes: the line that matched.
+            notesMatch(task, p["q"].orEmpty())?.let { div(classes = "notes-line") { +it } }
             div(classes = "meta") {
                 resolveEffective(task, byId, contextIds).effectiveDueDate?.takeUnless { task.isComplete }?.let { dueTail(it, dueStatus(it, now), now) }
                 byId[task.parentId]?.let { span { +(if (it.type == TaskType.FOLDER) it.title else "↳ ${it.title}") } }

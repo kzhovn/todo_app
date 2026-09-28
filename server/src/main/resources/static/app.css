@@ -296,8 +296,18 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .inline-hint { width: auto; }
 
 /* Task editor, matching the phone's: title box with flags, then pills that open popovers */
-.title-box { display: flex; align-items: flex-start; gap: 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); padding: 2px 4px 2px 10px; }
-.title-box:focus-within { border-color: var(--accent); }
+.title-card { border: 1px solid var(--border); border-radius: 6px; background: var(--panel); }
+.title-card:focus-within { border-color: var(--accent); }
+.title-box { display: flex; align-items: flex-start; gap: 4px; padding: 2px 4px 2px 10px; }
+/* The note, under the title in the same card. Empty, it only shows while the card is edited or hovered. */
+.notes { border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent); padding: 6px 10px 8px; }
+.title-card:not(:hover):not(:focus-within) .notes:has(.notes-input:placeholder-shown):not(:has(.notes-preview)) { display: none; }
+.notes-input { width: 100%; border: 0 !important; background: none !important; padding: 0 !important; font: inherit; font-size: 14px; line-height: 1.45; color: var(--ink); resize: none; field-sizing: content; min-height: 1.45em; outline: none; }
+.notes-preview { font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; overflow: hidden; }
+.notes-preview a { color: var(--accent); }
+.notes .more { font-size: 13px; color: var(--accent); cursor: pointer; }
+.notes:has(.notes-preview):not(.editing) .notes-input, .notes.editing .notes-preview, .notes.editing .more { display: none; }
+@media (max-width: 700px) { .notes-preview { -webkit-line-clamp: 2; } }
 /* The icons beside the title are one title line tall (its padding + line height), so they sit on its first line. */
 .title-box > :not(.title-input) { height: calc(16px + 18px * 1.4); }
 .title-input { flex: 1; border: 0 !important; background: none !important; padding: 8px 0 !important; font: inherit; font-size: 18px; font-weight: 600; color: var(--ink); resize: none; field-sizing: content; min-height: 1.4em; max-height: calc(4 * 1.4em + 16px); overflow-y: auto; line-height: 1.4; outline: none; }
@@ -401,3 +411,10 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 /* Settings. */
 .settings label { display: flex; align-items: center; gap: 8px; font-size: 15px; }
 .settings select { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
+/* A task with a note: a small mark after its title; search shows the line it matched. */
+.has-notes { display: inline-flex; vertical-align: -2px; margin-left: 5px; color: var(--muted); }
+.has-notes .icon { width: 14px; height: 14px; }
+.result .notes-line { flex-basis: 100%; font-size: 13px; color: var(--muted); }
+.focus-notes { width: min(520px, 100%); max-height: 40vh; overflow-y: auto; margin-top: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+.focus-notes a { color: var(--accent); }
+

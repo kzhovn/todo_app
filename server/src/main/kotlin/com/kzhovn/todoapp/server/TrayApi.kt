@@ -42,9 +42,10 @@ data class TrayState(
 @Serializable
 data class FolderRow(val id: Long, val title: String, val checklist: Boolean = false)
 
-// The session's task; `done`: it's finished, and every device asks what's next.
+// The session's task; `done`: it's finished, and every device asks what's next. `notes`: the start of
+// its note, for the focus card.
 @Serializable
-data class FocusRow(val id: Long, val title: String, val done: Boolean)
+data class FocusRow(val id: Long, val title: String, val done: Boolean, val notes: String? = null)
 
 @Serializable
 data class TrayCounts(val doing: Int, val active: Int, val all: Int)
@@ -82,7 +83,7 @@ fun trayState(service: TaskService, list: String?): TrayState {
         else -> emptyList()
     }
     val pinned = pinnedTask(all)?.let { PinnedRow(it.id, it.title, it.timerEndsAt, it.timerRemaining, it.durationMinutes) }
-    val focus = CurrentTask.focusSession(all)?.let { FocusRow(it.id, it.title, it.isComplete) }
+    val focus = CurrentTask.focusSession(all)?.let { FocusRow(it.id, it.title, it.isComplete, it.notes?.takeIf { n -> n.isNotBlank() }?.lines()?.take(4)?.joinToString("\n")?.take(300)) }
     val folders = if (list !in LISTS) emptyList() else all.filter { it.type == TaskType.FOLDER || (it.type == TaskType.CHECKLIST && !it.isComplete) }
         .sortedBy { it.title.lowercase() }.map { FolderRow(it.id, it.title, checklist = it.type == TaskType.CHECKLIST) }
     val defaultFolder = if (list !in LISTS) null else service.findFolder(DEFAULT_FOLDER)?.id

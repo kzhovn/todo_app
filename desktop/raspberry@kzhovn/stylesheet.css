@@ -80,3 +80,7 @@
 .rb-link { color: #2B4C7E; font-size: 12px; font-weight: bold; padding: 4px 6px; border-radius: 6px; }
 .rb-link:hover { background-color: rgba(43, 76, 126, 0.08); }
 
+/* Notes: a mark on rows that have one; the start of it on the focus card. */
+.rb-notes-icon { icon-size: 13px; color: #8A7A5C; padding: 0 4px; }
+.rb-focus-notes { font-size: 12px; color: #2B2318; background-color: #F7F4EE; border: 1px solid #DED5C1; border-radius: 7px; padding: 6px 9px; max-width: 360px; }
+

@@ -36,6 +36,9 @@ class TaskListViewModel(
         data class Search(val query: String, val filters: SearchFilters) : Shown
     }
     private var shown: Shown = Shown.Tab(TaskListMode.DOING)
+
+    // While searching, what for (the rows show the line of notes a task matched on).
+    val searchQuery: String? get() = (shown as? Shown.Search)?.query
     private var reloading: Job? = null
 
     init {

@@ -216,4 +216,15 @@ class QuickAddParserTest {
         assertEquals(Triple("groceries", true, 2), Triple(starredList.task!!.title, starredList.task!!.isStarred, starredList.items.size))
         assertEquals(Triple("read book", 30, true), read("read book ~30m*").task!!.let { Triple(it.title, it.durationMinutes, it.isStarred) })
     }
+
+    @Test
+    fun `a note follows a double slash or the first line, and a URL does not count`() {
+        val slash = read("call bank -d fri // ask about the fee")
+        assertEquals("call bank" to "ask about the fee", slash.task!!.title to slash.task!!.notes)
+        assertNotNull(slash.task!!.dueDate)
+        val lines = read("call bank\nask about the fee\nref 4417-22 due fri")
+        assertEquals("call bank" to "ask about the fee\nref 4417-22 due fri", lines.task!!.title to lines.task!!.notes)
+        assertNull(lines.task!!.dueDate) // dates in the note stay text
+        assertEquals("read https://example.com/a" to null, read("read https://example.com/a").task!!.let { it.title to it.notes })
+    }
 }

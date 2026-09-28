@@ -419,6 +419,12 @@ class Indicator extends PanelMenu.Button {
         const title = new St.Label({style_class: 'rb-focus-title', text: focus.done ? 'Done!' : focus.title, x_align: Clutter.ActorAlign.CENTER});
         title.clutter_text.line_wrap = true;
         box.add_child(title);
+        // The start of its note: what to ask, the number to call.
+        if (focus.notes && !focus.done) {
+            const notes = new St.Label({style_class: 'rb-focus-notes', text: focus.notes});
+            notes.clutter_text.line_wrap = true;
+            box.add_child(notes);
+        }
         const actions = new St.BoxLayout({style_class: 'rb-focus-actions', x_align: Clutter.ActorAlign.CENTER});
         if (focus.done) {
             box.add_child(new St.Label({style_class: 'rb-focus-sub', text: 'Focus on the next task, or finish?', x_align: Clutter.ActorAlign.CENTER}));
@@ -463,6 +469,8 @@ class Indicator extends PanelMenu.Button {
         const title = this._titleButton(row.title, () => this._open(`/tasks/${row.id}?mode=${this._mode.toUpperCase()}`));
         if (row.isBackburner) title.add_style_class_name('rb-dim');
         box.add_child(title);
+        // It has a note (opening the task shows it).
+        if (row.hasNotes) box.add_child(new St.Icon({icon_name: 'text-x-generic-symbolic', style_class: 'rb-notes-icon', y_align: Clutter.ActorAlign.CENTER}));
         if (row.durationMinutes) box.add_child(this._button({label: `▶ ${duration(row.durationMinutes)}`, style_class: 'rb-dur'}, () => this._post(`/api/tasks/${row.id}/timer`)));
         if (!row.isChecklist && row.subtasks) {
             const arrow = this._expanded.has(row.id) ? '▴' : '▾';

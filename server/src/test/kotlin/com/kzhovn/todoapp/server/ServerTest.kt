@@ -95,6 +95,19 @@ class ServerTest {
     }
 
     @Test
+    fun `a Discord add's lines after the first are its note, and editing the message edits it`() {
+        logic.onAdd(1L, "u", "-- call bank\nask about the fee\nref 4417")
+        val task = service.tasks().single { it.title == "call bank" }
+        assertEquals("ask about the fee\nref 4417", task.notes)
+        logic.onEdit(1L, "-- call bank // ask about the overdraft")
+        assertEquals("ask about the overdraft", service.get(task.id)!!.notes)
+        assertTrue(logic.listChunks(listOf(service.get(task.id)!!)).single().content.contains("call bank 📝"))
+        assertTrue(trayState(service, "doing").rows.single { it.id == task.id }.hasNotes)
+        service.focus(task.id)
+        assertEquals("ask about the overdraft", trayState(service, "none").focus?.notes)
+    }
+
+    @Test
     fun `the tray's quick add takes the phone's chips`() = testApplication {
         application { api(store, "secret") }
         fun tray(body: String) = SyncJson.decodeFromString(TrayState.serializer(), body)

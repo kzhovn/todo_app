@@ -38,4 +38,15 @@ class SearchTest {
     fun `a context filter keeps tasks with that context`() {
         assertEquals(listOf("Walk the dog"), search("", SearchFilters(contextId = 7), mapOf(12L to setOf(7L))))
     }
+
+    @Test
+    fun `notes match too, and the matching line is shown only when the title didn't match`() {
+        val bank = Task(id = 20, title = "Call the bank", notes = "Ask about the fee\nRef 4417-22")
+        assertEquals(listOf(bank), searchTasks(listOf(bank), emptyMap(), "4417", SearchFilters()))
+        assertEquals("Ref 4417-22", notesMatch(bank, "4417"))
+        assertEquals(null, notesMatch(bank, "bank"))
+        val long = Task(id = 21, title = "Trip", notes = "word ".repeat(30) + "passport " + "more ".repeat(30))
+        val cut = notesMatch(long, "passport")!!
+        assert(cut.startsWith("…") && cut.endsWith("…") && "passport" in cut && cut.length < 120) { cut }
+    }
 }

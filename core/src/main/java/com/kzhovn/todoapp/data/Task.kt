@@ -55,7 +55,9 @@ data class Task(
     val timerEndsAt: Long? = null,
     val timerRemaining: Long? = null,
     // A focus session on it, on every device (see CurrentTask.focusSession).
-    val focusedAt: Long? = null
+    val focusedAt: Long? = null,
+    // Free text: what to ask, the number to call, a link. Plain text; blank means none.
+    val notes: String? = null
 ) {
     fun isExpired(now: Long): Boolean = expiresAt != null && expiresAt <= now
 

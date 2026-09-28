@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.layout.Column
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.Color
@@ -93,15 +95,17 @@ import com.kzhovn.todoapp.ui.theme.folderColors
 // The task editor's sections, top to bottom; the state and data work live in TaskEditViewModel.
 
 // Title box: pin in front, the star after; the title wraps (up to four lines). Everything is centred
-// on one 44dp line, so a one-line title sits level with the icons.
+// on one 44dp line, so a one-line title sits level with the icons. The note sits under it (NotesArea).
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun TitleBox(vm: TaskEditViewModel, pinned: Boolean, onTogglePin: () -> Unit, onFocus: () -> Unit, onDone: () -> Unit) {
     val task = vm.task
     val focusManager = LocalFocusManager.current
+    var titleFocused by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().border(1.dp, LedgerBorder, RoundedCornerShape(6.dp))) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).border(1.dp, LedgerBorder, RoundedCornerShape(6.dp)).padding(horizontal = 2.dp)
+        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 2.dp)
     ) {
         if (task.type == TaskType.TASK && !task.isComplete) {
             // Tap pins; press and hold opens focus mode on this task (once it's saved).
@@ -120,7 +124,7 @@ internal fun TitleBox(vm: TaskEditViewModel, pinned: Boolean, onTogglePin: () ->
             textStyle = TextStyle(fontSize = 17.sp, color = LedgerInk),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus(); onDone() }),
-            modifier = Modifier.weight(1f).padding(start = 8.dp, end = 2.dp, top = 10.dp, bottom = 10.dp),
+            modifier = Modifier.weight(1f).padding(start = 8.dp, end = 2.dp, top = 10.dp, bottom = 10.dp).onFocusChanged { titleFocused = it.isFocused },
             decorationBox = { field ->
                 if (task.title.isEmpty()) Text(Labels.TITLE, fontSize = 17.sp, color = LedgerMuted)
                 field()
@@ -133,6 +137,8 @@ internal fun TitleBox(vm: TaskEditViewModel, pinned: Boolean, onTogglePin: () ->
                 modifier = Modifier.size(38.dp).clip(CircleShape).clickable { vm.task = task.copy(isStarred = !task.isStarred, isMaybe = task.isMaybe && task.isStarred) }
             ) { StarIcon(task.isStarred) }
         }
+    }
+    NotesArea(task.notes.orEmpty(), titleFocused) { vm.task = vm.task.copy(notes = it) }
     }
 }
 

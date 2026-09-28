@@ -413,6 +413,27 @@ class WebTest {
     }
 
     @Test
+    fun `notes save from the editor, show as a preview with links, mark rows and turn up in search`() = web {
+        val task = service.create(Task(title = "Call the bank", isStarred = true))
+        client.submitForm("/tasks/${task.id}/autosave", parameters {
+            append("base", taskFields(task, emptySet(), emptySet()).toString())
+            append("title", "Call the bank"); append("type", "TASK"); append("starred", "on")
+            append("notes", "Ask about the fee\r\nRef 4417, see https://bank.example/help.  ")
+        })
+        assertEquals("Ask about the fee\nRef 4417, see https://bank.example/help.", service.get(task.id)!!.notes)
+        val editor = client.get("/tasks/${task.id}?mode=DOING").bodyAsText()
+        assertTrue(editor.contains("<a href=\"https://bank.example/help\" target=\"_blank\" rel=\"noopener\">"))
+        assertTrue(client.get("/doing").bodyAsText().contains("has-notes"))
+        assertTrue(client.get("/search/results?q=4417").bodyAsText().contains("notes-line\">Ref 4417"))
+        // Cleared: gone, not an empty string.
+        client.submitForm("/tasks/${task.id}/autosave", parameters {
+            append("base", taskFields(service.get(task.id)!!, emptySet(), emptySet()).toString())
+            append("title", "Call the bank"); append("type", "TASK"); append("starred", "on"); append("notes", "")
+        })
+        assertNull(service.get(task.id)!!.notes)
+    }
+
+    @Test
     fun `auto-save writes a change in place, but leaves one needing a question to Save`() = web {
         val task = service.create(Task(title = "Call the dentist"))
         client.submitForm("/tasks/${task.id}/autosave", parameters {

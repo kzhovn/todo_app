@@ -337,7 +337,8 @@ private fun parseForm(p: Parameters, base: EditState, recurrence: RecurrenceSele
         durationMinutes = p["duration"]?.toIntOrNull()?.takeIf { it > 0 },
         expiresAt = if (p["today"] != null) base.task.expiresAt ?: nextRollover(service.now(), service.rolloverHour()) else null,
         sequential = p["sequential"] != null,
-        activeWithSubtasks = p["activeWithSubtasks"] != null
+        activeWithSubtasks = p["activeWithSubtasks"] != null,
+        notes = p["notes"]?.replace("\r\n", "\n")?.trimEnd()?.ifBlank { null }
     )
     return EditState(task, p.ids("ctx"), base.dependsOn)
 }
@@ -401,7 +402,7 @@ private fun merge(base: EditState, form: EditState, current: EditState): EditSta
         startDate = pick { it.startDate }, dueDate = pick { it.dueDate }, reminderOffsetMinutes = pick { it.reminderOffsetMinutes },
         parentId = pick { it.parentId }, recurrenceType = recurrenceType, recurrenceRule = recurrenceRule,
         isMaybe = pick { it.isMaybe }, expiresAt = pick { it.expiresAt }, sequential = pick { it.sequential }, activeWithSubtasks = pick { it.activeWithSubtasks },
-        durationMinutes = pick { it.durationMinutes }
+        durationMinutes = pick { it.durationMinutes }, notes = pick { it.notes }
     )
     return EditState(
         task,
@@ -414,6 +415,13 @@ private fun localDateTime(millis: Long) = Instant.ofEpochMilli(millis).atZone(Zo
 
 // The folder a task sits directly in, where its new related tasks go (related work usually belongs together).
 private fun TaskService.folderIdOf(task: Task): Long? = task.parentId?.takeIf { get(it)?.type == TaskType.FOLDER }
+
+// A note, collapsed (5 lines; 2 on a phone's screen) with links that open; clicking it edits the whole
+// note (app.js). With no note it's only shown while the title card is being edited or hovered (CSS).
+private fun FlowContent.notesField(notes: String?) = div(classes = "notes") {
+    if (!notes.isNullOrBlank()) div(classes = "notes-preview") { linkified(notes) }
+    textArea(classes = "notes-input") { name = "notes"; rows = "1"; placeholder = "Notes"; +notes.orEmpty() }
+}
 
 private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage(
     service, "Raspberry · ${v.shown.task.title.ifBlank { "New ${v.shown.task.type.name.lowercase()}" }}", v.list.path, v.list,
@@ -432,7 +440,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
     // normally on Save, so this lives on its own element.
     if (!isNew) div {
         attributes["hx-post"] = "/tasks/${t.id}/autosave?mode=${v.list.q}"
-        attributes["hx-trigger"] = "change delay:700ms from:.editor, change delay:700ms from:.editor-foot, input changed delay:1200ms from:.title-input"
+        attributes["hx-trigger"] = "change delay:700ms from:.editor, change delay:700ms from:.editor-foot, input changed delay:1200ms from:.title-input, input changed delay:1200ms from:.notes-input"
         attributes["hx-include"] = "#$formId"
         attributes["hx-swap"] = "none"
         attributes["hx-sync"] = "this:replace"
@@ -452,6 +460,8 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
 
         // The title wraps (up to four lines), with the star inside the box by the first line. A starred
         // task is never a maybe (Maybe is under Properties); app.js unticks the other when one is ticked.
+        // The note sits under it, in the same card.
+        div(classes = "title-card") {
         div(classes = "title-box") {
             // An existing task pins at once, like the phone's; a new one when it's saved.
             if (isNew) label(classes = "pin-toggle") { attributes["title"] = Labels.PIN; checkBoxInput(name = "pin") { checked = v.pin }; icon(Icon.PUSH_PIN, "") }
@@ -466,6 +476,8 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
                 checkBoxInput(name = "starred") { checked = t.isStarred }
                 icon(Icon.STAR, "")
             }
+        }
+        notesField(t.notes)
         }
 
         // One joined bar, the chosen type filled: a pick-one set, unlike the pills below.

@@ -127,6 +127,7 @@ internal enum class Icon(val path: String) {
     PROJECT("M22 11V3h-7v3H9V3H2v8h7V8h2v10h4v3h7v-8h-7v3h-2V8h2v3z"), // AccountTree
     STAR("M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"),
     REPEAT("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"),
+    NOTES("M3 18h12v-2H3v2zM3 6v2h18V6H3zm0 7h18v-2H3v2z"), // Notes
     CHECK("M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"),
     PLAY("M8 5v14l11-7z"),
     CALENDAR("M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"), // Event
@@ -442,6 +443,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                 due?.let { dueTail(it, status!!, data.now) }
                 if (task.type != TaskType.CHECKLIST) data.subtaskCounts(task)?.let { (done, total) -> span(classes = "tail") { +" · $done/$total" } }
                 if (task.recurrenceType != null) span(classes = "badge") { attributes["title"] = "Recurring"; icon(Icon.REPEAT, "") }
+                if (!task.notes.isNullOrBlank()) span(classes = "has-notes") { attributes["title"] = "Has notes"; icon(Icon.NOTES, "") }
             }
         }
         // A timed task's play button, "▶ 1h"; app.js runs the countdown (one at a time, per browser)
@@ -510,6 +512,18 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
 // "· due today" after a title, in the due colour (see DueStatus); the same words as the app's rows.
 internal fun FlowContent.dueTail(due: Long, status: DueStatus, now: Long) = span(classes = "tail due " + status.name.lowercase()) {
     +" · ${dueText(due, now)}"
+}
+
+// A note's text with its links opening in a new tab (trailing punctuation isn't part of the link).
+internal fun FlowContent.linkified(text: String) {
+    var at = 0
+    Regex("https?://\\S+").findAll(text).forEach { m ->
+        val url = m.value.trimEnd('.', ',', ')', ';', ':', '!', '?')
+        +text.substring(at, m.range.first)
+        a(href = url) { target = "_blank"; rel = "noopener"; +url }
+        at = m.range.first + url.length
+    }
+    +text.substring(at)
 }
 
 // Opens a link's page in the detail panel, keeping the list as it is (the URL still changes, so reload

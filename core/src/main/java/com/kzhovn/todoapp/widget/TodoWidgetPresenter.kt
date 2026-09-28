@@ -30,6 +30,7 @@ data class WidgetTaskRow(
     val durationMinutes: Int? = null, // a timed task: the row gets a play button with its length
     val due: DueStatus? = null, // colours the checkbox ring
     val isChecklist: Boolean = false, // a count in the checkbox's place
+    val hasNotes: Boolean = false, // the top bar marks it (the widget has no room)
     val children: List<WidgetChild> = emptyList() // what tapping the count expands, open ones first
 )
 
@@ -61,6 +62,7 @@ object TodoWidgetPresenter {
                 durationMinutes = it.durationMinutes,
                 due = effectiveDue(it)?.takeUnless { _ -> it.isComplete }?.let { d -> dueStatus(d, now) },
                 isChecklist = it.type == TaskType.CHECKLIST,
+                hasNotes = !it.notes.isNullOrBlank(),
                 children = childrenOf[it.id].orEmpty().sortedWith(ChecklistItemOrder).map { c -> WidgetChild(c.id, c.title, c.isComplete) }
             )
         }

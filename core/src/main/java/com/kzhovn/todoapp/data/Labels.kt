@@ -71,6 +71,7 @@ object Labels {
         "1 hour of …, ~30m" to "timed task (a play button counts it down)",
         "ends with * · ends with ?" to "starred · maybe",
         "-p · -f" to "pin it · focus on it (every device)",
+        "… // a note" to "a note on it",
     )
 
     const val SAVE = "Save"

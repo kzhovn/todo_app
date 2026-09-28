@@ -24,6 +24,46 @@
     if (e.key === "?") alert(help);
   });
 
+  // --- Notes (the editor's title card). The preview shows 5 lines (2 on a phone) with "more" when
+  // there's more; clicking it (not a link) edits the whole note, and leaving the field shows the
+  // preview again, rebuilt from what's typed.
+  const linkify = (el, text) => {
+    el.replaceChildren();
+    let at = 0;
+    for (const m of text.matchAll(/https?:\/\/\S+/g)) {
+      const url = m[0].replace(/[.,);:!?]+$/, "");
+      el.append(text.slice(at, m.index));
+      const a = Object.assign(document.createElement("a"), { href: url, target: "_blank", rel: "noopener", textContent: url });
+      el.append(a);
+      at = m.index + url.length;
+    }
+    el.append(text.slice(at));
+  };
+  const markMore = () => document.querySelectorAll(".notes").forEach((n) => {
+    const p = n.querySelector(".notes-preview");
+    n.querySelector(".more")?.remove();
+    if (p && p.scrollHeight > p.clientHeight + 1) p.after(Object.assign(document.createElement("div"), { className: "more", textContent: "more" }));
+  });
+  document.addEventListener("DOMContentLoaded", markMore);
+  document.addEventListener("htmx:afterSettle", markMore);
+  window.addEventListener("resize", markMore);
+  document.addEventListener("click", (e) => {
+    const notes = e.target.closest(".notes");
+    if (!notes || e.target.closest("a") || !e.target.closest(".notes-preview, .more")) return;
+    notes.classList.add("editing");
+    notes.querySelector(".notes-input").focus();
+  });
+  document.addEventListener("focusout", (e) => {
+    if (!e.target.matches(".notes-input")) return;
+    const notes = e.target.closest(".notes"), text = e.target.value.trim();
+    let p = notes.querySelector(".notes-preview");
+    if (!text) { p?.remove(); notes.classList.remove("editing"); return; }
+    if (!p) { p = Object.assign(document.createElement("div"), { className: "notes-preview" }); notes.prepend(p); }
+    linkify(p, text);
+    notes.classList.remove("editing");
+    markMore();
+  });
+
   // Settings save as soon as a value is picked (the CSP forbids inline handlers, hence here).
   document.addEventListener("change", (e) => { if (e.target.matches("form.settings select")) e.target.form.submit(); });
 

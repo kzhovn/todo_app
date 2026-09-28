@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.notesMatch
+import androidx.compose.material.icons.automirrored.filled.Notes
 import com.kzhovn.todoapp.data.countdown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -135,7 +137,8 @@ fun TaskListScreen(
         val effective = remember(task, allById, contextsByTaskId) { resolveEffective(task, allById, contextsByTaskId) }
         // The bar shows the nearest folder ancestor's color, even for a subtask of a task.
         val barColor = task.parentId?.let { walkParentChain(it, allById) { id -> colors[id] } } ?: LedgerBorder
-        val row = @Composable { TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, task.id in selectedIds, subtaskParentTitle(task, allById), onCheck, onStar, onEdit, onSnooze) }
+        val notesLine = viewModel.searchQuery?.let { notesMatch(task, it) }
+        val row = @Composable { TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, task.id in selectedIds, subtaskParentTitle(task, allById), onCheck, onStar, onEdit, onSnooze, notesLine) }
         // Swipe right to add a subtask (a checklist's are items), as in the All tree.
         SwipeToAddSubtask({ onAddSubtask(task.id) }, row)
         if (!last) HorizontalDivider(color = LedgerBorder)
@@ -201,6 +204,13 @@ private fun RecurrenceBadge() {
     }
 }
 
+// "There's more": the task has a note.
+@Composable
+internal fun NotesMark() {
+    Spacer(Modifier.width(4.dp))
+    Icon(Icons.AutoMirrored.Filled.Notes, contentDescription = "Has notes", tint = LedgerMuted, modifier = Modifier.size(15.dp))
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TaskRow(
@@ -214,7 +224,8 @@ private fun TaskRow(
     onCheck: (Long) -> Unit,
     onStar: (Long) -> Unit,
     onEdit: (Long) -> Unit,
-    onSnooze: (Long, Long) -> Unit
+    onSnooze: (Long, Long) -> Unit,
+    notesLine: String? = null // search: the line of the notes it matched
 ) {
     var showSnoozeMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -261,6 +272,7 @@ private fun TaskRow(
                         if (subtasks != null && subtasks.second > 0 && task.type != TaskType.CHECKLIST) {
                             withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · ${subtasks.first}/${subtasks.second}") }
                         }
+                        if (notesLine != null) withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 13.sp)) { append("\n$notesLine") }
                     },
                     fontWeight = FontWeight.Medium,
                     fontSize = 16.sp,
@@ -274,6 +286,7 @@ private fun TaskRow(
                     Spacer(Modifier.width(4.dp))
                     RecurrenceBadge()
                 }
+                if (!task.notes.isNullOrBlank()) NotesMark()
             }
             task.durationMinutes?.let { TimerButton(task, it) }
             if (task.isMaybe) {

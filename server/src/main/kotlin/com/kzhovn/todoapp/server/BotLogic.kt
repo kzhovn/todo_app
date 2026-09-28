@@ -40,6 +40,7 @@ Dates: `today`, `mon`, `next fri`, `+3d`, `in 2 weeks`, `+2h`, `oct 12`, `next w
 `-- x ~30m` / `-- 30m of x` a timed task
 `-- x*` starred · `-- x?` a maybe (hidden from Active, never starred)
 `-- x -p` pin it · `-- x -f` focus on it (every device)
+`-- x // a note`, or the message's lines after the first: its note
 Reply to a todo with a todo: the first depends on the new one.
 
 **On a todo's message**
@@ -136,7 +137,8 @@ class BotLogic(private val service: TaskService, private val store: Store) {
                 title = if (old.title != new.title) new.title else it.title,
                 startDate = if (old.startDate != new.startDate) new.startDate else it.startDate,
                 dueDate = if (old.dueDate != new.dueDate) new.dueDate else it.dueDate,
-                parentId = if (old.parentId != new.parentId) new.parentId else it.parentId
+                parentId = if (old.parentId != new.parentId) new.parentId else it.parentId,
+                notes = if (old.notes != new.notes) new.notes else it.notes
             )
         }
         saveLink(messageId, link.copy(text = content))
@@ -308,7 +310,7 @@ class BotLogic(private val service: TaskService, private val store: Store) {
     }
 
     private fun describe(task: Task): String {
-        val title = task.title.take(120) + if (task.isMaybe) " ?" else ""
+        val title = task.title.take(120) + (if (task.isMaybe) " ?" else "") + (if (!task.notes.isNullOrBlank()) " 📝" else "")
         val due = service.effectiveDueDate(task)?.let {
             " · due " + SimpleDateFormat(if (hasTime(it)) "EEE d MMM h:mm a" else "EEE d MMM", Locale.US).format(Date(it))
         }.orEmpty()

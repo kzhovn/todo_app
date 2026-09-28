@@ -71,7 +71,23 @@ object QuickAddParser {
 
     fun parse(input: String, now: Long = System.currentTimeMillis()): Task = read(input, now).task!!
 
+    // The note: everything after the first line, or after " // " on it ("call bank // ask about the
+    // fee"). A URL's "//" never counts, since it follows ":" rather than a space.
+    fun splitNotes(input: String): Pair<String, String?> {
+        val lines = input.trim().lines()
+        val first = lines.first()
+        val slash = Regex("(^|\\s)//(\\s|$)").find(first)
+        val title = if (slash == null) first else first.substring(0, slash.range.first)
+        val notes = listOfNotNull(slash?.let { first.substring(it.range.last + 1) }) + lines.drop(1)
+        return title to notes.joinToString("\n").trim().ifEmpty { null }
+    }
+
     fun read(input: String, now: Long = System.currentTimeMillis()): QuickAdd {
+        val (titlePart, notes) = splitNotes(input)
+        return readTitle(titlePart, now).let { it.copy(task = it.task!!.copy(notes = notes)) }
+    }
+
+    private fun readTitle(input: String, now: Long): QuickAdd {
         var startDate: Long? = null
         var dueDate: Long? = null
         val matches = flagRegex.findAll(input).map { Triple(it.groupValues[1].equals("s", ignoreCase = true), it.groupValues[2], it.groupValues[3]) } +

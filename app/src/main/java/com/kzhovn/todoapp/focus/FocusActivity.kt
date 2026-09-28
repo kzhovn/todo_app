@@ -1,5 +1,8 @@
 package com.kzhovn.todoapp.focus
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.kzhovn.todoapp.ui.theme.LedgerSearchBackground
+import com.kzhovn.todoapp.ui.linkified
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -167,6 +170,14 @@ class FocusActivity : ComponentActivity() {
                             Spacer(Modifier.height(16.dp))
                             Text(t.title, fontSize = 28.sp, fontWeight = FontWeight.Medium, color = LedgerInk, textAlign = TextAlign.Center, lineHeight = 34.sp)
                             effectiveDue?.let { due -> Text(dueText(due, System.currentTimeMillis()), fontSize = 14.sp, color = LedgerMuted, modifier = Modifier.padding(top = 8.dp)) }
+                            // The note: what to ask, the number to call. Links open.
+                            t.notes?.takeIf { it.isNotBlank() }?.let { notes ->
+                                Text(
+                                    linkified(notes), fontSize = 15.sp, lineHeight = 21.sp, color = LedgerInk,
+                                    modifier = Modifier.padding(top = 16.dp).fillMaxWidth().heightIn(max = 220.dp).verticalScroll(rememberScrollState())
+                                        .background(LedgerSearchBackground, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 10.dp)
+                                )
+                            }
                             if (items.isNotEmpty()) Column(Modifier.padding(top = 20.dp).heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
                                 items.forEach { item ->
                                     Row(verticalAlignment = Alignment.CenterVertically) {
