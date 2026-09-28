@@ -344,7 +344,7 @@
   });
   document.addEventListener("change", (e) => {
     const other = { maybe: "starred", starred: "maybe" }[e.target.name];
-    if (other && e.target.checked && e.target.closest(".title-box")) e.target.form.querySelector(`[name=${other}]`).checked = false;
+    if (other && e.target.checked && e.target.closest(".editor")) e.target.form.querySelector(`[name=${other}]`).checked = false;
   });
 
   // The undo toast hides a few seconds after it appears, whether swapped in or rendered with the page.

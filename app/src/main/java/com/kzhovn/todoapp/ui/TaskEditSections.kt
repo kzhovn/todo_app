@@ -1,5 +1,14 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.selection.selectable
 import android.app.Activity
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -130,11 +139,43 @@ internal fun TitleBox(vm: TaskEditViewModel, pinned: Boolean, onTogglePin: () ->
 @Composable
 internal fun TypeRow(vm: TaskEditViewModel) {
     Spacer(Modifier.height(10.dp))
-    Row {
-        Labels.TYPES.forEach { (type, label) ->
-            SelectablePill(label, selected = vm.task.type == type) { vm.task = vm.task.copy(type = type) }
-            Spacer(Modifier.width(8.dp))
+    // One joined bar, the chosen type filled: a pick-one set, unlike the chips below.
+    val shape = RoundedCornerShape(8.dp)
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).clip(shape).border(1.dp, LedgerBorder, shape)) {
+        Labels.TYPES.forEachIndexed { i, (type, label) ->
+            if (i > 0) Box(Modifier.width(1.dp).fillMaxHeight().background(LedgerBorder))
+            val on = vm.task.type == type
+            Text(
+                label, fontSize = 13.sp, color = if (on) LedgerAccentInk else LedgerMuted, textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f).background(if (on) LedgerAccent else Color.Transparent)
+                    .selectable(selected = on, role = Role.RadioButton) { vm.task = vm.task.copy(type = type) }
+                    .padding(vertical = 7.dp)
+            )
         }
+    }
+}
+
+// An on/off choice: a pill holding a small switch, the choice's icon and its label. Set apart from
+// the chips (whose tap opens a picker) by its switch and round outline.
+@Composable
+private fun TogglePill(label: String, icon: ImageVector, on: Boolean, onToggle: () -> Unit) {
+    val color = if (on) LedgerAccent else LedgerMuted
+    val shape = RoundedCornerShape(50)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.clip(shape).background(if (on) LedgerAccentSoft else Color.Transparent)
+            .border(1.dp, if (on) LedgerAccent else LedgerBorder, shape)
+            .toggleable(value = on, role = Role.Switch) { onToggle() }
+            .padding(start = 5.dp, end = 10.dp, top = 5.dp, bottom = 5.dp)
+    ) {
+        Box(
+            contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
+            modifier = Modifier.size(width = 24.dp, height = 14.dp).clip(shape).background(if (on) LedgerAccent else LedgerBorder).padding(2.dp)
+        ) { Box(Modifier.size(10.dp).clip(CircleShape).background(Color.White)) }
+        Spacer(Modifier.width(5.dp))
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(4.dp))
+        Text(label, fontSize = 12.sp, color = color)
     }
 }
 
@@ -207,14 +248,7 @@ internal fun TimingSection(vm: TaskEditViewModel, activity: Activity, onRepeat: 
                 val hour = AppSettings.rolloverHour(activity)
                 vm.task = vm.task.copy(expiresAt = if (vm.task.expiresAt == null) nextRollover(System.currentTimeMillis(), hour) else null)
             }
-            PropertyChip(
-                label = Labels.TODAY_ONLY,
-                valueText = Labels.TODAY_ONLY.takeIf { task.expiresAt != null },
-                icon = Icons.Filled.AcUnit,
-                onClick = toggleToday,
-                onClear = toggleToday,
-                showLabelWhenSet = false
-            )
+            TogglePill(Labels.TODAY_ONLY, Icons.Filled.AcUnit, on = task.expiresAt != null, onToggle = toggleToday)
         }
     }
 }
@@ -258,10 +292,9 @@ internal fun PropertiesSection(vm: TaskEditViewModel, onPickFolder: () -> Unit, 
             }
         }
         // Hidden from Active and Doing; never starred, so turning it on unstars.
-        if (task.type != TaskType.FOLDER) PropertyChip(
-            label = Labels.MAYBE, valueText = Labels.MAYBE.takeIf { task.isMaybe }, icon = Icons.Filled.QuestionMark,
-            onClick = { vm.task = task.copy(isMaybe = !task.isMaybe, isStarred = task.isStarred && task.isMaybe) }, showLabelWhenSet = false
-        )
+        if (task.type != TaskType.FOLDER) TogglePill(Labels.MAYBE, Icons.Filled.QuestionMark, on = task.isMaybe) {
+            vm.task = task.copy(isMaybe = !task.isMaybe, isStarred = task.isStarred && task.isMaybe)
+        }
     }
 }
 
@@ -340,15 +373,11 @@ internal fun SubtaskOptions(vm: TaskEditViewModel) {
     if (task.type == TaskType.CHECKLIST) return
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 8.dp)) {
         // Only the first incomplete child counts as active.
-        PropertyChip(
-            label = Labels.SEQUENTIAL, valueText = Labels.SEQUENTIAL.takeIf { task.sequential }, icon = Icons.Filled.FormatListNumbered,
-            onClick = { vm.task = task.copy(sequential = !task.sequential) }, showLabelWhenSet = false
-        )
+        TogglePill(Labels.SEQUENTIAL, Icons.Filled.FormatListNumbered, on = task.sequential) { vm.task = task.copy(sequential = !task.sequential) }
         // Normally a task waits on its open subtasks; this keeps it in Doing/Active anyway.
-        if (task.type == TaskType.TASK) PropertyChip(
-            label = Labels.ACTIVE_WITH_SUBTASKS, valueText = Labels.ACTIVE_WITH_SUBTASKS.takeIf { task.activeWithSubtasks }, icon = Icons.Filled.Bolt,
-            onClick = { vm.task = task.copy(activeWithSubtasks = !task.activeWithSubtasks) }, showLabelWhenSet = false
-        )
+        if (task.type == TaskType.TASK) TogglePill(Labels.ACTIVE_WITH_SUBTASKS, Icons.Filled.Bolt, on = task.activeWithSubtasks) {
+            vm.task = task.copy(activeWithSubtasks = !task.activeWithSubtasks)
+        }
     }
 }
 

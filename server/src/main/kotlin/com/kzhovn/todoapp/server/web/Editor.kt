@@ -441,9 +441,10 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
             }
         }
 
-        div(classes = "pills") {
+        // One joined bar, the chosen type filled: a pick-one set, unlike the pills below.
+        div(classes = "type-seg") {
             Labels.TYPES.forEach { (type, label) ->
-                label(classes = "pill") { radioInput(name = "type") { value = type.name; checked = t.type == type }; +label }
+                label { radioInput(name = "type") { value = type.name; checked = t.type == type }; +label }
             }
         }
 
@@ -536,10 +537,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
                 numberInput(name = "duration", classes = "duration-input") { value = t.durationMinutes?.toString().orEmpty(); min = "1"; placeholder = "minutes" }
                 span(classes = "hint inline-hint") { +"minutes" }
             }
-            label(classes = "pill task-only") {
-                checkBoxInput(name = "today") { checked = t.expiresAt != null }
-                icon(Icon.SNOWFLAKE, "pill-icon"); +Labels.TODAY_ONLY
-            }
+            togglePill("today", t.expiresAt != null, Icon.SNOWFLAKE, Labels.TODAY_ONLY, "task-only")
         }
 
         div(classes = "field-label section") { +Labels.PROPERTIES }
@@ -565,7 +563,7 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
             }
             a(href = "/contexts", classes = "pill manage") { +Labels.MANAGE_CONTEXTS }
             // Hidden from Active and Doing.
-            label(classes = "pill toggle task-only") { checkBoxInput(name = "maybe") { checked = t.isMaybe }; span(classes = "maybe-mark") { +"?" }; +Labels.MAYBE }
+            togglePill("maybe", t.isMaybe, Icon.QUESTION_MARK, Labels.MAYBE, "task-only")
         }
 
         // A new task has no id for the related-task actions yet, so its subtasks, prerequisite and
@@ -594,15 +592,9 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
         div(classes = "subtask-options") {
             div(classes = "pills") {
                 // Only the first incomplete child counts as active.
-                label(classes = "pill toggle") {
-                    checkBoxInput(name = "sequential") { checked = t.sequential; attributes["form"] = formId }
-                    icon(Icon.LIST_NUMBERED, "pill-icon"); +Labels.SEQUENTIAL
-                }
+                togglePill("sequential", t.sequential, Icon.LIST_NUMBERED, Labels.SEQUENTIAL, form = formId)
                 // Normally a task waits on its open subtasks; this keeps it in Doing/Active anyway.
-                label(classes = "pill toggle task-type-only") {
-                    checkBoxInput(name = "activeWithSubtasks") { checked = t.activeWithSubtasks; attributes["form"] = formId }
-                    icon(Icon.BOLT, "pill-icon"); +Labels.ACTIVE_WITH_SUBTASKS
-                }
+                togglePill("activeWithSubtasks", t.activeWithSubtasks, Icon.BOLT, Labels.ACTIVE_WITH_SUBTASKS, "task-type-only", form = formId)
             }
         }
         div(classes = "actions") {
@@ -638,6 +630,16 @@ private fun HTML.editorPage(service: TaskService, v: EditorView) = shellPage("Ra
         }
     }
 }
+
+// An on/off choice: a pill holding a small switch, the choice's icon and its label. Set apart from the
+// picker pills (which open a popover) by its switch and outline. `form`: for one outside the editor's form.
+private fun FlowContent.togglePill(name: String, on: Boolean, icon: Icon, label: String, classes: String = "", form: String? = null) =
+    label(classes = "pill toggle $classes".trim()) {
+        checkBoxInput(name = name) { checked = on; form?.let { attributes["form"] = it } }
+        span(classes = "sw")
+        icon(icon, "pill-icon")
+        +label
+    }
 
 internal fun FlowContent.field(label: String, classes: String, content: FlowContent.() -> Unit) = div(classes = "field $classes") {
     span(classes = "field-label") { +label }

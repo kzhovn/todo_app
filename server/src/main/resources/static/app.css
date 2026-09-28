@@ -269,7 +269,6 @@ body.selecting #list .row:not([data-type="TASK"]), body.selecting #list .folder 
 .title-input { flex: 1; border: 0 !important; background: none !important; padding: 8px 0 !important; font: inherit; font-size: 18px; font-weight: 600; color: var(--ink); resize: none; field-sizing: content; min-height: 1.4em; max-height: calc(4 * 1.4em + 16px); overflow-y: auto; line-height: 1.4; outline: none; }
 .flag-toggle { cursor: pointer; width: 34px; height: 38px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .flag-toggle input { display: none; }
-.maybe-mark { font-weight: 700; }
 .pill-icon { width: 14px; height: 14px; margin-right: 4px; vertical-align: -2px; }
 .pp { position: relative; display: inline-block; }
 .pp > summary { list-style: none; display: inline-flex; align-items: center; }
@@ -288,9 +287,21 @@ body.selecting #list .row:not([data-type="TASK"]), body.selecting #list .folder 
 /* A checklist's items are ticked in any order and never block it, so no subtask options. */
 .editor:has(input[name=type][value=CHECKLIST]:checked) ~ .editor-foot .subtask-options { display: none; }
 .subtask-options { margin: 8px 0; }
-.pill.toggle { display: inline-flex; align-items: center; gap: 4px; }
+/* An on/off choice: a small switch, then its icon and label. */
+.pill.toggle { display: inline-flex; align-items: center; gap: 5px; padding-left: 5px; }
 .pill.toggle input { display: none; }
+.pill.toggle .pill-icon { margin-right: 0; }
+.pill.toggle .sw { width: 24px; height: 14px; border-radius: 7px; background: var(--border); position: relative; flex-shrink: 0; transition: background .15s; }
+.pill.toggle .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: #fff; transition: left .15s; }
 .pill.toggle:has(:checked) { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.pill.toggle:has(:checked) .sw { background: var(--accent); }
+.pill.toggle:has(:checked) .sw::after { left: 12px; }
+/* The task type: one joined bar, the chosen one filled. */
+.type-seg { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 10px 0 2px; }
+.type-seg label { flex: 1; text-align: center; padding: 6px 0; font-size: 13px; color: var(--muted); cursor: pointer; border-left: 1px solid var(--border); }
+.type-seg label:first-child { border-left: 0; }
+.type-seg input { display: none; }
+.type-seg label:has(input:checked) { background: var(--accent); color: var(--panel); }
 .pill.manage { text-decoration: none; }
 .related { padding: 0 24px 4px; }
 .rel-row { display: flex; align-items: center; gap: 10px; min-height: 34px; border-bottom: 1px solid var(--border); }
