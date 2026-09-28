@@ -60,28 +60,13 @@ class Api {
     }
 }
 
-// Opens a page of the web app: in the installed desktop app when there is one (Chrome's launcher
-// for it, matched by name), else in the default browser.
+// Opens a page of the web app in the Raspberry desktop app (desktop/raspberry-app.js) when it's
+// installed, else in the default browser.
 function openPage(url) {
-    const dir = Gio.File.new_for_path(GLib.build_filenamev([GLib.get_user_data_dir(), 'applications']));
-    try {
-        const files = dir.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NONE, null);
-        for (let info; (info = files.next_file(null));) {
-            const name = info.get_name();
-            if (!/^chrome-.*\.desktop$/.test(name)) continue;
-            const keys = new GLib.KeyFile();
-            keys.load_from_file(dir.get_child(name).get_path(), GLib.KeyFileFlags.NONE);
-            if (keys.get_string('Desktop Entry', 'Name') !== 'Raspberry') continue;
-            const [, argv] = GLib.shell_parse_argv(keys.get_string('Desktop Entry', 'Exec'));
-            // The launcher opens the app's start page; this flag opens a given page in the app instead.
-            const args = argv.filter((a) => !a.startsWith('%')).concat(`--app-launch-url-for-shortcuts-menu-item=${url}`);
-            GLib.spawn_async(null, args, null, GLib.SpawnFlags.SEARCH_PATH, null);
-            return;
-        }
-    } catch (e) {
-        console.warn(`Raspberry: couldn't launch the installed app: ${e.message}`);
-    }
-    Gio.AppInfo.launch_default_for_uri(url, null);
+    const context = global.create_app_launch_context(0, -1);
+    const app = Gio.DesktopAppInfo.new('com.kzhovn.Raspberry.desktop');
+    if (app) app.launch_uris([url], context);
+    else Gio.AppInfo.launch_default_for_uri(url, context);
 }
 
 const Indicator = GObject.registerClass(
