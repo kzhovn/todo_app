@@ -3,10 +3,8 @@ package com.kzhovn.todoapp.widget
 import androidx.compose.ui.graphics.Color
 import com.kzhovn.todoapp.data.folderColorsArgb
 import com.kzhovn.todoapp.data.isUnder
-import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.subtaskCounts
 import androidx.glance.appwidget.updateAll
-import com.kzhovn.todoapp.data.isChecklistItem
 import androidx.glance.text.TextDecoration
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.currentState
@@ -109,7 +107,7 @@ class TodoWidget : GlanceAppWidget() {
             val allById = allTasks.associateBy { it.id }
             val contextsByTaskId = repository.getAllTaskContexts()
             val tasks = when (mode) {
-                WidgetMode.ALL -> allTasks.filter { it.type.isDoable && !it.isComplete && !isChecklistItem(it, allById) }
+                WidgetMode.ALL -> TodoWidgetPresenter.allOpen(allTasks, allById)
                 else -> {
                     val active = repository.getActiveTasksFrom(allTasks, contextsByTaskId, now, minuteOfDay(now), dayOfWeekMask(now))
                     if (mode == WidgetMode.ACTIVE) active

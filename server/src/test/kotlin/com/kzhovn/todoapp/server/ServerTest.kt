@@ -65,6 +65,7 @@ class ServerTest {
         val state = tray(client.get("/api/tray") { header("Authorization", "Bearer secret") }.bodyAsText())
         assertEquals(listOf("Find number"), state.doing.map { it.title }) // the parent waits on its subtask
         assertEquals("Call mom", state.doing.single().parentTitle)
+        assertEquals(listOf("Call mom", "Find number"), state.all.map { it.title }) // All has the waiting parent too
 
         val pinned = tray(client.post("/api/tasks/${call.id}/pin") { header("Authorization", "Bearer secret") }.bodyAsText())
         assertEquals(PinnedRow(call.id, "Call mom"), pinned.pinned)

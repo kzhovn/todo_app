@@ -1,4 +1,4 @@
-// The Raspberry tray: the phone widget's Doing/Active list in a top-bar popup, with the pinned task's
+// The Raspberry tray: the phone widget's Doing/Active/All lists in a top-bar popup, with the pinned task's
 // title in the top bar. Rows come ready-made from the server's /api/tray (the widget's own rows), so
 // nothing here decides what's in Doing or how a row reads. See
 // docs/superpowers/specs/2026-09-27-desktop-tray-design.md.
@@ -163,11 +163,11 @@ class Indicator extends PanelMenu.Button {
         this._popup.add_child(new St.Label({style_class: 'rb-status', text: this._status}));
     }
 
-    // ☰ opens the full list; the tabs switch Doing/Active; then refresh and quick add, like the widget.
+    // ☰ opens the full list; the tabs switch Doing/Active/All; then refresh and quick add, like the widget.
     _header() {
         const header = new St.BoxLayout({style_class: 'rb-header'});
         header.add_child(this._button({label: '☰', style_class: 'rb-menu'}, () => this._open(`/${this._mode}`)));
-        for (const mode of ['doing', 'active']) {
+        for (const mode of ['doing', 'active', 'all']) {
             const count = this._state ? ` ${this._state[mode].length}` : '';
             header.add_child(this._button(
                 {label: `${mode.toUpperCase()}${count}`, style_class: mode === this._mode ? 'rb-tab rb-tab-on' : 'rb-tab'},

@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.widget
 
+import com.kzhovn.todoapp.data.isChecklistItem
+import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.checklistItems
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.repository.urgentFirst
@@ -32,6 +34,10 @@ data class WidgetTaskRow(
 )
 
 object TodoWidgetPresenter {
+    // The All list's tasks: every open task and checklist (not folders, projects or checklist items).
+    fun allOpen(tasks: List<Task>, allById: Map<Long, Task>): List<Task> =
+        tasks.filter { it.type.isDoable && !it.isComplete && !isChecklistItem(it, allById) }
+
     fun toRows(
         tasks: List<Task>,
         subtaskCounts: Map<Long, Pair<Int, Int>> = emptyMap(),

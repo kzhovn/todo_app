@@ -19,7 +19,7 @@ import kotlinx.serialization.Serializable
 // Rows are the widget's own, so the tray shows exactly what a Doing/Active widget would. Every
 // action answers with the new state, so each costs one round trip.
 @Serializable
-data class TrayState(val pinned: PinnedRow?, val doing: List<WidgetTaskRow>, val active: List<WidgetTaskRow>)
+data class TrayState(val pinned: PinnedRow?, val doing: List<WidgetTaskRow>, val active: List<WidgetTaskRow>, val all: List<WidgetTaskRow>)
 
 @Serializable
 data class PinnedRow(val id: Long, val title: String)
@@ -30,10 +30,12 @@ fun trayState(service: TaskService): TrayState {
     val contexts = service.contextIdsByTask()
     val counts = subtaskCounts(all)
     val colors = folderColorsArgb(all)
-    fun rows(tasks: List<Task>) = TodoWidgetPresenter.toRows(
-        tasks, counts, service.now(), byId, colors, { resolveEffective(it, byId, contexts).effectiveDueDate }, urgentOnTop = true
+    fun rows(tasks: List<Task>, urgentOnTop: Boolean = true) = TodoWidgetPresenter.toRows(
+        tasks, counts, service.now(), byId, colors, { resolveEffective(it, byId, contexts).effectiveDueDate }, urgentOnTop
     )
-    return TrayState(service.pinned()?.let { PinnedRow(it.id, it.title) }, rows(service.doing()), rows(service.active()))
+    return TrayState(service.pinned()?.let { PinnedRow(it.id, it.title) }, rows(service.doing()), rows(service.active()),
+        // Like the widget's All: by folder, with nothing moved to the top.
+        rows(TodoWidgetPresenter.allOpen(all, byId), urgentOnTop = false))
 }
 
 // Bearer-token protected like /sync, so it's served even where the web pages aren't.
