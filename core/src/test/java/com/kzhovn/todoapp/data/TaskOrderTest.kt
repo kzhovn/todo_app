@@ -28,4 +28,34 @@ class TaskOrderTest {
         assertEquals(emptyList<Task>(), stalledProjects(listOf(project, done, open)))
         assertEquals(listOf(project), stalledProjects(listOf(project, done)))
     }
+
+    @Test
+    fun `a new task goes first below the folders, moving no sibling until there's no room`() {
+        val home = Task(id = 1, title = "Home", type = TaskType.FOLDER)
+        val all = mutableListOf(home, Task(id = 2, title = "Sub", type = TaskType.FOLDER, parentId = 1), Task(id = 3, title = "old", parentId = 1))
+        var siblingWrites = 0
+        for (n in 1..40) {
+            val new = Task(id = 100L + n, title = "new $n", parentId = 1)
+            val positions = newTaskPositions(all, new)
+            siblingWrites += positions.keys.count { it != new.id }
+            all.replaceAll { t -> positions[t.id]?.let { t.copy(position = it) } ?: t }
+            all += new.copy(position = positions[new.id])
+            assertEquals(listOf("Sub", "new $n"), all.filter { it.parentId == 1L }.sortedWith(TaskOrder).take(2).map { it.title })
+        }
+        assertEquals(listOf("Sub") + (40 downTo 1).map { "new $it" } + "old", all.filter { it.parentId == 1L }.sortedWith(TaskOrder).map { it.title })
+        // Room between the folder and the first task runs out only now and then; it was every add.
+        assert(siblingWrites < 40 * 5) { "respaced too often: $siblingWrites sibling writes" }
+    }
+
+    @Test
+    fun `with no folders to stay below, a new task never moves its siblings`() {
+        val all = mutableListOf(Task(id = 1, title = "Home", type = TaskType.FOLDER), Task(id = 2, title = "a", parentId = 1, position = 1))
+        repeat(50) { n ->
+            val new = Task(id = 100L + n, title = "n$n", parentId = 1)
+            val positions = newTaskPositions(all, new)
+            assertEquals(setOf(new.id), positions.keys)
+            all += new.copy(position = positions[new.id])
+        }
+        assertEquals("n49", all.filter { it.parentId == 1L }.sortedWith(TaskOrder).first().title)
+    }
 }
