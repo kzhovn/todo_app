@@ -62,6 +62,9 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     fun rolloverHour(): Int = store.getValue(Store.ROLLOVER_HOUR_KEY)?.toIntOrNull() ?: DEFAULT_ROLLOVER_HOUR
 
+    // From the web's settings; the phone picks it up on its next sync.
+    fun setRolloverHour(hour: Int) = store.setRolloverHour(hour.coerceIn(0, 23), clock())
+
     fun get(id: Long): Task? = store.get(TASKS, id)?.takeUnless { it.isDeleted }?.toTask()?.takeUnless { it.isExpired(clock()) }
 
     // Deletes "Today only" tasks whose day is over, so the phone drops them too even if it was

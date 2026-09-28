@@ -292,7 +292,7 @@ private fun HTML.shell(
             }
             div(classes = "nav-label") { +"More" }
             nav(classes = "nav") {
-                listOf("/focus" to "Focus", "/search" to "Search", "/review" to "Review", "/contexts" to "Contexts")
+                listOf("/focus" to "Focus", "/search" to "Search", "/review" to "Review", "/contexts" to "Contexts", "/settings" to "Settings")
                     .forEach { (path, label) -> a(href = path, classes = if (path == current) "current" else null) { +label } }
             }
             details(classes = "shortcuts") {

@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server.web
 
+import kotlinx.html.noScript
 import com.kzhovn.todoapp.data.clockTime
 import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.data.subtaskCounts
@@ -103,6 +104,11 @@ fun Route.pageRoutes(service: TaskService) {
 
     get("/review") { call.respondHtml { reviewPage(service) } }
 
+    get("/settings") { call.respondHtml { settingsPage(service) } }
+    post("/settings") {
+        call.receiveParameters()["rolloverHour"]?.toIntOrNull()?.let(service::setRolloverHour)
+        call.respondRedirect("/settings")
+    }
     get("/contexts") {
         val editing = call.request.queryParameters["edit"]?.toLongOrNull()?.let { id -> service.contexts().firstOrNull { it.id == id } }
         val form = editing?.let { ContextForm(it, service.timeWindows(it.id)) } ?: ContextForm(TaskContext(name = "", type = ContextType.PLACE), emptyList())
@@ -388,6 +394,25 @@ private fun describe(context: TaskContext, windows: List<ContextTimeWindow>): St
         val days = if (w.daysMask == ContextTimeWindow.ALL_DAYS) "every day"
         else Labels.WEEKDAYS.filter { (bit, _) -> w.daysMask and (1 shl bit) != 0 }.joinToString(" ") { it.second }
         "${clockTime(w.windowStartMinute)}–${clockTime(w.windowEndMinute)} $days"
+    }
+}
+
+// The phone's settings that belong to every device: when the day rolls over.
+private fun HTML.settingsPage(service: TaskService) = shellPage(service, "Raspberry · Settings", "/settings") {
+    div(classes = "contexts") {
+        h1 { +"Settings" }
+        form(action = "/settings", method = FormMethod.post, classes = "settings") {
+            label {
+                +"Day rolls over at "
+                select {
+                    name = "rolloverHour"
+                    attributes["onchange"] = "this.form.submit()"
+                    (0..23).forEach { h -> option { value = "$h"; selected = h == service.rolloverHour(); +"%02d:00".format(h) } }
+                }
+            }
+            p(classes = "hint") { +"“${Labels.TODAY_ONLY}” tasks are deleted at this time, and a snooze to tomorrow wakes then. The phone uses it too." }
+            noScript { button(type = ButtonType.submit) { +Labels.SAVE } }
+        }
     }
 }
 

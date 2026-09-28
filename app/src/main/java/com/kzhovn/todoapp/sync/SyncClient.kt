@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.sync
 
+import com.kzhovn.todoapp.AppSettings
 import android.content.Context
 import androidx.room.withTransaction
 import com.kzhovn.todoapp.data.Task
@@ -23,7 +24,7 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManagerFactory
 
-data class SyncConfig(val url: String, val token: String, val rolloverHour: Int? = null)
+data class SyncConfig(val url: String, val token: String, val rolloverHour: Int? = null, val rolloverSetAt: Long = 0)
 
 class SyncClient(
     private val context: Context,
@@ -44,10 +45,12 @@ class SyncClient(
     suspend fun sync(config: SyncConfig): Int = mutex.withLock {
         val (request, pushedTs) = db.withTransaction {
             val dirty = readDirty()
-            SyncRequest(cursor(), dirty.mapNotNull { (key, ts) -> changeFor(key, ts) }, config.rolloverHour) to dirty
+            SyncRequest(cursor(), dirty.mapNotNull { (key, ts) -> changeFor(key, ts) }, config.rolloverHour, config.rolloverSetAt) to dirty
         }
         val response = withContext(Dispatchers.IO) { (transport ?: ::post)(config, request) }
         val result = db.withTransaction { apply(response, pushedTs) }
+        // Set more recently elsewhere (the web): take it.
+        response.rolloverHour?.takeIf { response.rolloverSetAt > config.rolloverSetAt }?.let { AppSettings.setRolloverHour(context, it, response.rolloverSetAt) }
         result.applied.forEach { if (it.isComplete) reminders.cancel(it) else reminders.schedule(it) }
         result.removed.forEach(reminders::cancel)
         result.changedRows

@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.sync.SyncRequest
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.sync.taskFields
@@ -581,6 +582,16 @@ class WebTest {
         val draft = client.get("/tasks/new?text=packing+%5Bpassport%2C+charger%5D&due=tomorrow&mode=DOING").bodyAsText()
         assertTrue(draft.contains(">packing</textarea>"))
         assertTrue(draft.contains("passport\ncharger"))
+    }
+
+    @Test
+    fun `the web sets the day rollover hour, and beats an older one from the phone`() = web {
+        store.sync(SyncRequest(0, emptyList(), rolloverHour = 6, rolloverSetAt = 1))
+        assertTrue(client.get("/settings").bodyAsText().contains("<option value=\"6\" selected"))
+        client.submitForm("/settings", parameters { append("rolloverHour", "3") })
+        assertEquals(3, service.rolloverHour())
+        val phone = store.sync(SyncRequest(0, emptyList(), rolloverHour = 6, rolloverSetAt = 1))
+        assertEquals(3 to 3, service.rolloverHour() to phone.rolloverHour)
     }
 
     @Test

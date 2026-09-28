@@ -37,12 +37,13 @@ data class SyncRow(
     val deletedAt: Long? get() = fields[DELETED_AT]?.takeIf { it != JsonNull }?.jsonPrimitive?.long
 }
 
-// rolloverHour carries the phone's day-rollover setting so the bot's "--d:" tasks use the same day.
+// The day-rollover hour ("today only" tasks end then), set on the phone or the web: the newer setting
+// (rolloverSetAt; 0 for one never set) wins, like a task field, so every device uses the same day.
 @Serializable
-data class SyncRequest(val cursor: Long, val changes: List<SyncRow>, val rolloverHour: Int? = null)
+data class SyncRequest(val cursor: Long, val changes: List<SyncRow>, val rolloverHour: Int? = null, val rolloverSetAt: Long = 0)
 
 @Serializable
-data class SyncResponse(val cursor: Long, val rows: List<SyncRow>)
+data class SyncResponse(val cursor: Long, val rows: List<SyncRow>, val rolloverHour: Int? = null, val rolloverSetAt: Long = 0)
 
 // Per-field last-write-wins. Ties keep `current`, so on the server, the server wins ties.
 fun merge(current: SyncRow?, incoming: SyncRow): SyncRow {

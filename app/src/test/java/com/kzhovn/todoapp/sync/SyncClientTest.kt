@@ -57,6 +57,19 @@ class SyncClientTest {
     fun tearDown() = db.close()
 
     @Test
+    fun `the day rollover hour set more recently wins, the phone's or the web's`() = runBlocking {
+        com.kzhovn.todoapp.AppSettings.setRolloverHour(context, 5, setAt = 100)
+        client.sync(config.copy(rolloverHour = 5, rolloverSetAt = 100))
+        assertEquals(5, server.rolloverHour())
+
+        store.setRolloverHour(2, setAt = 200) // set on the web since
+        client.sync(config.copy(rolloverHour = 5, rolloverSetAt = 100))
+        assertEquals(2, server.rolloverHour())
+        assertEquals(2, com.kzhovn.todoapp.AppSettings.rolloverHour(context))
+        assertEquals(200, com.kzhovn.todoapp.AppSettings.rolloverSetAt(context))
+    }
+
+    @Test
     fun `local tasks, contexts, and assignments reach the server`() = runBlocking {
         val ctxId = contexts.createContext(TaskContext(name = "Work", type = ContextType.TIME))
         contexts.addTimeWindow(ContextTimeWindow(contextId = ctxId, windowStartMinute = 540, windowEndMinute = 1020))

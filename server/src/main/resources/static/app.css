@@ -398,3 +398,6 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .focus-item .check { margin: 0; flex-shrink: 0; }
 .focus-item.done { color: var(--muted); text-decoration: line-through; }
 
+/* Settings. */
+.settings label { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.settings select { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }

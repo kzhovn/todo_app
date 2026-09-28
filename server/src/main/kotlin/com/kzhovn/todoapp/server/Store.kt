@@ -36,18 +36,29 @@ class Store(path: String) {
 
     // Merged rows get fresh versions, so they come back in the response too — the client needs the
     // merged result, not just what it sent.
+    // The newer setting wins; ties go to the incoming one, so a phone that never set it still counts
+    // until the web sets it.
+    fun setRolloverHour(hour: Int, setAt: Long) = transaction {
+        if (setAt >= rolloverSetAt()) {
+            setValue(ROLLOVER_HOUR_KEY, hour.toString())
+            setValue(ROLLOVER_SET_AT_KEY, setAt.toString())
+        }
+    }
+
+    private fun rolloverSetAt() = getValue(ROLLOVER_SET_AT_KEY)?.toLongOrNull() ?: 0
+
     @Synchronized
     fun sync(request: SyncRequest): SyncResponse {
         val changed = mutableListOf<Pair<SyncRow?, SyncRow>>()
         val response = transaction {
-            request.rolloverHour?.let { setValue(ROLLOVER_HOUR_KEY, it.toString()) }
+            request.rolloverHour?.let { setRolloverHour(it, request.rolloverSetAt) }
             request.changes.forEach { incoming ->
                 val before = get(incoming.table, incoming.id)
                 val after = merge(before, incoming)
                 put(after)
                 changed += before to after
             }
-            SyncResponse(maxVersion(), since(request.cursor))
+            SyncResponse(maxVersion(), since(request.cursor), getValue(ROLLOVER_HOUR_KEY)?.toIntOrNull(), rolloverSetAt())
         }
         changed.forEach { (before, after) ->
             onChange?.invoke(before, after)
@@ -149,6 +160,7 @@ class Store(path: String) {
 
     companion object {
         const val ROLLOVER_HOUR_KEY = "rolloverHour"
+        const val ROLLOVER_SET_AT_KEY = "rolloverSetAt"
         private val clockSerializer = MapSerializer(String.serializer(), Long.serializer())
     }
 }

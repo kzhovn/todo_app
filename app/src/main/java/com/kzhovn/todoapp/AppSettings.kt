@@ -10,5 +10,9 @@ object AppSettings {
     // Hour (0-23) when "today" ends: expiring tasks are deleted at this time.
     fun rolloverHour(context: Context): Int = prefs(context).getInt("rolloverHour", DEFAULT_ROLLOVER_HOUR)
 
-    fun setRolloverHour(context: Context, hour: Int) = prefs(context).edit().putInt("rolloverHour", hour).apply()
+    // When it was last set (0: never), so the newer of this and the web's setting wins (see SyncRequest).
+    fun rolloverSetAt(context: Context): Long = prefs(context).getLong("rolloverSetAt", 0)
+
+    fun setRolloverHour(context: Context, hour: Int, setAt: Long = System.currentTimeMillis()) =
+        prefs(context).edit().putInt("rolloverHour", hour).putLong("rolloverSetAt", setAt).apply()
 }

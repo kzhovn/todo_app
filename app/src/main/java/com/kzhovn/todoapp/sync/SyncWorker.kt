@@ -59,7 +59,7 @@ object SyncSettings {
         val prefs = prefs(context)
         val url = prefs.getString("url", null)?.takeIf { it.isNotBlank() } ?: return null
         val token = prefs.getString("token", null)?.takeIf { it.isNotBlank() } ?: return null
-        return SyncConfig(url, token, AppSettings.rolloverHour(context))
+        return SyncConfig(url, token, AppSettings.rolloverHour(context), AppSettings.rolloverSetAt(context))
     }
 
     fun save(context: Context, url: String, token: String) =
