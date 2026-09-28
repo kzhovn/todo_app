@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.focus
 
+import com.kzhovn.todoapp.repository.nextFocusTasks
 import com.kzhovn.todoapp.data.findFolder
 import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.quickadd.QuickAddParser
@@ -52,7 +53,6 @@ import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.notifications.PinnedTask
-import com.kzhovn.todoapp.notifications.TaskTimer
 import com.kzhovn.todoapp.repository.dayOfWeekMask
 import com.kzhovn.todoapp.repository.filterDoing
 import com.kzhovn.todoapp.repository.minuteOfDay
@@ -67,19 +67,13 @@ import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
 import kotlinx.coroutines.launch
 
-// What to focus on next: Doing, or Active when Doing is empty. After finishing a step of something
-// sequential, the step that's now unblocked always comes first.
-internal fun nextFocusTasks(active: List<Task>, doing: List<Task>, finished: Task?, byId: Map<Long, Task>): List<Task> {
-    val nextStep = finished?.parentId?.takeIf { byId[it]?.sequential == true }?.let { parent -> active.firstOrNull { it.parentId == parent } }
-    return (listOfNotNull(nextStep) + doing.ifEmpty { active }).distinctBy { it.id }
-}
 
 // One task, full screen, with the app pinned (Android's screen pinning) so other apps are out of
 // reach. Leaving takes typing a random sentence; finishing the task offers the next one instead.
 // ponytail: pinning can still be undone with Android's own Back+Overview gesture; a real app
 // blocker (usage access + overlay) is on the backlog.
 class FocusActivity : ComponentActivity() {
-    private var focusing = false
+    private var locked = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,23 +81,36 @@ class FocusActivity : ComponentActivity() {
         val repository = app.repository
         setContent {
             LedgerTheme {
-                var task by remember { mutableStateOf<Task?>(null) }
+                // The focus session (CurrentTask.focusSession), shared by every device: this screen
+                // follows it wherever it started, and closes once it's over. Its task done, every device
+                // asks what's next.
+                var session by remember { mutableStateOf<Task?>(null) }
+                val task = session?.takeUnless { it.isComplete }
+                val askNext = session?.isComplete == true
                 var effectiveDue by remember { mutableStateOf<Long?>(null) }
                 var candidates by remember { mutableStateOf<List<Task>?>(null) }
-                var askNext by remember { mutableStateOf(false) }
                 var leaving by remember { mutableStateOf<String?>(null) }
                 var adding by remember { mutableStateOf(false) }
                 // Adding from the "Focus on" picker: the new task is the one to focus on.
                 var addToFocus by remember { mutableStateOf(false) }
                 val scope = rememberCoroutineScope()
 
-                fun focusOn(t: Task) {
-                    task = t
-                    scope.launch {
+                // Locked (screen pinning) whenever a session runs, wherever it was started.
+                suspend fun reload() {
+                    val s = repository.getFocusSession()
+                    session = s
+                    effectiveDue = s?.let { t ->
                         val all = repository.getAllTasks()
-                        effectiveDue = resolveEffective(t, all.associateBy { it.id }, repository.getAllTaskContexts()).effectiveDueDate
+                        resolveEffective(t, all.associateBy { it.id }, repository.getAllTaskContexts()).effectiveDueDate
                     }
-                    if (!focusing) { focusing = true; startLockTask() }
+                    if (s != null && !locked) { locked = true; startLockTask() }
+                }
+
+                // Focusing pins the task, and moves the session to it on every device.
+                fun focusOn(t: Task) = scope.launch {
+                    repository.focus(t.id, System.currentTimeMillis())
+                    PinnedTask.refresh(this@FocusActivity)
+                    reload()
                 }
 
                 suspend fun pickable(finished: Task? = null): List<Task> {
@@ -117,19 +124,34 @@ class FocusActivity : ComponentActivity() {
                 }
 
                 fun exit() {
-                    focusing = false
+                    locked = false
                     runCatching { stopLockTask() }
                     finish()
                 }
 
-                // The task it was opened on, else the running timer's, else the pinned one, else ask.
-                LaunchedEffect(Unit) {
-                    val id = intent.getLongExtra(EXTRA_TASK_ID, 0L).takeIf { it != 0L }
-                        ?: TaskTimer.state.value?.taskId ?: PinnedTask.pinnedId(this@FocusActivity)
-                    val current = id?.let { repository.getTask(it) }?.takeUnless { it.isComplete }
-                    if (current != null) focusOn(current) else candidates = pickable()
+                // Leaving (or "I'm done") ends the session on every device, and unpins.
+                fun end() = scope.launch {
+                    repository.unpin()
+                    PinnedTask.refresh(this@FocusActivity)
+                    exit()
                 }
-                BackHandler(enabled = task != null) { }
+
+                // Opened on a task: focus on it. Otherwise join the running session, or ask what to focus on.
+                LaunchedEffect(Unit) {
+                    intent.getLongExtra(EXTRA_TASK_ID, 0L).takeIf { it != 0L }?.let {
+                        repository.focus(it, System.currentTimeMillis())
+                        PinnedTask.refresh(this@FocusActivity)
+                    }
+                    reload()
+                    if (session == null) candidates = pickable()
+                    // Follows changes from anywhere: the next task picked on the desktop, or the session left there.
+                    app.listInputChanges().collect {
+                        val had = session != null
+                        reload()
+                        if (had && session == null) exit()
+                    }
+                }
+                BackHandler(enabled = session != null) { }
 
                 Box(Modifier.fillMaxSize().background(LedgerBackground).padding(24.dp)) {
                     task?.let { t ->
@@ -145,10 +167,11 @@ class FocusActivity : ComponentActivity() {
                             Spacer(Modifier.height(32.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 TaskCheckbox(checked = false, due = effectiveDue?.let { dueStatus(it, System.currentTimeMillis()) }, size = 36.dp, touchSize = 56.dp) {
+                                    // The session stays on the done task, so every device asks what's next.
                                     scope.launch {
                                         repository.completeWithDescendants(t.id, System.currentTimeMillis())
-                                        if (TaskTimer.state.value?.taskId == t.id) TaskTimer.stop(this@FocusActivity)
-                                        askNext = true
+                                        PinnedTask.refresh(this@FocusActivity)
+                                        reload()
                                     }
                                 }
                                 Text("Done", fontSize = 16.sp, color = LedgerMuted)
@@ -168,10 +191,11 @@ class FocusActivity : ComponentActivity() {
                     TaskPickerDialog(
                         title = "Focus on",
                         tasks = list,
-                        onPick = { candidates = null; askNext = false; focusOn(it) },
+                        onPick = { candidates = null; focusOn(it) },
                         onCreateNew = { adding = true; addToFocus = true },
-                        // Nothing picked: with no task yet there's nothing to focus on; after one, it's the "done" choice.
-                        onDismiss = { candidates = null; if (task == null || askNext) exit() }
+                        // Nothing picked: with no session there's nothing to focus on; after a task is done,
+                        // the "Next or finish?" question comes back.
+                        onDismiss = { candidates = null; if (session == null) exit() }
                     )
                 }
 
@@ -180,8 +204,8 @@ class FocusActivity : ComponentActivity() {
                         onDismissRequest = {},
                         title = { Text("Done!") },
                         text = { Text("Focus on the next task, or finish?") },
-                        confirmButton = { Button(onClick = { scope.launch { candidates = pickable(finished = task) } }) { Text("Next task") } },
-                        dismissButton = { TextButton(onClick = { exit() }) { Text("I'm done") } }
+                        confirmButton = { Button(onClick = { scope.launch { candidates = pickable(finished = session) } }) { Text("Next task") } },
+                        dismissButton = { TextButton(onClick = { end() }) { Text("I'm done") } }
                     )
                 }
 
@@ -199,7 +223,6 @@ class FocusActivity : ComponentActivity() {
                             val created = repository.getTask(id)
                             if (focusOnIt && created != null) {
                                 candidates = null
-                                askNext = false
                                 focusOn(created)
                             } else {
                                 Toast.makeText(this@FocusActivity, "Added “${parsed.title}”", Toast.LENGTH_SHORT).show()
@@ -244,7 +267,7 @@ class FocusActivity : ComponentActivity() {
                         },
                         confirmButton = {
                             Button(
-                                onClick = { exit() },
+                                onClick = { end() },
                                 enabled = FocusPhrase.matches(phrase, typed),
                                 colors = ButtonDefaults.buttonColors(containerColor = LedgerAccent, contentColor = LedgerAccentInk)
                             ) { Text("Leave") }
@@ -263,6 +286,6 @@ class FocusActivity : ComponentActivity() {
     // Unpinned with Android's own gesture and back again: pin again.
     override fun onResume() {
         super.onResume()
-        if (focusing && getSystemService(ActivityManager::class.java).lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) startLockTask()
+        if (locked && getSystemService(ActivityManager::class.java).lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) startLockTask()
     }
 }

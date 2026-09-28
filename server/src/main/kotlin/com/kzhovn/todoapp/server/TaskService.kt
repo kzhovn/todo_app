@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.data.completed
+import com.kzhovn.todoapp.data.CurrentTask
 import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.quickadd.QuickAddParser
 import com.kzhovn.todoapp.data.pinnedTask
@@ -121,15 +123,22 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         writeTask(change(row.toTask()).withRules(clock()), row)
     }
 
-    // One pin, shared by every device (see pinnedTask). Older pins are cleared, so normally only one is set.
-    fun pin(id: Long) = store.transaction {
-        tasks().filter { it.pinnedAt != null && it.id != id }.forEach { t -> update(t.id) { it.copy(pinnedAt = null) } }
-        update(id) { it.copy(pinnedAt = clock()) }
+    // The current task: the pin, with its timer and focus session (see CurrentTask), shared by every device.
+    private fun current(change: (List<Task>) -> List<Task>) = store.transaction {
+        change(tasks()).forEach { t -> update(t.id) { t } }
     }
 
-    fun unpin() = store.transaction { tasks().filter { it.pinnedAt != null }.forEach { t -> update(t.id) { it.copy(pinnedAt = null) } } }
+    fun pin(id: Long) = current { CurrentTask.pin(it, id, clock()) }
+    fun unpin() = current { CurrentTask.unpin(it) }
+    fun startTimer(id: Long, minutes: Int) = current { CurrentTask.startTimer(it, id, minutes, clock()) }
+    fun pauseTimer() = current { CurrentTask.pauseTimer(it, clock()) }
+    fun resumeTimer() = current { CurrentTask.resumeTimer(it, clock()) }
+    fun addTime(minutes: Int) = current { CurrentTask.addTime(it, minutes, clock()) }
+    fun focus(id: Long) = current { CurrentTask.focus(it, id, clock()) }
 
     fun pinned(): Task? = pinnedTask(tasks())
+
+    fun focusSession(): Task? = CurrentTask.focusSession(tasks())
 
     // Quick add from the web or the desktop tray: parsed like the app's, into Personal (or the folder
     // being looked at). Added while looking at Doing, it starts starred so it shows up right there,
@@ -285,7 +294,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun complete(id: Long) = store.transaction {
         val now = clock()
         val task = get(id)?.takeUnless { it.isComplete } ?: return@transaction
-        val completed = task.copy(isComplete = true, completedAt = now)
+        val completed = task.completed(now)
         update(id) { completed }
         RecurrenceEngine.nextInstance(completed, now)?.let { next ->
             val rows = liveRows().associateBy { it.id }

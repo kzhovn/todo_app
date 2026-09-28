@@ -32,7 +32,6 @@ import kotlinx.html.BODY
 import kotlinx.html.DIV
 import kotlinx.html.FlowContent
 import kotlinx.html.HTML
-import kotlinx.html.MAIN
 import kotlinx.html.a
 import kotlinx.html.aside
 import kotlinx.html.body
@@ -42,7 +41,6 @@ import kotlinx.html.classes
 import kotlinx.html.details
 import kotlinx.html.div
 import kotlinx.html.form
-import kotlinx.html.h1
 import kotlinx.html.head
 import kotlinx.html.hiddenInput
 import kotlinx.html.id

@@ -1,4 +1,4 @@
-package com.kzhovn.todoapp.focus
+package com.kzhovn.todoapp.repository
 
 import com.kzhovn.todoapp.data.Task
 import org.junit.Assert.assertEquals

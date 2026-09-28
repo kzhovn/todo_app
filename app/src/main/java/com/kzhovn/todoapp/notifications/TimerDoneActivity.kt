@@ -41,7 +41,7 @@ import com.kzhovn.todoapp.ui.theme.LedgerTheme
 import kotlinx.coroutines.launch
 
 // "Time's up" for a timed task: is it done? Done completes it; Not yet asks how much more time and
-// starts the timer again with that.
+// runs the timer again for that long. Either answer reaches every device (the timer is on the task).
 class TimerDoneActivity : ComponentActivity() {
     @OptIn(ExperimentalLayoutApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,8 +51,8 @@ class TimerDoneActivity : ComponentActivity() {
         val title = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         TaskTimer.clearNotification(this)
 
-        fun restart(minutes: Int) = lifecycleScope.launch {
-            app.repository.getTask(taskId)?.let { TaskTimer.start(this@TimerDoneActivity, it, minutes) }
+        fun restart(minutes: Int) {
+            TaskTimer.addTime(this, minutes)
             finish()
         }
 
@@ -73,6 +73,7 @@ class TimerDoneActivity : ComponentActivity() {
                                     lifecycleScope.launch {
                                         // As the notification's Done: subtasks complete too.
                                         app.repository.completeWithDescendants(taskId, System.currentTimeMillis())
+                                        PinnedTask.refresh(this@TimerDoneActivity)
                                         finish()
                                     }
                                 },

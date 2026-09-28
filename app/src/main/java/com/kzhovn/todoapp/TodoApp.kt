@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.SupervisorJob
 import com.kzhovn.todoapp.data.MIGRATION_9_10
 import com.kzhovn.todoapp.data.MIGRATION_10_11
+import com.kzhovn.todoapp.data.MIGRATION_11_12
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.callbackFlow
@@ -26,7 +27,6 @@ import com.kzhovn.todoapp.data.MIGRATION_5_6
 import com.kzhovn.todoapp.data.MIGRATION_6_7
 import com.kzhovn.todoapp.data.MIGRATION_7_8
 import com.kzhovn.todoapp.data.MIGRATION_8_9
-import com.kzhovn.todoapp.notifications.TaskTimer
 import com.kzhovn.todoapp.data.TodoDatabase
 import com.kzhovn.todoapp.notifications.PinnedTask
 import kotlinx.coroutines.CoroutineScope
@@ -44,7 +44,7 @@ import com.kzhovn.todoapp.sync.TRACKED_TABLES
 class TodoApp : Application() {
     val database: TodoDatabase by lazy {
         Room.databaseBuilder(this, TodoDatabase::class.java, "todo.db")
-            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
             .addCallback(SyncTracking)
             .build()
     }
@@ -79,7 +79,8 @@ class TodoApp : Application() {
     override fun onCreate() {
         super.onCreate()
         if (SyncSettings.config(this) != null) SyncWorker.ensurePeriodic(this)
-        TaskTimer.restore(this)
+        // The "Now" notification and the timer's alarm, from the current task (they don't survive a restart).
+        CoroutineScope(Dispatchers.IO).launch { PinnedTask.refresh(this@TodoApp) }
         startWifiMonitor()
         // Every widget redraws when tasks, contexts or dependencies change, from anywhere (the app, a
         // sync, another widget). A widget only watches the data while its own session is alive, so

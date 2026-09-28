@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.repository
 
+import com.kzhovn.todoapp.data.completed
+import com.kzhovn.todoapp.data.CurrentTask
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.searchTasks
 import com.kzhovn.todoapp.data.planMoveNextTo
@@ -122,7 +124,7 @@ class TaskRepository(
 
     suspend fun markComplete(taskId: Long, now: Long) {
         val task = taskDao.getById(taskId) ?: return
-        val completedTask = task.copy(isComplete = true, completedAt = now)
+        val completedTask = task.completed(now)
         taskDao.update(completedTask)
         reminderScheduler.cancel(completedTask)
         // The next instance keeps the task's contexts and gets fresh copies of its subtasks.
@@ -184,15 +186,20 @@ class TaskRepository(
 
     suspend fun getTask(taskId: Long): Task? = taskDao.getById(taskId)
 
-    // One pin, shared by every device (see pinnedTask). Older pins are cleared, so normally only one is set.
-    suspend fun pin(taskId: Long, now: Long) {
-        taskDao.getAllOnce().filter { it.pinnedAt != null && it.id != taskId }.forEach { taskDao.update(it.copy(pinnedAt = null)) }
-        taskDao.getById(taskId)?.let { taskDao.update(it.copy(pinnedAt = now)) }
-    }
+    // The current task: the pin, with its timer and focus session (see CurrentTask), shared by every device.
+    private suspend fun current(change: (List<Task>) -> List<Task>) = change(taskDao.getAllOnce()).forEach { taskDao.update(it) }
 
-    suspend fun unpin() = taskDao.getAllOnce().filter { it.pinnedAt != null }.forEach { taskDao.update(it.copy(pinnedAt = null)) }
+    suspend fun pin(taskId: Long, now: Long) = current { CurrentTask.pin(it, taskId, now) }
+    suspend fun unpin() = current { CurrentTask.unpin(it) }
+    suspend fun startTimer(taskId: Long, minutes: Int, now: Long) = current { CurrentTask.startTimer(it, taskId, minutes, now) }
+    suspend fun pauseTimer(now: Long) = current { CurrentTask.pauseTimer(it, now) }
+    suspend fun resumeTimer(now: Long) = current { CurrentTask.resumeTimer(it, now) }
+    suspend fun addTime(minutes: Int, now: Long) = current { CurrentTask.addTime(it, minutes, now) }
+    suspend fun focus(taskId: Long, now: Long) = current { CurrentTask.focus(it, taskId, now) }
 
     suspend fun getPinnedTask(): Task? = taskDao.getPinned()
+
+    suspend fun getFocusSession(): Task? = CurrentTask.focusSession(taskDao.getAllOnce())
 
     suspend fun updateTask(task: Task) {
         taskDao.update(task.withRules(System.currentTimeMillis()))

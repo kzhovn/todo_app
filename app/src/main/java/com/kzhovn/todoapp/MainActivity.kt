@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp
 
+import androidx.lifecycle.lifecycleScope
+import com.kzhovn.todoapp.focus.FocusActivity
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.ui.TextInputDialog
@@ -419,6 +421,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // A focus session (started here or on another device) takes over the app until it's left.
+        lifecycleScope.launch {
+            if ((application as TodoApp).repository.getFocusSession() != null) startActivity(Intent(this@MainActivity, FocusActivity::class.java))
+        }
         (application as TodoApp).startWifiMonitor()
         if (SyncSettings.config(this) != null) SyncWorker.requestSoon(this, delaySeconds = 0)
     }

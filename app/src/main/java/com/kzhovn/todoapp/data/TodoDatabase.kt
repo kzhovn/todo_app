@@ -8,7 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [Task::class, TaskDependency::class, TaskContext::class, TaskContextCrossRef::class, ContextTimeWindow::class],
-    version = 11
+    version = 12
 )
 @TypeConverters(Converters::class)
 abstract class TodoDatabase : RoomDatabase() {
@@ -54,4 +54,12 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
 
 val MIGRATION_10_11 = object : Migration(10, 11) {
     override fun migrate(db: SupportSQLiteDatabase) = db.execSQL("ALTER TABLE tasks ADD COLUMN pinnedAt INTEGER")
+}
+
+val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tasks ADD COLUMN timerEndsAt INTEGER")
+        db.execSQL("ALTER TABLE tasks ADD COLUMN timerRemaining INTEGER")
+        db.execSQL("ALTER TABLE tasks ADD COLUMN focusedAt INTEGER")
+    }
 }

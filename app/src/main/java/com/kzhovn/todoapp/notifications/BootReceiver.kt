@@ -19,7 +19,6 @@ class BootReceiver : BroadcastReceiver() {
             try {
                 app.repository.getAllTasks().forEach { app.reminderScheduler.schedule(it) }
                 PinnedTask.refresh(app) // ongoing notifications don't survive a reboot either
-                TaskTimer.restore(app) // nor do the timer's notification and alarm
             } finally {
                 pendingResult.finish()
             }

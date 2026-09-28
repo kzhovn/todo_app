@@ -49,8 +49,13 @@ data class Task(
     val durationMinutes: Int? = null,
     // Normally a task waits on its open subtasks (see computeActiveTasks); this keeps it active anyway.
     @ColumnInfo(defaultValue = "0") val activeWithSubtasks: Boolean = false,
-    // When it was pinned ("what I'm doing now"), shared by every device. See pinnedTask.
-    val pinnedAt: Long? = null
+    // When it was pinned ("what I'm doing now"), shared by every device. See pinnedTask and CurrentTask.
+    val pinnedAt: Long? = null,
+    // The pinned task's timer: running until timerEndsAt, or paused with timerRemaining (ms) left.
+    val timerEndsAt: Long? = null,
+    val timerRemaining: Long? = null,
+    // A focus session on it, on every device (see CurrentTask.focusSession).
+    val focusedAt: Long? = null
 ) {
     fun isExpired(now: Long): Boolean = expiresAt != null && expiresAt <= now
 

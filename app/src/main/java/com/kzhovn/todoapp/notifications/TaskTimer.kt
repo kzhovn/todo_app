@@ -1,6 +1,5 @@
 package com.kzhovn.todoapp.notifications
 
-import com.kzhovn.todoapp.data.countdown
 import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -13,22 +12,24 @@ import androidx.core.app.NotificationCompat
 import com.kzhovn.todoapp.R
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.repository.TaskRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlin.math.ceil
 
-// The countdown for a timed task: one at a time, pausable. Shown as an ongoing notification with the
-// time left; an exact alarm at the end asks whether the task is done (TimerDoneActivity). State lives
-// in prefs, so it outlives the app process, and in a StateFlow the play buttons watch.
+// The current task's timer. It lives on the task (CurrentTask), so every device shows the same
+// countdown; its "Now" notification draws it (PinnedTask). This keeps the phone's side: `state` for the
+// play buttons, an exact alarm at the end, and the "Time's up" alert.
 object TaskTimer {
     data class State(val taskId: Long, val title: String, val endsAt: Long?, val remainingMillis: Long) {
         val isPaused get() = endsAt == null
         fun remaining(now: Long) = endsAt?.let { it - now } ?: remainingMillis
     }
 
-    private const val RUNNING_CHANNEL = "timer_running"
     private const val DONE_CHANNEL = "timer_done"
     private const val NOTIFICATION_ID = 7002
     const val ACTION_PAUSE = "com.kzhovn.todoapp.TIMER_PAUSE"
@@ -40,42 +41,63 @@ object TaskTimer {
     private val _state = MutableStateFlow<State?>(null)
     val state: StateFlow<State?> = _state
 
-    private fun prefs(context: Context) = context.getSharedPreferences("timer", Context.MODE_PRIVATE)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    // Reloads saved state (app start, reboot) and puts the notification and alarm back.
-    fun restore(context: Context) {
-        val p = prefs(context)
-        val id = p.getLong("taskId", 0L).takeIf { it != 0L } ?: return
-        val state = State(id, p.getString("title", "").orEmpty(), p.getLong("endsAt", 0L).takeIf { it != 0L }, p.getLong("remaining", 0L))
-        _state.value = state
-        if (!state.isPaused) scheduleEnd(context, state.endsAt!!)
-        showRunning(context, state)
+    private fun repository(context: Context) = (context.applicationContext as TodoApp).repository
+
+    // Each writes the task, then brings the notification, alarm and `state` up to date.
+    private fun act(context: Context, block: suspend TaskRepository.(now: Long) -> Unit) = scope.launch {
+        repository(context).block(System.currentTimeMillis())
+        PinnedTask.refresh(context)
     }
 
-    fun start(context: Context, task: Task, minutes: Int) = run(context, State(task.id, task.title, System.currentTimeMillis() + minutes * 60_000L, 0L))
+    // Starting a timer pins its task (see CurrentTask).
+    fun start(context: Context, task: Task, minutes: Int) = act(context) { startTimer(task.id, minutes, it) }
+    fun pause(context: Context) = act(context) { pauseTimer(it) }
+    fun resume(context: Context) = act(context) { resumeTimer(it) }
+    fun addTime(context: Context, minutes: Int) = act(context) { addTime(minutes, it) }
 
-    fun pause(context: Context) {
-        val s = _state.value?.takeUnless { it.isPaused } ?: return
-        cancelEnd(context)
-        run(context, s.copy(endsAt = null, remainingMillis = s.remaining(System.currentTimeMillis()).coerceAtLeast(0)))
+    // Stopping unpins the task, which also ends a focus session.
+    fun stop(context: Context) = act(context) { unpin() }
+
+    // Follows the current task's timer (from PinnedTask.refresh, after any change from anywhere): the
+    // alarm for its end, or "Time's up" if that's passed; the alert goes once it's answered anywhere.
+    internal suspend fun follow(context: Context, current: Task?) {
+        migrateLocalTimer(context)
+        val s = current?.let { t ->
+            val endsAt = t.timerEndsAt
+            val remaining = t.timerRemaining
+            when {
+                endsAt != null -> State(t.id, t.title, endsAt, 0L)
+                remaining != null -> State(t.id, t.title, null, remaining)
+                else -> null
+            }
+        }
+        _state.value = s
+        val endsAt = s?.endsAt
+        val prefs = context.getSharedPreferences("timer", Context.MODE_PRIVATE)
+        when {
+            endsAt == null -> { cancelEnd(context); manager(context).cancel(NOTIFICATION_ID) }
+            endsAt > System.currentTimeMillis() -> { scheduleEnd(context, endsAt); manager(context).cancel(NOTIFICATION_ID) }
+            // Already over (the alarm rang, or it ran out while this phone was away): ask, once per timer end.
+            prefs.getLong("alerted", 0L) != endsAt -> { prefs.edit().putLong("alerted", endsAt).apply(); timeUp(context, s) }
+        }
     }
 
-    fun resume(context: Context) {
-        val s = _state.value?.takeIf { it.isPaused } ?: return
-        run(context, s.copy(endsAt = System.currentTimeMillis() + s.remainingMillis))
+    fun clearNotification(context: Context) = manager(context).cancel(NOTIFICATION_ID)
+
+    // Before timers synced, the phone kept its own in preferences: moved onto the task once.
+    private suspend fun migrateLocalTimer(context: Context) {
+        val prefs = context.getSharedPreferences("timer", Context.MODE_PRIVATE)
+        val id = prefs.getLong("taskId", 0L).takeIf { it != 0L } ?: return
+        val endsAt = prefs.getLong("endsAt", 0L)
+        prefs.edit().remove("taskId").remove("title").remove("endsAt").remove("remaining").apply()
+        val left = endsAt - System.currentTimeMillis()
+        if (left > 0) repository(context).startTimer(id, ceil(left / 60_000.0).toInt(), System.currentTimeMillis())
     }
 
-    fun stop(context: Context) {
-        cancelEnd(context)
-        save(context, null)
-        manager(context).cancel(NOTIFICATION_ID)
-    }
-
-    // The alarm went off: swap the countdown for "Time's up", which asks whether the task is done.
-    fun finish(context: Context) {
-        val s = _state.value ?: return
-        save(context, null)
-        ensureChannels(context)
+    private fun timeUp(context: Context, s: State) {
+        ensureChannel(context)
         val ask = PendingIntent.getActivity(
             context, 10,
             Intent(context, TimerDoneActivity::class.java).putExtra(TimerDoneActivity.EXTRA_TASK_ID, s.taskId).putExtra(TimerDoneActivity.EXTRA_TITLE, s.title),
@@ -90,63 +112,25 @@ object TaskTimer {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .setContentIntent(ask)
-            .addAction(0, "Done", broadcast(context, ACTION_DONE, s.taskId, 11))
+            .addAction(0, "Done", actionIntent(context, ACTION_DONE, s.taskId, 11))
             .addAction(0, "Not yet", ask)
             .build()
         manager(context).notify(NOTIFICATION_ID, notification)
-    }
-
-    fun clearNotification(context: Context) = manager(context).cancel(NOTIFICATION_ID)
-
-    private fun run(context: Context, s: State) {
-        save(context, s)
-        if (!s.isPaused) scheduleEnd(context, s.endsAt!!)
-        showRunning(context, s)
-    }
-
-    private fun save(context: Context, s: State?) {
-        _state.value = s
-        prefs(context).edit().apply {
-            if (s == null) clear() else {
-                putLong("taskId", s.taskId); putString("title", s.title)
-                putLong("endsAt", s.endsAt ?: 0L); putLong("remaining", s.remainingMillis)
-            }
-        }.apply()
-    }
-
-    private fun showRunning(context: Context, s: State) {
-        ensureChannels(context)
-        val builder = NotificationCompat.Builder(context, RUNNING_CHANNEL)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(s.title)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setCategory(NotificationCompat.CATEGORY_STOPWATCH)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-        if (s.isPaused) {
-            builder.setContentText("Paused · ${countdown(s.remainingMillis)} left")
-                .addAction(0, "Resume", broadcast(context, ACTION_RESUME, s.taskId, 1))
-        } else {
-            // The system draws the live countdown to endsAt.
-            builder.setContentText("Timer").setUsesChronometer(true).setChronometerCountDown(true).setWhen(s.endsAt!!).setShowWhen(true)
-                .addAction(0, "Pause", broadcast(context, ACTION_PAUSE, s.taskId, 2))
-        }
-        builder.addAction(0, "Stop", broadcast(context, ACTION_STOP, s.taskId, 3))
-        manager(context).notify(NOTIFICATION_ID, builder.build())
     }
 
     // Exact, so the timer ends on time; USE_EXACT_ALARM (a timer app's permission) grants it on
     // Android 13+, and before that SCHEDULE_EXACT_ALARM, falling back to inexact if revoked.
     private fun scheduleEnd(context: Context, at: Long) {
         val alarms = context.getSystemService(AlarmManager::class.java)
-        val intent = broadcast(context, ACTION_FINISHED, 0L, 4)
+        val intent = actionIntent(context, ACTION_FINISHED, 0L, 4)
         if (Build.VERSION.SDK_INT < 31 || alarms.canScheduleExactAlarms()) alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
         else alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, intent)
     }
 
-    private fun cancelEnd(context: Context) = context.getSystemService(AlarmManager::class.java).cancel(broadcast(context, ACTION_FINISHED, 0L, 4))
+    private fun cancelEnd(context: Context) = context.getSystemService(AlarmManager::class.java).cancel(actionIntent(context, ACTION_FINISHED, 0L, 4))
 
-    private fun broadcast(context: Context, action: String, taskId: Long, requestCode: Int) = PendingIntent.getBroadcast(
+    // Also the "Now" notification's Pause / Resume.
+    internal fun actionIntent(context: Context, action: String, taskId: Long, requestCode: Int): PendingIntent = PendingIntent.getBroadcast(
         context, requestCode,
         Intent(context, TaskTimerReceiver::class.java).setAction(action).putExtra(TimerDoneActivity.EXTRA_TASK_ID, taskId),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -154,22 +138,16 @@ object TaskTimer {
 
     private fun manager(context: Context) = context.getSystemService(NotificationManager::class.java)
 
-    // Running: prominent but silent, like the pinned task. Done: an alert, with sound.
-    private fun ensureChannels(context: Context) {
+    // Time's up is an alert, with sound.
+    private fun ensureChannel(context: Context) {
         val manager = manager(context)
-        if (manager.getNotificationChannel(RUNNING_CHANNEL) == null) {
-            manager.createNotificationChannel(NotificationChannel(RUNNING_CHANNEL, "Timer (running)", NotificationManager.IMPORTANCE_HIGH).apply {
-                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
-                setSound(null, null)
-                enableVibration(false)
-                setShowBadge(false)
-            })
-        }
         if (manager.getNotificationChannel(DONE_CHANNEL) == null) {
             manager.createNotificationChannel(NotificationChannel(DONE_CHANNEL, "Timer (time's up)", NotificationManager.IMPORTANCE_HIGH).apply {
                 lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
             })
         }
+        // The running timer used to have its own notification; it's part of the "Now" one now.
+        manager.deleteNotificationChannel("timer_running")
     }
 }
 
@@ -179,7 +157,13 @@ class TaskTimerReceiver : BroadcastReceiver() {
             TaskTimer.ACTION_PAUSE -> TaskTimer.pause(context)
             TaskTimer.ACTION_RESUME -> TaskTimer.resume(context)
             TaskTimer.ACTION_STOP -> TaskTimer.stop(context)
-            TaskTimer.ACTION_FINISHED -> TaskTimer.finish(context)
+            // The alarm: PinnedTask.refresh sees the timer is over and asks.
+            TaskTimer.ACTION_FINISHED -> {
+                val pending = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try { PinnedTask.refresh(context) } finally { pending.finish() }
+                }
+            }
             TaskTimer.ACTION_DONE -> {
                 val taskId = intent.getLongExtra(TimerDoneActivity.EXTRA_TASK_ID, 0L)
                 TaskTimer.clearNotification(context)
@@ -188,6 +172,7 @@ class TaskTimerReceiver : BroadcastReceiver() {
                     try {
                         // Like the pinned task's Complete: no room for the subtask question here.
                         (context.applicationContext as TodoApp).repository.completeWithDescendants(taskId, System.currentTimeMillis())
+                        PinnedTask.refresh(context)
                     } finally {
                         pending.finish()
                     }
