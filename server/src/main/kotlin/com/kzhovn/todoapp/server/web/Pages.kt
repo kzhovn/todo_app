@@ -406,7 +406,6 @@ private fun HTML.settingsPage(service: TaskService) = shellPage(service, "Raspbe
                 +"Day rolls over at "
                 select {
                     name = "rolloverHour"
-                    attributes["onchange"] = "this.form.submit()"
                     (0..23).forEach { h -> option { value = "$h"; selected = h == service.rolloverHour(); +"%02d:00".format(h) } }
                 }
             }

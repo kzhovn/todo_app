@@ -24,6 +24,9 @@
     if (e.key === "?") alert(help);
   });
 
+  // Settings save as soon as a value is picked (the CSP forbids inline handlers, hence here).
+  document.addEventListener("change", (e) => { if (e.target.matches("form.settings select")) e.target.form.submit(); });
+
   // --- All-tree outliner. Every action re-renders #list; focus then returns to the same row (or the
   // row the server names in X-Focus, e.g. a task just created with Enter).
   let focusId = null;
