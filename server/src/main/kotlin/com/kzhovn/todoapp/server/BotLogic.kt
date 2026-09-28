@@ -39,8 +39,8 @@ Dates: `today`, `mon`, `next fri`, `+3d`, `in 2 weeks`, `+2h`, `oct 12`, `next w
 `-- x @home` a context
 `-- x ~30m` / `-- 30m of x` a timed task
 `-- x*` starred · `-- x?` a maybe (hidden from Active, never starred)
-`-- x -p` pin it · `-- x -f` focus on it (every device)
-`-- x // a note`, or the message's lines after the first: its note
+`-- x -p` pin it · `-- x -f` focus on it
+`-- call bank // ask about fees` everything after // (or after the first line) is the note
 Reply to a todo with a todo: the first depends on the new one.
 
 **On a todo's message**

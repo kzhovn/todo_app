@@ -68,10 +68,10 @@ object Labels {
         "every day, every mon, thu, every 2 weeks, every 1st sat" to "repeat on a schedule",
         "every 4 days after done" to "repeat after completion",
         "remind 30m" to "reminder before the due time",
-        "1 hour of …, ~30m" to "timed task (a play button counts it down)",
+        "1 hour of …, ~30m" to "timed task",
         "ends with * · ends with ?" to "starred · maybe",
-        "-p · -f" to "pin it · focus on it (every device)",
-        "… // a note" to "a note on it",
+        "-p · -f" to "pin it · focus on it",
+        "call bank // ask about fees" to "everything after // is the note",
     )
 
     const val SAVE = "Save"
