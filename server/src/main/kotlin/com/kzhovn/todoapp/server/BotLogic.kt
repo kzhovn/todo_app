@@ -2,9 +2,9 @@ package com.kzhovn.todoapp.server
 
 import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.data.Task
-import com.kzhovn.todoapp.data.nextRollover
+import com.kzhovn.todoapp.data.checklistItems
 import com.kzhovn.todoapp.data.hasTime
-import com.kzhovn.todoapp.quickadd.QuickAddParser
+import com.kzhovn.todoapp.quickadd.QuickAdd
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import com.kzhovn.todoapp.sync.SyncJson
@@ -26,11 +26,20 @@ const val NOTHING = "🎉 Nothing here 🎉"
 val HELP = """
 **Adding**
 `-- call mom` a task (starred, in Personal)
-`--work: send report` into the folder Work
+`--work: send report` into the folder Work (or a project)
+`--groceries: milk, eggs` items into the checklist Groceries
+`-- packing [passport, charger]` a new checklist
 `--d: shower` today only (gone at day rollover)
 `-- x -d fri` / `due fri 5pm` / `due 3pm` due date and time
 `-- x -s tomorrow` / `start mon 9am` start date
-`-- x?` a maybe (hidden from Active, never starred)
+Dates: `today`, `mon`, `next fri`, `+3d`, `in 2 weeks`, `+2h`, `oct 12`, `next week`, `weekend`
+`-- x every mon, thu` / `every 2 weeks` / `every 1st sat` repeats
+`-- x every 4 days after done` repeats after completion
+`-- x due fri 3pm remind 30m` a reminder
+`-- x @home` a context
+`-- x ~30m` / `-- 30m of x` a timed task
+`-- x*` starred · `-- x?` a maybe (hidden from Active, never starred)
+`-- x -p` pin it · `-- x -f` focus on it (every device)
 Reply to a todo with a todo: the first depends on the new one.
 
 **On a todo's message**
@@ -39,15 +48,13 @@ Editing the message updates the task; deleting it deletes the task.
 
 **Lists**
 `.doing` / `.list` Doing · `.active` Active · `.rand` one random active task
-`.list work` open tasks in a folder; `.doing work` / `.active work` filter by folder
+`.list work` open tasks in a folder (or a checklist's items); `.doing work` / `.active work` filter by folder
 Tap an item's emoji to complete it (un-tap to undo).
 
 **Nudges**
 With the morning digest, anything in Doing for 3+ days gets a message (again every 3 days):
 🔽 moves it out (unstars it); reply with `-- step` lines to break it into subtasks.
 """.trimIndent()
-// `--d: shower` (or rusabot's `--daily:`) makes a task that expires at the next day rollover.
-private val DAILY_PREFIXES = setOf("d", "daily")
 private const val MAX_REACTIONS = 20 // Discord's per-message limit on distinct reactions
 private const val MAX_CHARS = 2000 // Discord's message length limit
 
@@ -88,27 +95,29 @@ sealed interface ReactionOutcome {
 
 class BotLogic(private val service: TaskService, private val store: Store) {
 
-    // `-- text` or `--folder: text`. Returns null for messages that aren't adds. A bare add is
-    // starred so it lands in Doing; any start/due date or folder means the user placed it
+    // `-- text` with the quick-add syntax every device shares (`--work: text` into a folder,
+    // `--groceries: milk, eggs` into a checklist...). Returns null for messages that aren't adds. A bare
+    // add is starred so it lands in Doing; any start/due date or folder means the user placed it
     // deliberately, and a trailing "?" (a maybe) is never starred.
-    fun parseAdd(content: String): Task? {
+    fun planAdd(content: String): QuickAdd? {
         if (!content.startsWith("--")) return null
-        val body = content.removePrefix("--").trim()
-        val prefix = body.substringBefore(':', missingDelimiterValue = "")
-        val daily = prefix.trim().lowercase() in DAILY_PREFIXES
-        val explicitFolder = if (daily) null else prefix.takeIf { it.isNotBlank() }?.let(service::findFolder)
-        val parsed = QuickAddParser.parse(if (daily || explicitFolder != null) body.substringAfter(':') else body)
-        val bare = explicitFolder == null && parsed.startDate == null && parsed.dueDate == null && !parsed.isMaybe
-        val folder = explicitFolder ?: service.findFolder(DEFAULT_FOLDER)
-        val expiresAt = if (daily) nextRollover(service.now(), service.rolloverHour()) else null
-        return parsed.takeIf { it.title.isNotBlank() }?.copy(parentId = folder?.id, isStarred = bare, expiresAt = expiresAt)
+        val add = service.planQuickAdd(content.removePrefix("--").trim()).takeUnless { it.isEmpty } ?: return null
+        val task = add.task ?: return add
+        val bare = task.parentId == null && task.startDate == null && task.dueDate == null && !task.isMaybe
+        return add.copy(task = task.copy(parentId = task.parentId ?: service.findFolder(DEFAULT_FOLDER)?.id, isStarred = task.isStarred || bare))
     }
+
+    // The new task alone (null for items added to a checklist).
+    fun parseAdd(content: String): Task? = planAdd(content)?.task
 
     // Replying to another todo's `--` message with a new todo makes the replied-to task wait for
     // the new one ("-- hang mirror" <- reply "-- move mirror upstairs").
     fun onAdd(messageId: Long, jumpUrl: String, content: String, replyToMessageId: Long? = null): Boolean = fromDiscord {
         replyToMessageId?.let(::link)?.nudgeFor?.let { return breakUp(it, content) }
-        val task = service.create(parseAdd(content) ?: return false)
+        val add = planAdd(content) ?: return false
+        // Items into a checklist: nothing to link, since the message isn't one task.
+        if (add.task == null) return service.add(add, defaultParent = null) != null
+        val task = service.add(add, defaultParent = null)!!
         saveLink(messageId, MessageLink(taskId = task.id, text = content))
         store.setValue("src:${task.id}", jumpUrl)
         replyToMessageId?.let(::link)?.taskId?.let { waiting -> service.addDependency(waiting, task.id) }
@@ -270,8 +279,12 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         if (name !in setOf(".doing", ".list", ".active", ".rand")) return null
         service.purgeExpired()
         val arg = content.substringAfter(' ', "").trim()
+        // `.list groceries`: a checklist's open items, ticked off with their emoji like any list.
+        if (name == ".list" && arg.isNotEmpty() && service.findFolder(arg) == null) service.findChecklist(arg)?.let { list ->
+            return Result.success(checklistItems(list.id, service.tasks()).filterNot { it.isComplete })
+        }
         val folder = if (arg.isEmpty()) null else service.findFolder(arg)
-            ?: return Result.failure(IllegalArgumentException("No folder named \"$arg\"."))
+            ?: return Result.failure(IllegalArgumentException("No folder${if (name == ".list") " or checklist" else ""} named \"$arg\"."))
         val tasks = when (name) {
             ".doing" -> service.doing(folder?.id)
             ".list" -> if (folder == null) service.doing() else service.openInFolder(folder.id)

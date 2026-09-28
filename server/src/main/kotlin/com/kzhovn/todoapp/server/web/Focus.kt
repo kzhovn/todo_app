@@ -1,6 +1,8 @@
 package com.kzhovn.todoapp.server.web
 
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.data.checklistItems
 import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.data.formatDuration
 import com.kzhovn.todoapp.data.subtaskParentTitle
@@ -60,6 +62,12 @@ fun Route.focusRoutes(service: TaskService) {
         val session = service.focusSession() ?: return@post call.goTo("/doing")
         call.respondText(createHTML().div { focusBody(service, session) }, ContentType.Text.Html)
     }
+    // Ticking an item of the checklist in focus.
+    post("/focus/item") {
+        call.request.queryParameters["task"]?.toLongOrNull()?.let(service::get)?.let { if (it.isComplete) service.uncomplete(it.id) else service.complete(it.id) }
+        val session = service.focusSession() ?: return@post call.goTo("/doing")
+        call.respondText(createHTML().div { focusBody(service, session) }, ContentType.Text.Html)
+    }
     post("/focus/leave") {
         service.unpin()
         call.goTo("/doing")
@@ -103,6 +111,16 @@ fun DIV.focusBody(service: TaskService, session: Task) {
     subtaskParentTitle(session, byId)?.let { p(classes = "focus-sub") { +it } }
     h1(classes = "focus-title") { +session.title }
     service.effectiveDueDate(session)?.let { p(classes = "focus-sub") { +dueText(it, service.now()) } }
+    // A checklist: its items, big, to tick off one by one.
+    if (session.type == TaskType.CHECKLIST) div(classes = "focus-items") {
+        checklistItems(session.id, all).forEach { item ->
+            button(classes = if (item.isComplete) "focus-item done" else "focus-item") {
+                hx("post", "/focus/item?task=${item.id}", "#focus")
+                span(classes = if (item.isComplete) "check done" else "check") { if (item.isComplete) icon(Icon.CHECK, "") }
+                +item.title
+            }
+        }
+    }
     // The timer: the same play button as a list row's (app.js runs it; it's shared with every device).
     session.durationMinutes?.let { minutes ->
         button(classes = "play") {

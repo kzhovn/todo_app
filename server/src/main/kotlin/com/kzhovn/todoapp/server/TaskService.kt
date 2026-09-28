@@ -3,7 +3,8 @@ package com.kzhovn.todoapp.server
 import com.kzhovn.todoapp.data.completed
 import com.kzhovn.todoapp.data.CurrentTask
 import com.kzhovn.todoapp.data.DEFAULT_FOLDER
-import com.kzhovn.todoapp.quickadd.QuickAddParser
+import com.kzhovn.todoapp.quickadd.QuickAdd
+import com.kzhovn.todoapp.quickadd.planQuickAdd
 import com.kzhovn.todoapp.data.pinnedTask
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.searchTasks
@@ -108,12 +109,12 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun findFolder(name: String): Task? = findFolder(tasks(), name)
 
     // Placed like the app's createTask (see newTaskPositions).
-    fun create(task: Task): Task = store.transaction {
+    fun create(task: Task, contextIds: Set<Long> = emptySet()): Task = store.transaction {
         val all = tasks()
         val new = task.copy(id = newId()).withRules(clock())
         val positions = newTaskPositions(all, new)
         val created = new.copy(position = positions[new.id] ?: new.position)
-        store.write(TASKS, created.id, taskFields(created, emptySet(), emptySet()), clock())
+        store.write(TASKS, created.id, taskFields(created, contextIds, emptySet()), clock())
         positions.forEach { (id, position) -> if (id != created.id) update(id) { it.copy(position = position) } }
         created
     }
@@ -141,13 +142,25 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun focusSession(): Task? = CurrentTask.focusSession(tasks())
 
     // Quick add from the web or the desktop tray: parsed like the app's, into Personal (or the folder
-    // being looked at). Added while looking at Doing, it starts starred so it shows up right there,
-    // like the Doing widget's.
+    // being looked at) unless it names one. Added while looking at Doing, it starts starred so it shows
+    // up right there, like the Doing widget's.
     fun quickAdd(text: String, fromDoing: Boolean, folderId: Long? = null): Task? {
-        val parsed = QuickAddParser.parse(text)
-        if (parsed.title.isBlank()) return null
         val folder = folderId?.takeIf { get(it)?.type == TaskType.FOLDER } ?: findFolder(DEFAULT_FOLDER)?.id
-        return create(parsed.copy(parentId = folder, isStarred = parsed.isStarred || fromDoing))
+        return add(planQuickAdd(text), folder, star = fromDoing)
+    }
+
+    fun planQuickAdd(text: String): QuickAdd = planQuickAdd(text, tasks(), contexts(), clock(), rolloverHour())
+
+    // Carries out a quick add (see planQuickAdd): the task with its contexts, items, pin or focus, or
+    // items into an existing checklist. Returns the task (the checklist, for items).
+    fun add(add: QuickAdd, defaultParent: Long?, star: Boolean = false): Task? = store.transaction {
+        if (add.isEmpty) return@transaction null
+        add.intoChecklist?.let { id -> addItems(id, add.items); return@transaction get(id) }
+        val task = add.task ?: return@transaction null
+        val created = create(task.copy(parentId = task.parentId ?: defaultParent, isStarred = task.isStarred || (star && !task.isMaybe)), add.contextIds)
+        add.items.forEach { create(Task(title = it, parentId = created.id)) }
+        if (add.focus) focus(created.id) else if (add.pin) pin(created.id)
+        created
     }
 
     fun setStarred(id: Long, starred: Boolean) = update(id) { it.copy(isStarred = starred) }
@@ -315,7 +328,11 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     }
 
     // Checklists; mirror TaskRepository's addItems, clearChecked, uncheckAll and completeChecklist.
-    fun addItems(checklistId: Long, text: String) = store.transaction { splitItems(text).forEach { create(Task(title = it, parentId = checklistId)) } }
+    fun addItems(checklistId: Long, text: String) = addItems(checklistId, splitItems(text))
+
+    private fun addItems(checklistId: Long, items: List<String>) = store.transaction { items.forEach { create(Task(title = it, parentId = checklistId)) } }
+
+    fun findChecklist(name: String): Task? = tasks().firstOrNull { it.type == TaskType.CHECKLIST && !it.isComplete && it.title.trim().equals(name.trim(), ignoreCase = true) }
 
     fun clearChecked(checklistId: Long) = store.transaction { tasks().filter { it.parentId == checklistId && it.isComplete }.forEach { delete(it.id) } }
 

@@ -388,4 +388,9 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .now-focus .icon, .focus-toggle .icon { width: 17px; height: 17px; }
 .focus-toggle { width: 32px; height: 32px; color: var(--muted); }
 .now-focus:hover, .focus-toggle:hover { background: var(--tile); color: var(--accent); }
+/* Focus on a checklist: its items, big. */
+.focus-items { width: min(420px, 100%); margin-top: 14px; display: flex; flex-direction: column; }
+.focus-item { display: flex; align-items: center; gap: 12px; padding: 10px 8px; border-bottom: 1px solid var(--border); font-size: 17px; text-align: left; }
+.focus-item .check { margin: 0; flex-shrink: 0; }
+.focus-item.done { color: var(--muted); text-decoration: line-through; }
 

@@ -1,5 +1,8 @@
 package com.kzhovn.todoapp.quickadd
 
+import com.kzhovn.todoapp.focus.FocusActivity
+import com.kzhovn.todoapp.data.splitItems
+import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.findFolder
 import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.ui.theme.folderColors
@@ -91,7 +94,8 @@ class QuickAddActivity : ComponentActivity() {
             val focus = remember { FocusRequester() }
 
             LaunchedEffect(Unit) {
-                folders = repository.getFolders()
+                // Checklists too: picking one makes the text its new items ("milk, eggs").
+                folders = repository.getAllTasks().filter { it.type == TaskType.FOLDER || (it.type == TaskType.CHECKLIST && !it.isComplete) }
                 // With no folder asked for, new tasks land in Personal (if it exists), as Discord adds do.
                 folder = if (initialFolderId != null) folders.firstOrNull { it.id == initialFolderId }
                 else findFolder(folders, DEFAULT_FOLDER)
@@ -99,33 +103,40 @@ class QuickAddActivity : ComponentActivity() {
                 focus.requestFocus()
             }
 
-            fun buildTask(): Task {
-                val parsed = QuickAddParser.parse(title)
-                // Everything the parser found, plus what's set on the chips.
-                return parsed.copy(
-                    isStarred = starred,
+            // Everything the text asks for (the syntax every device shares), plus what's set on the chips.
+            suspend fun buildAdd(): QuickAdd {
+                // Read before suspending: "hold to add another" clears the form straight after.
+                val text = title; val star = starred; val start = startDate; val due = dueDate; val today = todayOnly; val chip = folder
+                val now = System.currentTimeMillis()
+                val rollover = AppSettings.rolloverHour(this@QuickAddActivity)
+                if (fixedParentId == null && chip?.type == TaskType.CHECKLIST) return QuickAdd(task = null, items = splitItems(text), intoChecklist = chip.id)
+                val add = repository.planQuickAdd(text, rollover, now)
+                val task = add.task ?: return add
+                return add.copy(task = task.copy(
+                    isStarred = star || task.isStarred,
                     // Chip values are an explicit, later user action, so they override whatever
                     // the shorthand parser found in the title text.
-                    startDate = startDate ?: parsed.startDate,
-                    dueDate = dueDate ?: parsed.dueDate,
-                    // Adding a subtask fixes the parent to the task it was launched from — the
-                    // Folder chip doesn't apply, since the subtask's position in the tree is
-                    // already decided by that relationship.
-                    parentId = fixedParentId ?: folder?.id,
-                    expiresAt = if (todayOnly) nextRollover(System.currentTimeMillis(), AppSettings.rolloverHour(this@QuickAddActivity)) else null
-                )
+                    startDate = start ?: task.startDate,
+                    dueDate = due ?: task.dueDate,
+                    // Adding a subtask fixes the parent to the task it was launched from. Otherwise a
+                    // folder named in the text ("work: …") beats the chip, which starts on Personal.
+                    parentId = fixedParentId ?: task.parentId ?: chip?.id,
+                    expiresAt = if (today) nextRollover(now, rollover) else task.expiresAt
+                ))
             }
 
             // keepOpen: "hold to add another" saves and clears the form for the next task. The
             // folder stays, since a burst of adds usually goes to the same place.
             fun create(keepOpen: Boolean) {
                 if (title.isBlank()) return
-                val task = buildTask()
                 lifecycleScope.launch {
-                    val id = repository.createTask(task)
-                    dependsOnId?.let { repository.addDependency(id, it) }
+                    val add = buildAdd()
+                    val id = repository.quickAdd(add, defaultParent = null, System.currentTimeMillis()) ?: return@launch
+                    if (add.task != null) dependsOnId?.let { repository.addDependency(id, it) }
+                    // "-f": every device goes into focus on it, this one included.
+                    if (add.focus) startActivity(Intent(this@QuickAddActivity, FocusActivity::class.java))
                     if (keepOpen) {
-                        Toast.makeText(this@QuickAddActivity, "Added “${task.title}”", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@QuickAddActivity, add.task?.let { "Added “${it.title}”" } ?: "Added ${add.items.size} items", Toast.LENGTH_SHORT).show()
                     } else {
                         finish()
                     }
@@ -189,7 +200,7 @@ class QuickAddActivity : ComponentActivity() {
                             icon = Icons.Filled.Folder,
                             onClick = { showFolderPicker = true },
                             showLabelWhenSet = false,
-                            tint = folder?.let { folderColors(folders)[it.id] } ?: LedgerAccent
+                            tint = folder?.let { folderColors(folders.filter { f -> f.type == TaskType.FOLDER })[it.id] } ?: LedgerAccent
                         )
                     }
                 }
@@ -201,12 +212,15 @@ class QuickAddActivity : ComponentActivity() {
                     // Opens the full editor on an unsaved draft of what's typed so far; backing out of
                     // the editor leaves nothing behind.
                     TextButton(onClick = {
-                        startActivity(
-                            Intent(this@QuickAddActivity, TaskEditActivity::class.java)
-                                .putExtra(TaskEditActivity.EXTRA_DRAFT, SyncJson.encodeToString(Task.serializer(), buildTask()))
-                                .apply { dependsOnId?.let { putExtra(TaskEditActivity.EXTRA_DRAFT_DEPENDS_ON, it) } }
-                        )
-                        finish()
+                        lifecycleScope.launch {
+                            val draft = buildAdd().task ?: Task(title = title)
+                            startActivity(
+                                Intent(this@QuickAddActivity, TaskEditActivity::class.java)
+                                    .putExtra(TaskEditActivity.EXTRA_DRAFT, SyncJson.encodeToString(Task.serializer(), draft))
+                                    .apply { dependsOnId?.let { putExtra(TaskEditActivity.EXTRA_DRAFT_DEPENDS_ON, it) } }
+                            )
+                            finish()
+                        }
                     }) {
                         Text("EDIT ALL DETAILS", color = LedgerAccent, fontWeight = FontWeight.Bold)
                     }

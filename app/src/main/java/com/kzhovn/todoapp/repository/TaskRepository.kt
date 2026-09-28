@@ -18,6 +18,8 @@ import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.newId
 import com.kzhovn.todoapp.notifications.ReminderScheduler
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
+import com.kzhovn.todoapp.quickadd.QuickAdd
+import com.kzhovn.todoapp.quickadd.planQuickAdd
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -229,6 +231,22 @@ class TaskRepository(
 
     // Checklist items: "milk, eggs" adds two, in order, at the end of the list.
     suspend fun addItems(checklistId: Long, text: String) = splitItems(text).forEach { createTask(Task(title = it, parentId = checklistId)) }
+
+    suspend fun planQuickAdd(text: String, rolloverHour: Int, now: Long): QuickAdd =
+        planQuickAdd(text, taskDao.getAllOnce(), taskContextDao.getAll(), now, rolloverHour)
+
+    // Carries out a quick add (see planQuickAdd): the task with its contexts, items, pin or focus, or
+    // items into an existing checklist. Returns the task's id (the checklist's, for items).
+    suspend fun quickAdd(add: QuickAdd, defaultParent: Long?, now: Long): Long? {
+        if (add.isEmpty) return null
+        add.intoChecklist?.let { id -> add.items.forEach { createTask(Task(title = it, parentId = id)) }; return id }
+        val task = add.task ?: return null
+        val id = createTask(task.copy(parentId = task.parentId ?: defaultParent))
+        add.contextIds.forEach { taskContextDao.assignContext(TaskContextCrossRef(id, it)) }
+        add.items.forEach { createTask(Task(title = it, parentId = id)) }
+        if (add.focus) focus(id, now) else if (add.pin) pin(id, now)
+        return id
+    }
 
     // Checked items are gone for good (after asking): a groceries list would otherwise fill up with them.
     suspend fun clearChecked(checklistId: Long) =

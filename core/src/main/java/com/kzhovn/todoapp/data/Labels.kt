@@ -58,10 +58,19 @@ object Labels {
     val QUICK_ADD_SYNTAX = listOf(
         "-d fri · due 3pm" to "due date (and time)",
         "-s tomorrow · start mon 9am" to "start date",
-        "today, tomorrow, mon–sun, next fri, 2026-10-01" to "dates",
+        "today, mon, next fri, +3d, in 2 weeks, +2h, oct 12, next week, weekend, 2026-10-01" to "dates",
         "5pm, 9:30am, 14:00" to "times",
-        "ends with ?" to "maybe",
-        "1 hour of …, 30m of …" to "timed task (a play button counts it down)",
+        "work: …" to "into a folder or project (else Personal)",
+        "groceries: milk, eggs" to "items into a checklist",
+        "packing [passport, charger]" to "a new checklist",
+        "d: …" to "today only",
+        "@home" to "a context",
+        "every day, every mon, thu, every 2 weeks, every 1st sat" to "repeat on a schedule",
+        "every 4 days after done" to "repeat after completion",
+        "remind 30m" to "reminder before the due time",
+        "1 hour of …, ~30m" to "timed task (a play button counts it down)",
+        "ends with * · ends with ?" to "starred · maybe",
+        "-p · -f" to "pin it · focus on it (every device)",
     )
 
     const val SAVE = "Save"

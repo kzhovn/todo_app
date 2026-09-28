@@ -187,7 +187,27 @@ class ServerTest {
         val due = logic.parseAdd("-- work: update bug due today")!!
         assertEquals("update bug", due.title)
         assertEquals(work.id, due.parentId)
-        assertEquals(java.util.Calendar.getInstance().startOfDay(), due.dueDate)
+        assertEquals(java.util.Calendar.getInstance().apply { timeInMillis = now }.startOfDay(), due.dueDate)
+    }
+
+    @Test
+    fun `adds share the quick-add syntax - checklist items, contexts, pin and focus`() {
+        val groceries = service.create(Task(type = TaskType.CHECKLIST, title = "Groceries"))
+        assertTrue(logic.onAdd(1L, "u", "--groceries: milk, eggs"))
+        assertEquals(listOf("milk", "eggs"), service.tasks().filter { it.parentId == groceries.id }.map { it.title })
+        assertEquals(listOf("milk", "eggs"), logic.command(".list groceries")!!.getOrThrow().map { it.title })
+
+        logic.onAdd(2L, "u", "-- packing [passport, charger] -p")
+        val packing = service.tasks().single { it.title == "packing" }
+        assertEquals(TaskType.CHECKLIST, packing.type)
+        assertEquals(2, service.tasks().count { it.parentId == packing.id })
+        assertEquals(packing.id, service.pinned()?.id)
+
+        val home = service.saveContext(com.kzhovn.todoapp.data.TaskContext(name = "Home", type = com.kzhovn.todoapp.data.ContextType.PLACE), emptyList())
+        val web = service.quickAdd("fix sink @home -f", fromDoing = false)!!
+        assertEquals("fix sink", web.title)
+        assertEquals(setOf(home.id), service.contextIdsByTask()[web.id])
+        assertEquals(web.id, service.focusSession()?.id)
     }
 
     @Test

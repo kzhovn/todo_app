@@ -570,6 +570,17 @@ class WebTest {
     }
 
     @Test
+    fun `focus on a checklist lists its items to tick off`() = web {
+        val groceries = service.create(Task(title = "Groceries", type = TaskType.CHECKLIST))
+        service.quickAdd("groceries: milk, eggs", fromDoing = false)
+        val milk = service.tasks().single { it.title == "milk" }
+        service.focus(groceries.id)
+        assertTrue(client.get("/doing").bodyAsText().contains("/focus/item?task=${milk.id}"))
+        assertTrue(client.post("/focus/item?task=${milk.id}").bodyAsText().contains("focus-item done"))
+        assertTrue(service.get(milk.id)!!.isComplete)
+    }
+
+    @Test
     fun `the web timer is the current task's, shared, and stopping it unpins`() = web {
         val work = service.create(Task(title = "Ticket work", durationMinutes = 60))
         val started = client.post("/timer/start?task=${work.id}").bodyAsText()

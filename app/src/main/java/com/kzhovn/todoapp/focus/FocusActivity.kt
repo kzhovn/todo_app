@@ -1,9 +1,15 @@
 package com.kzhovn.todoapp.focus
 
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.heightIn
+import com.kzhovn.todoapp.AppSettings
+import com.kzhovn.todoapp.data.checklistItems
+import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.repository.nextFocusTasks
 import com.kzhovn.todoapp.data.findFolder
 import com.kzhovn.todoapp.data.DEFAULT_FOLDER
-import com.kzhovn.todoapp.quickadd.QuickAddParser
 import com.kzhovn.todoapp.data.Labels
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
@@ -88,6 +94,8 @@ class FocusActivity : ComponentActivity() {
                 val task = session?.takeUnless { it.isComplete }
                 val askNext = session?.isComplete == true
                 var effectiveDue by remember { mutableStateOf<Long?>(null) }
+                // A checklist in focus: its items, to tick off here.
+                var items by remember { mutableStateOf<List<Task>>(emptyList()) }
                 var candidates by remember { mutableStateOf<List<Task>?>(null) }
                 var leaving by remember { mutableStateOf<String?>(null) }
                 var adding by remember { mutableStateOf(false) }
@@ -99,10 +107,9 @@ class FocusActivity : ComponentActivity() {
                 suspend fun reload() {
                     val s = repository.getFocusSession()
                     session = s
-                    effectiveDue = s?.let { t ->
-                        val all = repository.getAllTasks()
-                        resolveEffective(t, all.associateBy { it.id }, repository.getAllTaskContexts()).effectiveDueDate
-                    }
+                    val all = if (s != null) repository.getAllTasks() else emptyList()
+                    effectiveDue = s?.let { t -> resolveEffective(t, all.associateBy { it.id }, repository.getAllTaskContexts()).effectiveDueDate }
+                    items = s?.takeIf { it.type == TaskType.CHECKLIST }?.let { checklistItems(it.id, all) }.orEmpty()
                     if (s != null && !locked) { locked = true; startLockTask() }
                 }
 
@@ -160,6 +167,19 @@ class FocusActivity : ComponentActivity() {
                             Spacer(Modifier.height(16.dp))
                             Text(t.title, fontSize = 28.sp, fontWeight = FontWeight.Medium, color = LedgerInk, textAlign = TextAlign.Center, lineHeight = 34.sp)
                             effectiveDue?.let { due -> Text(dueText(due, System.currentTimeMillis()), fontSize = 14.sp, color = LedgerMuted, modifier = Modifier.padding(top = 8.dp)) }
+                            if (items.isNotEmpty()) Column(Modifier.padding(top = 20.dp).heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
+                                items.forEach { item ->
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        TaskCheckbox(checked = item.isComplete, due = null, size = 26.dp, touchSize = 48.dp) {
+                                            scope.launch { repository.toggleComplete(item.id, System.currentTimeMillis()); reload() }
+                                        }
+                                        Text(
+                                            item.title, fontSize = 18.sp, color = if (item.isComplete) LedgerMuted else LedgerInk,
+                                            textDecoration = if (item.isComplete) TextDecoration.LineThrough else null
+                                        )
+                                    }
+                                }
+                            }
                             t.durationMinutes?.let { minutes ->
                                 Spacer(Modifier.height(20.dp))
                                 TimerButton(t, minutes)
@@ -214,18 +234,18 @@ class FocusActivity : ComponentActivity() {
                     val focusOnIt = addToFocus
                     val close = { adding = false; addToFocus = false }
                     val add = {
-                        val parsed = QuickAddParser.parse(text)
                         close()
-                        if (parsed.title.isNotBlank()) scope.launch {
-                            // Into Personal, like quick add with no folder chosen.
+                        if (text.isNotBlank()) scope.launch {
+                            val now = System.currentTimeMillis()
+                            val add = repository.planQuickAdd(text, AppSettings.rolloverHour(this@FocusActivity), now)
+                            // Into Personal unless it names a folder, like quick add with no folder chosen.
                             val personal = findFolder(repository.getFolders(), DEFAULT_FOLDER)
-                            val id = repository.createTask(parsed.copy(parentId = personal?.id))
-                            val created = repository.getTask(id)
-                            if (focusOnIt && created != null) {
+                            val created = repository.quickAdd(add, personal?.id, now)?.let { repository.getTask(it) }
+                            if (focusOnIt && created != null && add.task != null) {
                                 candidates = null
                                 focusOn(created)
-                            } else {
-                                Toast.makeText(this@FocusActivity, "Added “${parsed.title}”", Toast.LENGTH_SHORT).show()
+                            } else if (created != null) {
+                                Toast.makeText(this@FocusActivity, add.task?.let { "Added “${it.title}”" } ?: "Added to ${created.title}", Toast.LENGTH_SHORT).show()
                             }
                         }
                     }

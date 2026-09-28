@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.Labels
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -50,7 +51,7 @@ fun FolderPickerDialog(
                 }
                 visibleFolders.forEach { f ->
                     Text(
-                        f.title,
+                        f.title + if (f.type == TaskType.CHECKLIST) " (checklist)" else "",
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onPick(f) }

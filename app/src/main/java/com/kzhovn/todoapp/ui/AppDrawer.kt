@@ -78,8 +78,7 @@ fun AppDrawer(
 @Composable
 private fun QuickAddKey() {
     val discord = listOf(
-        "--work: …" to "into a folder (else Personal)",
-        "--d: …" to Labels.TODAY_ONLY.lowercase(),
+        "-- …" to "any quick add above",
         "reply to a todo" to "it depends on the new one",
         "✅ ❌ ⭐" to "complete / delete / star",
     )

@@ -140,4 +140,75 @@ class QuickAddParserTest {
         val maybe = QuickAddParser.parse("20 minutes of stretching?")
         assertEquals(Triple("stretching", 20, true), Triple(maybe.title, maybe.durationMinutes, maybe.isMaybe))
     }
+
+    // Wednesday 30 Sep 2026, 10:00.
+    private val wed = java.util.Calendar.getInstance().apply { set(2026, 8, 30, 10, 0, 0); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
+    private fun date(ms: Long?) = java.text.SimpleDateFormat("EEE yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(ms!!))
+    private fun read(text: String) = QuickAddParser.read(text, wed)
+
+    @Test
+    fun `relative and month dates`() {
+        assertEquals("Sat 2026-10-03 00:00", date(read("x -d +3d").task!!.dueDate))
+        assertEquals("Wed 2026-10-14 00:00", date(read("x start in 2 weeks").task!!.startDate))
+        assertEquals("Fri 2026-10-30 00:00", date(read("x -s +1m").task!!.startDate))
+        assertEquals("Wed 2026-09-30 12:00", date(read("x -s +2h").task!!.startDate))
+        assertEquals("Mon 2026-10-12 17:00", date(read("x due oct 12 5pm").task!!.dueDate))
+        assertEquals("Mon 2026-10-12 00:00", date(read("x -d 12th october").task!!.dueDate))
+        assertEquals("Mon 2027-03-01 00:00", date(read("x due mar 1").task!!.dueDate)) // already past this year
+        assertEquals("Mon 2026-10-05 00:00", date(read("x -s next week").task!!.startDate))
+        assertEquals("Sat 2026-10-03 00:00", date(read("x start weekend").task!!.startDate))
+        assertEquals("Sat 2026-10-03 00:00", date(read("x -s this weekend").task!!.startDate))
+        assertEquals("x", read("x -s this weekend").task!!.title)
+        // Words that only look like dates stay put.
+        assertEquals("may the force be with you", read("may the force be with you").task!!.title)
+    }
+
+    @Test
+    fun `repeats on a schedule start on their first day, repeats after done don't need one`() {
+        val mon = read("water plants every mon, thu").task!!
+        assertEquals("water plants", mon.title)
+        assertEquals("FREQ=WEEKLY;BYDAY=MO,TH", mon.recurrenceRule)
+        assertEquals("Thu 2026-10-01 00:00", date(mon.startDate))
+        assertEquals("FREQ=DAILY", read("stretch every day").task!!.recurrenceRule)
+        assertEquals("Wed 2026-09-30 00:00", date(read("stretch every day").task!!.startDate))
+        assertEquals("FREQ=WEEKLY;INTERVAL=2", read("bins every 2 weeks").task!!.recurrenceRule)
+        assertEquals("FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", read("standup every weekday").task!!.recurrenceRule)
+        val sat = read("market every 1st sat").task!!
+        assertEquals("FREQ=MONTHLY;BYDAY=1SA", sat.recurrenceRule)
+        assertEquals("Sat 2026-10-03 00:00", date(sat.startDate))
+        assertEquals("FREQ=MONTHLY;BYDAY=-1FR", read("payday every last friday").task!!.recurrenceRule)
+        val after = read("haircut every 4 weeks after done").task!!
+        assertEquals(com.kzhovn.todoapp.data.RecurrenceType.AFTER_COMPLETION to "4w", after.recurrenceType to after.recurrenceRule)
+        assertEquals("haircut", after.title)
+        assertNull(after.startDate)
+        assertEquals("read every book", read("read every book").task!!.title)
+    }
+
+    @Test
+    fun `reminders, star, pin, focus, tilde durations and new checklists`() {
+        assertEquals(30, read("call dentist due fri 3pm remind 30m").task!!.reminderOffsetMinutes)
+        assertEquals(60, read("call dentist due fri remind me 1h before").task!!.reminderOffsetMinutes)
+        assertNull(read("call dentist remind 30m").task!!.reminderOffsetMinutes) // no due date
+        assertEquals("call dentist", read("call dentist remind 30m").task!!.title)
+
+        val starred = read("call mom*")
+        assertEquals("call mom" to true, starred.task!!.title to starred.task!!.isStarred)
+        val maybeStar = read("call mom?*").task!!
+        assert(maybeStar.isMaybe && !maybeStar.isStarred)
+
+        val pf = read("write report -p")
+        assertEquals("write report", pf.task!!.title)
+        assert(pf.pin && !pf.focus)
+        assert(read("write -f report").focus)
+
+        assertEquals("taxes" to 30, read("taxes ~30m").task!!.let { it.title to it.durationMinutes })
+        assertEquals(90, read("~1h 30m taxes").task!!.durationMinutes)
+        assertEquals(90, read("taxes ~1.5h").task!!.durationMinutes)
+
+        val packing = read("packing [passport, charger, toothbrush] -d fri")
+        assertEquals("packing", packing.task!!.title)
+        assertEquals(com.kzhovn.todoapp.data.TaskType.CHECKLIST, packing.task!!.type)
+        assertEquals(listOf("passport", "charger", "toothbrush"), packing.items)
+        assertNotNull(packing.task!!.dueDate)
+    }
 }
