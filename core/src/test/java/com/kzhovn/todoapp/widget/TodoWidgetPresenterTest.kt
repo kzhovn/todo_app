@@ -37,10 +37,10 @@ class TodoWidgetPresenterTest {
         val dishes = Task(id = 12, title = "Dishes", parentId = home.id)
         val loose = Task(id = 13, title = "Loose")
         val byId = listOf(work, home, bug, step, dishes, loose).associateBy { it.id }
-        val colors = mapOf(work.id to androidx.compose.ui.graphics.Color.Red, home.id to androidx.compose.ui.graphics.Color.Blue)
+        val colors = mapOf(work.id to 0xFFFF0000.toInt(), home.id to 0xFF0000FF.toInt())
 
         val rows = TodoWidgetPresenter.toRows(listOf(loose, bug, step, dishes), allById = byId, folderColors = colors)
         assertEquals(listOf("Dishes", "Bug", "Step", "Loose"), rows.map { it.title })
-        assertEquals(listOf(androidx.compose.ui.graphics.Color.Blue, androidx.compose.ui.graphics.Color.Red, androidx.compose.ui.graphics.Color.Red, null), rows.map { it.barColor })
+        assertEquals(listOf(0xFF0000FF.toInt(), 0xFFFF0000.toInt(), 0xFFFF0000.toInt(), null), rows.map { it.barColor })
     }
 }

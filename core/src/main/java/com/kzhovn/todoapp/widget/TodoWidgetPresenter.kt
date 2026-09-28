@@ -6,21 +6,25 @@ import com.kzhovn.todoapp.repository.urgentFirst
 import com.kzhovn.todoapp.data.DueStatus
 import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.data.Task
-import androidx.compose.ui.graphics.Color
+import kotlinx.serialization.Serializable
 import com.kzhovn.todoapp.data.sectionsByTopFolder
 import com.kzhovn.todoapp.data.subtaskParentTitle
 import com.kzhovn.todoapp.data.walkParentChain
 
+// The widget's rows, shared by the phone's widget and the desktop tray (served as JSON by /api/tray).
+
 // A subtask or checklist item, shown under its row when the row is expanded.
+@Serializable
 data class WidgetChild(val id: Long, val title: String, val isComplete: Boolean)
 
+@Serializable
 data class WidgetTaskRow(
     val id: Long, val title: String, val isComplete: Boolean, val isStarred: Boolean, val isMaybe: Boolean = false,
     val subtasks: Pair<Int, Int>? = null, // (done, total), like the app's list rows
     val isBackburner: Boolean = false,
     val parentTitle: String? = null, // a subtask's parent, shown as "Parent: subtask"
     val parentId: Long? = null,
-    val barColor: Color? = null, // the nearest folder's colour, as the app's rows show it
+    val barColor: Int? = null, // the nearest folder's colour (ARGB), as the app's rows show it
     val durationMinutes: Int? = null, // a timed task: the row gets a play button with its length
     val due: DueStatus? = null, // colours the checkbox ring
     val isChecklist: Boolean = false, // a count in the checkbox's place
@@ -33,7 +37,7 @@ object TodoWidgetPresenter {
         subtaskCounts: Map<Long, Pair<Int, Int>> = emptyMap(),
         now: Long = System.currentTimeMillis(),
         allById: Map<Long, Task> = emptyMap(),
-        folderColors: Map<Long, Color> = emptyMap(),
+        folderColors: Map<Long, Int> = emptyMap(), // ARGB, see folderColorsArgb
         effectiveDue: (Task) -> Long? = { it.dueDate },
         // Doing and Active: what's overdue or due today on top (urgentFirst), above the folder grouping.
         urgentOnTop: Boolean = false

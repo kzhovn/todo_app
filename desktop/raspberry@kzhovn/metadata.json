@@ -1,0 +1,7 @@
+{
+  "uuid": "raspberry@kzhovn",
+  "name": "Raspberry",
+  "description": "Doing and Active from the Raspberry todo app, like the phone's widget, with the pinned task in the top bar.",
+  "shell-version": ["46"],
+  "version": 1
+}

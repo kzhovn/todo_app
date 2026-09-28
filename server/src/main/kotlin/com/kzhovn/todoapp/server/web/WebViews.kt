@@ -136,6 +136,9 @@ fun HTML.page(title: String, content: BODY.() -> Unit) {
         link(rel = "icon", href = "/static/icon-32.png", type = "image/png") { attributes["sizes"] = "32x32" }
         link(rel = "icon", href = "/static/icon-192.png", type = "image/png") { attributes["sizes"] = "192x192" }
         link(rel = "apple-touch-icon", href = "/static/apple-touch-icon.png")
+        // Makes the site installable as a desktop app (Chrome: Install page as app). Fetched with the
+        // basic-auth credentials, which a manifest request otherwise leaves out.
+        link(rel = "manifest", href = "/static/manifest.json") { attributes["crossorigin"] = "use-credentials" }
         script(src = "/static/htmx/htmx.min.js") {}
         script(src = "/static/app.js") { defer = true }
     }

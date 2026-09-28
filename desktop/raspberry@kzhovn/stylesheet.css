@@ -1,0 +1,51 @@
+/* The phone widget's look: the Ledger palette (app/.../ui/theme/Color.kt) on a cream card. */
+.rb-panel-icon { icon-size: 16px; border-radius: 3px; }
+.rb-panel-label { padding-left: 6px; }
+
+.rb-item { padding: 0; }
+.rb-popup { background-color: #F0EAE0; color: #2B2318; border-radius: 10px; padding: 4px 4px 6px; width: 400px; }
+
+.rb-header { padding: 2px 2px 4px; spacing: 2px; }
+.rb-menu { color: #2B4C7E; font-size: 18px; font-weight: bold; width: 32px; height: 30px; border-radius: 6px; }
+.rb-tab { color: #8A7A5C; font-size: 11px; font-weight: bold; padding: 4px 8px; border-radius: 6px; }
+.rb-tab-on { color: #2B4C7E; background-color: #DFE6EF; }
+.rb-tool { width: 28px; height: 28px; border-radius: 6px; color: #8A7A5C; }
+.rb-add { width: 30px; height: 30px; border-radius: 15px; background-color: #DFE6EF; color: #2B4C7E; }
+.rb-icon { icon-size: 16px; }
+.rb-menu:hover, .rb-tab:hover, .rb-tool:hover, .rb-title:hover, .rb-parent:hover, .rb-subtasks:hover, .rb-count:hover { background-color: rgba(43, 76, 126, 0.08); }
+
+.rb-entry { margin: 2px 4px 6px; background-color: #F7F4EE; color: #2B2318; border: 1px solid #DED5C1; border-radius: 6px; padding: 6px 8px; caret-color: #2B4C7E; }
+.rb-entry:focus { border-color: #2B4C7E; }
+.rb-entry .hint-text { color: #8A7A5C; }
+
+.rb-pinned { background-color: #DFE6EF; border-radius: 6px; margin: 0 2px 4px; padding-left: 8px; spacing: 4px; }
+.rb-pin-icon { icon-size: 14px; color: #2B4C7E; }
+
+.rb-scroll { max-height: 480px; }
+.rb-row { min-height: 30px; }
+.rb-bar { width: 4px; }
+.rb-child .rb-bar { min-height: 26px; }
+
+/* The checkbox: a ring, with a pale fill of its own colour when due today / overdue. */
+.rb-check { width: 17px; height: 17px; border-radius: 10px; border: 1.5px solid #B5A98C; margin: 0 7px; }
+.rb-check:hover { background-color: #DFE6EF; }
+.rb-today { border: 2px solid #C98A1A; background-color: rgba(201, 138, 26, 0.18); }
+.rb-overdue { border: 2px solid #96412B; background-color: rgba(150, 65, 43, 0.18); }
+.rb-check-small { width: 13px; height: 13px; margin-left: 21px; margin-right: 6px; }
+.rb-check-done { border-color: #8A7A5C; }
+.rb-tick { icon-size: 11px; color: #8A7A5C; }
+
+.rb-count { color: #2B4C7E; font-size: 11px; font-weight: bold; min-width: 31px; padding: 0 3px; border-radius: 4px; }
+.rb-parent { color: #8A7A5C; font-size: 14px; padding: 5px 4px 5px 2px; border-radius: 4px; }
+.rb-title { color: #2B2318; font-size: 14px; font-weight: bold; padding: 5px 2px; border-radius: 4px; }
+.rb-dim { color: #8A7A5C; }
+.rb-subtasks { color: #8A7A5C; font-size: 11px; padding: 0 3px; border-radius: 4px; }
+.rb-star { width: 30px; height: 30px; color: #B5A98C; }
+.rb-star-on { color: #C9A01E; }
+.rb-star .rb-icon { icon-size: 18px; }
+.rb-maybe { color: #8A7A5C; font-size: 18px; font-weight: bold; width: 30px; text-align: center; }
+
+.rb-child-title { font-size: 13px; color: #2B2318; padding: 4px 6px 4px 2px; }
+.rb-done { color: #8A7A5C; }
+.rb-empty { color: #8A7A5C; padding: 18px; text-align: center; }
+.rb-status { color: #8A7A5C; font-size: 10px; padding: 4px 8px 0; }

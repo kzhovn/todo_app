@@ -13,6 +13,7 @@ import com.kzhovn.todoapp.sync.diff
 import com.kzhovn.todoapp.sync.dependsOn
 import com.kzhovn.todoapp.sync.taskFields
 import com.kzhovn.todoapp.sync.toTask
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -50,6 +51,33 @@ class ServerTest {
 
         val again = store.sync(SyncRequest(response.cursor, emptyList()))
         assertTrue("nothing new since cursor", again.rows.isEmpty())
+    }
+
+    @Test
+    fun `the tray API needs the token and serves the widget's rows`() = testApplication {
+        application { api(store, "secret") }
+        fun tray(body: String) = SyncJson.decodeFromString(TrayState.serializer(), body)
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/api/tray").status)
+        assertEquals(HttpStatusCode.Unauthorized, client.post("/api/unpin") { header("Authorization", "Bearer nope") }.status)
+
+        val call = service.create(Task(title = "Call mom", isStarred = true))
+        val step = service.create(Task(title = "Find number", parentId = call.id, isStarred = true))
+        val state = tray(client.get("/api/tray") { header("Authorization", "Bearer secret") }.bodyAsText())
+        assertEquals(listOf("Find number"), state.doing.map { it.title }) // the parent waits on its subtask
+        assertEquals("Call mom", state.doing.single().parentTitle)
+
+        val pinned = tray(client.post("/api/tasks/${call.id}/pin") { header("Authorization", "Bearer secret") }.bodyAsText())
+        assertEquals(PinnedRow(call.id, "Call mom"), pinned.pinned)
+        // The checkbox completes the subtasks too, like the widget's.
+        val done = tray(client.post("/api/tasks/${call.id}/complete") { header("Authorization", "Bearer secret") }.bodyAsText())
+        assertTrue(service.get(step.id)!!.isComplete)
+        assertNull(done.pinned)
+        assertTrue(done.doing.isEmpty())
+
+        val added = tray(client.post("/api/quickadd") {
+            header("Authorization", "Bearer secret"); contentType(ContentType.Application.FormUrlEncoded); setBody("text=Water+plants&mode=doing")
+        }.bodyAsText())
+        assertEquals(listOf("Water plants"), added.doing.map { it.title }) // added from Doing: starred
     }
 
     @Test

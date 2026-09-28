@@ -1,6 +1,5 @@
 package com.kzhovn.todoapp.server.web
 
-import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.quickadd.QuickAddParser
@@ -135,11 +134,7 @@ fun Route.webRoutes(service: TaskService) {
         val params = call.receiveParameters()
         val text = params["text"].orEmpty()
         val mode = params["mode"]?.let { runCatching { ListMode.valueOf(it) }.getOrNull() }
-        val parsed = QuickAddParser.parse(text)
-        // Added from Doing, it starts starred so it shows up right there, like the Doing widget's.
-        val created = if (parsed.title.isBlank()) null else service.create(
-            parsed.copy(parentId = service.findFolder(DEFAULT_FOLDER)?.id, isStarred = parsed.isStarred || mode == ListMode.DOING)
-        )
+        val created = service.quickAdd(text, fromDoing = mode == ListMode.DOING)
         if (mode != null) return@post call.respondList(service, mode)
         call.respondText(created?.let { t -> createHTML().div { addedToastContents(t) } }.orEmpty(), ContentType.Text.Html)
     }

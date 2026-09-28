@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.widget
 
+import androidx.compose.ui.graphics.Color
+import com.kzhovn.todoapp.data.folderColorsArgb
 import com.kzhovn.todoapp.data.isUnder
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.subtaskCounts
@@ -70,7 +72,6 @@ import com.kzhovn.todoapp.repository.dayOfWeekMask
 import com.kzhovn.todoapp.repository.filterDoing
 import com.kzhovn.todoapp.repository.minuteOfDay
 import com.kzhovn.todoapp.ui.TaskEditActivity
-import com.kzhovn.todoapp.ui.theme.folderColors
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
@@ -117,7 +118,7 @@ class TodoWidget : GlanceAppWidget() {
             }.filter { folderId == null || isUnder(it, folderId, allById) }
             val folderName = folderId?.let { allById[it]?.title }
             val effectiveDue = { t: Task -> resolveEffective(t, allById, contextsByTaskId).effectiveDueDate }
-            return TodoWidgetPresenter.toRows(tasks, subtaskCounts(allTasks), now, allById, folderColors(allTasks), effectiveDue, urgentOnTop = mode != WidgetMode.ALL) to
+            return TodoWidgetPresenter.toRows(tasks, subtaskCounts(allTasks), now, allById, folderColorsArgb(allTasks), effectiveDue, urgentOnTop = mode != WidgetMode.ALL) to
                 mode.label.uppercase() + folderName?.let { " · $it" }.orEmpty()
         }
         val initial = load()
@@ -218,7 +219,7 @@ private fun WidgetRow(row: WidgetTaskRow, expanded: Boolean) {
     val toggleExpanded = actionRunCallback<ToggleExpandedAction>(actionParametersOf(taskIdKey to row.id))
     Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
         // The folder colour bar, like the app's rows; row height is fixed by the 30dp tap boxes.
-        Box(GlanceModifier.width(4.dp).height(30.dp).background(fixed(row.barColor ?: LedgerBorder))) {}
+        Box(GlanceModifier.width(4.dp).height(30.dp).background(fixed(row.barColor?.let(::Color) ?: LedgerBorder))) {}
         // A checklist: "5/8" in the checkbox's place, tapped to show its items in place.
         if (row.isChecklist) Box(contentAlignment = Alignment.Center, modifier = GlanceModifier.size(width = 36.dp, height = 30.dp).clickable(toggleExpanded)) {
             val (done, total) = row.subtasks ?: (0 to 0)
@@ -314,7 +315,7 @@ private fun WidgetRow(row: WidgetTaskRow, expanded: Boolean) {
 @androidx.compose.runtime.Composable
 private fun WidgetChildRow(parent: WidgetTaskRow, child: WidgetChild) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
-        Box(GlanceModifier.width(4.dp).height(26.dp).background(fixed(parent.barColor ?: LedgerBorder))) {}
+        Box(GlanceModifier.width(4.dp).height(26.dp).background(fixed(parent.barColor?.let(::Color) ?: LedgerBorder))) {}
         Box(
             contentAlignment = Alignment.Center,
             modifier = GlanceModifier.padding(start = 14.dp).size(width = 28.dp, height = 26.dp)

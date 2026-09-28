@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server
 
+import io.ktor.server.routing.RoutingContext
 import com.kzhovn.todoapp.server.web.webRoutes
 import com.kzhovn.todoapp.sync.SyncJson
 import com.kzhovn.todoapp.sync.SyncRequest
@@ -91,12 +92,13 @@ fun Application.api(store: Store, apiToken: String, service: TaskService = TaskS
         }
     }
     val expected = "Bearer $apiToken".toByteArray()
+    val hasToken = { ctx: RoutingContext -> MessageDigest.isEqual(ctx.call.request.headers["Authorization"].orEmpty().toByteArray(), expected) }
     routing {
         if (webEnabled) webRoutes(service)
         post("/sync") {
-            val auth = call.request.headers["Authorization"].orEmpty().toByteArray()
-            if (!MessageDigest.isEqual(auth, expected)) return@post call.respond(HttpStatusCode.Unauthorized)
+            if (!hasToken(this)) return@post call.respond(HttpStatusCode.Unauthorized)
             call.respond(store.sync(call.receive<SyncRequest>()))
         }
+        trayRoutes(service, hasToken)
     }
 }

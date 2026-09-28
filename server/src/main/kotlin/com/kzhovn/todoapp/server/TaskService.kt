@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.data.DEFAULT_FOLDER
+import com.kzhovn.todoapp.quickadd.QuickAddParser
 import com.kzhovn.todoapp.data.pinnedTask
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.searchTasks
@@ -134,6 +136,14 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun unpin() = store.transaction { tasks().filter { it.pinnedAt != null }.forEach { t -> update(t.id) { it.copy(pinnedAt = null) } } }
 
     fun pinned(): Task? = pinnedTask(tasks())
+
+    // Quick add from the web or the desktop tray: parsed like the app's, into Personal. Added while
+    // looking at Doing, it starts starred so it shows up right there, like the Doing widget's.
+    fun quickAdd(text: String, fromDoing: Boolean): Task? {
+        val parsed = QuickAddParser.parse(text)
+        if (parsed.title.isBlank()) return null
+        return create(parsed.copy(parentId = findFolder(DEFAULT_FOLDER)?.id, isStarred = parsed.isStarred || fromDoing))
+    }
 
     fun setStarred(id: Long, starred: Boolean) = update(id) { it.copy(isStarred = starred) }
 
