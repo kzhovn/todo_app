@@ -12,10 +12,10 @@ object QuickAddParser {
     // A time needs am/pm or a colon, so a bare number ("buy 3 apples") is never mistaken for one.
     private const val TIME = "\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)|\\d{1,2}:\\d{2}"
 
-    // A flag takes any token (an unparseable one is dropped); the words "start"/"due" only count
-    // when followed by a recognised date or time, so they can still appear in ordinary titles.
-    // Either may be followed by an optional time: "-d fri 5pm", "due tomorrow at 9:30".
-    private val flagRegex = Regex("(?<!\\S)-([sd])\\s+(\\S+)(?:\\s+(?:at\\s+)?($TIME))?(?!\\S)", RegexOption.IGNORE_CASE)
+    // A flag takes any token (an unparseable one is dropped), or "next <weekday>" as one; the words
+    // "start"/"due" only count when followed by a recognised date or time, so they can still appear
+    // in ordinary titles. Either may be followed by an optional time: "-d fri 5pm", "due tomorrow at 9:30".
+    private val flagRegex = Regex("(?<!\\S)-([sd])\\s+(next\\s+(?:$WEEKDAY)|\\S+)(?:\\s+(?:at\\s+)?($TIME))?(?!\\S)", RegexOption.IGNORE_CASE)
     private val wordRegex = Regex(
         "(?<!\\S)(start|due)\\s+(?:($DATE)(?:\\s+(?:at\\s+)?($TIME))?|(?:at\\s+)?($TIME))(?!\\S)",
         RegexOption.IGNORE_CASE

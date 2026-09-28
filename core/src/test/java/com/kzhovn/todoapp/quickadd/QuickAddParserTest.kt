@@ -68,6 +68,11 @@ class QuickAddParserTest {
         assert(dayOffset(friday) in 1..7)
         assertEquals(friday, QuickAddParser.parse("call bank due next friday").dueDate)
         assertEquals(friday, QuickAddParser.parse("call bank -d friday").dueDate)
+        val flagged = QuickAddParser.parse("taxes -s next fri 9am")
+        assertEquals("taxes", flagged.title)
+        val start = java.util.Calendar.getInstance().apply { timeInMillis = flagged.startDate!! }
+        assertEquals(dayOffset(friday), dayOffset(flagged.startDate!!))
+        assertEquals(9, start.get(java.util.Calendar.HOUR_OF_DAY))
     }
 
     @Test
