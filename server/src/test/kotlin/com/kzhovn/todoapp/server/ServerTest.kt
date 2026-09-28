@@ -74,6 +74,8 @@ class ServerTest {
 
         val pinned = tray(client.post("/api/tasks/${call.id}/pin?list=doing") { header("Authorization", auth) }.bodyAsText())
         assertEquals(PinnedRow(call.id, "Call mom"), pinned.pinned)
+        val focused = tray(client.post("/api/tasks/${call.id}/focus?list=doing") { header("Authorization", auth) }.bodyAsText())
+        assertEquals(FocusRow(call.id, "Call mom", done = false), focused.focus)
         // The checkbox completes the subtasks too, like the widget's.
         val done = tray(client.post("/api/tasks/${call.id}/complete?list=doing") { header("Authorization", auth) }.bodyAsText())
         assertTrue(service.get(step.id)!!.isComplete)
@@ -90,6 +92,20 @@ class ServerTest {
         val long = tray(client.get("/api/tray?list=all") { header("Authorization", auth) }.bodyAsText())
         assertEquals(100, long.rows.size)
         assertEquals(121, long.counts.all)
+    }
+
+    @Test
+    fun `the tray's timer is the current task's, and time's up adds time`() = testApplication {
+        application { api(store, "secret") }
+        fun tray(body: String) = SyncJson.decodeFromString(TrayState.serializer(), body)
+        val work = service.create(Task(title = "Ticket work", durationMinutes = 60))
+        val started = tray(client.post("/api/tasks/${work.id}/timer?list=none") { header("Authorization", "Bearer secret") }.bodyAsText())
+        // (The API runs on the real clock, so times are checked against the server's `now`.)
+        assertTrue(kotlin.math.abs(started.pinned!!.timerEndsAt!! - started.now - 60 * 60_000L) < 5_000) // starting a timer pins its task
+        val paused = tray(client.post("/api/timer/pause?list=none") { header("Authorization", "Bearer secret") }.bodyAsText())
+        assertTrue(kotlin.math.abs(paused.pinned!!.timerRemaining!! - 60 * 60_000L) < 5_000)
+        val more = tray(client.post("/api/timer/add?minutes=10&list=none") { header("Authorization", "Bearer secret") }.bodyAsText())
+        assertTrue(kotlin.math.abs(more.pinned!!.timerEndsAt!! - more.now - 10 * 60_000L) < 5_000)
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.data.CurrentTask
 import com.kzhovn.todoapp.data.pinnedTask
 import com.kzhovn.todoapp.repository.filterDoing
 import com.kzhovn.todoapp.data.Task
@@ -23,15 +24,27 @@ import kotlinx.serialization.Serializable
 // back (`list`), and at most MAX_ROWS of it: the popup is parsed and drawn inside GNOME Shell, and a
 // full All list ran to over a megabyte.
 @Serializable
-data class TrayState(val pinned: PinnedRow?, val counts: TrayCounts, val list: String?, val rows: List<WidgetTaskRow>)
+data class TrayState(
+    val pinned: PinnedRow?,
+    val counts: TrayCounts,
+    val list: String?,
+    val rows: List<WidgetTaskRow>,
+    val focus: FocusRow? = null, // a focus session (on every device): the popup shows just it
+    val now: Long = 0 // the server's clock, for the countdown
+)
+
+// The session's task; `done`: it's finished, and every device asks what's next.
+@Serializable
+data class FocusRow(val id: Long, val title: String, val done: Boolean)
 
 @Serializable
 data class TrayCounts(val doing: Int, val active: Int, val all: Int)
 
 private const val MAX_ROWS = 100
 
+// The current task, with its timer (running until timerEndsAt, or paused with timerRemaining left).
 @Serializable
-data class PinnedRow(val id: Long, val title: String)
+data class PinnedRow(val id: Long, val title: String, val timerEndsAt: Long? = null, val timerRemaining: Long? = null, val durationMinutes: Int? = null)
 
 // list: "doing", "active", "all", or anything else for none (the popup is closed: just the pin and counts).
 fun trayState(service: TaskService, list: String?): TrayState {
@@ -53,7 +66,9 @@ fun trayState(service: TaskService, list: String?): TrayState {
         "all" -> rows(allOpen, urgentOnTop = false)
         else -> emptyList()
     }
-    return TrayState(pinnedTask(all)?.let { PinnedRow(it.id, it.title) }, TrayCounts(doing.size, active.size, allOpen.size), list, rows)
+    val pinned = pinnedTask(all)?.let { PinnedRow(it.id, it.title, it.timerEndsAt, it.timerRemaining, it.durationMinutes) }
+    val focus = CurrentTask.focusSession(all)?.let { FocusRow(it.id, it.title, it.isComplete) }
+    return TrayState(pinned, TrayCounts(doing.size, active.size, allOpen.size), list, rows, focus, service.now())
 }
 
 // Bearer-token protected like /sync, so it's served even where the web pages aren't.
@@ -74,7 +89,16 @@ fun Route.trayRoutes(service: TaskService, hasToken: (RoutingContext) -> Boolean
     }
     post("/api/tasks/{id}/star") { act { id -> id?.let(service::toggleStar) } }
     post("/api/tasks/{id}/pin") { act { id -> id?.let(service::pin) } }
+    // Unpinning also stops the timer and leaves focus, on every device.
     post("/api/unpin") { act { service.unpin() } }
+    // The shared timer (CurrentTask): starting one pins its task.
+    post("/api/tasks/{id}/timer") { act { id -> id?.let { service.get(it)?.durationMinutes?.let { m -> service.startTimer(it, m) } } } }
+    post("/api/timer/pause") { act { service.pauseTimer() } }
+    post("/api/timer/resume") { act { service.resumeTimer() } }
+    post("/api/timer/add") { act { call.request.queryParameters["minutes"]?.toIntOrNull()?.takeIf { it > 0 }?.let(service::addTime) } }
+    // Focus, on every device; done keeps the session (it asks what's next), leaving is unpinning.
+    post("/api/tasks/{id}/focus") { act { id -> id?.let(service::focus) } }
+    post("/api/focus/done") { act { service.focusSession()?.takeUnless { it.isComplete }?.let { service.completeWithDescendants(it.id) } } }
     post("/api/quickadd") {
         if (!hasToken(this)) return@post call.respond(HttpStatusCode.Unauthorized)
         val params = call.receiveParameters()

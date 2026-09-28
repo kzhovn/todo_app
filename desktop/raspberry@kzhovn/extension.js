@@ -1,5 +1,5 @@
-// The Raspberry tray: the phone widget's Doing/Active/All lists in a top-bar popup, with the pinned task's
-// title in the top bar. Rows come ready-made from the server's /api/tray (the widget's own rows), so
+// The Raspberry tray: the phone widget's Doing/Active/All lists in a top-bar popup, with the current
+// task (its pin, timer and any focus session, shared by every device) in the top bar. Rows come ready-made from the server's /api/tray (the widget's own rows), so
 // nothing here decides what's in Doing or how a row reads. See
 // docs/superpowers/specs/2026-09-27-desktop-tray-design.md.
 import Clutter from 'gi://Clutter';
@@ -25,6 +25,12 @@ const PARENT_CHARS = 22; // like the widget: a long parent can't crowd out the t
 const hex = (argb) => (argb == null ? null : `#${(argb & 0xffffff).toString(16).padStart(6, '0')}`);
 const cut = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 const clock = (date) => date.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'});
+// A timer's time left, "18:42" or "1:05:00", and a task's length, "45m" / "1h 30m", as on the phone.
+const countdown = (ms) => {
+    const s = Math.max(0, Math.ceil(ms / 1000)), mm = String(Math.floor(s / 60) % 60).padStart(2, '0'), ss = String(s % 60).padStart(2, '0');
+    return s >= 3600 ? `${Math.floor(s / 3600)}:${mm}:${ss}` : `${Math.floor(s / 60)}:${ss}`;
+};
+const duration = (m) => (m < 60 ? `${m}m` : m % 60 === 0 ? `${m / 60}h` : `${Math.floor(m / 60)}h ${m % 60}m`);
 
 function readConfig() {
     try {
@@ -96,6 +102,7 @@ class Indicator extends PanelMenu.Button {
                 this._render();
                 this._refresh();
             } else {
+                this._countdownLabel = null;
                 this._popup.destroy_all_children();
             }
         });
@@ -109,6 +116,7 @@ class Indicator extends PanelMenu.Button {
 
     destroy() {
         GLib.source_remove(this._timer);
+        if (this._ticker) GLib.source_remove(this._ticker);
         this._api?.abort();
         super.destroy();
     }
@@ -123,7 +131,8 @@ class Indicator extends PanelMenu.Button {
                 // A reply for another list (sent before the popup opened or a tab switch) only brings the
                 // pin and counts, so the list on screen isn't wiped.
                 const keepRows = result.list !== this._mode && this._state?.list === this._mode;
-                this._state = keepRows ? {...this._state, pinned: result.pinned, counts: result.counts} : result;
+                this._state = keepRows ? {...this._state, pinned: result.pinned, counts: result.counts, focus: result.focus} : result;
+                this._skew = result.now - Date.now(); // the server's clock, which every device's timer counts to
                 this._lastOk = clock(new Date());
                 this._status = `Updated ${this._lastOk}`;
             } catch (e) {
@@ -140,7 +149,7 @@ class Indicator extends PanelMenu.Button {
     }
 
     _post(path, form) {
-        return this._request('POST', `${path}?list=${this._mode}`, form);
+        return this._request('POST', `${path}${path.includes('?') ? '&' : '?'}list=${this._mode}`, form);
     }
 
     _open(path) {
@@ -148,15 +157,62 @@ class Indicator extends PanelMenu.Button {
         openPage(this._config.url + path);
     }
 
+    // The pinned task's timer: ms left (negative once it's up), or null without one.
+    _timeLeft() {
+        const p = this._state?.pinned;
+        if (p?.timerEndsAt) return p.timerEndsAt - (Date.now() + (this._skew ?? 0));
+        return p?.timerRemaining ?? null;
+    }
+
+    // The top bar: the current task, "◎" in a focus session, and its timer's time left.
+    _updateLabel() {
+        const pinned = this._state?.pinned, focus = this._state?.focus;
+        let text = null;
+        if (focus?.done) text = '◎ Done: what next?';
+        else if (pinned) {
+            const left = this._timeLeft();
+            text = (focus ? '◎ ' : '') + cut(pinned.title, TOP_BAR_CHARS) + (left == null ? '' : left <= 0 ? " · time's up" : ` · ${countdown(left)}`);
+        }
+        this._pinLabel.visible = !!text;
+        if (text) this._pinLabel.text = text;
+        if (this._countdownLabel) this._countdownLabel.text = this._countdownText();
+    }
+
+    _countdownText() {
+        const left = this._timeLeft();
+        return left == null ? '' : left <= 0 ? "time's up" : countdown(left);
+    }
+
+    // Ticks once a second, only while a timer runs.
+    _syncTicker() {
+        const running = !!this._state?.pinned?.timerEndsAt;
+        if (running && !this._ticker) {
+            this._ticker = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
+                this._updateLabel();
+                return GLib.SOURCE_CONTINUE;
+            });
+        } else if (!running && this._ticker) {
+            GLib.source_remove(this._ticker);
+            this._ticker = null;
+        }
+    }
+
     _render() {
         const pinned = this._state?.pinned;
-        this._pinLabel.visible = !!pinned;
-        if (pinned) this._pinLabel.text = cut(pinned.title, TOP_BAR_CHARS);
+        this._updateLabel();
+        this._syncTicker();
         if (!this.menu.isOpen) return;
 
+        this._countdownLabel = null; // it goes with the popup's old contents
         this._popup.destroy_all_children();
         if (!this._api) {
             this._popup.add_child(new St.Label({style_class: 'rb-empty', text: `Put {"url": …, "token": …} in\n${CONFIG}`}));
+            return;
+        }
+        // A focus session, on every device: the popup is just it.
+        if (this._state?.focus) {
+            this._popup.add_child(this._focusView(this._state.focus, pinned));
+            this._popup.add_child(new St.Label({style_class: 'rb-status', text: this._status}));
             return;
         }
         this._popup.add_child(this._header());
@@ -239,15 +295,66 @@ class Indicator extends PanelMenu.Button {
         if (this._adding && this._entry?.get_stage()) this._entry.grab_key_focus();
     }
 
-    // Title (opens it), checkbox (completes it), then the pin, which unpins it.
+    // Title (opens it), its timer, checkbox (completes it), Focus, then the pin, which unpins it.
     _pinnedRow(pinned) {
         const row = new St.BoxLayout({style_class: 'rb-pinned'});
         row.add_child(this._titleButton(pinned.title, () => this._open(`/tasks/${pinned.id}?mode=DOING`)));
+        row.add_child(this._timerControls(pinned));
         row.add_child(this._check(null, () => this._post(`/api/tasks/${pinned.id}/complete`)));
+        const focus = this._iconButton('find-location-symbolic', 'rb-tool rb-unpin', () => this._post(`/api/tasks/${pinned.id}/focus`));
+        focus.accessible_name = 'Focus';
+        row.add_child(focus);
         const unpin = this._iconButton('view-pin-symbolic', 'rb-tool rb-unpin', () => this._post('/api/unpin'));
         unpin.accessible_name = 'Unpin';
         row.add_child(unpin);
         return row;
+    }
+
+    // The shared timer (on the task, like every device's): time left and Pause / Resume, "+10m" once
+    // it's up, or ▶ to start one on a timed task.
+    _timerControls(pinned) {
+        const box = new St.BoxLayout({style_class: 'rb-timer', y_align: Clutter.ActorAlign.CENTER});
+        const left = this._timeLeft();
+        if (left == null) {
+            if (pinned.durationMinutes) box.add_child(this._button({label: `▶ ${duration(pinned.durationMinutes)}`, style_class: 'rb-dur'}, () => this._post(`/api/tasks/${pinned.id}/timer`)));
+            return box;
+        }
+        this._countdownLabel = new St.Label({style_class: 'rb-countdown', text: this._countdownText(), y_align: Clutter.ActorAlign.CENTER});
+        box.add_child(this._countdownLabel);
+        if (left <= 0) box.add_child(this._button({label: '+10m', style_class: 'rb-dur'}, () => this._post('/api/timer/add?minutes=10')));
+        else if (pinned.timerEndsAt) box.add_child(this._iconButton('media-playback-pause-symbolic', 'rb-tool', () => this._post('/api/timer/pause')));
+        else box.add_child(this._iconButton('media-playback-start-symbolic', 'rb-tool', () => this._post('/api/timer/resume')));
+        return box;
+    }
+
+    // The popup during a focus session: just the task, its timer, Done and Leave. Once it's done, the
+    // same question every device asks: the next task (picked in the desktop app), or finish.
+    _focusView(focus, pinned) {
+        const box = new St.BoxLayout({vertical: true, style_class: 'rb-focus'});
+        box.add_child(new St.Label({style_class: 'rb-focus-label', text: 'FOCUS', x_align: Clutter.ActorAlign.CENTER}));
+        const title = new St.Label({style_class: 'rb-focus-title', text: focus.done ? 'Done!' : focus.title, x_align: Clutter.ActorAlign.CENTER});
+        title.clutter_text.line_wrap = true;
+        box.add_child(title);
+        const actions = new St.BoxLayout({style_class: 'rb-focus-actions', x_align: Clutter.ActorAlign.CENTER});
+        if (focus.done) {
+            box.add_child(new St.Label({style_class: 'rb-focus-sub', text: 'Focus on the next task, or finish?', x_align: Clutter.ActorAlign.CENTER}));
+            actions.add_child(this._button({label: 'Next task', style_class: 'rb-btn rb-btn-primary'}, () => this._open('/focus')));
+            actions.add_child(this._button({label: "I'm done", style_class: 'rb-btn'}, () => this._post('/api/unpin')));
+        } else {
+            if (pinned) {
+                const timer = this._timerControls(pinned);
+                timer.x_align = Clutter.ActorAlign.CENTER;
+                box.add_child(timer);
+            }
+            actions.add_child(this._check(null, () => this._post('/api/focus/done')));
+            actions.add_child(new St.Label({text: 'Done', style_class: 'rb-focus-sub', y_align: Clutter.ActorAlign.CENTER}));
+            actions.add_child(new St.Widget({width: 18}));
+            actions.add_child(this._button({label: 'Open', style_class: 'rb-btn'}, () => this._open('/focus')));
+            // Leaving ends it on every device, and unpins.
+            actions.add_child(this._button({label: 'Leave focus', style_class: 'rb-btn'}, () => this._post('/api/unpin')));
+        }
+        box.add_child(actions);
+        return box;
     }
 
     // One of the widget's rows: folder bar, checkbox (or a checklist's "3/8"), "Parent:", title,
@@ -272,6 +379,7 @@ class Indicator extends PanelMenu.Button {
         const title = this._titleButton(row.title, () => this._open(`/tasks/${row.id}?mode=${this._mode.toUpperCase()}`));
         if (row.isBackburner) title.add_style_class_name('rb-dim');
         box.add_child(title);
+        if (row.durationMinutes) box.add_child(this._button({label: `▶ ${duration(row.durationMinutes)}`, style_class: 'rb-dur'}, () => this._post(`/api/tasks/${row.id}/timer`)));
         if (!row.isChecklist && row.subtasks) {
             const arrow = this._expanded.has(row.id) ? '▴' : '▾';
             box.add_child(this._button({label: `${row.subtasks.first}/${row.subtasks.second} ${arrow}`, style_class: 'rb-subtasks'}, toggle));

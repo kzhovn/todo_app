@@ -51,3 +51,18 @@
 .rb-more { color: #2B4C7E; font-size: 12px; padding: 6px 10px; border-radius: 4px; }
 .rb-more:hover { background-color: rgba(43, 76, 126, 0.08); }
 .rb-status { color: #8A7A5C; font-size: 10px; padding: 4px 8px 0; }
+
+/* The shared timer, the ▶ on timed tasks, and a focus session. */
+.rb-timer { spacing: 2px; }
+.rb-countdown { font-family: monospace; font-size: 13px; color: #2B4C7E; padding: 0 4px; }
+.rb-dur { color: #2B4C7E; font-size: 12px; font-weight: bold; padding: 2px 6px; border-radius: 10px; }
+.rb-dur:hover { background-color: rgba(43, 76, 126, 0.08); }
+.rb-focus { padding: 14px 12px 10px; spacing: 8px; }
+.rb-focus-label { font-size: 10px; letter-spacing: 3px; color: #8A7A5C; }
+.rb-focus-title { font-size: 18px; font-weight: bold; color: #2B2318; text-align: center; }
+.rb-focus-sub { font-size: 13px; color: #8A7A5C; }
+.rb-focus-actions { spacing: 6px; padding-top: 6px; }
+.rb-btn { border: 1px solid #DED5C1; border-radius: 7px; padding: 5px 10px; font-size: 13px; color: #8A7A5C; }
+.rb-btn:hover { background-color: rgba(43, 76, 126, 0.08); color: #2B2318; }
+.rb-btn-primary { background-color: #2B4C7E; border-color: #2B4C7E; color: #fff; }
+.rb-btn-primary:hover { background-color: #2B4C7E; color: #fff; }
