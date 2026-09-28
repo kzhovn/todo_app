@@ -331,7 +331,7 @@ fun DIV.listContents(data: ListData) {
     classes = if (data.mode == ListMode.ALL) setOf("list", "outline") else setOf("list")
     id = "list"
     attributes["hx-get"] = "/list/${data.mode.name.lowercase()}" + (data.folder?.let { "?folder=$it" } ?: "")
-    attributes["hx-trigger"] = "every 60s[document.visibilityState==='visible'], visibilitychange[document.visibilityState==='visible'] from:document, refresh from:body"
+    attributes["hx-trigger"] = "every 60s, visibilitychange from:document, refresh from:body"
     attributes["hx-swap"] = "outerHTML"
     data.stalled?.let { stalledPrompt(it, data.mode, data.q) }
     if (data.mode == ListMode.ALL) {

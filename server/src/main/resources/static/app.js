@@ -89,6 +89,12 @@
     const refresh = e.detail.requestConfig.verb === "get" && e.detail.requestConfig.path === "/list/all";
     if (refresh && (dragId || document.querySelector(".outline-new"))) e.preventDefault();
   });
+  // The lists and the focus screen refresh themselves, but not in a hidden tab (hx-trigger's own
+  // [condition] filters need eval, which the CSP forbids).
+  document.addEventListener("htmx:beforeRequest", (e) => {
+    const { verb, path } = e.detail.requestConfig;
+    if (document.hidden && verb === "get" && /^\/(list\/|focus\/body)/.test(path)) e.preventDefault();
+  });
   document.addEventListener("htmx:afterSwap", (e) => {
     if (!document.querySelector("#list.outline") || document.activeElement !== document.body) return;
     const id = e.detail.xhr?.getResponseHeader("X-Focus") || focusId;

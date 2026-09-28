@@ -96,7 +96,7 @@ fun DIV.focusBody(service: TaskService, session: Task) {
     classes = setOf("focus")
     // Follows the session from anywhere: a task done on the phone, the next one picked on the top bar.
     attributes["hx-get"] = "/focus/body"
-    attributes["hx-trigger"] = "every 20s[document.visibilityState==='visible'], visibilitychange[document.visibilityState==='visible'] from:document, refresh from:body"
+    attributes["hx-trigger"] = "every 20s, visibilitychange from:document, refresh from:body"
     attributes["hx-swap"] = "outerHTML"
     if (session.isComplete) {
         h1(classes = "focus-title") { +"Done!" }
