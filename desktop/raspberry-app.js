@@ -52,6 +52,15 @@ function build() {
         Gio.AppInfo.launch_default_for_uri(uri, null);
         return true;
     });
+    // WebKit's own dialog only pre-fills a saved login, so it would ask on every launch. The first
+    // login goes through it (tick "Remember password" to keep it in the GNOME keyring); after that
+    // the saved one is sent without asking, and the dialog comes back only if the server rejects it.
+    view.connect('authenticate', (_view, request) => {
+        const saved = request.get_proposed_credential();
+        if (!saved?.has_password() || request.is_retry()) return false;
+        request.authenticate(saved);
+        return true;
+    });
     // The web app's timer notifies when time's up.
     view.connect('permission-request', (_view, request) => {
         if (!(request instanceof WebKit.NotificationPermissionRequest)) return false;
