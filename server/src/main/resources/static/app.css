@@ -302,7 +302,7 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 /* The note, under the title in the same card. Empty, it only shows while the card is edited or hovered. */
 .notes { border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent); padding: 6px 10px 8px; }
 .title-card:not(:hover):not(:focus-within) .notes:has(.notes-input:placeholder-shown):not(:has(.notes-preview)) { display: none; }
-.notes-input { width: 100%; border: 0 !important; background: none !important; padding: 0 !important; font: inherit; font-size: 14px; line-height: 1.45; color: var(--ink); resize: none; field-sizing: content; min-height: 1.45em; outline: none; }
+.notes-input { display: block; width: 100%; border: 0 !important; background: none !important; padding: 0 !important; font: inherit; font-size: 14px; line-height: 1.45; color: var(--ink); resize: none; field-sizing: content; min-height: 1.45em; outline: none; }
 .notes-preview { font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; overflow: hidden; }
 .notes-preview a { color: var(--accent); }
 .notes .more { font-size: 13px; color: var(--accent); cursor: pointer; }

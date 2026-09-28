@@ -47,14 +47,38 @@
   document.addEventListener("DOMContentLoaded", markMore);
   document.addEventListener("htmx:afterSettle", markMore);
   window.addEventListener("resize", markMore);
+  // Where in the preview's text a click landed, or null unless it's on the text itself (not the space
+  // beside a line or under the last one).
+  const offsetAt = (el, x, y) => {
+    const pos = document.caretPositionFromPoint?.(x, y);
+    const range = document.caretRangeFromPoint?.(x, y);
+    const node = pos ? pos.offsetNode : range?.startContainer, at = pos ? pos.offset : range?.startOffset;
+    if (!node || node.nodeType !== Node.TEXT_NODE || !el.contains(node) || !node.length) return null;
+    const char = document.createRange();
+    const i = Math.min(at, node.length - 1);
+    char.setStart(node, i);
+    char.setEnd(node, i + 1);
+    const box = char.getBoundingClientRect();
+    if (y < box.top || y > box.bottom || x < box.left - 12 || x > box.right + 12) return null;
+    let total = 0;
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let n; (n = walk.nextNode()); ) {
+      if (n === node) return total + at;
+      total += n.length;
+    }
+    return null;
+  };
   document.addEventListener("click", (e) => {
     const notes = e.target.closest(".notes");
     if (!notes || e.target.closest("a") || !e.target.closest(".notes-preview, .more")) return;
+    const preview = notes.querySelector(".notes-preview");
+    const clicked = e.target.closest(".notes-preview") ? offsetAt(preview, e.clientX, e.clientY) : null;
     notes.classList.add("editing");
-    // The cursor at the end, ready to add to the note.
+    // The cursor where the text was clicked; anywhere else, at the end, ready to add to the note.
     const input = notes.querySelector(".notes-input");
+    const at = Math.min(clicked ?? input.value.length, input.value.length);
     input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
+    input.setSelectionRange(at, at);
   });
   // Clicking anywhere else leaves the note (even where a click doesn't move focus, as on some
   // WebKit buttons), which folds it back into its preview below.

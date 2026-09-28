@@ -14,6 +14,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.semantics.SemanticsProperties
 import org.junit.Assert.assertEquals
@@ -57,5 +59,19 @@ class NotesAreaTest {
         compose.onNodeWithTag("title").performClick()
         compose.onNodeWithText("call").assertExists()
         assertEquals(1, compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `tapping on the text puts the cursor there, and opening doesn't change the height`() {
+        var notes: String? by mutableStateOf("ask about the fee")
+        compose.setContent { NotesArea(notes.orEmpty(), titleFocused = false) { notes = it } }
+        val preview = compose.onNodeWithText("ask about the fee")
+        val height = preview.fetchSemanticsNode().boundsInRoot.height
+        // A tap near the text's start: the cursor lands near there, not at the end.
+        preview.performTouchInput { click(androidx.compose.ui.geometry.Offset(2f, centerY)) }
+        val field = compose.onNode(hasSetTextAction())
+        val caret = field.fetchSemanticsNode().config[SemanticsProperties.TextSelectionRange].start
+        assert(caret < 3) { "caret at $caret" }
+        assertEquals(height, field.fetchSemanticsNode().boundsInRoot.height, 0.5f)
     }
 }
