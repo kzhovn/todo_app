@@ -1,5 +1,8 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.material3.NavigationDrawerItemDefaults
+import com.kzhovn.todoapp.ui.theme.LedgerBorder
+import androidx.compose.material3.HorizontalDivider
 import com.kzhovn.todoapp.data.Labels
 import android.content.Intent
 import androidx.compose.foundation.layout.Column
@@ -10,7 +13,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CenterFocusStrong
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.Icon
@@ -40,9 +42,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun AppDrawer(
     drawerState: DrawerState,
-    searchSelected: Boolean = false,
     reviewSelected: Boolean = false,
-    onSearch: () -> Unit,
     content: @Composable () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -53,13 +53,13 @@ fun AppDrawer(
         icon = { Icon(icon, contentDescription = null) },
         selected = selected,
         onClick = { scope.launch { drawerState.close() }; onClick() },
+        colors = NavigationDrawerItemDefaults.colors(unselectedTextColor = LedgerInk, unselectedIconColor = LedgerMuted),
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
     )
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet {
-                Item("Search", Icons.Filled.Search, searchSelected, onSearch)
                 Item("Focus", Icons.Filled.CenterFocusStrong, false) { context.startActivity(Intent(context, FocusActivity::class.java)) }
                 Item("Review", Icons.Filled.BarChart, reviewSelected) {
                     if (!reviewSelected) context.startActivity(Intent(context, ReviewActivity::class.java))
@@ -67,6 +67,7 @@ fun AppDrawer(
                 Item("Settings", Icons.Filled.Sync, false) { context.startActivity(Intent(context, SyncSettingsActivity::class.java)) }
                 Item("Contexts", Icons.Filled.AlternateEmail, false) { context.startActivity(Intent(context, ContextsActivity::class.java)) }
                 Spacer(Modifier.weight(1f))
+                HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(horizontal = 24.dp))
                 QuickAddKey()
             }
         },

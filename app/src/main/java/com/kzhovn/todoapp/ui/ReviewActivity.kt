@@ -84,12 +84,7 @@ class ReviewActivity : ComponentActivity() {
                 val colorOf = { folder: Task? -> folder?.let { colors[it.id] } ?: LedgerMuted }
                 val week = days.take(7).sumOf { it.tasks.size }
 
-                AppDrawer(rememberDrawerState(DrawerValue.Closed), reviewSelected = true, onSearch = {
-                    startActivity(Intent(this@ReviewActivity, MainActivity::class.java)
-                        .putExtra(MainActivity.EXTRA_SEARCH, true)
-                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
-                    finish()
-                }) {
+                AppDrawer(rememberDrawerState(DrawerValue.Closed), reviewSelected = true) {
                 LazyColumn(Modifier.fillMaxSize().background(LedgerBackground).padding(horizontal = 16.dp)) {
                     item {
                         Text("Review", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk, modifier = Modifier.padding(top = 16.dp))

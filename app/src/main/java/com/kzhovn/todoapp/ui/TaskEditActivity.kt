@@ -315,7 +315,8 @@ class TaskEditActivity : ComponentActivity() {
                 showNoFolderOption = true,
                 onPick = { picked -> vm.task = vm.task.copy(parentId = picked?.id); close() },
                 onDismiss = close,
-                onCreateNew = { dialog = EditorDialog.NewFolder }
+                onCreateNew = { dialog = EditorDialog.NewFolder },
+                selectedId = vm.task.parentId
             )
             EditorDialog.NewFolder -> TextDialog(title = "New folder", placeholder = "Folder name", confirmLabel = "Create", onDismiss = close) {
                 vm.createFolder(it)

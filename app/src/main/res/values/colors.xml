@@ -1,0 +1,8 @@
+<resources>
+    <!-- The Ledger palette (ui/theme/Color.kt), for Android's own windows and dialogs. -->
+    <color name="ledger_background">#F0EAE0</color>
+    <color name="ledger_panel">#F7F4EE</color>
+    <color name="ledger_ink">#2B2318</color>
+    <color name="ledger_muted">#8A7A5C</color>
+    <color name="ledger_accent">#2B4C7E</color>
+</resources>

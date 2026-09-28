@@ -3,5 +3,10 @@
         <item name="android:windowIsFloating">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowNoTitle">true</item>
+        <!-- The date and time pickers opened from here, in the app's colours. -->
+        <item name="android:colorAccent">@color/ledger_accent</item>
+        <item name="android:colorControlActivated">@color/ledger_accent</item>
+        <item name="android:colorBackgroundFloating">@color/ledger_panel</item>
+        <item name="android:textColorPrimary">@color/ledger_ink</item>
     </style>
 </resources>

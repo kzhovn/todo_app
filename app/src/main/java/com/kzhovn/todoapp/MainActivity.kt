@@ -1,5 +1,8 @@
 package com.kzhovn.todoapp
 
+import com.kzhovn.todoapp.ui.SearchBar
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.focus.FocusActivity
 import com.kzhovn.todoapp.data.isDoable
@@ -100,12 +103,9 @@ class MainActivity : ComponentActivity() {
     // The widget's "open list" button says which tab to show, whether the app is starting or
     // already open (then the intent arrives via onNewIntent).
     private val requestedMode = mutableStateOf<TaskListMode?>(null)
-    // Set by another screen's drawer "Search" item.
-    private val requestedSearch = mutableStateOf(false)
 
     private fun readRequestedMode(intent: Intent?) {
         intent?.getStringExtra(EXTRA_MODE)?.let { name -> runCatching { TaskListMode.valueOf(name) }.getOrNull() }?.let { requestedMode.value = it }
-        if (intent?.getBooleanExtra(EXTRA_SEARCH, false) == true) requestedSearch.value = true
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -141,7 +141,6 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(requestedMode.value) { requestedMode.value?.let { selectedMode = it } }
             val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
             var searchMode by remember { mutableStateOf(false) }
-            LaunchedEffect(requestedSearch.value) { if (requestedSearch.value) { searchMode = true; requestedSearch.value = false } }
             var query by remember { mutableStateOf("") }
             var showFilters by remember { mutableStateOf(false) }
             var filters by remember { mutableStateOf(SearchFilters()) }
@@ -150,6 +149,14 @@ class MainActivity : ComponentActivity() {
             // Non-null while in multi-select mode: the ids picked for a bulk edit.
             var selection by remember { mutableStateOf<Set<Long>?>(null) }
             BackHandler(enabled = selection != null) { selection = null }
+            val focusManager = LocalFocusManager.current
+            val closeSearch = {
+                searchMode = false
+                query = ""
+                showFilters = false
+                focusManager.clearFocus()
+            }
+            BackHandler(enabled = searchMode && selection == null) { closeSearch() }
             // What the list shows; it reloads itself on data changes (see TaskListViewModel). Resuming
             // reloads too, since time passing (a start date arriving) changes Doing/Active without any write.
             // In search mode the filters apply even with an empty query (every task matching them).
@@ -186,7 +193,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            AppDrawer(drawerState, searchSelected = searchMode, onSearch = { searchMode = true }) {
+            AppDrawer(drawerState) {
             Scaffold(
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 floatingActionButton = {
@@ -247,18 +254,16 @@ class MainActivity : ComponentActivity() {
                             }) { Text("Edit") }
                         }
                     }
-                    if (selection == null) Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Filled.Menu, contentDescription = "Menu")
-                        }
+                    // The search bar sits in the top bar; typing in it searches right there. While searching,
+                    // the menu makes way for a back arrow and Select for the filters.
+                    if (selection == null) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
                         if (searchMode) {
-                            OutlinedTextField(
-                                value = query,
-                                onValueChange = { query = it },
-                                placeholder = { Text("Search") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
-                            )
+                            IconButton(onClick = closeSearch) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close search") }
+                        } else {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Filled.Menu, contentDescription = "Menu") }
+                        }
+                        SearchBar(query, searching = searchMode, onStart = { searchMode = true }, onChange = { query = it }, modifier = Modifier.weight(1f))
+                        if (searchMode) {
                             IconButton(onClick = { showFilters = !showFilters }) {
                                 Icon(
                                     Icons.Filled.FilterList,
@@ -266,15 +271,7 @@ class MainActivity : ComponentActivity() {
                                     tint = if (filters != SearchFilters()) LedgerAccent else LedgerMuted
                                 )
                             }
-                            IconButton(onClick = {
-                                searchMode = false
-                                query = ""
-                                showFilters = false
-                            }) {
-                                Icon(Icons.Filled.Close, contentDescription = "Close search")
-                            }
                         } else {
-                            Spacer(Modifier.weight(1f))
                             IconButton(onClick = { selection = emptySet() }) {
                                 Icon(Icons.Filled.Checklist, contentDescription = "Select tasks")
                             }
@@ -431,7 +428,6 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_MODE = "mode"
-        const val EXTRA_SEARCH = "search"
     }
 }
 

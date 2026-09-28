@@ -251,7 +251,8 @@ class QuickAddActivity : ComponentActivity() {
                     folders = folders,
                     showNoFolderOption = false,
                     onPick = { picked -> folder = picked; showFolderPicker = false },
-                    onDismiss = { showFolderPicker = false }
+                    onDismiss = { showFolderPicker = false },
+                    selectedId = folder?.id
                 )
             }
             }

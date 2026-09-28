@@ -1,3 +1,17 @@
-<resources>
-    <style name="Theme.TodoApp" parent="android:Theme.Material.Light.NoActionBar" />
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Android's own parts in the app's colours: the status and navigation bars, and the date and
+         time pickers (their header and selection use colorAccent, their card colorBackgroundFloating). -->
+    <style name="Theme.TodoApp" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:colorPrimary">@color/ledger_accent</item>
+        <item name="android:colorAccent">@color/ledger_accent</item>
+        <item name="android:colorControlActivated">@color/ledger_accent</item>
+        <item name="android:colorBackground">@color/ledger_background</item>
+        <item name="android:colorBackgroundFloating">@color/ledger_panel</item>
+        <item name="android:textColorPrimary">@color/ledger_ink</item>
+        <item name="android:textColorSecondary">@color/ledger_muted</item>
+        <item name="android:statusBarColor">@color/ledger_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@color/ledger_background</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
+    </style>
 </resources>
