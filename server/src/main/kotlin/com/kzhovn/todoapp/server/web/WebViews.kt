@@ -141,6 +141,7 @@ internal enum class Icon(val path: String) {
     LIST_NUMBERED("M2 17h2v.5H3v1h1v.5H2v1h3v-4H2v1zm1-9h1V4H2v1h1v3zm-1 3h1.8L2 13.1v.9h3v-1H3.2L5 10.9V10H2v1zm5-6v2h14V5H7zm0 14h14v-2H7v2zm0-6h14v-2H7v2z"), // FormatListNumbered
     QUESTION_MARK("M11.07 12.85c.77-1.39 2.25-2.21 3.11-3.44.91-1.29.4-3.7-2.18-3.7-1.69 0-2.52 1.28-2.87 2.34L6.54 6.96C7.25 4.83 9.18 3 11.99 3c2.35 0 3.96 1.07 4.78 2.41.7 1.15 1.11 3.3.03 4.9-1.2 1.77-2.35 2.31-2.97 3.45-.25.46-.35.76-.35 2.24h-2.89c-.01-.78-.13-2.05.48-3.15zM14 20c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2z"),
     BOLT("M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66.19-.34.05-.08.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z"),
+    CENTER_FOCUS("M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm-7 7H3v4c0 1.1.9 2 2 2h4v-2H5v-4zM5 5h4V3H5c-1.1 0-2 .9-2 2v4h2V5zm14-2h-4v2h4v4h2V5c0-1.1-.9-2-2-2zm0 16h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4z"), // CenterFocusStrong
     PUSH_PIN("M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z"),
     DATE_RANGE("M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z")
 }
@@ -219,6 +220,19 @@ fun HTML.shellPage(
     toast: (DIV.() -> Unit)? = null,
     detail: (ASIDE.() -> Unit)? = null,
     content: DIV.() -> Unit
+) {
+    service.focusSession()?.let { return focusPage(service, it) }
+    shell(service, title, current, list, toast, detail, content)
+}
+
+private fun HTML.shell(
+    service: TaskService,
+    title: String,
+    current: String,
+    list: ListData?,
+    toast: (DIV.() -> Unit)?,
+    detail: (ASIDE.() -> Unit)?,
+    content: DIV.() -> Unit
 ) = page(title) {
     val nav = SideNav(service)
     div(classes = "shell") {
@@ -235,6 +249,15 @@ fun HTML.shellPage(
                     attributes["hx-swap"] = "none"
                 }
                 textInput(name = "text") { id = "quickadd"; placeholder = "Add a task… (n)"; attributes["autocomplete"] = "off" }
+            }
+            // The current task (pinned, or its timer running), shared with every device.
+            service.pinned()?.let { now ->
+                div(classes = "now") {
+                    span(classes = "now-label") { +"Now" }
+                    a(href = "/tasks/${now.id}?mode=DOING", classes = "now-title") { openInPanel(); +now.title }
+                    span(classes = "now-timer") {}
+                    button(classes = "now-focus") { hx("post", "/focus/start?task=${now.id}", "this"); attributes["title"] = "Focus"; icon(Icon.CENTER_FOCUS, "") }
+                }
             }
             nav(classes = "nav") {
                 ListMode.entries.forEach { m ->
@@ -256,7 +279,7 @@ fun HTML.shellPage(
             }
             div(classes = "nav-label") { +"More" }
             nav(classes = "nav") {
-                listOf("/search" to "Search", "/review" to "Review", "/contexts" to "Contexts")
+                listOf("/focus" to "Focus", "/search" to "Search", "/review" to "Review", "/contexts" to "Contexts")
                     .forEach { (path, label) -> a(href = path, classes = if (path == current) "current" else null) { +label } }
             }
             details(classes = "shortcuts") {
@@ -285,7 +308,7 @@ fun DIV.listContents(data: ListData) {
     classes = if (data.mode == ListMode.ALL) setOf("list", "outline") else setOf("list")
     id = "list"
     attributes["hx-get"] = "/list/${data.mode.name.lowercase()}" + (data.folder?.let { "?folder=$it" } ?: "")
-    attributes["hx-trigger"] = "every 60s[document.visibilityState==='visible'], visibilitychange[document.visibilityState==='visible'] from:document"
+    attributes["hx-trigger"] = "every 60s[document.visibilityState==='visible'], visibilitychange[document.visibilityState==='visible'] from:document, refresh from:body"
     attributes["hx-swap"] = "outerHTML"
     data.stalled?.let { stalledPrompt(it, data.mode, data.q) }
     if (data.mode == ListMode.ALL) {
@@ -431,6 +454,12 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                     hx("post", "/tasks/${task.id}/pin?mode=$mode")
                     icon(Icon.PUSH_PIN, "")
                     +Labels.PIN
+                }
+                // Every device goes into focus on it.
+                button(classes = "menu-row") {
+                    hx("post", "/focus/start?task=${task.id}", "this")
+                    icon(Icon.CENTER_FOCUS, "")
+                    +"Focus"
                 }
             }
         }

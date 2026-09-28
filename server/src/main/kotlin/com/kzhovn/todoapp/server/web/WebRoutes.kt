@@ -1,5 +1,8 @@
 package com.kzhovn.todoapp.server.web
 
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.buildJsonObject
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.quickadd.QuickAddParser
@@ -52,6 +55,8 @@ fun Route.webRoutes(service: TaskService) {
 
     editorRoutes(service)
     pageRoutes(service)
+    focusRoutes(service)
+    timerRoutes(service)
 
     // The All tree's outliner actions (app.js sends them from keys and drag).
     post("/outline/{id}/{action}") {
@@ -163,8 +168,38 @@ internal fun ApplicationCall.listData(service: TaskService, mode: ListMode, sele
     return ListData(service, mode, ids(COLLAPSED), ids(LATER), ids(SECTIONS), folder = folder(), selected = selected)
 }
 
-internal suspend fun ApplicationCall.respondList(service: TaskService, mode: ListMode, extra: String? = null) =
+internal suspend fun ApplicationCall.respondList(service: TaskService, mode: ListMode, extra: String? = null) {
+    // A focus session started (here or elsewhere): the page reloads, into it.
+    if (service.focusSession() != null) response.header("HX-Refresh", "true")
     respondText(createHTML().div { listContents(listData(service, mode)) } + extra.orEmpty(), ContentType.Text.Html)
+}
+
+// The timer, shared with every device: it's the current task's (CurrentTask). app.js runs the countdown
+// from this, and re-reads it now and then; `now` lets it correct for its own clock.
+private fun Route.timerRoutes(service: TaskService) {
+    suspend fun ApplicationCall.respondTimer() {
+        val t = service.pinned()?.takeIf { it.timerEndsAt != null || it.timerRemaining != null }
+        val body = buildJsonObject {
+            put("now", service.now())
+            if (t == null) put("timer", JsonNull) else put("timer", buildJsonObject {
+                put("id", t.id.toString()); put("title", t.title); put("endsAt", t.timerEndsAt); put("remaining", t.timerRemaining)
+            })
+        }
+        respondText(body.toString(), ContentType.Application.Json)
+    }
+    get("/timer") { call.respondTimer() }
+    post("/timer/start") {
+        call.request.queryParameters["task"]?.toLongOrNull()?.let { id -> service.get(id)?.durationMinutes?.let { service.startTimer(id, it) } }
+        call.respondTimer()
+    }
+    post("/timer/pause") { service.pauseTimer(); call.respondTimer() }
+    post("/timer/resume") { service.resumeTimer(); call.respondTimer() }
+    // Stopping unpins the task (and ends a focus session).
+    post("/timer/stop") { service.unpin(); call.respondTimer() }
+    post("/timer/add") { call.request.queryParameters["minutes"]?.toIntOrNull()?.takeIf { it > 0 }?.let(service::addTime); call.respondTimer() }
+    // Time's up, and it's done: like the phone's, subtasks too.
+    post("/timer/done") { service.pinned()?.let { service.completeWithDescendants(it.id) }; call.respondTimer() }
+}
 
 // Per-browser id sets kept in cookies the server reads, so the list's periodic re-render honours them.
 // ponytail: ~250 ids fit a cookie; plenty for these.

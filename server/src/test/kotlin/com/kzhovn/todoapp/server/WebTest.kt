@@ -17,6 +17,8 @@ import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -544,5 +546,40 @@ class WebTest {
         assertEquals("Write draft", service.pinned()?.title)
         client.submitForm("/tasks/new", parameters { append("title", "Unpinned"); append("type", "TASK") })
         assertEquals("Write draft", service.pinned()?.title)
+    }
+
+    @Test
+    fun `a focus session takes over every page until it's left, which unpins`() = web {
+        val call = service.create(Task(title = "Call mom", isStarred = true))
+        client.post("/focus/start?task=${call.id}") { header("HX-Request", "true") }
+        assertEquals(call.id, service.focusSession()?.id)
+        assertEquals(call.id, service.pinned()?.id) // focusing pins
+
+        val page = client.get("/doing").bodyAsText()
+        assertTrue(page.contains("id=\"focus\""))
+        assertTrue(page.contains(">Call mom<"))
+        // A list refreshing itself on another open page reloads it, into focus.
+        assertEquals("true", client.get("/list/doing").headers["HX-Refresh"])
+
+        // Done: the session asks what's next.
+        assertTrue(client.post("/focus/done").bodyAsText().contains("Focus on the next task, or finish?"))
+        client.post("/focus/leave")
+        assertNull(service.focusSession())
+        assertNull(service.pinned())
+        assertFalse(client.get("/doing").bodyAsText().contains("id=\"focus\""))
+    }
+
+    @Test
+    fun `the web timer is the current task's, shared, and stopping it unpins`() = web {
+        val work = service.create(Task(title = "Ticket work", durationMinutes = 60))
+        val started = client.post("/timer/start?task=${work.id}").bodyAsText()
+        assertTrue(started.contains("\"id\":\"${work.id}\""))
+        assertEquals(work.id, service.pinned()?.id) // starting a timer pins
+        assertNotNull(service.get(work.id)!!.timerEndsAt)
+        client.post("/timer/pause")
+        assertNotNull(service.get(work.id)!!.timerRemaining)
+        client.post("/timer/stop")
+        assertNull(service.pinned())
+        assertTrue(client.get("/timer").bodyAsText().contains("\"timer\":null"))
     }
 }

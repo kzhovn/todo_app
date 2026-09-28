@@ -10,6 +10,8 @@
   document.addEventListener("keydown", (e) => {
     const typing = e.target.closest("input, textarea, select");
     if (e.key === "Escape" && typing) { e.target.blur(); return; }
+    // Esc leaves focus (every device's, and unpins).
+    if (e.key === "Escape" && !typing) { const leave = document.querySelector("#focus .leave"); if (leave) { leave.click(); return; } }
     // Esc closes the task panel, back to the list alone.
     if (e.key === "Escape" && !typing) { const close = document.querySelector("#detail .detail-close"); if (close) { location.href = close.href; return; } }
     if (typing || e.ctrlKey || e.metaKey) return;
@@ -51,6 +53,7 @@
       case "Enter": newTask(node, list); return true;
       case "e": location.href = `/tasks/${id}?mode=ALL`; return true;
       case "s": post(`/tasks/${id}/star?mode=ALL`); return true;
+      case "f": htmx.ajax("POST", `/focus/start?task=${id}`, { swap: "none" }); return true;
     }
     return false;
   }
@@ -165,51 +168,63 @@
   document.addEventListener("htmx:afterSettle", markCurrent);
   window.addEventListener("popstate", () => setTimeout(markCurrent));
 
-  // --- Timed tasks. One countdown at a time per browser, kept in localStorage so it survives reloads
-  // and moving between pages; the phone has its own (TaskTimer). At zero it asks whether the task is
-  // done: Done completes it (subtasks too, like the phone's), Not yet asks how much time to add.
-  const TIMER_KEY = "raspberry-timer";
-  const loadTimer = () => { try { return JSON.parse(localStorage.getItem(TIMER_KEY)); } catch { return null; } };
-  const saveTimer = (t) => {
-    try { if (t) localStorage.setItem(TIMER_KEY, JSON.stringify(t)); else localStorage.removeItem(TIMER_KEY); } catch {}
-    renderTimer();
-  };
-  const leftOf = (t) => (t.endsAt ? t.endsAt - Date.now() : t.remaining);
+  // --- Timed tasks. The timer is the current task's, on the server, shared with every device (the
+  // phone, the top bar): this shows it (the bar, the running row's play button, the sidebar's Now strip),
+  // ticks it down, and sends Start / Pause / Resume / Stop / more time back. It's re-read every 30s and
+  // when the tab comes back, so changes elsewhere show up. At zero it asks whether the task is done.
+  let timer = null, skew = 0, askMore = false, alerted = null;
+  const now = () => Date.now() + skew; // the server's clock, which the phone's alarm also counts to
+  const leftOf = (t) => (t.endsAt ? t.endsAt - now() : t.remaining);
+  const over = (t) => !!t?.endsAt && leftOf(t) <= 0;
   const clock = (ms) => {
     const s = Math.max(0, Math.ceil(ms / 1000)), mm = String(Math.floor(s / 60) % 60).padStart(2, "0"), ss = String(s % 60).padStart(2, "0");
     return s >= 3600 ? `${Math.floor(s / 3600)}:${mm}:${ss}` : `${Math.floor(s / 60)}:${ss}`;
   };
   const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-  const listMode = () => document.querySelector(".list-tools")?.dataset.mode || "DOING";
   const baseTitle = document.title;
+  const takeTimer = async (res) => {
+    const body = await res.json();
+    skew = body.now - Date.now();
+    if (timer?.endsAt !== body.timer?.endsAt) askMore = false;
+    timer = body.timer;
+    renderTimer();
+  };
+  const syncTimer = () => fetch("/timer").then(takeTimer).catch(() => {});
+  // After an action, the list (or focus screen) catches up too: a task done, or a pin moved.
+  const timerPost = (path) => fetch(path, { method: "POST" }).then(takeTimer).then(() => htmx.trigger(document.body, "refresh")).catch(() => {});
 
   function renderTimer() {
-    const t = loadTimer(), bar = document.getElementById("timer");
+    const t = timer, bar = document.getElementById("timer");
     // A row's timer pill shows its length ("1h"), or the time left while this task's timer is on.
     document.querySelectorAll(".play").forEach((b) => {
-      const mine = !!t && !t.phase && t.id === b.dataset.taskId;
+      const mine = !!t && !over(t) && t.id === b.dataset.taskId;
       b.classList.toggle("running", mine && !!t.endsAt);
       b.querySelector(".play-time").textContent = mine ? clock(leftOf(t)) : duration(+b.dataset.minutes);
     });
-    document.title = t?.phase ? `⏰ ${baseTitle}` : baseTitle;
+    document.querySelectorAll(".now-timer").forEach((el) => { el.textContent = t ? (over(t) ? "time's up" : clock(leftOf(t)) + (t.endsAt ? "" : " ⏸")) : ""; });
+    document.title = over(t) ? `⏰ ${baseTitle}` : baseTitle;
     if (!bar) return;
     bar.hidden = !t;
     if (!t) return;
-    if (t.phase === "ask") {
-      bar.innerHTML = `<span>Time's up: <b>${esc(t.title)}</b>. Is it done?</span><button data-timer="done" class="primary">Done</button><button data-timer="more">Not yet</button>`;
-    } else if (t.phase === "more") {
+    if (over(t) && askMore) {
       bar.innerHTML = `<span>How much more time?</span>` +
         [5, 10, 15, 30, 60].map((m) => `<button data-timer="add" data-minutes="${m}">+${m < 60 ? m + "m" : "1h"}</button>`).join("") +
         `<input type="number" min="1" placeholder="min" class="timer-custom"><button data-timer="add">Start</button>`;
+    } else if (over(t)) {
+      bar.innerHTML = `<span>Time's up: <b>${esc(t.title)}</b>. Is it done?</span><button data-timer="done" class="primary">Done</button><button data-timer="more">Not yet</button>`;
     } else {
       bar.innerHTML = `<span class="timer-title">${esc(t.title)}</span><span class="timer-left">${clock(leftOf(t))}</span>` +
         `<button data-timer="${t.endsAt ? "pause" : "resume"}">${t.endsAt ? "Pause" : "Resume"}</button><button data-timer="stop">Stop</button>`;
     }
   }
 
-  // At zero: ask, with a notification (if allowed) and a few beeps, since the tab may be in the background.
+  // At zero: ask, with a notification (if allowed) and a few beeps, since the tab may be in the
+  // background. Once per timer end, and not for one long over by the time this page saw it.
   function timeUp(t) {
-    saveTimer({ ...t, phase: "ask" });
+    if (alerted === t.endsAt) return;
+    alerted = t.endsAt;
+    renderTimer();
+    if (leftOf(t) < -60000) return;
     try { if (window.Notification?.permission === "granted") new Notification("Time's up", { body: t.title }); } catch {}
     try {
       const audio = new AudioContext();
@@ -224,45 +239,38 @@
   }
 
   setInterval(() => {
-    const t = loadTimer();
-    if (!t || t.phase || !t.endsAt) return;
-    if (leftOf(t) <= 0) timeUp(t);
-    else document.querySelectorAll("#timer .timer-left, .play.running .play-time").forEach((el) => el.replaceChildren(clock(leftOf(t))));
+    if (!timer?.endsAt) return;
+    if (over(timer)) timeUp(timer);
+    else document.querySelectorAll("#timer .timer-left, .play.running .play-time, .now-timer").forEach((el) => el.replaceChildren(clock(leftOf(timer))));
   }, 1000);
-  window.addEventListener("storage", (e) => { if (e.key === TIMER_KEY) renderTimer(); }); // other tabs
+  setInterval(() => { if (document.visibilityState === "visible") syncTimer(); }, 30000);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") syncTimer(); });
   document.addEventListener("htmx:afterSwap", renderTimer); // re-marks the running row's button
-  document.addEventListener("DOMContentLoaded", renderTimer);
+  document.addEventListener("DOMContentLoaded", syncTimer);
 
   document.addEventListener("click", (e) => {
     const play = e.target.closest(".play");
     if (play && !selecting()) {
-      const t = loadTimer();
-      if (t && t.id === play.dataset.taskId && !t.phase) {
-        saveTimer(t.endsAt ? { ...t, endsAt: null, remaining: leftOf(t) } : { ...t, endsAt: Date.now() + t.remaining });
+      const t = timer;
+      if (t && t.id === play.dataset.taskId && !over(t)) {
+        timerPost(t.endsAt ? "/timer/pause" : "/timer/resume");
       } else {
-        saveTimer({ id: play.dataset.taskId, title: play.dataset.title, endsAt: Date.now() + play.dataset.minutes * 60000 });
+        timerPost(`/timer/start?task=${play.dataset.taskId}`);
         try { if (window.Notification?.permission === "default") Notification.requestPermission(); } catch {}
       }
       return;
     }
     const action = e.target.closest("#timer [data-timer]")?.dataset.timer;
-    if (!action) return;
-    const t = loadTimer();
-    if (!t) return;
-    if (action === "pause") saveTimer({ ...t, endsAt: null, remaining: leftOf(t) });
-    if (action === "resume") saveTimer({ ...t, endsAt: Date.now() + t.remaining });
-    if (action === "stop") saveTimer(null);
-    if (action === "more") saveTimer({ ...t, phase: "more" });
+    if (!action || !timer) return;
+    if (action === "pause") timerPost("/timer/pause");
+    if (action === "resume") timerPost("/timer/resume");
+    if (action === "stop") timerPost("/timer/stop");
+    if (action === "more") { askMore = true; renderTimer(); }
     if (action === "add") {
       const minutes = +(e.target.dataset.minutes || document.querySelector("#timer .timer-custom")?.value || 0);
-      if (minutes > 0) saveTimer({ id: t.id, title: t.title, endsAt: Date.now() + minutes * 60000 });
+      if (minutes > 0) timerPost(`/timer/add?minutes=${minutes}`);
     }
-    if (action === "done") {
-      saveTimer(null);
-      const url = `/tasks/${t.id}/complete?mode=${listMode()}&subtasks=complete`;
-      if (document.getElementById("list")) htmx.ajax("POST", url, { target: "#list", swap: "outerHTML" });
-      else fetch(url, { method: "POST" });
-    }
+    if (action === "done") timerPost("/timer/done");
   });
 
   // Clear quick add after a successful add (here rather than in an inline hx-on handler, so the
