@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.data.TaskType
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonObject
@@ -104,6 +105,18 @@ fun Route.webRoutes(service: TaskService) {
         service.completeOrDecide(id, choice)
         call.respondList(service, mode, extra = createHTML().div { undoToastContents(task, call.listQuery()) })
     }
+    // From a row's menu: a subtask under it, or items into a checklist ("milk, eggs" is two).
+    post("/tasks/{id}/add-subtask") {
+        val parent = call.taskId()?.let(service::get) ?: return@post call.respondList(service, call.mode())
+        val text = call.receiveParameters()["text"].orEmpty()
+        if (parent.type == TaskType.CHECKLIST) service.addItems(parent.id, text)
+        // The parent now waits on its new subtask, so in Doing a starred parent's subtask starts starred and
+        // takes its place there, as on the phone.
+        else QuickAddParser.parse(text).takeIf { it.title.isNotBlank() }?.let { t ->
+            service.create(t.copy(parentId = parent.id, isStarred = t.isStarred || (call.mode() == ListMode.DOING && parent.isStarred)))
+        }
+        call.respondList(service, call.mode())
+    }
     post("/tasks/{id}/uncomplete") { call.taskId()?.let(service::uncomplete); call.respondList(service, call.mode()) }
     post("/tasks/{id}/pin") {
         val task = call.taskId()?.let(service::get) ?: return@post call.respondList(service, call.mode())
@@ -171,7 +184,8 @@ internal fun ApplicationCall.listData(service: TaskService, mode: ListMode, sele
 internal suspend fun ApplicationCall.respondList(service: TaskService, mode: ListMode, extra: String? = null) {
     // A focus session started (here or elsewhere): the page reloads, into it.
     if (service.focusSession() != null) response.header("HX-Refresh", "true")
-    respondText(createHTML().div { listContents(listData(service, mode)) } + extra.orEmpty(), ContentType.Text.Html)
+    val data = listData(service, mode)
+    respondText(createHTML().div { listContents(data) } + countsOob(service, data) + extra.orEmpty(), ContentType.Text.Html)
 }
 
 // The timer, shared with every device: it's the current task's (CurrentTask). app.js runs the countdown

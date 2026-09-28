@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.data.nextRollover
+import com.kzhovn.todoapp.quickadd.QuickAddParser
 import com.kzhovn.todoapp.data.completed
 import com.kzhovn.todoapp.data.CurrentTask
 import com.kzhovn.todoapp.data.DEFAULT_FOLDER
@@ -150,6 +152,24 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     }
 
     fun planQuickAdd(text: String): QuickAdd = planQuickAdd(text, tasks(), contexts(), clock(), rolloverHour())
+
+    // With the phone quick add's chips (the top bar's): they beat what the text says, except that a
+    // folder named in the text beats the Folder chip. A checklist on that chip makes the text its items.
+    fun planQuickAdd(text: String, chips: QuickAddChips): QuickAdd {
+        val chosen = chips.folderId?.let(::get)
+        if (chosen?.type == TaskType.CHECKLIST) return QuickAdd(task = null, items = splitItems(text), intoChecklist = chosen.id)
+        val add = planQuickAdd(text)
+        val task = add.task ?: return add
+        // A chip's date is one of quick add's words ("tomorrow", "next week"), read as quick add reads it.
+        fun day(word: String?) = word?.takeIf { it.isNotBlank() }?.let { QuickAddParser.parse("-s $it", clock()).startDate }
+        return add.copy(task = task.copy(
+            isStarred = task.isStarred || chips.star,
+            startDate = day(chips.start) ?: task.startDate,
+            dueDate = day(chips.due) ?: task.dueDate,
+            parentId = task.parentId ?: chosen?.takeIf { it.type == TaskType.FOLDER }?.id,
+            expiresAt = if (chips.todayOnly) nextRollover(clock(), rolloverHour()) else task.expiresAt
+        ))
+    }
 
     // Carries out a quick add (see planQuickAdd): the task with its contexts, items, pin or focus, or
     // items into an existing checklist. Returns the task (the checklist, for items).
@@ -441,3 +461,6 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         return result
     }
 }
+
+// The phone quick add's chips, as the top bar sends them (see TaskService.planQuickAdd).
+data class QuickAddChips(val star: Boolean = false, val start: String? = null, val due: String? = null, val todayOnly: Boolean = false, val folderId: Long? = null)

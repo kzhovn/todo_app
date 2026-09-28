@@ -570,6 +570,20 @@ class WebTest {
     }
 
     @Test
+    fun `a row's menu adds a subtask, or items to a checklist, and Edit all details drafts a quick add`() = web {
+        val move = service.create(Task(title = "House move", isStarred = true))
+        val groceries = service.create(Task(title = "Groceries", type = TaskType.CHECKLIST, isStarred = true))
+        client.submitForm("/tasks/${move.id}/add-subtask?mode=DOING", parameters { append("text", "book van -d fri") })
+        assertEquals(move.id, service.tasks().single { it.title == "book van" }.parentId)
+        client.submitForm("/tasks/${groceries.id}/add-subtask?mode=DOING", parameters { append("text", "milk, eggs") })
+        assertEquals(2, service.tasks().count { it.parentId == groceries.id })
+
+        val draft = client.get("/tasks/new?text=packing+%5Bpassport%2C+charger%5D&due=tomorrow&mode=DOING").bodyAsText()
+        assertTrue(draft.contains(">packing</textarea>"))
+        assertTrue(draft.contains("passport\ncharger"))
+    }
+
+    @Test
     fun `focus on a checklist lists its items to tick off`() = web {
         val groceries = service.create(Task(title = "Groceries", type = TaskType.CHECKLIST))
         service.quickAdd("groceries: milk, eggs", fromDoing = false)

@@ -95,6 +95,28 @@ class ServerTest {
     }
 
     @Test
+    fun `the tray's quick add takes the phone's chips`() = testApplication {
+        application { api(store, "secret") }
+        fun tray(body: String) = SyncJson.decodeFromString(TrayState.serializer(), body)
+        suspend fun add(body: String) = client.post("/api/quickadd?list=doing") {
+            header("Authorization", "Bearer secret"); contentType(ContentType.Application.FormUrlEncoded); setBody(body)
+        }
+        val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
+        val groceries = service.create(Task(type = TaskType.CHECKLIST, title = "Groceries"))
+        assertEquals(listOf("Groceries", "Work"), tray(client.get("/api/tray?list=doing") { header("Authorization", "Bearer secret") }.bodyAsText()).folders.map { it.title })
+
+        add("text=Fix+bug&mode=active&star=1&due=tomorrow&today=1&folder=${work.id}")
+        val bug = service.tasks().single { it.title == "Fix bug" }
+        assertEquals(work.id, bug.parentId)
+        assertTrue(bug.isStarred)
+        assertNotNull(bug.dueDate)
+        assertNotNull(bug.expiresAt)
+        // A checklist on the Folder chip: the text is its items.
+        add("text=milk%2C+eggs&mode=active&folder=${groceries.id}")
+        assertEquals(listOf("milk", "eggs"), service.tasks().filter { it.parentId == groceries.id }.map { it.title })
+    }
+
+    @Test
     fun `the tray's timer is the current task's, and time's up adds time`() = testApplication {
         application { api(store, "secret") }
         fun tray(body: String) = SyncJson.decodeFromString(TrayState.serializer(), body)

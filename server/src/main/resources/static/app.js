@@ -103,6 +103,7 @@
     if (!n) return;
     dragId = n.dataset.id;
     e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", n.dataset.id); // Firefox won't start a drag without data
   });
   document.addEventListener("dragover", (e) => {
     const n = e.target.closest?.(".node");

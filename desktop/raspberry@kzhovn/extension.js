@@ -30,6 +30,8 @@ const countdown = (ms) => {
     const s = Math.max(0, Math.ceil(ms / 1000)), mm = String(Math.floor(s / 60) % 60).padStart(2, '0'), ss = String(s % 60).padStart(2, '0');
     return s >= 3600 ? `${Math.floor(s / 3600)}:${mm}:${ss}` : `${Math.floor(s / 60)}:${ss}`;
 };
+// Quick add's Start and Due chips: quick add's own words, sent as typed.
+const DAY_LABELS = {today: 'Today', tomorrow: 'Tomorrow', 'next week': 'Next week', weekend: 'Weekend'};
 const duration = (m) => (m < 60 ? `${m}m` : m % 60 === 0 ? `${m / 60}h` : `${Math.floor(m / 60)}h ${m % 60}m`);
 
 function readConfig() {
@@ -83,6 +85,8 @@ class Indicator extends PanelMenu.Button {
         this._mode = 'doing';
         this._expanded = new Set(); // rows whose subtasks/items are shown in place, like the widget's
         this._status = '';
+        this._draft = ''; // quick add's text and chips, kept across re-renders
+        this._chips = {};
 
         const bar = new St.BoxLayout({style_class: 'panel-status-menu-box'});
         bar.add_child(new St.Icon({gicon: Gio.icon_new_for_string(`${extension.path}/raspberry.png`), style_class: 'rb-panel-icon'}));
@@ -264,31 +268,111 @@ class Indicator extends PanelMenu.Button {
         return header;
     }
 
-    // Stays open after each add, for adding several; the same parser as quick add everywhere. What's
-    // typed survives re-renders (a refresh rebuilds the popup).
+    // The phone's quick add: the text (the same syntax everywhere), then its chips: star, start, due,
+    // today only and folder (or checklist, whose items the text then is). Stays open after each add,
+    // for adding several; the folder stays too. What's typed survives re-renders (a refresh rebuilds
+    // the popup).
     _quickAdd() {
-        const entry = new St.Entry({style_class: 'rb-entry', hint_text: 'Add a task…', can_focus: true, x_expand: true, text: this._draft ?? ''});
+        const box = new St.BoxLayout({vertical: true, style_class: 'rb-quickadd'});
+        const chips = this._chips;
+        const folders = this._state?.folders ?? [];
+        const folder = folders.find((f) => f.id === (chips.folder ?? this._state?.defaultFolder));
+        const form = () => ({
+            text: this._draft.trim(), mode: this._mode, star: chips.star ? '1' : '', start: chips.start ?? '', due: chips.due ?? '',
+            today: chips.today ? '1' : '', folder: chips.folder ?? '',
+        });
+        const add = () => {
+            if (!this._draft.trim()) return;
+            const sent = form();
+            this._draft = '';
+            this._chips = {folder: chips.folder};
+            this._picking = null;
+            this._post('/api/quickadd', sent).then(() => this._focusQuickAdd());
+        };
+
+        const entry = new St.Entry({style_class: 'rb-entry', hint_text: 'Add a task…', can_focus: true, x_expand: true, text: this._draft});
         entry.clutter_text.connect('text-changed', () => {
             this._draft = entry.get_text();
         });
-        entry.clutter_text.connect('activate', () => {
-            const text = entry.get_text().trim();
-            if (!text) return;
-            this._draft = '';
-            this._post('/api/quickadd', {text, mode: this._mode}).then(() => this._focusQuickAdd());
-        });
+        entry.clutter_text.connect('activate', add);
         entry.clutter_text.connect('key-press-event', (_actor, event) => {
             if (event.get_key_symbol() !== Clutter.KEY_Escape) return Clutter.EVENT_PROPAGATE;
             this._adding = false;
             this._render();
             return Clutter.EVENT_STOP;
         });
+        const top = new St.BoxLayout();
+        top.add_child(entry);
+        top.add_child(this._chip(chips.star ? 'starred-symbolic' : 'non-starred-symbolic', null, chips.star, () => {
+            chips.star = !chips.star;
+            this._render();
+        }));
+        box.add_child(top);
+
+        const pick = (what) => () => {
+            this._picking = this._picking === what ? null : what;
+            this._render();
+        };
+        const row = new St.BoxLayout({style_class: 'rb-chips'});
+        row.add_child(this._chip('x-office-calendar-symbolic', chips.start ? DAY_LABELS[chips.start] : 'Start', !!chips.start, pick('start')));
+        row.add_child(this._chip('alarm-symbolic', chips.due ? DAY_LABELS[chips.due] : 'Due', !!chips.due, pick('due')));
+        row.add_child(this._chip('weather-snow-symbolic', chips.today ? 'Today only' : null, chips.today, () => {
+            chips.today = !chips.today;
+            this._render();
+        }));
+        row.add_child(this._chip(folder?.checklist ? 'view-list-symbolic' : 'folder-symbolic', folder?.title ?? 'Folder', false, pick('folder')));
+        box.add_child(row);
+
+        // The chip being set: a few days (St has no date picker), or the folders and checklists.
+        if (this._picking) {
+            const choices = new St.Widget({style_class: 'rb-choices', layout_manager: new Clutter.FlowLayout({column_spacing: 4, row_spacing: 4})});
+            if (this._picking === 'folder') {
+                for (const f of folders) {
+                    choices.add_child(this._chip(f.checklist ? 'view-list-symbolic' : 'folder-symbolic', f.title, f.id === folder?.id, () => {
+                        chips.folder = f.id;
+                        this._picking = null;
+                        this._render();
+                    }));
+                }
+            } else {
+                const kind = this._picking;
+                for (const [word, label] of Object.entries(DAY_LABELS)) {
+                    choices.add_child(this._chip(null, label, chips[kind] === word, () => {
+                        chips[kind] = chips[kind] === word ? null : word;
+                        this._picking = null;
+                        this._render();
+                    }));
+                }
+            }
+            box.add_child(choices);
+        }
+
+        const actions = new St.BoxLayout({style_class: 'rb-quickadd-actions'});
+        // The full editor on a draft of what's typed, like the phone's "Edit all details".
+        actions.add_child(this._button({label: 'Edit all details', style_class: 'rb-link'}, () => {
+            const query = Object.entries({...form(), mode: this._mode.toUpperCase()}).filter(([, v]) => v !== '').map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+            this._draft = '';
+            this._chips = {folder: chips.folder};
+            this._open(`/tasks/new?${query}`);
+        }));
+        actions.add_child(new St.Widget({x_expand: true}));
+        actions.add_child(this._button({label: 'Add', style_class: 'rb-btn rb-btn-primary'}, add));
+        box.add_child(actions);
+
         GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
-            if (entry.get_stage()) entry.grab_key_focus();
+            if (entry.get_stage() && !this._picking) entry.grab_key_focus();
             return GLib.SOURCE_REMOVE;
         });
         this._entry = entry;
-        return entry;
+        return box;
+    }
+
+    // One of quick add's chips: an icon, and its value (or name) once there's something to say.
+    _chip(icon, label, on, onClick) {
+        const box = new St.BoxLayout({style_class: 'rb-chip-box'});
+        if (icon) box.add_child(new St.Icon({icon_name: icon, style_class: 'rb-chip-icon'}));
+        if (label) box.add_child(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}));
+        return this._button({style_class: on ? 'rb-chip rb-chip-on' : 'rb-chip', child: box}, onClick);
     }
 
     _focusQuickAdd() {

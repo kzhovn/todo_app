@@ -51,6 +51,7 @@ import kotlinx.html.nav
 import kotlinx.html.p
 import kotlinx.html.script
 import kotlinx.html.span
+import kotlinx.html.stream.createHTML
 import kotlinx.html.style
 import kotlinx.html.summary
 import kotlinx.html.textInput
@@ -175,7 +176,7 @@ fun HTML.listPage(service: TaskService, data: ListData, deleted: Task? = null) =
 fun FlowContent.listColumn(data: ListData) {
     div(classes = "list-head") {
         h2 { +data.title }
-        if (data.mode != ListMode.ALL) span(classes = "list-count") { +data.tasks.size.toString() }
+        if (data.mode != ListMode.ALL) span(classes = "list-count") { id = "list-count"; +data.tasks.size.toString() }
         // Bulk edit: app.js turns on selection, where clicking task rows picks them instead.
         div(classes = "list-tools") {
             attributes["data-mode"] = data.mode.name
@@ -205,6 +206,18 @@ private class SideNav(service: TaskService) {
     val colors = folderColorsHex(all)
     val folders = all.filter { it.type == TaskType.FOLDER && it.parentId == null }.sortedWith(TaskOrder).map { folder ->
         folder to all.count { it.type.isDoable && !it.isComplete && !isChecklistItem(it, byId) && isUnder(it, folder.id, byId) }
+    }
+}
+
+// After a list action, the counts elsewhere on the page (the list's own, the sidebar's), swapped in
+// beside the list by htmx.
+fun countsOob(service: TaskService, data: ListData): String {
+    val nav = SideNav(service)
+    fun count(id: String, classes: String, n: Int) = createHTML().span(classes = classes) { this.id = id; attributes["hx-swap-oob"] = "true"; +n.toString() }
+    return buildString {
+        if (data.mode != ListMode.ALL) append(count("list-count", "list-count", data.tasks.size))
+        ListMode.entries.forEach { append(count("n-${it.name.lowercase()}", "n", nav.counts.getValue(it))) }
+        nav.folders.forEach { (folder, open) -> append(count("n-${folder.id}", "n", open)) }
     }
 }
 
@@ -261,7 +274,7 @@ private fun HTML.shell(
             }
             nav(classes = "nav") {
                 ListMode.entries.forEach { m ->
-                    a(href = m.path, classes = if (m.path == current) "current" else null) { +m.label; span(classes = "n") { +nav.counts.getValue(m).toString() } }
+                    a(href = m.path, classes = if (m.path == current) "current" else null) { +m.label; span(classes = "n") { id = "n-${m.name.lowercase()}"; +nav.counts.getValue(m).toString() } }
                 }
             }
             if (nav.folders.isNotEmpty()) {
@@ -272,7 +285,7 @@ private fun HTML.shell(
                         a(href = path, classes = if (path == current) "current" else null) {
                             span(classes = "fdot") { nav.colors[folder.id]?.let { style = "background: $it" } }
                             +folder.title
-                            span(classes = "n") { +open.toString() }
+                            span(classes = "n") { id = "n-${folder.id}"; +open.toString() }
                         }
                     }
                 }
@@ -470,6 +483,14 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                     hx("post", "/focus/start?task=${task.id}", "this")
                     icon(Icon.CENTER_FOCUS, "")
                     +"Focus"
+                }
+                // The phone's swipe right: a subtask under it (a checklist's are items).
+                form(classes = "inline menu-add") {
+                    hx("post", "/tasks/${task.id}/add-subtask?mode=$mode")
+                    textInput(name = "text") {
+                        placeholder = if (task.type == TaskType.CHECKLIST) "+ ${Labels.ADD_ITEM}" else "+ ${Labels.SUBTASK}"
+                        attributes["autocomplete"] = "off"
+                    }
                 }
             }
         }

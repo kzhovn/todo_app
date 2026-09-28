@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.server.quickAddChips
+import com.kzhovn.todoapp.quickadd.QuickAdd
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.repository.changedInheritedFields
 import com.kzhovn.todoapp.data.checklistItems
@@ -128,12 +130,19 @@ fun Route.editorRoutes(service: TaskService) {
 
     // A blank editor, like the phone's "+ Project" / "+ Folder". Made from a folder's view, it goes in
     // that folder; otherwise a new task goes in Personal, as quick add's do, and a project or folder
-    // starts at the top.
+    // starts at the top. With `text` (the top bar's "Edit all details"), a draft of that quick add.
     get("/tasks/new") {
         val type = call.request.queryParameters["type"]?.let { runCatching { TaskType.valueOf(it) }.getOrNull() } ?: TaskType.TASK
-        val parent = call.folder() ?: if (type == TaskType.TASK) service.findFolder(DEFAULT_FOLDER)?.id else null
-        val state = EditState(Task(title = "", type = type, parentId = parent), emptySet(), emptySet())
-        call.respondHtml { editorPage(service, EditorView(call.mode(), call.listData(service, call.mode()), state, RecurrenceSelection(RecurrencePreset.NONE), state.encode())) }
+        val parent = call.folder()?.takeIf { service.get(it)?.type == TaskType.FOLDER } ?: if (type == TaskType.TASK) service.findFolder(DEFAULT_FOLDER)?.id else null
+        val draft = call.request.queryParameters["text"]?.let { text ->
+            service.planQuickAdd(text, call.request.queryParameters.quickAddChips()).let { add -> add.takeIf { it.task != null } ?: QuickAdd(Task(title = text)) }
+        }
+        val task = draft?.task?.let { it.copy(parentId = it.parentId ?: parent) } ?: Task(title = "", type = type, parentId = parent)
+        val state = EditState(task, draft?.contextIds.orEmpty(), emptySet())
+        val recurrence = recurrenceSelectionFromTask(task.recurrenceType, task.recurrenceRule)
+        call.respondHtml {
+            editorPage(service, EditorView(call.mode(), call.listData(service, call.mode()), state, recurrence, state.encode(), newSubtasks = draft?.items?.joinToString("\n").orEmpty(), pin = draft?.pin == true))
+        }
     }
     post("/tasks/new") { saveTask(service, id = null) }
     post("/tasks/{id}") { saveTask(service, call.taskId() ?: return@post call.respond(HttpStatusCode.NotFound)) }

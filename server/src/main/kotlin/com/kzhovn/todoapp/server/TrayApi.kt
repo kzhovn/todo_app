@@ -1,5 +1,8 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.data.DEFAULT_FOLDER
+import com.kzhovn.todoapp.data.TaskType
+import io.ktor.http.Parameters
 import com.kzhovn.todoapp.data.CurrentTask
 import com.kzhovn.todoapp.data.pinnedTask
 import com.kzhovn.todoapp.repository.filterDoing
@@ -30,8 +33,14 @@ data class TrayState(
     val list: String?,
     val rows: List<WidgetTaskRow>,
     val focus: FocusRow? = null, // a focus session (on every device): the popup shows just it
-    val now: Long = 0 // the server's clock, for the countdown
+    val now: Long = 0, // the server's clock, for the countdown
+    // Quick add's Folder chip: folders and open checklists, starting on Personal. Only with a list.
+    val folders: List<FolderRow> = emptyList(),
+    val defaultFolder: Long? = null
 )
+
+@Serializable
+data class FolderRow(val id: Long, val title: String, val checklist: Boolean = false)
 
 // The session's task; `done`: it's finished, and every device asks what's next.
 @Serializable
@@ -41,6 +50,12 @@ data class FocusRow(val id: Long, val title: String, val done: Boolean)
 data class TrayCounts(val doing: Int, val active: Int, val all: Int)
 
 private const val MAX_ROWS = 100
+private val LISTS = setOf("doing", "active", "all")
+
+// The Folder chip and friends, from the top bar's quick add (and its "Edit all details").
+internal fun Parameters.quickAddChips() = QuickAddChips(
+    star = this["star"] == "1", start = this["start"], due = this["due"], todayOnly = this["today"] == "1", folderId = this["folder"]?.toLongOrNull()
+)
 
 // The current task, with its timer (running until timerEndsAt, or paused with timerRemaining left).
 @Serializable
@@ -68,7 +83,10 @@ fun trayState(service: TaskService, list: String?): TrayState {
     }
     val pinned = pinnedTask(all)?.let { PinnedRow(it.id, it.title, it.timerEndsAt, it.timerRemaining, it.durationMinutes) }
     val focus = CurrentTask.focusSession(all)?.let { FocusRow(it.id, it.title, it.isComplete) }
-    return TrayState(pinned, TrayCounts(doing.size, active.size, allOpen.size), list, rows, focus, service.now())
+    val folders = if (list !in LISTS) emptyList() else all.filter { it.type == TaskType.FOLDER || (it.type == TaskType.CHECKLIST && !it.isComplete) }
+        .sortedBy { it.title.lowercase() }.map { FolderRow(it.id, it.title, checklist = it.type == TaskType.CHECKLIST) }
+    val defaultFolder = if (list !in LISTS) null else service.findFolder(DEFAULT_FOLDER)?.id
+    return TrayState(pinned, TrayCounts(doing.size, active.size, allOpen.size), list, rows, focus, service.now(), folders, defaultFolder)
 }
 
 // Bearer-token protected like /sync, so it's served even where the web pages aren't.
@@ -102,7 +120,8 @@ fun Route.trayRoutes(service: TaskService, hasToken: (RoutingContext) -> Boolean
     post("/api/quickadd") {
         if (!hasToken(this)) return@post call.respond(HttpStatusCode.Unauthorized)
         val params = call.receiveParameters()
-        service.quickAdd(params["text"].orEmpty(), fromDoing = params["mode"] == "doing")
+        val add = service.planQuickAdd(params["text"].orEmpty(), params.quickAddChips())
+        service.add(add, defaultParent = service.findFolder(DEFAULT_FOLDER)?.id, star = params["mode"] == "doing")
         call.respond(trayState(service, params["mode"]))
     }
 }

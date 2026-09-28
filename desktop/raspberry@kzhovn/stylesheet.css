@@ -66,3 +66,17 @@
 .rb-btn:hover { background-color: rgba(43, 76, 126, 0.08); color: #2B2318; }
 .rb-btn-primary { background-color: #2B4C7E; border-color: #2B4C7E; color: #fff; }
 .rb-btn-primary:hover { background-color: #2B4C7E; color: #fff; }
+
+/* Quick add's chips, like the phone's. */
+.rb-quickadd { margin: 2px 4px 6px; spacing: 4px; }
+.rb-quickadd .rb-entry { margin: 0 4px 0 0; }
+.rb-chips, .rb-quickadd-actions { spacing: 4px; }
+.rb-chip { border: 1px solid #DED5C1; border-radius: 13px; padding: 3px 9px; color: #8A7A5C; font-size: 12px; }
+.rb-chip:hover { background-color: rgba(43, 76, 126, 0.08); }
+.rb-chip-on { border-color: #2B4C7E; background-color: #DFE6EF; color: #2B4C7E; }
+.rb-chip-box { spacing: 4px; }
+.rb-chip-icon { icon-size: 14px; }
+.rb-choices { padding: 2px 0; }
+.rb-link { color: #2B4C7E; font-size: 12px; font-weight: bold; padding: 4px 6px; border-radius: 6px; }
+.rb-link:hover { background-color: rgba(43, 76, 126, 0.08); }
+
