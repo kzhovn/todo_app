@@ -71,8 +71,13 @@ class Store(path: String) {
     fun get(table: String, id: Long): SyncRow? =
         query("SELECT * FROM rows WHERE tbl = ? AND id = ?", table, id).firstOrNull()
 
+    // Decoding every row's JSON is the costly part of most reads, and one page or tray refresh asks
+    // for all rows several times, so they're kept until the next write (or rollback). The same list
+    // comes back until then, which TaskService relies on to keep its own decoding.
+    private val allCache = mutableMapOf<String, List<SyncRow>>()
+
     @Synchronized
-    fun all(table: String): List<SyncRow> = query("SELECT * FROM rows WHERE tbl = ?", table)
+    fun all(table: String): List<SyncRow> = allCache.getOrPut(table) { query("SELECT * FROM rows WHERE tbl = ?", table) }
 
     @Synchronized
     fun getValue(key: String): String? =
@@ -106,6 +111,7 @@ class Store(path: String) {
             return block().also { conn.commit() }
         } catch (e: Throwable) {
             conn.rollback()
+            allCache.clear()
             throw e
         } finally {
             conn.autoCommit = true
@@ -118,6 +124,7 @@ class Store(path: String) {
         conn.createStatement().use { st -> st.executeQuery("SELECT COALESCE(MAX(version), 0) FROM rows").use { it.next(); it.getLong(1) } }
 
     private fun put(row: SyncRow) {
+        allCache.remove(row.table)
         conn.prepareStatement("INSERT OR REPLACE INTO rows VALUES(?, ?, ?, ?, ?)").use {
             it.setString(1, row.table)
             it.setLong(2, row.id)

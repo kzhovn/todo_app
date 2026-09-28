@@ -42,6 +42,10 @@ interface TaskDao {
     @Query("SELECT * FROM tasks")
     suspend fun getAllOnce(): List<Task>
 
+    // pinnedTask() in :core, as one query: the open task pinned most recently.
+    @Query("SELECT * FROM tasks WHERE pinnedAt IS NOT NULL AND isComplete = 0 ORDER BY pinnedAt DESC LIMIT 1")
+    suspend fun getPinned(): Task?
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertDependency(dependency: TaskDependency)
 

@@ -48,8 +48,18 @@ object PinnedTask {
     suspend fun refresh(context: Context) {
         migrateLocalPin(context)
         val task = repository(context).getPinnedTask()
-        if (task == null) manager(context).cancel(NOTIFICATION_ID) else show(context, task)
+        if (task == null) {
+            manager(context).cancel(NOTIFICATION_ID)
+            shown = null
+        } else if (shown != task.id to task.title) {
+            show(context, task)
+            shown = task.id to task.title
+        }
     }
+
+    // What the notification shows, so a refresh with nothing new (most data changes) posts nothing.
+    @Volatile
+    private var shown: Pair<Long, String>? = null
 
     // Before pins synced, the phone kept its own in preferences; moved onto the task once.
     private suspend fun migrateLocalPin(context: Context) {

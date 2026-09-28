@@ -83,17 +83,20 @@ class TodoApp : Application() {
         startWifiMonitor()
         // Every widget redraws when tasks, contexts or dependencies change, from anywhere (the app, a
         // sync, another widget). A widget only watches the data while its own session is alive, so
-        // an idle one would otherwise keep showing the old list.
+        // an idle one would otherwise keep showing the old list. The pinned notification follows too:
+        // the pin may have moved (another device), or its task changed or finished. Debounced, since a
+        // sync writes many rows in a burst.
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
-            listInputChanges().debounce(300).collect { TodoWidget().updateAll(this@TodoApp) }
+            listInputChanges().debounce(300).collect {
+                TodoWidget().updateAll(this@TodoApp)
+                PinnedTask.refresh(this@TodoApp)
+            }
         }
         // Push shortly after any local edit, from any screen or the widget. Pull-applies clear
         // their own dirty marks, so they don't re-trigger this.
         database.invalidationTracker.addObserver(object : InvalidationTracker.Observer(TRACKED_TABLES) {
             override fun onInvalidated(tables: Set<String>) {
                 if (SyncSettings.config(this@TodoApp) != null && syncClient.hasDirty()) SyncWorker.requestSoon(this@TodoApp)
-                // The pin may have moved (another device), or its task changed or finished.
-                CoroutineScope(Dispatchers.IO).launch { PinnedTask.refresh(this@TodoApp) }
             }
         })
     }

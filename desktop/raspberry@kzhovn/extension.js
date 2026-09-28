@@ -89,15 +89,21 @@ class Indicator extends PanelMenu.Button {
         const item = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false, style_class: 'rb-item'});
         item.add_child(this._popup);
         this.menu.addMenuItem(item);
+        // The popup is only built while it's open: this all runs inside GNOME Shell, so nothing is
+        // drawn that isn't on screen. Closed, a refresh just keeps the top bar's pinned title current.
         this.menu.connect('open-state-changed', (_menu, open) => {
-            if (open) this._refresh();
+            if (open) {
+                this._render();
+                this._refresh();
+            } else {
+                this._popup.destroy_all_children();
+            }
         });
 
         this._timer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, REFRESH_SECONDS, () => {
             this._refresh();
             return GLib.SOURCE_CONTINUE;
         });
-        this._render();
         this._refresh();
     }
 
@@ -111,24 +117,30 @@ class Indicator extends PanelMenu.Button {
         // Read until there is one, so filling in the config needs no restart.
         this._config ??= readConfig();
         this._api ??= this._config && new Api(this._config);
-        if (!this._api) return this._render();
-        try {
-            this._state = await this._api.call(method, path, form);
-            this._lastOk = clock(new Date());
-            this._status = `Updated ${this._lastOk}`;
-        } catch (e) {
-            // The last list stays up, marked stale.
-            this._status = `Offline (${e.message})${this._lastOk ? ` · last updated ${this._lastOk}` : ''}`;
+        if (this._api) {
+            try {
+                const result = await this._api.call(method, path, form);
+                // A reply for another list (sent before the popup opened or a tab switch) only brings the
+                // pin and counts, so the list on screen isn't wiped.
+                const keepRows = result.list !== this._mode && this._state?.list === this._mode;
+                this._state = keepRows ? {...this._state, pinned: result.pinned, counts: result.counts} : result;
+                this._lastOk = clock(new Date());
+                this._status = `Updated ${this._lastOk}`;
+            } catch (e) {
+                // The last list stays up, marked stale.
+                this._status = `Offline (${e.message})${this._lastOk ? ` · last updated ${this._lastOk}` : ''}`;
+            }
         }
         this._render();
     }
 
+    // Only the list on screen comes back, and none while the popup is closed.
     _refresh() {
-        return this._request('GET', '/api/tray');
+        return this._request('GET', `/api/tray?list=${this.menu.isOpen ? this._mode : 'none'}`);
     }
 
     _post(path, form) {
-        return this._request('POST', path, form);
+        return this._request('POST', `${path}?list=${this._mode}`, form);
     }
 
     _open(path) {
@@ -140,6 +152,7 @@ class Indicator extends PanelMenu.Button {
         const pinned = this._state?.pinned;
         this._pinLabel.visible = !!pinned;
         if (pinned) this._pinLabel.text = cut(pinned.title, TOP_BAR_CHARS);
+        if (!this.menu.isOpen) return;
 
         this._popup.destroy_all_children();
         if (!this._api) {
@@ -150,12 +163,20 @@ class Indicator extends PanelMenu.Button {
         if (this._adding) this._popup.add_child(this._quickAdd());
         if (pinned) this._popup.add_child(this._pinnedRow(pinned));
 
-        const rows = this._state?.[this._mode] ?? [];
+        // Until this tab's list has arrived, the last one isn't shown under it.
+        const loaded = this._state?.list === this._mode;
+        const rows = loaded ? this._state.rows : [];
+        const total = this._state?.counts[this._mode] ?? 0;
         const list = new St.BoxLayout({vertical: true, x_expand: true});
-        if (this._state && rows.length === 0) list.add_child(new St.Label({style_class: 'rb-empty', text: 'Nothing here'}));
+        if (!loaded) list.add_child(new St.Label({style_class: 'rb-empty', text: 'Loading…'}));
+        else if (rows.length === 0) list.add_child(new St.Label({style_class: 'rb-empty', text: 'Nothing here'}));
         for (const row of rows) {
             list.add_child(this._row(row));
             if (this._expanded.has(row.id)) for (const child of row.children) list.add_child(this._childRow(row, child));
+        }
+        // The server sends at most 100 rows; the rest are a click away in the full list.
+        if (loaded && total > rows.length) {
+            list.add_child(this._button({label: `${total - rows.length} more in the full list…`, style_class: 'rb-more'}, () => this._open(`/${this._mode}`)));
         }
         const scroll = new St.ScrollView({style_class: 'rb-scroll', hscrollbar_policy: St.PolicyType.NEVER, vscrollbar_policy: St.PolicyType.AUTOMATIC});
         scroll.set_child(list);
@@ -168,12 +189,13 @@ class Indicator extends PanelMenu.Button {
         const header = new St.BoxLayout({style_class: 'rb-header'});
         header.add_child(this._button({label: '☰', style_class: 'rb-menu'}, () => this._open(`/${this._mode}`)));
         for (const mode of ['doing', 'active', 'all']) {
-            const count = this._state ? ` ${this._state[mode].length}` : '';
+            const count = this._state ? ` ${this._state.counts[mode]}` : '';
             header.add_child(this._button(
                 {label: `${mode.toUpperCase()}${count}`, style_class: mode === this._mode ? 'rb-tab rb-tab-on' : 'rb-tab'},
                 () => {
                     this._mode = mode;
                     this._render();
+                    this._refresh();
                 }
             ));
         }

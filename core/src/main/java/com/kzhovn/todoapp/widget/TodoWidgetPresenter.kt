@@ -1,8 +1,8 @@
 package com.kzhovn.todoapp.widget
 
+import com.kzhovn.todoapp.data.ChecklistItemOrder
 import com.kzhovn.todoapp.data.isChecklistItem
 import com.kzhovn.todoapp.data.isDoable
-import com.kzhovn.todoapp.data.checklistItems
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.repository.urgentFirst
 import com.kzhovn.todoapp.data.DueStatus
@@ -48,7 +48,8 @@ object TodoWidgetPresenter {
         // Doing and Active: what's overdue or due today on top (urgentFirst), above the folder grouping.
         urgentOnTop: Boolean = false
     ): List<WidgetTaskRow> {
-        val all = allById.values.filter { it.type != TaskType.FOLDER }
+        // Each row's children, grouped once: looking them up per row made a long list quadratic.
+        val childrenOf = allById.values.filter { it.type != TaskType.FOLDER }.groupBy { it.parentId }
         // Grouped by top-level folder in the All tree's order (folderless last), like Active's sections.
         return sectionsByTopFolder(tasks, allById).flatMap { it.second }
             .let { if (urgentOnTop) urgentFirst(it, now, effectiveDue) else it }
@@ -60,7 +61,7 @@ object TodoWidgetPresenter {
                 durationMinutes = it.durationMinutes,
                 due = effectiveDue(it)?.takeUnless { _ -> it.isComplete }?.let { d -> dueStatus(d, now) },
                 isChecklist = it.type == TaskType.CHECKLIST,
-                children = checklistItems(it.id, all).map { c -> WidgetChild(c.id, c.title, c.isComplete) }
+                children = childrenOf[it.id].orEmpty().sortedWith(ChecklistItemOrder).map { c -> WidgetChild(c.id, c.title, c.isComplete) }
             )
         }
     }

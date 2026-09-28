@@ -1,6 +1,5 @@
 package com.kzhovn.todoapp.repository
 
-import com.kzhovn.todoapp.data.pinnedTask
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.searchTasks
 import com.kzhovn.todoapp.data.planMoveNextTo
@@ -193,7 +192,7 @@ class TaskRepository(
 
     suspend fun unpin() = taskDao.getAllOnce().filter { it.pinnedAt != null }.forEach { taskDao.update(it.copy(pinnedAt = null)) }
 
-    suspend fun getPinnedTask(): Task? = pinnedTask(taskDao.getAllOnce())
+    suspend fun getPinnedTask(): Task? = taskDao.getPinned()
 
     suspend fun updateTask(task: Task) {
         taskDao.update(task.withRules(System.currentTimeMillis()))

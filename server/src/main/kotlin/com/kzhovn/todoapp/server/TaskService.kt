@@ -68,33 +68,27 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     fun deletedTask(id: Long): Task? = store.get(TASKS, id)?.takeIf { it.isDeleted }?.toTask()
 
-    fun tasks(): List<Task> = liveRows().map { it.toTask() }
+    fun tasks(): List<Task> = clock().let { now -> decoded().let { d -> d.rows.mapNotNull { d.tasks[it.id]?.takeUnless { t -> t.isExpired(now) } } } }
 
     fun active(folderId: Long? = null): List<Task> {
         val rows = liveRows()
+        val all = tasks()
+        val contexts = contextsByTaskId(rows)
         val contextRows = store.all(CONTEXTS).filterNot { it.isDeleted }
         val active = computeActiveTasks(
-            all = rows.map { it.toTask() },
-            contextsByTaskId = contextsByTaskId(rows),
+            all = all,
+            contextsByTaskId = contexts,
             contexts = contextRows.map { it.toContext() },
             timeWindows = contextRows.flatMap { it.timeWindows() },
             dependencies = rows.flatMap { row -> row.dependsOn().map { TaskDependency(row.id, it) } },
             now = clock()
         )
-        return urgentFirst(if (folderId == null) active else active.filter { it.id in subtreeIds(folderId) }, clock(), rows.associate { it.id to it.toTask() }, contextsByTaskId(rows))
+        return urgentFirst(if (folderId == null) active else active.filter { it.id in subtreeIds(folderId) }, clock(), all.associateBy { it.id }, contexts)
     }
 
-    fun doing(folderId: Long? = null): List<Task> {
-        val rows = liveRows()
-        val byId = rows.associate { it.id to it.toTask() }
-        val contexts = contextsByTaskId(rows)
-        return filterDoing(active(folderId), clock(), byId, contexts)
-    }
+    fun doing(folderId: Long? = null): List<Task> = filterDoing(active(folderId), clock(), tasks().associateBy { it.id }, contextIdsByTask())
 
-    fun effectiveDueDate(task: Task): Long? {
-        val rows = liveRows()
-        return resolveEffective(task, rows.associate { it.id to it.toTask() }, contextsByTaskId(rows)).effectiveDueDate
-    }
+    fun effectiveDueDate(task: Task): Long? = resolveEffective(task, tasks().associateBy { it.id }, contextIdsByTask()).effectiveDueDate
 
     // Open tasks anywhere under the folder, for `.list <folder>`.
     fun openInFolder(folderId: Long): List<Task> {
@@ -389,12 +383,27 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     private fun writeTask(task: Task, row: SyncRow) =
         store.write(TASKS, task.id, JsonObject(taskFields(task, row.contextIds(), row.dependsOn()) - DELETED_AT), clock())
 
-    private fun liveRows(): List<SyncRow> = clock().let { now -> store.all(TASKS).filterNot { it.isDeleted || it.toTask().isExpired(now) } }
+    // Every task decoded once per change to the stored rows (Store.all returns the same list until a
+    // write), since one page or tray refresh reads them all several times over.
+    private class Decoded(val source: List<SyncRow>, val rows: List<SyncRow>, val tasks: Map<Long, Task>)
+
+    @Volatile
+    private var decodedCache: Decoded? = null
+
+    private fun decoded(): Decoded {
+        val source = store.all(TASKS)
+        decodedCache?.takeIf { it.source === source }?.let { return it }
+        val rows = source.filterNot { it.isDeleted }
+        return Decoded(source, rows, rows.associate { it.id to it.toTask() }).also { decodedCache = it }
+    }
+
+    private fun liveRows(): List<SyncRow> = clock().let { now -> decoded().let { d -> d.rows.filterNot { d.tasks.getValue(it.id).isExpired(now) } } }
 
     private fun contextsByTaskId(rows: List<SyncRow>) = rows.associate { it.id to it.contextIds() }
 
     private fun subtreeIds(rootId: Long, rows: List<SyncRow> = liveRows()): Set<Long> {
-        val children = rows.groupBy({ it.toTask().parentId }, { it.id })
+        val tasks = decoded().tasks
+        val children = rows.groupBy({ (tasks[it.id] ?: it.toTask()).parentId }, { it.id })
         val result = mutableSetOf<Long>()
         val stack = ArrayDeque(listOf(rootId))
         while (stack.isNotEmpty()) {

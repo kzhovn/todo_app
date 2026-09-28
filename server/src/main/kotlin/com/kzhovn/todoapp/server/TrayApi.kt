@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.data.pinnedTask
+import com.kzhovn.todoapp.repository.filterDoing
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.folderColorsArgb
 import com.kzhovn.todoapp.data.resolveEffective
@@ -16,26 +18,42 @@ import io.ktor.server.routing.post
 import kotlinx.serialization.Serializable
 
 // The desktop tray's data and actions (docs/superpowers/specs/2026-09-27-desktop-tray-design.md).
-// Rows are the widget's own, so the tray shows exactly what a Doing/Active widget would. Every
-// action answers with the new state, so each costs one round trip.
+// Rows are the widget's own, so the tray shows exactly what a Doing/Active/All widget would. Every
+// action answers with the new state, so each costs one round trip. Only the list on screen comes
+// back (`list`), and at most MAX_ROWS of it: the popup is parsed and drawn inside GNOME Shell, and a
+// full All list ran to over a megabyte.
 @Serializable
-data class TrayState(val pinned: PinnedRow?, val doing: List<WidgetTaskRow>, val active: List<WidgetTaskRow>, val all: List<WidgetTaskRow>)
+data class TrayState(val pinned: PinnedRow?, val counts: TrayCounts, val list: String?, val rows: List<WidgetTaskRow>)
+
+@Serializable
+data class TrayCounts(val doing: Int, val active: Int, val all: Int)
+
+private const val MAX_ROWS = 100
 
 @Serializable
 data class PinnedRow(val id: Long, val title: String)
 
-fun trayState(service: TaskService): TrayState {
+// list: "doing", "active", "all", or anything else for none (the popup is closed: just the pin and counts).
+fun trayState(service: TaskService, list: String?): TrayState {
     val all = service.tasks()
     val byId = all.associateBy { it.id }
-    val contexts = service.contextIdsByTask()
-    val counts = subtaskCounts(all)
-    val colors = folderColorsArgb(all)
-    fun rows(tasks: List<Task>, urgentOnTop: Boolean = true) = TodoWidgetPresenter.toRows(
-        tasks, counts, service.now(), byId, colors, { resolveEffective(it, byId, contexts).effectiveDueDate }, urgentOnTop
-    )
-    return TrayState(service.pinned()?.let { PinnedRow(it.id, it.title) }, rows(service.doing()), rows(service.active()),
+    val active = service.active()
+    val doing = filterDoing(active, service.now(), byId, service.contextIdsByTask())
+    val allOpen = TodoWidgetPresenter.allOpen(all, byId)
+    fun rows(tasks: List<Task>, urgentOnTop: Boolean): List<WidgetTaskRow> {
+        val contexts = service.contextIdsByTask()
+        return TodoWidgetPresenter.toRows(
+            tasks, subtaskCounts(all), service.now(), byId, folderColorsArgb(all), { resolveEffective(it, byId, contexts).effectiveDueDate }, urgentOnTop
+        ).take(MAX_ROWS)
+    }
+    val rows = when (list) {
+        "doing" -> rows(doing, urgentOnTop = true)
+        "active" -> rows(active, urgentOnTop = true)
         // Like the widget's All: by folder, with nothing moved to the top.
-        rows(TodoWidgetPresenter.allOpen(all, byId), urgentOnTop = false))
+        "all" -> rows(allOpen, urgentOnTop = false)
+        else -> emptyList()
+    }
+    return TrayState(pinnedTask(all)?.let { PinnedRow(it.id, it.title) }, TrayCounts(doing.size, active.size, allOpen.size), list, rows)
 }
 
 // Bearer-token protected like /sync, so it's served even where the web pages aren't.
@@ -43,7 +61,7 @@ fun Route.trayRoutes(service: TaskService, hasToken: (RoutingContext) -> Boolean
     suspend fun RoutingContext.act(action: (Long?) -> Unit) {
         if (!hasToken(this)) return call.respond(HttpStatusCode.Unauthorized)
         action(call.parameters["id"]?.toLongOrNull())
-        call.respond(trayState(service))
+        call.respond(trayState(service, call.request.queryParameters["list"]))
     }
     get("/api/tray") { act {} }
     // The row's checkbox, like the widget's: completing takes the subtasks too (no room to ask).
@@ -61,6 +79,6 @@ fun Route.trayRoutes(service: TaskService, hasToken: (RoutingContext) -> Boolean
         if (!hasToken(this)) return@post call.respond(HttpStatusCode.Unauthorized)
         val params = call.receiveParameters()
         service.quickAdd(params["text"].orEmpty(), fromDoing = params["mode"] == "doing")
-        call.respond(trayState(service))
+        call.respond(trayState(service, params["mode"]))
     }
 }

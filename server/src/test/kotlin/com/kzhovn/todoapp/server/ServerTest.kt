@@ -54,31 +54,42 @@ class ServerTest {
     }
 
     @Test
-    fun `the tray API needs the token and serves the widget's rows`() = testApplication {
+    fun `the tray API needs the token and serves the widget's rows, one list at a time`() = testApplication {
         application { api(store, "secret") }
         fun tray(body: String) = SyncJson.decodeFromString(TrayState.serializer(), body)
+        val auth = "Bearer secret"
         assertEquals(HttpStatusCode.Unauthorized, client.get("/api/tray").status)
         assertEquals(HttpStatusCode.Unauthorized, client.post("/api/unpin") { header("Authorization", "Bearer nope") }.status)
 
         val call = service.create(Task(title = "Call mom", isStarred = true))
         val step = service.create(Task(title = "Find number", parentId = call.id, isStarred = true))
-        val state = tray(client.get("/api/tray") { header("Authorization", "Bearer secret") }.bodyAsText())
-        assertEquals(listOf("Find number"), state.doing.map { it.title }) // the parent waits on its subtask
-        assertEquals("Call mom", state.doing.single().parentTitle)
-        assertEquals(listOf("Call mom", "Find number"), state.all.map { it.title }) // All has the waiting parent too
+        val doing = tray(client.get("/api/tray?list=doing") { header("Authorization", auth) }.bodyAsText())
+        assertEquals(listOf("Find number"), doing.rows.map { it.title }) // the parent waits on its subtask
+        assertEquals("Call mom", doing.rows.single().parentTitle)
+        assertEquals(TrayCounts(doing = 1, active = 1, all = 2), doing.counts)
+        val all = tray(client.get("/api/tray?list=all") { header("Authorization", auth) }.bodyAsText())
+        assertEquals(listOf("Call mom", "Find number"), all.rows.map { it.title }) // All has the waiting parent too
+        // The popup closed: only the pin and the counts.
+        assertTrue(tray(client.get("/api/tray?list=none") { header("Authorization", auth) }.bodyAsText()).rows.isEmpty())
 
-        val pinned = tray(client.post("/api/tasks/${call.id}/pin") { header("Authorization", "Bearer secret") }.bodyAsText())
+        val pinned = tray(client.post("/api/tasks/${call.id}/pin?list=doing") { header("Authorization", auth) }.bodyAsText())
         assertEquals(PinnedRow(call.id, "Call mom"), pinned.pinned)
         // The checkbox completes the subtasks too, like the widget's.
-        val done = tray(client.post("/api/tasks/${call.id}/complete") { header("Authorization", "Bearer secret") }.bodyAsText())
+        val done = tray(client.post("/api/tasks/${call.id}/complete?list=doing") { header("Authorization", auth) }.bodyAsText())
         assertTrue(service.get(step.id)!!.isComplete)
         assertNull(done.pinned)
-        assertTrue(done.doing.isEmpty())
+        assertTrue(done.rows.isEmpty())
 
         val added = tray(client.post("/api/quickadd") {
-            header("Authorization", "Bearer secret"); contentType(ContentType.Application.FormUrlEncoded); setBody("text=Water+plants&mode=doing")
+            header("Authorization", auth); contentType(ContentType.Application.FormUrlEncoded); setBody("text=Water+plants&mode=doing")
         }.bodyAsText())
-        assertEquals(listOf("Water plants"), added.doing.map { it.title }) // added from Doing: starred
+        assertEquals(listOf("Water plants"), added.rows.map { it.title }) // added from Doing: starred
+
+        // A long list is capped; the count still says how many there are.
+        repeat(120) { service.create(Task(title = "Task $it")) }
+        val long = tray(client.get("/api/tray?list=all") { header("Authorization", auth) }.bodyAsText())
+        assertEquals(100, long.rows.size)
+        assertEquals(121, long.counts.all)
     }
 
     @Test

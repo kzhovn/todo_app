@@ -48,4 +48,6 @@
 .rb-child-title { font-size: 13px; color: #2B2318; padding: 4px 6px 4px 2px; }
 .rb-done { color: #8A7A5C; }
 .rb-empty { color: #8A7A5C; padding: 18px; text-align: center; }
+.rb-more { color: #2B4C7E; font-size: 12px; padding: 6px 10px; border-radius: 4px; }
+.rb-more:hover { background-color: rgba(43, 76, 126, 0.08); }
 .rb-status { color: #8A7A5C; font-size: 10px; padding: 4px 8px 0; }

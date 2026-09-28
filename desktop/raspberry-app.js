@@ -21,6 +21,11 @@ function siteUrl() {
     }
 }
 
+// WebKit runs each page in a bubblewrap sandbox, which Ubuntu 24.04's AppArmor blocks for apps
+// without a profile of their own (the page process can't start, and the app crashes). This window
+// only ever shows your own site (other links open in the browser), so it runs without it.
+GLib.setenv('WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS', '1', true);
+
 const app = new Gtk.Application({application_id: APP_ID, flags: Gio.ApplicationFlags.HANDLES_OPEN});
 const site = siteUrl();
 let window, view;
