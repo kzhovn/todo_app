@@ -379,12 +379,13 @@ class Indicator extends PanelMenu.Button {
         if (this._adding && this._entry?.get_stage()) this._entry.grab_key_focus();
     }
 
-    // Title (opens it), its timer, checkbox (completes it), Focus, then the pin, which unpins it.
+    // Checkbox (completes it; in front, as every checkbox is), title (opens it), its timer, Focus, then
+    // the pin, which unpins it.
     _pinnedRow(pinned) {
         const row = new St.BoxLayout({style_class: 'rb-pinned'});
+        row.add_child(this._check(null, () => this._post(`/api/tasks/${pinned.id}/complete`)));
         row.add_child(this._titleButton(pinned.title, () => this._open(`/tasks/${pinned.id}?mode=DOING`)));
         row.add_child(this._timerControls(pinned));
-        row.add_child(this._check(null, () => this._post(`/api/tasks/${pinned.id}/complete`)));
         const focus = this._iconButton('find-location-symbolic', 'rb-tool rb-unpin', () => this._post(`/api/tasks/${pinned.id}/focus`));
         focus.accessible_name = 'Focus';
         row.add_child(focus);

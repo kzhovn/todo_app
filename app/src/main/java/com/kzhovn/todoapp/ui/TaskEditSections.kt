@@ -328,14 +328,14 @@ internal fun RelatedSection(vm: TaskEditViewModel, openTask: (Long) -> Unit, onA
     SectionLabel(Labels.RELATED)
     val subtasks = remember(vm.allTasks, vm.taskId, isChecklist) { vm.allTasks.filter { it.parentId == vm.taskId && !vm.isNew && !isChecklist }.sortedWith(TaskOrder) }
     subtasks.forEach { sub ->
-        RelatedRow(Labels.SUBTASK, sub.title, done = sub.isComplete, onOpen = { openTask(sub.id) }) {
+        RelatedRow(Labels.SUBTASK, sub.title, done = sub.isComplete, onOpen = { openTask(sub.id) }, leading = {
             if (sub.type == TaskType.TASK) {
                 TaskCheckbox(
                     checked = sub.isComplete, due = sub.dueDate?.takeUnless { sub.isComplete }?.let { dueStatus(it, System.currentTimeMillis()) },
                     size = 18.dp, touchSize = 34.dp, onCheckedChange = { vm.toggleComplete(sub.id) }
                 )
-            }
-        }
+            } else Spacer(Modifier.width(34.dp))
+        }) {}
     }
     if (!isChecklist) vm.pendingSubtasks.forEachIndexed { index, title ->
         RelatedRow(Labels.SUBTASK, title, onOpen = null) { RemoveButton { vm.pendingSubtasks = vm.pendingSubtasks.filterIndexed { i, _ -> i != index } } }
@@ -442,12 +442,14 @@ private fun SectionLabel(text: String) {
     Text(text, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerInk, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
 }
 
-// One related task: what it is to this one (Subtask, Prerequisite, Dependent), its title (tap opens
-// it), and a trailing control (a checkbox or ✕).
+// One related task: what it is to this one (Subtask, Prerequisite, Dependent), a subtask's checkbox
+// (in front of the title, as every checkbox is; other rows keep its space so titles line up), its
+// title (tap opens it), and a trailing ✕ where it can be removed.
 @Composable
-private fun RelatedRow(kind: String, title: String, done: Boolean = false, onOpen: (() -> Unit)?, trailing: @Composable () -> Unit) {
+private fun RelatedRow(kind: String, title: String, done: Boolean = false, onOpen: (() -> Unit)?, leading: @Composable () -> Unit = { Spacer(Modifier.width(34.dp)) }, trailing: @Composable () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp)) {
         Text(kind, fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.width(84.dp))
+        leading()
         Text(
             title,
             fontSize = 14.sp,

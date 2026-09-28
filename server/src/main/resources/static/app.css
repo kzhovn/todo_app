@@ -353,7 +353,8 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .rel-row a { flex: 1; color: var(--ink); text-decoration: none; }
 .rel-row a:hover { text-decoration: underline; }
 .rel-row a.done { color: var(--muted); text-decoration: line-through; }
-.rel-row .check { margin-left: 0; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; }
+.rel-row .check { margin-left: 0; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.rel-row .check-space { width: 18px; flex-shrink: 0; }
 .unlink { color: var(--muted); width: 28px; height: 28px; }
 .unlink:hover { color: var(--overdue); }
 .adders { display: flex; gap: 18px; margin-top: 8px; }

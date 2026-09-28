@@ -727,8 +727,10 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
     val task = byId[id] ?: return
     val m = mode.name
     fun kotlinx.html.HTMLTag.htmx(url: String) = hx("post", url, "#related")
-    fun FlowContent.row(kind: String, t: Task, trailing: FlowContent.() -> Unit) = div(classes = "rel-row") {
+    // A subtask's checkbox goes in front of its title, as every checkbox does; other rows keep its space.
+    fun FlowContent.row(kind: String, t: Task, leading: FlowContent.() -> Unit = { span(classes = "check-space") {} }, trailing: FlowContent.() -> Unit) = div(classes = "rel-row") {
         span(classes = "rel-kind") { +kind }
+        leading()
         a(href = "/tasks/${t.id}?mode=$m", classes = if (t.isComplete) "done" else null) { +t.title }
         trailing()
     }
@@ -764,13 +766,13 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
     }
     div(classes = "field-label section") { +Labels.RELATED }
     all.filter { it.parentId == id && !isChecklist }.sortedWith(TaskOrder).forEach { sub ->
-        row(Labels.SUBTASK, sub) {
+        row(Labels.SUBTASK, sub, leading = {
             if (sub.type == TaskType.TASK) button(classes = if (sub.isComplete) "check done" else "check") {
                 htmx("/tasks/$id/subtasks/${sub.id}/toggle?mode=$m")
                 attributes["aria-label"] = if (sub.isComplete) "Mark not done" else "Complete"
                 if (sub.isComplete) icon(Icon.CHECK, "")
-            }
-        }
+            } else span(classes = "check-space") {}
+        }) {}
     }
     val edges = service.dependencyEdges()
     // A folder can't be completed, so it neither depends on tasks nor has any depending on it.
