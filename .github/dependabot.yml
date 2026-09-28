@@ -1,0 +1,11 @@
+# Weekly update PRs for the Gradle dependencies (Ktor and JDA face the internet), grouped into one PR
+# so there's a single thing to review and merge.
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      all:
+        patterns: ["*"]

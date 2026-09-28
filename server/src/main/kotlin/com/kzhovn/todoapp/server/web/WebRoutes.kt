@@ -33,8 +33,8 @@ private const val HOUR_MS = 60 * 60 * 1000L
 // server listens on loopback, i.e. is reachable solely through Caddy.
 fun Route.webRoutes(service: TaskService) {
     // Explicit route: staticResources() treats dots in a resource path as package separators, which
-    // mangles the webjar's "htmx.org/2.0.8" directory.
-    val htmx = Route::class.java.classLoader.getResource("META-INF/resources/webjars/htmx.org/2.0.8/dist/htmx.min.js")!!.readBytes()
+    // mangles the webjar's "htmx.org/2.0.11" directory.
+    val htmx = Route::class.java.classLoader.getResource("META-INF/resources/webjars/htmx.org/2.0.11/dist/htmx.min.js")!!.readBytes()
     get("/static/htmx/htmx.min.js") { call.respondBytes(htmx, ContentType.Text.JavaScript) }
     staticResources("/static", "static")
 

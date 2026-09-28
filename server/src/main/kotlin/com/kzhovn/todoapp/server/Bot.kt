@@ -1,5 +1,8 @@
 package com.kzhovn.todoapp.server
 
+import java.util.EnumSet
+import net.dv8tion.jda.api.entities.Message
+import net.dv8tion.jda.api.utils.messages.MessageRequest
 import net.dv8tion.jda.api.JDA
 import net.dv8tion.jda.api.JDABuilder
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel
@@ -89,6 +92,8 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
 
         fun start(token: String, service: TaskService, store: Store, allowedUserIds: Set<Long>, digestChannelId: Long?, digestTime: String?): JDA {
             val bot = Bot(BotLogic(service, store), allowedUserIds)
+            // The bot reposts task titles; one with "@everyone" or a role in it mustn't ping anyone.
+            MessageRequest.setDefaultMentions(EnumSet.noneOf(Message.MentionType::class.java))
             val jda = JDABuilder.createLight(
                 token,
                 GatewayIntent.GUILD_MESSAGES, GatewayIntent.DIRECT_MESSAGES, GatewayIntent.MESSAGE_CONTENT,
