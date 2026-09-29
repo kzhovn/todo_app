@@ -34,6 +34,11 @@ const countdown = (ms) => {
 const DAY_LABELS = {today: 'Today', tomorrow: 'Tomorrow', 'next week': 'Next week', weekend: 'Weekend'};
 const duration = (m) => (m < 60 ? `${m}m` : m % 60 === 0 ? `${m / 60}h` : `${Math.floor(m / 60)}h ${m % 60}m`);
 
+// The app's own Material icons (icons/, made by tools/tray_icons.py from the web's), so the top bar
+// looks like the phone and web rather than the desktop theme.
+let iconDir = null;
+const appIcon = (name) => Gio.icon_new_for_string(`${iconDir}/${name}.svg`);
+
 function readConfig() {
     try {
         const [, bytes] = GLib.file_get_contents(CONFIG);
@@ -81,6 +86,7 @@ const Indicator = GObject.registerClass(
 class Indicator extends PanelMenu.Button {
     _init(extension) {
         super._init(0.5, 'Raspberry');
+        iconDir = `${extension.path}/icons`;
         this._state = null;
         this._mode = 'doing';
         this._expanded = new Set(); // rows whose subtasks/items are shown in place, like the widget's
@@ -260,8 +266,8 @@ class Indicator extends PanelMenu.Button {
             ));
         }
         header.add_child(new St.Widget({x_expand: true}));
-        header.add_child(this._iconButton('view-refresh-symbolic', 'rb-tool', () => this._refresh()));
-        header.add_child(this._iconButton('list-add-symbolic', 'rb-add', () => {
+        header.add_child(this._iconButton('refresh-symbolic', 'rb-tool', () => this._refresh()));
+        header.add_child(this._iconButton('add-symbolic', 'rb-add', () => {
             this._adding = !this._adding;
             this._render();
         }));
@@ -303,7 +309,7 @@ class Indicator extends PanelMenu.Button {
         });
         const top = new St.BoxLayout();
         top.add_child(entry);
-        top.add_child(this._chip(chips.star ? 'starred-symbolic' : 'non-starred-symbolic', null, chips.star, () => {
+        top.add_child(this._chip(chips.star ? 'star-on' : 'star-off', null, chips.star, () => {
             chips.star = !chips.star;
             this._render();
         }));
@@ -314,13 +320,13 @@ class Indicator extends PanelMenu.Button {
             this._render();
         };
         const row = new St.BoxLayout({style_class: 'rb-chips'});
-        row.add_child(this._chip('x-office-calendar-symbolic', chips.start ? DAY_LABELS[chips.start] : 'Start', !!chips.start, pick('start')));
-        row.add_child(this._chip('alarm-symbolic', chips.due ? DAY_LABELS[chips.due] : 'Due', !!chips.due, pick('due')));
-        row.add_child(this._chip('weather-snow-symbolic', chips.today ? 'Today only' : null, chips.today, () => {
+        row.add_child(this._chip('calendar-symbolic', chips.start ? DAY_LABELS[chips.start] : 'Start', !!chips.start, pick('start')));
+        row.add_child(this._chip('flag-symbolic', chips.due ? DAY_LABELS[chips.due] : 'Due', !!chips.due, pick('due')));
+        row.add_child(this._chip('snowflake-symbolic', chips.today ? 'Today only' : null, chips.today, () => {
             chips.today = !chips.today;
             this._render();
         }));
-        row.add_child(this._chip(folder?.checklist ? 'view-list-symbolic' : 'folder-symbolic', folder?.title ?? 'Folder', false, pick('folder')));
+        row.add_child(this._chip(folder?.checklist ? 'checklist-symbolic' : 'folder-symbolic', folder?.title ?? 'Folder', false, pick('folder')));
         box.add_child(row);
 
         // The chip being set: a few days (St has no date picker), or the folders and checklists.
@@ -328,7 +334,7 @@ class Indicator extends PanelMenu.Button {
             const choices = new St.Widget({style_class: 'rb-choices', layout_manager: new Clutter.FlowLayout({column_spacing: 4, row_spacing: 4})});
             if (this._picking === 'folder') {
                 for (const f of folders) {
-                    choices.add_child(this._chip(f.checklist ? 'view-list-symbolic' : 'folder-symbolic', f.title, f.id === folder?.id, () => {
+                    choices.add_child(this._chip(f.checklist ? 'checklist-symbolic' : 'folder-symbolic', f.title, f.id === folder?.id, () => {
                         chips.folder = f.id;
                         this._picking = null;
                         this._render();
@@ -370,7 +376,7 @@ class Indicator extends PanelMenu.Button {
     // One of quick add's chips: an icon, and its value (or name) once there's something to say.
     _chip(icon, label, on, onClick) {
         const box = new St.BoxLayout({style_class: 'rb-chip-box'});
-        if (icon) box.add_child(new St.Icon({icon_name: icon, style_class: 'rb-chip-icon'}));
+        if (icon) box.add_child(new St.Icon({gicon: appIcon(icon), style_class: 'rb-chip-icon'}));
         if (label) box.add_child(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}));
         return this._button({style_class: on ? 'rb-chip rb-chip-on' : 'rb-chip', child: box}, onClick);
     }
@@ -386,10 +392,10 @@ class Indicator extends PanelMenu.Button {
         row.add_child(this._check(null, () => this._post(`/api/tasks/${pinned.id}/complete`)));
         row.add_child(this._titleButton(pinned.title, () => this._open(`/tasks/${pinned.id}?mode=DOING`)));
         row.add_child(this._timerControls(pinned));
-        const focus = this._iconButton('find-location-symbolic', 'rb-tool rb-unpin', () => this._post(`/api/tasks/${pinned.id}/focus`));
+        const focus = this._iconButton('center-focus-symbolic', 'rb-tool rb-unpin', () => this._post(`/api/tasks/${pinned.id}/focus`));
         focus.accessible_name = 'Focus';
         row.add_child(focus);
-        const unpin = this._iconButton('view-pin-symbolic', 'rb-tool rb-unpin', () => this._post('/api/unpin'));
+        const unpin = this._iconButton('push-pin-symbolic', 'rb-tool rb-unpin', () => this._post('/api/unpin'));
         unpin.accessible_name = 'Unpin';
         row.add_child(unpin);
         return row;
@@ -407,8 +413,8 @@ class Indicator extends PanelMenu.Button {
         this._countdownLabel = new St.Label({style_class: 'rb-countdown', text: this._countdownText(), y_align: Clutter.ActorAlign.CENTER});
         box.add_child(this._countdownLabel);
         if (left <= 0) box.add_child(this._button({label: '+10m', style_class: 'rb-dur'}, () => this._post('/api/timer/add?minutes=10')));
-        else if (pinned.timerEndsAt) box.add_child(this._iconButton('media-playback-pause-symbolic', 'rb-tool', () => this._post('/api/timer/pause')));
-        else box.add_child(this._iconButton('media-playback-start-symbolic', 'rb-tool', () => this._post('/api/timer/resume')));
+        else if (pinned.timerEndsAt) box.add_child(this._iconButton('pause-symbolic', 'rb-tool', () => this._post('/api/timer/pause')));
+        else box.add_child(this._iconButton('play-symbolic', 'rb-tool', () => this._post('/api/timer/resume')));
         return box;
     }
 
@@ -471,13 +477,13 @@ class Indicator extends PanelMenu.Button {
         if (row.isBackburner) title.add_style_class_name('rb-dim');
         box.add_child(title);
         // It has a note (opening the task shows it).
-        if (row.hasNotes) box.add_child(new St.Icon({icon_name: 'text-x-generic-symbolic', style_class: 'rb-notes-icon', y_align: Clutter.ActorAlign.CENTER}));
+        if (row.hasNotes) box.add_child(new St.Icon({gicon: appIcon('notes-symbolic'), style_class: 'rb-notes-icon', y_align: Clutter.ActorAlign.CENTER}));
         if (row.durationMinutes) box.add_child(this._button({label: `▶ ${duration(row.durationMinutes)}`, style_class: 'rb-dur'}, () => this._post(`/api/tasks/${row.id}/timer`)));
         if (!row.isChecklist && row.subtasks) {
             const arrow = this._expanded.has(row.id) ? '▴' : '▾';
             box.add_child(this._button({label: `${row.subtasks.first}/${row.subtasks.second} ${arrow}`, style_class: 'rb-subtasks'}, toggle));
         }
-        const pin = this._iconButton('view-pin-symbolic', 'rb-tool rb-row-pin', () => this._post(`/api/tasks/${row.id}/pin`));
+        const pin = this._iconButton('push-pin-symbolic', 'rb-tool rb-row-pin', () => this._post(`/api/tasks/${row.id}/pin`));
         pin.opacity = 0;
         box.connect('notify::hover', () => {
             pin.opacity = box.hover ? 255 : 0;
@@ -486,7 +492,7 @@ class Indicator extends PanelMenu.Button {
         if (row.isMaybe) {
             box.add_child(new St.Label({style_class: 'rb-maybe', text: '?', y_align: Clutter.ActorAlign.CENTER}));
         } else {
-            box.add_child(this._iconButton(row.isStarred ? 'starred-symbolic' : 'non-starred-symbolic',
+            box.add_child(this._iconButton(row.isStarred ? 'star-on' : 'star-off',
                 row.isStarred ? 'rb-star rb-star-on' : 'rb-star', () => this._post(`/api/tasks/${row.id}/star`)));
         }
         return box;
@@ -500,7 +506,7 @@ class Indicator extends PanelMenu.Button {
         check.add_style_class_name('rb-check-small');
         if (child.isComplete) {
             check.add_style_class_name('rb-check-done');
-            check.set_child(new St.Icon({icon_name: 'object-select-symbolic', style_class: 'rb-tick'}));
+            check.set_child(new St.Icon({gicon: appIcon('check-symbolic'), style_class: 'rb-tick'}));
         }
         box.add_child(check);
         const label = new St.Label({style_class: child.isComplete ? 'rb-child-title rb-done' : 'rb-child-title', x_expand: true, y_align: Clutter.ActorAlign.CENTER});
@@ -534,7 +540,7 @@ class Indicator extends PanelMenu.Button {
     }
 
     _iconButton(icon, style, onClick) {
-        return this._button({style_class: style, child: new St.Icon({icon_name: icon, style_class: 'rb-icon'})}, onClick);
+        return this._button({style_class: style, child: new St.Icon({gicon: appIcon(icon), style_class: 'rb-icon'})}, onClick);
     }
 });
 

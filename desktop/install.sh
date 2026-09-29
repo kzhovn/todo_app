@@ -21,7 +21,7 @@ StartupNotify=true
 DESKTOP
 
 mkdir -p "$data/gnome-shell/extensions/$uuid"
-cp "$here/$uuid"/* "$data/gnome-shell/extensions/$uuid/"
+cp -r "$here/$uuid"/* "$data/gnome-shell/extensions/$uuid/"
 
 # Turned on for the next login (gnome-extensions enable only knows extensions already loaded).
 current=$(gsettings get org.gnome.shell enabled-extensions)
