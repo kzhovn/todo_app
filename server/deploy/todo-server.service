@@ -1,5 +1,5 @@
 [Unit]
-Description=Todo sync server and Discord bot
+Description=Raspberry todo server: sync, web app, top-bar API and Discord bot
 After=network-online.target
 Wants=network-online.target
 

@@ -108,6 +108,36 @@ class ServerTest {
     }
 
     @Test
+    fun `Google Tasks items come in through quick add, once each, and are deleted there`() {
+        val personal = service.create(Task(type = TaskType.FOLDER, title = "Personal"))
+        val inbox = mutableListOf(
+            GoogleTask("a", "call mom"),
+            GoogleTask("b", "book dentist due tomorrow"),
+            GoogleTask("c", "renew passport", notes = "photo booth first", due = "2026-10-02T00:00:00.000Z")
+        )
+        var failDelete = true
+        val import = GoogleTasksImport(service, store, { inbox.toList() }) { id ->
+            if (failDelete) throw IllegalStateException("offline")
+            inbox.removeAll { it.id == id }
+        }
+        // The first delete fails: the item is added once, and deleted on the next run instead of added again.
+        assertTrue(runCatching { import.importOnce() }.isFailure)
+        failDelete = false
+        assertEquals(2, import.importOnce())
+        assertEquals(0, import.importOnce())
+        assertTrue(inbox.isEmpty())
+
+        val tasks = service.tasks().filter { it.type == TaskType.TASK }.associateBy { it.title }
+        assertEquals(setOf("call mom", "book dentist", "renew passport"), tasks.keys)
+        assertTrue(tasks.values.all { it.parentId == personal.id })
+        assertTrue(tasks.getValue("call mom").isStarred) // a bare add lands in Doing
+        assertNotNull(tasks.getValue("book dentist").dueDate)
+        assertFalse(tasks.getValue("book dentist").isStarred)
+        assertEquals("photo booth first", tasks.getValue("renew passport").notes)
+        assertEquals(java.time.LocalDate.of(2026, 10, 2).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli(), tasks.getValue("renew passport").dueDate)
+    }
+
+    @Test
     fun `the tray's quick add takes the phone's chips`() = testApplication {
         application { api(store, "secret") }
         fun tray(body: String) = SyncJson.decodeFromString(TrayState.serializer(), body)
