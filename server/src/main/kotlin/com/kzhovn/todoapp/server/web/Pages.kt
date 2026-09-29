@@ -18,9 +18,16 @@ import com.kzhovn.todoapp.data.walkParentChain
 import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.repository.BulkEdit
 import com.kzhovn.todoapp.repository.DateChange
-import com.kzhovn.todoapp.repository.DayCompletions
 import com.kzhovn.todoapp.repository.FolderChange
-import com.kzhovn.todoapp.repository.completionsByDay
+import com.kzhovn.todoapp.repository.DONE_BUCKETS
+import com.kzhovn.todoapp.repository.ReviewBar
+import com.kzhovn.todoapp.repository.ReviewPage
+import com.kzhovn.todoapp.repository.WAITING_BUCKETS
+import com.kzhovn.todoapp.repository.Zoom
+import com.kzhovn.todoapp.repository.bucketCounts
+import com.kzhovn.todoapp.repository.medianByTopFolder
+import com.kzhovn.todoapp.repository.review
+import com.kzhovn.todoapp.repository.shortAge
 import com.kzhovn.todoapp.server.TaskService
 import io.ktor.http.ContentType
 import io.ktor.http.Parameters
@@ -39,6 +46,7 @@ import kotlinx.html.FormMethod
 import kotlinx.html.HTML
 import kotlinx.html.InputType
 import kotlinx.html.a
+import kotlinx.html.b
 import kotlinx.html.button
 import kotlinx.html.checkBoxInput
 import kotlinx.html.classes
@@ -60,16 +68,14 @@ import kotlinx.html.stream.createHTML
 import kotlinx.html.style
 import kotlinx.html.textInput
 import kotlinx.html.timeInput
-import java.text.SimpleDateFormat
+import java.time.LocalDate
 import java.time.LocalTime
-import java.util.Date
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 // Search, Review and Contexts: the phone's secondary screens.
 
 private const val MAX_RESULTS = 200 // ponytail: a cap, not paging; narrow the search past it
-private const val CHART_DAYS = 14
-private const val LIST_DAYS = 30
 
 fun Route.pageRoutes(service: TaskService) {
     get("/search") { call.respondHtml { searchPage(service, call.request.queryParameters) } }
@@ -103,7 +109,12 @@ fun Route.pageRoutes(service: TaskService) {
         call.respondRedirect(call.mode().path)
     }
 
-    get("/review") { call.respondHtml { reviewPage(service) } }
+    get("/review") {
+        val q = call.request.queryParameters
+        val zoom = q["zoom"]?.let { z -> Zoom.entries.firstOrNull { it.name.equals(z, ignoreCase = true) } } ?: Zoom.MONTH
+        val end = q["end"]?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        call.respondHtml { reviewPage(service, zoom, end) }
+    }
 
     get("/settings") { call.respondHtml { settingsPage(service) } }
     post("/settings") {
@@ -301,67 +312,165 @@ private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode)
 
 // --- Review
 
-private fun HTML.reviewPage(service: TaskService) = shellPage(service, "Raspberry · Review", "/review") {
+// Rolling windows, stepped and zoomed through links, so Back and bookmarks work without JavaScript
+// (app.js adds ← → − + keys that follow the links marked with data-key).
+private fun reviewUrl(zoom: Zoom, end: LocalDate, today: LocalDate) =
+    "/review?zoom=${zoom.name.lowercase()}" + if (zoom != Zoom.ALL && end != today) "&end=$end" else ""
+
+private fun HTML.reviewPage(service: TaskService, zoom: Zoom, end: LocalDate?) = shellPage(service, "Raspberry · Review", "/review") {
     val all = service.tasks()
     val byId = all.associateBy { it.id }
     val colors = folderColorsHex(all)
     // Grouped and coloured by top-level folder, like the phone's Review.
     val colorOf = { folder: Task? -> folder?.let { colors[it.id] } ?: "var(--muted)" }
-    val days = completionsByDay(all, service.now(), service.rolloverHour(), LIST_DAYS)
-    val week = days.take(7).sumOf { it.tasks.size }
+    val page = review(all, service.waiting(), service.now(), service.rolloverHour(), zoom, end)
+    fun url(z: Zoom, e: LocalDate) = reviewUrl(z, e, page.today)
+    val ages = page.timeToDone.associate { it.task.id to it.ms }
+    // The tick takes the task's own folder shade, as its row's colour bar does.
+    fun FlowContent.taskRow(task: Task, right: String?, done: Boolean = true) = div(classes = "done-row") {
+        val tick = task.parentId?.let { walkParentChain(it, byId) { id -> colors[id] } } ?: "var(--muted)"
+        span(classes = "tick") { style = "color: ${if (done) tick else "var(--muted)"}"; +(if (done) "✓" else "○") }
+        a(href = "/tasks/${task.id}?mode=ALL") { +task.title }
+        right?.let { span(classes = "age") { +it } }
+    }
+    fun FlowContent.hbars(counts: List<Pair<String, Int>>, color: String) = div(classes = "hbars") {
+        val max = counts.maxOf { it.second }.coerceAtLeast(1)
+        counts.forEach { (label, n) ->
+            span(classes = "lab") { +label }
+            div(classes = "track") { div(classes = "fill") { style = "width: ${n * 100 / max}%; background: $color" } }
+            span(classes = "num") { +n.toString() }
+        }
+    }
+    fun FlowContent.section(title: String, caption: String? = null) = div(classes = "sec") {
+        +title
+        caption?.let { span(classes = "cap") { +it } }
+    }
+
     div(classes = "review") {
         h1 { +"Review" }
-        p(classes = "hint") { +"$week done in the last 7 days · ${"%.1f".format(week / 7.0)} a day" }
-        val chartDays = days.take(CHART_DAYS).reversed()
-        completionChart(chartDays.map { day -> sectionsByTopFolder(day.tasks, byId).map { (folder, tasks) -> Segment(colorOf(folder), folder?.title ?: Labels.NO_FOLDER, tasks.size) } }, chartDays)
+        div(classes = "review-controls") {
+            div(classes = "seg") {
+                Zoom.entries.forEach { z ->
+                    a(href = url(z, page.end), classes = if (z == zoom) "on" else null) {
+                        if (z.ordinal == zoom.ordinal + 1) attributes["data-key"] = "-"
+                        if (z.ordinal == zoom.ordinal - 1) attributes["data-key"] = "+"
+                        +z.name.lowercase().replaceFirstChar { it.uppercase() }
+                    }
+                }
+            }
+            div(classes = "step") {
+                page.previous?.let { a(href = url(zoom, it)) { attributes["data-key"] = "ArrowLeft"; attributes["aria-label"] = "Earlier"; +"‹" } }
+                span { +page.windowLabel }
+                page.next?.let { a(href = url(zoom, it)) { attributes["data-key"] = "ArrowRight"; attributes["aria-label"] = "Later"; +"›" } }
+            }
+            if (page.end != page.today && zoom != Zoom.ALL) a(href = url(zoom, page.today), classes = "today-link") { +"Back to today" }
+        }
+
+        reviewChart(page, byId, colorOf) { bar -> page.zoomIn(bar)?.let { (z, e) -> url(z, e) } ?: "#d-${bar.first}" }
         div(classes = "legend") {
-            sectionsByTopFolder(chartDays.flatMap { it.tasks }, byId).forEach { (folder, _) ->
+            sectionsByTopFolder(page.done, byId).forEach { (folder, _) ->
                 span { span(classes = "swatch") { style = "background: ${colorOf(folder)}" }; +(folder?.title ?: Labels.NO_FOLDER) }
             }
         }
-        // The chart's table view, too: every completion, day by day.
-        days.filter { it.tasks.isNotEmpty() }.forEach { day ->
-            h2 { +"${SimpleDateFormat("EEE, MMM d", Locale.US).format(Date(day.dayStart))} · ${day.tasks.size}" }
-            sectionsByTopFolder(day.tasks, byId).forEach { (folder, tasks) ->
-                div(classes = "folder-name") { +(folder?.title ?: Labels.NO_FOLDER) }
-                tasks.forEach { task ->
-                    div(classes = "done-row") {
-                        // The tick takes the task's own folder shade, as its row's colour bar does.
-                        val tick = task.parentId?.let { walkParentChain(it, byId) { id -> colors[id] } } ?: "var(--muted)"
-                        span(classes = "tick") { style = "color: $tick"; +"✓" }
-                        a(href = "/tasks/${task.id}?mode=ALL") { +task.title }
+        div(classes = "summary") {
+            page.summary.forEach { (label, line) ->
+                div(classes = "k") { +label }
+                div { b { +line.substringBefore(" · ") }; if (" · " in line) +(" · " + line.substringAfter(" · ")) }
+            }
+        }
+
+        if (page.timeToDone.isNotEmpty()) {
+            section("Time to done", "from start or creation · ${page.timeToDone.size} tasks, repeats left out")
+            div(classes = "twocol") {
+                div { hbars(bucketCounts(page.timeToDone, DONE_BUCKETS), "var(--accent)") }
+                div {
+                    div(classes = "folder-name") { +"Median by folder" }
+                    medianByTopFolder(page.timeToDone, byId).forEach { (folder, median) ->
+                        div(classes = "median-row") {
+                            span(classes = "swatch") { style = "background: ${colorOf(folder)}" }
+                            span { +(folder?.title ?: Labels.NO_FOLDER) }
+                            span(classes = "age") { +shortAge(median) }
+                        }
                     }
+                    div(classes = "folder-name") { +"Took longest" }
+                    page.timeToDone.sortedByDescending { it.ms }.take(5).forEach { taskRow(it.task, shortAge(it.ms)) }
                 }
             }
         }
-        if (days.none { it.tasks.isNotEmpty() }) p(classes = "empty") { +"Nothing completed in the last $LIST_DAYS days." }
+        if (page.waiting.isNotEmpty()) {
+            section("Waiting now", "Active tasks, plus those only held back by a context, by how long they've waited")
+            div(classes = "twocol") {
+                div { hbars(bucketCounts(page.waiting, WAITING_BUCKETS), "var(--overdue)") }
+                div {
+                    div(classes = "folder-name") { +"Waited longest" }
+                    page.waiting.take(5).forEach { taskRow(it.task, shortAge(it.ms), done = false) }
+                }
+            }
+        }
+        if (page.dueOutcomes.isNotEmpty()) {
+            val late = page.dueOutcomes.filter { it.ms > 0 }.sortedByDescending { it.ms }
+            section("Due dates")
+            div(classes = "due-bar") {
+                attributes["role"] = "img"
+                attributes["aria-label"] = "${page.dueOutcomes.size - late.size} on time, ${late.size} late"
+                div(classes = "on-time") { style = "flex: ${page.dueOutcomes.size - late.size}" }
+                div(classes = "late") { style = "flex: ${late.size}" }
+            }
+            if (late.isNotEmpty()) {
+                div(classes = "folder-name") { +"Latest" }
+                late.take(5).forEach { taskRow(it.task, "${shortAge(it.ms, "under a day")} late") }
+            }
+        }
+
+        if (zoom == Zoom.WEEK || zoom == Zoom.MONTH) {
+            // The chart's table view, too: every completion, day by day, each with its time to done.
+            section("Done ${page.windowLabel}")
+            page.bars.reversed().filter { it.tasks.isNotEmpty() }.forEach { day ->
+                h2 { id = "d-${day.first}"; +"${page.barLabel(day)} · ${day.tasks.size}" }
+                sectionsByTopFolder(day.tasks, byId).forEach { (folder, tasks) ->
+                    div(classes = "folder-name") { +(folder?.title ?: Labels.NO_FOLDER) }
+                    tasks.forEach { taskRow(it, ages[it.id]?.let(::shortAge)) }
+                }
+            }
+        } else {
+            section("By month")
+            page.months.forEach { (month, tasks) ->
+                a(href = url(Zoom.MONTH, page.monthEnd(month)), classes = "month-row") {
+                    span(classes = "month-name") { +month.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.US)) }
+                    div(classes = "mini") {
+                        sectionsByTopFolder(tasks, byId).forEach { (folder, group) -> div { style = "background: ${colorOf(folder)}; flex: ${group.size}" } }
+                    }
+                    span(classes = "num") { +tasks.size.toString() }
+                }
+            }
+        }
+        if (page.done.isEmpty()) p(classes = "empty") { +"Nothing completed in ${page.windowLabel}." }
     }
 }
 
-private class Segment(val color: String, val folder: String, val count: Int)
-
-// Oldest to newest, left to right: count above each bar, weekday below, and the date with a
-// per-folder breakdown on hover. Mirrors the phone's CompletionChart.
-private fun FlowContent.completionChart(stacks: List<List<Segment>>, days: List<DayCompletions>) {
-    val max = days.maxOfOrNull { it.tasks.size }?.coerceAtLeast(1) ?: return
-    div(classes = "chart") {
+// Oldest to newest, left to right: the count above each bar (Week and Month), the axis label below,
+// and the dates with a per-folder breakdown on hover. Each bar links where a click should go:
+// zoomed in, or down to that day in the list. Mirrors the phone's ReviewChart.
+private fun FlowContent.reviewChart(page: ReviewPage, byId: Map<Long, Task>, colorOf: (Task?) -> String, href: (ReviewBar) -> String) {
+    val max = page.bars.maxOfOrNull { it.tasks.size }?.coerceAtLeast(1) ?: return
+    val counts = page.zoom == Zoom.WEEK || page.zoom == Zoom.MONTH
+    div(classes = if (page.bars.size > 31) "chart dense" else "chart") {
         attributes["role"] = "img"
-        attributes["aria-label"] = "Tasks completed per day, last ${days.size} days"
-        days.zip(stacks).forEach { (day, segments) ->
-            val date = SimpleDateFormat("EEE, MMM d", Locale.US).format(Date(day.dayStart))
-            div(classes = "day") {
-                attributes["title"] = "$date: ${day.tasks.size} done" + segments.joinToString("") { "\n${it.folder}: ${it.count}" }
+        attributes["aria-label"] = "Tasks completed, ${page.windowLabel}"
+        page.bars.forEachIndexed { i, bar ->
+            val segments = sectionsByTopFolder(bar.tasks, byId)
+            a(href = href(bar), classes = "day") {
+                attributes["title"] = "${page.barLabel(bar)}: ${bar.tasks.size} done" + segments.joinToString("") { (f, t) -> "\n${f?.title ?: Labels.NO_FOLDER}: ${t.size}" }
                 div(classes = "plot") {
                     // The count sits on its bar; the tallest bar leaves room for it (the 16px).
-                    if (day.tasks.isNotEmpty()) span(classes = "day-count") { +day.tasks.size.toString() }
+                    if (counts && bar.tasks.isNotEmpty()) span(classes = "day-count") { +bar.tasks.size.toString() }
                     // Segments stack bottom-up, sized by count.
                     div(classes = "bar") {
-                        style = "height: calc((100% - 16px) * ${day.tasks.size.toDouble() / max})"
-                        segments.forEach { div { style = "background: ${it.color}; flex: ${it.count}" } }
+                        style = "height: calc((100% - ${if (counts) 16 else 0}px) * ${bar.tasks.size.toDouble() / max})"
+                        segments.forEach { (folder, tasks) -> div { style = "background: ${colorOf(folder)}; flex: ${tasks.size}" } }
                     }
                 }
-                // Two letters: the JVM, unlike Android, has no one-letter weekday pattern.
-                span(classes = "weekday") { +SimpleDateFormat("EEE", Locale.US).format(Date(day.dayStart)).take(2) }
+                span(classes = "weekday") { +page.axisLabel(i) }
             }
         }
     }

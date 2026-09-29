@@ -6,7 +6,8 @@
   const go = { d: "/doing", a: "/active", t: "/all" };
   const help = "n  jump to quick add\ng, then d / a / t  go to Doing / Active / All\nEsc  leave a text box, close the task panel, or leave focus\n\n" +
     "All tree (click a row first):\n↑ ↓  move between rows    ← →  fold / unfold\nEnter  new task below    Tab / Shift-Tab  indent / outdent\n" +
-    "Space  complete    Alt-↑ / Alt-↓  move up / down\ne  edit    s  star    f  focus\nDrag a row: top or bottom edge to reorder, middle to nest";
+    "Space  complete    Alt-↑ / Alt-↓  move up / down\ne  edit    s  star    f  focus\nDrag a row: top or bottom edge to reorder, middle to nest\n\n" +
+    "Review:\n← →  earlier / later    − / +  zoom out / in";
   document.addEventListener("keydown", (e) => {
     const typing = e.target.closest("input, textarea, select");
     if (e.key === "Escape" && typing) { e.target.blur(); return; }
@@ -18,6 +19,9 @@
     const node = e.target.closest(".node");
     if (node && outlineKey(e, node)) { e.preventDefault(); return; }
     if (e.altKey) return;
+    // Review: ← → step through time, − / + zoom (links marked with data-key).
+    const reviewLink = document.querySelector(`.review a[data-key="${e.key === "=" ? "+" : e.key}"]`);
+    if (reviewLink) { location.href = reviewLink.href; return; }
     if (pendingG && go[e.key]) { location.href = go[e.key]; pendingG = false; return; }
     pendingG = e.key === "g";
     if (e.key === "n") { e.preventDefault(); document.getElementById("quickadd")?.focus(); }

@@ -94,6 +94,12 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         return urgentFirst(if (folderId == null) active else active.filter { it.id in subtreeIds(folderId) }, clock(), all.associateBy { it.id }, contexts)
     }
 
+    // Review's "Waiting now": Active with contexts ignored, so a task held back only by a context counts.
+    fun waiting(): List<Task> = computeActiveTasks(
+        all = tasks(), contextsByTaskId = emptyMap(), contexts = emptyList(), timeWindows = emptyList(),
+        dependencies = liveRows().flatMap { row -> row.dependsOn().map { TaskDependency(row.id, it) } }, now = clock()
+    )
+
     fun doing(folderId: Long? = null): List<Task> = filterDoing(active(folderId), clock(), tasks().associateBy { it.id }, contextIdsByTask())
 
     fun effectiveDueDate(task: Task): Long? = resolveEffective(task, tasks().associateBy { it.id }, contextIdsByTask()).effectiveDueDate

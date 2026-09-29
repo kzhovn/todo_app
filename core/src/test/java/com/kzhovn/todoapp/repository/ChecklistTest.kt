@@ -24,7 +24,7 @@ class ChecklistTest {
     @Test
     fun `items don't count in Review, a completed checklist does`() {
         val done = all.map { if (it.id == 1L) it.copy(isComplete = true, completedAt = now - 500) else it }
-        assertEquals(listOf("Groceries"), completionsByDay(done, now, 4, 1).single().tasks.map { it.title })
+        assertEquals(listOf("Groceries"), review(done, emptyList(), now, 4, Zoom.WEEK).done.map { it.title })
     }
 
     @Test

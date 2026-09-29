@@ -241,11 +241,21 @@ class WebTest {
     }
 
     @Test
-    fun `review counts completions by day, and quick add off a list confirms with a toast`() = web {
-        service.create(Task(title = "Done today", isComplete = true, completedAt = service.now()))
+    fun `review counts completions by window, steps back, and quick add off a list confirms with a toast`() = web {
+        val day = 24L * 60 * 60 * 1000
+        service.create(Task(title = "Done today", isComplete = true, completedAt = service.now(), dueDate = service.now() - 3 * day))
+        service.create(Task(title = "Still open"))
         val review = client.get("/review").bodyAsText()
-        assertTrue(review.contains("1 done in the last 7 days"))
+        assertTrue(review.contains("<b>1</b> · 0.0 a day · none the 30 days before"))
+        assertTrue(review.contains("0 of 1 on time"))
         assertTrue(review.contains("Done today"))
+        assertTrue(review.substringAfter("Waiting now").contains("Still open"))
+
+        val earlier = java.time.LocalDate.now().minusDays(20)
+        val week = client.get("/review?zoom=week&end=$earlier").bodyAsText()
+        assertTrue(week.contains("Back to today"))
+        assertFalse(week.contains(">Done today<"))
+        assertTrue(client.get("/review?zoom=year").bodyAsText().contains("By month"))
 
         assertTrue(client.submitForm("/quickadd", parameters { append("text", "call mom") }).bodyAsText().contains("Added “call mom”"))
     }

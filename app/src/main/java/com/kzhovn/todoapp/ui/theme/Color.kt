@@ -23,6 +23,8 @@ val LedgerDueToday = Color(0xFFC98A1A)
 val LedgerDueTodayText = Color(0xFFA86F0C)
 
 val LedgerOverdue = Color(0xFF96412B)
+// Review: due dates kept.
+val LedgerGood = Color(0xFF3B8841)
 
 val LedgerCheckBorder = Color(0xFFB5A98C)
 
