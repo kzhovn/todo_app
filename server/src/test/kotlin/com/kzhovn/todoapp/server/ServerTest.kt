@@ -108,6 +108,21 @@ class ServerTest {
     }
 
     @Test
+    fun `a Discord message starting with a check mark logs a completed task`() {
+        val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
+        assertTrue(logic.onAdd(1L, "u", "✅ fixed the sink"))
+        assertTrue(logic.onAdd(2L, "u", "✅work: sent the report -p"))
+        val sink = service.tasks().single { it.title == "fixed the sink" }
+        val report = service.tasks().single { it.title == "sent the report" }
+        assertTrue(sink.isComplete && report.isComplete && !sink.isStarred)
+        assertEquals(work.id, report.parentId)
+        assertNull(service.pinned())
+        logic.onEdit(1L, "✅ fixed the kitchen sink")
+        assertEquals("fixed the kitchen sink", service.get(sink.id)!!.title)
+        assertFalse(logic.onAdd(3L, "u", "✅"))
+    }
+
+    @Test
     fun `Google Tasks items come in through quick add, once each, and are deleted there`() {
         val personal = service.create(Task(type = TaskType.FOLDER, title = "Personal"))
         val inbox = mutableListOf(

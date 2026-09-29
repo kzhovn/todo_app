@@ -41,6 +41,7 @@ Dates: `today`, `mon`, `next fri`, `+3d`, `in 2 weeks`, `+2h`, `oct 12`, `next w
 `-- x*` starred · `-- x?` a maybe (hidden from Active, never starred)
 `-- x -p` pin it · `-- x -f` focus on it
 `-- call bank // ask about fees` everything after // (or after the first line) is the note
+`✅ fixed the sink` logs something already done (a completed task, for Review)
 Reply to a todo with a todo: the first depends on the new one.
 
 **On a todo's message**
@@ -100,10 +101,13 @@ class BotLogic(private val service: TaskService, private val store: Store) {
     // `--groceries: milk, eggs` into a checklist...). Returns null for messages that aren't adds. A bare
     // add is starred so it lands in Doing; any start/due date or folder means the user placed it
     // deliberately, and a trailing "?" (a maybe) is never starred.
+    // `✅ did the laundry` logs something already done: the same syntax, never starred (onAdd completes it).
     fun planAdd(content: String): QuickAdd? {
-        if (!content.startsWith("--")) return null
-        val add = service.planQuickAdd(content.removePrefix("--").trim()).takeUnless { it.isEmpty } ?: return null
-        val task = add.task ?: return add
+        val logged = content.startsWith(DONE)
+        if (!content.startsWith("--") && !logged) return null
+        val add = service.planQuickAdd(content.removePrefix("--").removePrefix(DONE).trim()).takeUnless { it.isEmpty } ?: return null
+        val task = add.task ?: return add.takeUnless { logged }
+        if (logged) return add.copy(task = task.copy(parentId = task.parentId ?: service.findFolder(DEFAULT_FOLDER)?.id, isStarred = false), pin = false, focus = false)
         val bare = task.parentId == null && task.startDate == null && task.dueDate == null && !task.isMaybe
         return add.copy(task = task.copy(parentId = task.parentId ?: service.findFolder(DEFAULT_FOLDER)?.id, isStarred = task.isStarred || bare))
     }
@@ -121,7 +125,8 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         val task = service.add(add, defaultParent = null)!!
         saveLink(messageId, MessageLink(taskId = task.id, text = content))
         store.setValue("src:${task.id}", jumpUrl)
-        replyToMessageId?.let(::link)?.taskId?.let { waiting -> service.addDependency(waiting, task.id) }
+        if (content.startsWith(DONE)) service.completeWithDescendants(task.id)
+        else replyToMessageId?.let(::link)?.taskId?.let { waiting -> service.addDependency(waiting, task.id) }
         return true
     }
 
