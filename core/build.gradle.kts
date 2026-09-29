@@ -8,9 +8,9 @@ kotlin { jvmToolchain(17) }
 
 dependencies {
     // Entity annotations only; :app's Room compiler reads them, :server ignores them.
-    compileOnly("androidx.room:room-common:2.6.1")
+    compileOnly("androidx.room:room-common:2.8.5")
     api("org.dmfs:lib-recur:0.17.1")
-    api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
 
     testImplementation("junit:junit:4.13.2")
 }
