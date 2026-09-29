@@ -427,6 +427,13 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .cand:hover { background: var(--accent-soft); }
 .cand .parent { color: var(--muted); }
 .focus-new { margin-top: 12px; }
+.focus-search { margin-bottom: 8px; }
+.focus-search summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); padding: 4px 0; }
+.focus-search summary::-webkit-details-marker { display: none; }
+.focus-search summary:hover { color: var(--ink); }
+.focus-search .search-icon { width: 16px; height: 16px; }
+.focus-search .search-icon svg { fill: currentColor; }
+.focus-search input { width: 100%; margin-top: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
 .focus-new input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
 /* The sidebar's Now strip: the current task, its timer, and Focus. */
 .now { display: flex; align-items: center; gap: 6px; margin: 0 2px 10px; padding: 7px 8px; border-radius: 8px; background: var(--accent-soft); font-size: 13px; }

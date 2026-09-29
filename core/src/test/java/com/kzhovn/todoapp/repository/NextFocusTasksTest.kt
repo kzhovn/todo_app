@@ -25,4 +25,16 @@ class NextFocusTasksTest {
         val loose = byId + (1L to project.copy(sequential = false))
         assertEquals(listOf(starred), nextFocusTasks(listOf(step2, starred, other), listOf(starred), done, loose))
     }
+
+    @Test
+    fun `search finds any open task, not just Doing or Active`() {
+        val maybe = Task(id = 6, title = "Call the bank?", isMaybe = true)
+        val later = Task(id = 7, title = "Call mom", startDate = Long.MAX_VALUE)
+        val closed = Task(id = 8, title = "Call Sam", isComplete = true)
+        val folder = Task(id = 9, title = "Calls", type = com.kzhovn.todoapp.data.TaskType.FOLDER)
+        val list = Task(id = 10, title = "Call list", type = com.kzhovn.todoapp.data.TaskType.CHECKLIST)
+        val item = Task(id = 11, title = "Call the plumber", parentId = 10)
+        assertEquals(listOf("Call list", "Call mom", "Call the bank?"), focusSearch(listOf(maybe, later, closed, folder, list, item), " call ").map { it.title })
+        assertEquals(emptyList<Task>(), focusSearch(listOf(maybe), " "))
+    }
 }

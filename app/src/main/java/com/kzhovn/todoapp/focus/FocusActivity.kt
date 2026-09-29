@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.heightIn
 import com.kzhovn.todoapp.AppSettings
 import com.kzhovn.todoapp.data.checklistItems
 import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.repository.focusSearch
 import com.kzhovn.todoapp.repository.nextFocusTasks
 import com.kzhovn.todoapp.data.findFolder
 import com.kzhovn.todoapp.data.DEFAULT_FOLDER
@@ -123,9 +124,12 @@ class FocusActivity : ComponentActivity() {
                     reload()
                 }
 
+                // Every task, for the picker's search (any open task, not just Doing or Active).
+                var allTasks by remember { mutableStateOf<List<Task>>(emptyList()) }
+
                 suspend fun pickable(finished: Task? = null): List<Task> {
                     val now = System.currentTimeMillis()
-                    val all = repository.getAllTasks()
+                    val all = repository.getAllTasks().also { allTasks = it }
                     val byId = all.associateBy { it.id }
                     val contexts = repository.getAllTaskContexts()
                     val active = repository.getActiveTasksFrom(all, contexts, now, minuteOfDay(now), dayOfWeekMask(now))
@@ -222,6 +226,7 @@ class FocusActivity : ComponentActivity() {
                     TaskPickerDialog(
                         title = "Focus on",
                         tasks = list,
+                        searchAll = { query -> focusSearch(allTasks, query) },
                         onPick = { candidates = null; focusOn(it) },
                         onCreateNew = { adding = true; addToFocus = true },
                         // Nothing picked: with no session there's nothing to focus on; after a task is done,

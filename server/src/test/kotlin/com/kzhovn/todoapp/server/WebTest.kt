@@ -657,6 +657,20 @@ class WebTest {
     }
 
     @Test
+    fun `the focus picker starts with Doing, and its search reaches any open task`() = web {
+        service.create(Task(title = "Starred one", isStarred = true))
+        service.create(Task(title = "Someday thing?", isMaybe = true))
+        val picker = client.get("/focus").bodyAsText()
+        assertTrue(picker.contains("Starred one"))
+        assertFalse(picker.contains("Someday thing"))
+        assertTrue(picker.contains("Search all tasks"))
+        val found = client.get("/focus/search?q=someday").bodyAsText()
+        assertTrue(found.contains("id=\"focus-cands\""))
+        assertTrue(found.contains("Someday thing?"))
+        assertTrue(client.get("/focus/search?q=").bodyAsText().contains("Starred one"))
+    }
+
+    @Test
     fun `focus on a checklist lists its items to tick off`() = web {
         val groceries = service.create(Task(title = "Groceries", type = TaskType.CHECKLIST))
         service.quickAdd("groceries: milk, eggs", fromDoing = false)

@@ -76,6 +76,14 @@ class ScreenshotRender {
         draw(compose.activity.window.decorView, "drawer")
     }
 
+    @Test
+    fun focusPicker() {
+        if (dir == null) return
+        val doing = listOf(Task(id = 1, title = "Send the invoice"), Task(id = 2, title = "Call the dentist"))
+        compose.setContent { LedgerTheme { TaskPickerDialog("Focus on", doing, onPick = {}, onCreateNew = {}, onDismiss = {}, searchAll = { emptyList() }) } }
+        draw(org.robolectric.shadows.ShadowDialog.getLatestDialog().window!!.decorView, "focus_picker")
+    }
+
     // Review over 14 months of made-up completions, in each zoom.
     @Test
     @Config(qualifiers = "w400dp-h1800dp-xxhdpi")

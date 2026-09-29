@@ -160,6 +160,10 @@
     input.addEventListener("blur", () => setTimeout(() => input.remove(), 200));
   }
 
+  // The focus picker's search: opening it puts the cursor in the box.
+  document.addEventListener("toggle", (e) => {
+    if (e.target.matches?.(".focus-search") && e.target.open) e.target.querySelector("input")?.focus();
+  }, true);
   document.addEventListener("focusin", (e) => { const n = e.target.closest(".node"); if (n) focusId = n.dataset.id; });
   // The list's periodic refresh would wipe a half-typed task or a drag in progress; skip it then.
   document.addEventListener("htmx:beforeRequest", (e) => {
