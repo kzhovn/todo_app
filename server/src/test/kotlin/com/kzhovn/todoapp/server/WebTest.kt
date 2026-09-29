@@ -616,6 +616,23 @@ class WebTest {
     }
 
     @Test
+    fun `Enter in the editor saves, never deletes, and a start time alone is today's`() = web {
+        val task = service.create(Task(title = "call mom"))
+        // Enter "clicks" the form's first submit button: it must be the Save one, not Delete (below the form).
+        val page = client.get("/tasks/${task.id}?mode=DOING").bodyAsText()
+        val editor = page.substringAfter("class=\"editor\"")
+        assertTrue(editor.substringAfter("<button").substringBefore(">").contains("default-submit"))
+        assertTrue(editor.indexOf("default-submit") < editor.indexOf("class=\"delete\""))
+
+        client.submitForm("/tasks/${task.id}/autosave", parameters {
+            append("base", taskFields(task, emptySet(), emptySet()).toString())
+            append("title", "call mom"); append("type", "TASK"); append("startTime", "09:30")
+        })
+        val start = service.get(task.id)!!.startDate!!
+        assertEquals(java.time.LocalDate.now().atTime(9, 30).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli(), start)
+    }
+
+    @Test
     fun `focus on a checklist lists its items to tick off`() = web {
         val groceries = service.create(Task(title = "Groceries", type = TaskType.CHECKLIST))
         service.quickAdd("groceries: milk, eggs", fromDoing = false)

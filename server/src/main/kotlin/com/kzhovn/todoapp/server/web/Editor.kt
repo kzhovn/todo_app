@@ -388,9 +388,10 @@ private fun FlowContent.repeatPreview(r: RecurrenceSelection, anchor: Long, now:
 
 // A date without a time is local midnight (see hasTime).
 internal fun dateTime(date: String?, time: String?): Long? {
-    val d = date?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return null
-    val t = time?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: LocalTime.MIDNIGHT
-    return d.atTime(t).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    val t = time?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
+    // A time alone means today, as in quick add ("start 5pm").
+    val d = date?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now().takeIf { t != null } ?: return null
+    return d.atTime(t ?: LocalTime.MIDNIGHT).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 }
 
 // Three-way merge: a field the user changed in the form wins; any other keeps its current value.
@@ -447,6 +448,9 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
     }
     form(action = "/tasks/${if (isNew) "new" else t.id}?mode=${v.list.q}", method = FormMethod.post, classes = "editor") {
         id = formId
+        // Enter in a field "clicks" the form's first submit button. Without this one that's Delete (tied to
+        // the form from the footer below), so Enter deleted the task; now it saves.
+        button(type = ButtonType.submit, classes = "default-submit") { attributes["tabindex"] = "-1"; attributes["aria-hidden"] = "true"; +Labels.SAVE }
         hiddenInput(name = "base") { id = "base"; value = v.base }
         v.error?.let { p(classes = "error") { +it } }
         v.ask?.let { (count, fields) ->

@@ -366,11 +366,15 @@
   // the same words as the phone's chips (Labels / pillDate / formatDuration in Kotlin).
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const pillDate = (date, time) => {
-    if (!date) return null;
+    // A time alone is today's (the server reads it so too).
+    if (!date) return time ? `Today ${pillTime(time)}` : null;
     const [, m, d] = date.split("-").map(Number);
     if (!time) return `${MONTHS[m - 1]} ${d}`;
+    return `${MONTHS[m - 1]} ${d} ${pillTime(time)}`;
+  };
+  const pillTime = (time) => {
     const [h, min] = time.split(":").map(Number);
-    return `${MONTHS[m - 1]} ${d} ${h % 12 || 12}:${String(min).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+    return `${h % 12 || 12}:${String(min).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
   };
   const duration = (m) => (m < 60 ? `${m}m` : m % 60 === 0 ? `${m / 60}h` : `${Math.floor(m / 60)}h ${m % 60}m`);
   // The server words it (Labels.repeat), in the preview it re-renders on each change.
@@ -444,6 +448,17 @@
   // Enter in the (wrapping) title saves instead of adding a line; a maybe is never starred.
   document.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && e.target.matches(".title-input")) { e.preventDefault(); e.target.form.requestSubmit(); }
+  });
+  // Enter in a pill's popover (a date, a time, minutes) applies it and closes the popover, rather than
+  // submitting the whole editor. Popovers with forms of their own (Related's "+" ones) keep theirs.
+  document.addEventListener("keydown", (e) => {
+    const pp = e.target.closest?.(".pp");
+    if (e.key !== "Enter" || !pp || !e.target.closest(".pop") || !e.target.form?.classList.contains("editor")) return;
+    e.preventDefault();
+    e.target.dispatchEvent(new Event("change", { bubbles: true })); // the auto-save hears it
+    if (pp.dataset.kind) refreshPill(pp);
+    pp.open = false;
+    pp.querySelector("summary").focus();
   });
   document.addEventListener("change", (e) => {
     const other = { maybe: "starred", starred: "maybe" }[e.target.name];
