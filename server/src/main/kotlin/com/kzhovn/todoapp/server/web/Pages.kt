@@ -351,11 +351,12 @@ private fun FlowContent.completionChart(stacks: List<List<Segment>>, days: List<
             val date = SimpleDateFormat("EEE, MMM d", Locale.US).format(Date(day.dayStart))
             div(classes = "day") {
                 attributes["title"] = "$date: ${day.tasks.size} done" + segments.joinToString("") { "\n${it.folder}: ${it.count}" }
-                span(classes = "count") { +(if (day.tasks.isEmpty()) "" else day.tasks.size.toString()) }
                 div(classes = "plot") {
+                    // The count sits on its bar; the tallest bar leaves room for it (the 16px).
+                    if (day.tasks.isNotEmpty()) span(classes = "day-count") { +day.tasks.size.toString() }
                     // Segments stack bottom-up, sized by count.
                     div(classes = "bar") {
-                        style = "height: ${100.0 * day.tasks.size / max}%"
+                        style = "height: calc((100% - 16px) * ${day.tasks.size.toDouble() / max})"
                         segments.forEach { div { style = "background: ${it.color}; flex: ${it.count}" } }
                     }
                 }
