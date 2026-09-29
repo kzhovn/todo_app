@@ -307,13 +307,15 @@ class Indicator extends PanelMenu.Button {
             this._render();
             return Clutter.EVENT_STOP;
         });
-        const top = new St.BoxLayout();
-        top.add_child(entry);
-        top.add_child(this._chip(chips.star ? 'star-on' : 'star-off', null, chips.star, () => {
+        // The star sits inside the text box, at its end, as on the phone.
+        entry.set_secondary_icon(new St.Icon({gicon: appIcon(chips.star ? 'star-on' : 'star-off'), style_class: 'rb-entry-star'}));
+        // After the click finishes: re-rendering destroys this very entry.
+        entry.connect('secondary-icon-clicked', () => GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
             chips.star = !chips.star;
             this._render();
+            return GLib.SOURCE_REMOVE;
         }));
-        box.add_child(top);
+        box.add_child(entry);
 
         const pick = (what) => () => {
             this._picking = this._picking === what ? null : what;
