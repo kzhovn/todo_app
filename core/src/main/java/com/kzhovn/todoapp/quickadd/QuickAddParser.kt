@@ -32,8 +32,10 @@ object QuickAddParser {
     private const val WEEKDAY = "sun(?:day)?|mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:r(?:s(?:day)?)?)?|fri(?:day)?|sat(?:urday)?"
     private const val MONTH = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?"
     private const val DAY_OF_MONTH = "\\d{1,2}(?:st|nd|rd|th)?"
-    // "+3d", "in 2 weeks"; hours ("+2h", "in 2 hours") count from now, the rest from today.
-    private const val OFFSET = "\\+\\d+[dwmh]|in\\s+\\d+\\s+(?:days?|weeks?|months?|hours?)"
+    // "+3d", "in 2 weeks", "in two days"; hours and minutes ("+2h", "in four hours", "in half an hour",
+    // "in 30 minutes") count from now, the rest from today. Numbers may be spelled out, as said aloud.
+    private const val COUNT = "\\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve"
+    private const val OFFSET = "\\+\\d+[dwmh]|in\\s+half\\s+an?\\s+hour|in\\s+(?:$COUNT)\\s+(?:days?|weeks?|months?|hours?|minutes?|mins?)"
     private const val DATE = "today|tomorrow|next\\s+week|(?:this\\s+)?weekend|(?:next\\s+)?(?:$WEEKDAY)|$OFFSET|" +
         "\\d{4}-\\d{1,2}-\\d{1,2}|(?:$MONTH)\\s+$DAY_OF_MONTH|$DAY_OF_MONTH\\s+(?:$MONTH)"
 
@@ -191,7 +193,7 @@ object QuickAddParser {
 
     // A time alone ("due 5pm", "-d 17:00") means today at that time.
     private fun resolve(dateText: String, timeText: String, now: Long): Long? {
-        hoursFromNow(dateText)?.let { return now + it * 3_600_000L }
+        minutesFromNow(dateText)?.let { return now + it * 60_000L }
         val today = Calendar.getInstance().apply { timeInMillis = now }.startOfDay()
         val (day, time) = when {
             dateText.isEmpty() -> today to timeText
@@ -203,8 +205,20 @@ object QuickAddParser {
         return atTime(day, hour, minute)
     }
 
-    private fun hoursFromNow(value: String): Int? =
-        Regex("(?:\\+(\\d+)h|in\\s+(\\d+)\\s+hours?)", I).matchEntire(value.trim())?.let { m -> m.groupValues[1].ifEmpty { m.groupValues[2] }.toInt() }
+    private fun minutesFromNow(value: String): Int? {
+        val v = value.trim().lowercase().replace(Regex("\\s+"), " ")
+        if (v == "in half an hour" || v == "in half a hour") return 30
+        val m = Regex("\\+(\\d+)h|in ($COUNT) (hours?|minutes?|mins?)").matchEntire(v) ?: return null
+        if (m.groupValues[1].isNotEmpty()) return m.groupValues[1].toInt() * 60
+        val n = count(m.groupValues[2])
+        return if (m.groupValues[3].startsWith("h")) n * 60 else n
+    }
+
+    // "4", "four", "a"/"an": how many.
+    private fun count(word: String): Int = word.toIntOrNull() ?: when (word) {
+        "a", "an" -> 1
+        else -> listOf("one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve").indexOf(word) + 1
+    }
 
     private fun parseTime(value: String): Pair<Int, Int>? {
         val m = Regex("(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?", I).matchEntire(value.trim()) ?: return null
@@ -223,7 +237,7 @@ object QuickAddParser {
         val dow = cal.get(Calendar.DAY_OF_WEEK)
         // Always a future day: "due monday" said on a Monday means next week.
         fun ahead(target: Int) = cal.apply { add(Calendar.DAY_OF_YEAR, ((target - dow + 7) % 7).takeIf { it != 0 } ?: 7) }.startOfDay()
-        val offset = Regex("\\+(\\d+)([dwm])|in (\\d+) (day|week|month)s?").matchEntire(word)
+        val offset = Regex("\\+(\\d+)([dwm])|in ($COUNT) (day|week|month)s?").matchEntire(word)
         val monthDay = Regex("(?:([a-z]+) (\\d{1,2})|(\\d{1,2}) ([a-z]+))").matchEntire(word.replace(Regex("(\\d)(st|nd|rd|th)"), "$1"))
         return when {
             word == "today" -> cal.startOfDay()
@@ -233,7 +247,7 @@ object QuickAddParser {
             word.endsWith("weekend") -> if (dow == Calendar.SATURDAY || dow == Calendar.SUNDAY) cal.startOfDay() else ahead(Calendar.SATURDAY)
             Regex(WEEKDAY).matches(word.removePrefix("next ")) -> ahead(weekdayIndex(word.removePrefix("next ")) + 1)
             offset != null -> {
-                val n = offset.groupValues[1].ifEmpty { offset.groupValues[3] }.toInt()
+                val n = count(offset.groupValues[1].ifEmpty { offset.groupValues[3] })
                 val field = when (offset.groupValues[2].ifEmpty { offset.groupValues[4] }.first()) {
                     'w' -> Calendar.WEEK_OF_YEAR
                     'm' -> Calendar.MONTH

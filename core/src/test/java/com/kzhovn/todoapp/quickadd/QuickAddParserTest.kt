@@ -227,4 +227,16 @@ class QuickAddParserTest {
         assertNull(lines.task!!.dueDate) // dates in the note stay text
         assertEquals("read https://example.com/a" to null, read("read https://example.com/a").task!!.let { it.title to it.notes })
     }
+
+    @Test
+    fun `spelled-out numbers, minutes and half an hour, as said aloud`() {
+        val said = read("call bank -s in four hours // ask about the fee").task!!
+        assertEquals(Triple("call bank", "Wed 2026-09-30 14:00", "ask about the fee"), Triple(said.title, date(said.startDate), said.notes))
+        assertEquals("Wed 2026-09-30 11:00", date(read("x start in an hour").task!!.startDate))
+        assertEquals("Wed 2026-09-30 10:30", date(read("x -s in half an hour").task!!.startDate))
+        assertEquals("Wed 2026-09-30 10:45", date(read("x start in 45 minutes").task!!.startDate))
+        assertEquals("Fri 2026-10-02 00:00", date(read("x due in two days").task!!.dueDate))
+        assertEquals("Wed 2026-10-07 00:00", date(read("x -d in a week").task!!.dueDate))
+        assertEquals("x", read("x due in two days").task!!.title)
+    }
 }
