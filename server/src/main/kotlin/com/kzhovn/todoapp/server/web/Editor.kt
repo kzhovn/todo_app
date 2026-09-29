@@ -769,21 +769,27 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
         }
     }
     div(classes = "field-label section") { +Labels.RELATED }
-    all.filter { it.parentId == id && !isChecklist }.sortedWith(TaskOrder).forEach { sub ->
-        row(Labels.SUBTASK, sub, leading = {
+    val edges = service.dependencyEdges()
+    // A folder can't be completed, so it neither depends on tasks nor has any depending on it.
+    val prerequisites = if (task.type == TaskType.FOLDER) emptyList() else service.dependsOn(id).mapNotNull(byId::get).sortedBy { it.title.lowercase() }
+    val dependents = if (task.type == TaskType.FOLDER) emptyList() else edges.filter { it.dependsOnTaskId == id }.mapNotNull { byId[it.taskId] }
+    val subtasks = all.filter { it.parentId == id && !isChecklist }.sortedWith(TaskOrder)
+    subtasks.forEach { sub ->
+        val kind = when (sub) { in prerequisites -> Labels.PREREQUISITE_SUBTASK; in dependents -> Labels.DEPENDENT_SUBTASK; else -> Labels.SUBTASK }
+        row(kind, sub, leading = {
             if (sub.type == TaskType.TASK) button(classes = if (sub.isComplete) "check done" else "check") {
                 htmx("/tasks/$id/subtasks/${sub.id}/toggle?mode=$m")
                 attributes["aria-label"] = if (sub.isComplete) "Mark not done" else "Complete"
                 if (sub.isComplete) icon(Icon.CHECK, "")
             } else span(classes = "check-space") {}
-        }) {}
+        }) {
+            // ✕ unlinks the dependency; the subtask stays.
+            if (sub in prerequisites) unlink("/tasks/$id/prerequisite/${sub.id}/remove?mode=$m")
+            else if (sub in dependents) unlink("/tasks/$id/dependent/${sub.id}/remove?mode=$m")
+        }
     }
-    val edges = service.dependencyEdges()
-    // A folder can't be completed, so it neither depends on tasks nor has any depending on it.
-    val prerequisites = if (task.type == TaskType.FOLDER) emptyList() else service.dependsOn(id).mapNotNull(byId::get).sortedBy { it.title.lowercase() }
-    val dependents = if (task.type == TaskType.FOLDER) emptyList() else edges.filter { it.dependsOnTaskId == id }.mapNotNull { byId[it.taskId] }
-    prerequisites.forEach { p -> row(Labels.PREREQUISITE, p) { unlink("/tasks/$id/prerequisite/${p.id}/remove?mode=$m") } }
-    dependents.forEach { d -> row(Labels.DEPENDENT, d) { unlink("/tasks/$id/dependent/${d.id}/remove?mode=$m") } }
+    (prerequisites - subtasks.toSet()).forEach { p -> row(Labels.PREREQUISITE, p) { unlink("/tasks/$id/prerequisite/${p.id}/remove?mode=$m") } }
+    (dependents - subtasks.toSet()).forEach { d -> row(Labels.DEPENDENT, d) { unlink("/tasks/$id/dependent/${d.id}/remove?mode=$m") } }
 
     // Each "+" opens a popover: type a new task, or pick an existing one.
     fun FlowContent.adder(label: String, url: String, existingName: String, placeholder: String, candidates: List<Task>) = details(classes = "pp adder") {

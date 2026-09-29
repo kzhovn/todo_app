@@ -44,6 +44,9 @@ object Labels {
     const val SUBTASK = "Subtask"
     const val PREREQUISITE = "Prerequisite"
     const val DEPENDENT = "Dependent"
+    // A subtask that's also a prerequisite or dependent gets one row, not two.
+    const val PREREQUISITE_SUBTASK = "Prerequisite subtask"
+    const val DEPENDENT_SUBTASK = "Dependent subtask"
     const val ADD_SUBTASK = "+ Subtask"
     const val ADD_PREREQUISITE = "+ Prerequisite"
     const val ADD_DEPENDENT = "+ Dependent task"

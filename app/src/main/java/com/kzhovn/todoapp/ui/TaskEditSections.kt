@@ -327,16 +327,25 @@ internal fun RelatedSection(vm: TaskEditViewModel, openTask: (Long) -> Unit, onA
     val isChecklist = task.type == TaskType.CHECKLIST
     SectionLabel(Labels.RELATED)
     val subtasks = remember(vm.allTasks, vm.taskId, isChecklist) { vm.allTasks.filter { it.parentId == vm.taskId && !vm.isNew && !isChecklist }.sortedWith(TaskOrder) }
+    val isFolder = task.type == TaskType.FOLDER
+    val dependentIds = if (isFolder || vm.isNew) emptySet() else vm.dependencyEdges.filter { it.dependsOnTaskId == vm.taskId }.map { it.taskId }.toSet()
+    val prerequisiteIds = if (isFolder) emptySet() else vm.dependencyIds
     subtasks.forEach { sub ->
-        RelatedRow(Labels.SUBTASK, sub.title, done = sub.isComplete, onOpen = { openTask(sub.id) }, leading = {
+        val kind = when (sub.id) { in prerequisiteIds -> Labels.PREREQUISITE_SUBTASK; in dependentIds -> Labels.DEPENDENT_SUBTASK; else -> Labels.SUBTASK }
+        RelatedRow(kind, sub.title, done = sub.isComplete, onOpen = { openTask(sub.id) }, leading = {
             if (sub.type == TaskType.TASK) {
                 TaskCheckbox(
                     checked = sub.isComplete, due = sub.dueDate?.takeUnless { sub.isComplete }?.let { dueStatus(it, System.currentTimeMillis()) },
                     size = 18.dp, touchSize = 34.dp, onCheckedChange = { vm.toggleComplete(sub.id) }
                 )
             } else Spacer(Modifier.width(34.dp))
-        }) {}
+        }) {
+            // Removing unlinks the dependency; the subtask stays.
+            if (sub.id in prerequisiteIds) RemoveButton { vm.dependencyIds = vm.dependencyIds - sub.id }
+            else if (sub.id in dependentIds) RemoveButton { vm.removeDependent(sub.id) }
+        }
     }
+    val subtaskIds = subtasks.map { it.id }.toSet()
     if (!isChecklist) vm.pendingSubtasks.forEachIndexed { index, title ->
         RelatedRow(Labels.SUBTASK, title, onOpen = null) { RemoveButton { vm.pendingSubtasks = vm.pendingSubtasks.filterIndexed { i, _ -> i != index } } }
     }
@@ -344,7 +353,7 @@ internal fun RelatedSection(vm: TaskEditViewModel, openTask: (Long) -> Unit, onA
         RelatedRow(Labels.SUBTASK, child.title, onOpen = { openTask(child.id) }) { RemoveButton { vm.pendingChildIds = vm.pendingChildIds - child.id } }
     }
     if (task.type != TaskType.FOLDER) {
-        vm.dependencyIds.mapNotNull(vm.allById::get).sortedBy { it.title.lowercase() }.forEach { prereq ->
+        (vm.dependencyIds - subtaskIds).mapNotNull(vm.allById::get).sortedBy { it.title.lowercase() }.forEach { prereq ->
             RelatedRow(Labels.PREREQUISITE, prereq.title, done = prereq.isComplete, onOpen = { openTask(prereq.id) }) {
                 RemoveButton { vm.dependencyIds = vm.dependencyIds - prereq.id }
             }
@@ -355,7 +364,7 @@ internal fun RelatedSection(vm: TaskEditViewModel, openTask: (Long) -> Unit, onA
         vm.pendingDependents.forEachIndexed { index, title ->
             RelatedRow(Labels.DEPENDENT, title, onOpen = null) { RemoveButton { vm.pendingDependents = vm.pendingDependents.filterIndexed { i, _ -> i != index } } }
         }
-        vm.dependencyEdges.filter { it.dependsOnTaskId == vm.taskId && !vm.isNew }.mapNotNull { vm.allById[it.taskId] }.forEach { dependent ->
+        (dependentIds - subtaskIds).mapNotNull(vm.allById::get).forEach { dependent ->
             RelatedRow(Labels.DEPENDENT, dependent.title, done = dependent.isComplete, onOpen = { openTask(dependent.id) }) {
                 RemoveButton { vm.removeDependent(dependent.id) }
             }

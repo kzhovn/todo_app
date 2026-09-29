@@ -1,6 +1,7 @@
 package com.kzhovn.todoapp.server
 
 import com.kzhovn.todoapp.sync.SyncRequest
+import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.sync.taskFields
@@ -514,6 +515,19 @@ class WebTest {
             append("title", "Write the report"); append("type", "TASK"); append("parent", folder.id.toString())
         })
         assertEquals(setOf(vpn.id), service.dependsOn(report.id))
+    }
+
+    @Test
+    fun `a subtask that's also a dependent is one row`() = web {
+        val trip = service.create(Task(title = "Plan trip"))
+        val book = service.create(Task(title = "Book hotel", parentId = trip.id))
+        service.addDependency(book.id, trip.id)
+        val related = client.get("/tasks/${trip.id}").bodyAsText().substringAfter("id=\"related\"")
+        assertEquals(1, Regex("Book hotel").findAll(related).count())
+        assertTrue(related.contains(Labels.DEPENDENT_SUBTASK))
+        client.post("/tasks/${trip.id}/dependent/${book.id}/remove")
+        assertEquals(trip.id, service.get(book.id)!!.parentId)
+        assertEquals(emptySet<Long>(), service.dependsOn(book.id))
     }
 
     @Test
