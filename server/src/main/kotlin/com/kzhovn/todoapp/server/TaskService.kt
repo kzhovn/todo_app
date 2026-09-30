@@ -109,14 +109,19 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     // Review's "Waiting now": Active with contexts ignored, so a task held back only by a context counts.
     // In the mode's folder, unless `everywhere`.
     fun waiting(everywhere: Boolean = false): List<Task> {
-        val all = tasks()
-        val byId = all.associateBy { it.id }
+        val byId = tasks().associateBy { it.id }
         val mode = if (everywhere) null else modeFolderId()
-        return computeActiveTasks(
-            all = all, contextsByTaskId = emptyMap(), contexts = emptyList(), timeWindows = emptyList(),
-            dependencies = liveRows().flatMap { row -> row.dependsOn().map { TaskDependency(row.id, it) } }, now = clock()
-        ).filter { inMode(it, mode, byId) }
+        return activeIgnoringContexts().filter { inMode(it, mode, byId) }
     }
+
+    // Doing as if every context were on: the nudges' view, so a task that drops out of Doing overnight
+    // (a work-hours context, being away from home) still counts as sitting there.
+    fun doingIgnoringContexts(): List<Task> = filterDoing(activeIgnoringContexts(), clock(), tasks().associateBy { it.id }, emptyMap())
+
+    private fun activeIgnoringContexts(): List<Task> = computeActiveTasks(
+        all = tasks(), contextsByTaskId = emptyMap(), contexts = emptyList(), timeWindows = emptyList(),
+        dependencies = liveRows().flatMap { row -> row.dependsOn().map { TaskDependency(row.id, it) } }, now = clock()
+    )
 
     fun doing(folderId: Long? = modeFolderId()): List<Task> = filterDoing(active(folderId), clock(), tasks().associateBy { it.id }, contextIdsByTask())
 

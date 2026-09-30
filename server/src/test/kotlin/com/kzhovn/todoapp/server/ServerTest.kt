@@ -453,7 +453,7 @@ class ServerTest {
         val stuck = service.create(Task(title = "Taxes", isStarred = true))
         assertTrue(logic.dueNudges().isEmpty()) // first digest to see it: clock starts
 
-        now += 3 * day
+        now += 3 * day - 5 // a digest firing a hair earlier than the last still counts as 3 days
         assertEquals(listOf("Taxes" to 3), logic.dueNudges().map { (t, d) -> t.title to d })
         now += day
         assertTrue(logic.dueNudges().isEmpty()) // nudged a day ago
@@ -473,6 +473,17 @@ class ServerTest {
         assertTrue(logic.dueNudges().none { it.first.id == stuck.id }) // left Doing: clock reset
         logic.onReaction(900L, MOVE_OUT, added = false)
         assertTrue(service.get(stuck.id)!!.isStarred)
+    }
+
+    @Test
+    fun `a task out of Doing only because of a context still gets nudged`() {
+        val day = 24L * 60 * 60 * 1000
+        val work = service.saveContext(com.kzhovn.todoapp.data.TaskContext(name = "office", type = com.kzhovn.todoapp.data.ContextType.PLACE, wifiSsid = "Office"), emptyList())
+        val report = service.create(Task(title = "Report", isStarred = true), contextIds = setOf(work.id))
+        assertTrue(service.doing(null).none { it.id == report.id }) // not at the office at digest time
+        assertTrue(logic.dueNudges().isEmpty())
+        now += 3 * day
+        assertEquals(listOf("Report"), logic.dueNudges().map { it.first.title })
     }
 
     @Test

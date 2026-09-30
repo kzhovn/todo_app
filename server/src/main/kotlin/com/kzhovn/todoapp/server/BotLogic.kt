@@ -20,6 +20,7 @@ const val STAR = "⭐"
 const val MOVE_OUT = "🔽" // on a nudge: unstar the task (no variation selector, so reactions match)
 private const val DAY_MS = 24L * 60 * 60 * 1000
 private const val NUDGE_AFTER = 3 * DAY_MS
+private const val NUDGE_SLACK = 60L * 60 * 1000
 const val NOTHING = "🎉 Nothing here 🎉"
 
 val HELP = """
@@ -176,9 +177,11 @@ class BotLogic(private val service: TaskService, private val store: Store) {
 
     // Run with each morning digest. A task counts as entering Doing at the first digest that sees it
     // there (leaving resets it); it's nudged once it's been there 3 days, then every 3 days after.
+    // Contexts don't count as leaving: the digest's 8am isn't work hours, or home. Days are digest to
+    // digest, and a digest can fire a few ms earlier than the last, hence the slack.
     fun dueNudges(): List<Pair<Task, Int>> = store.transaction {
         val now = service.now()
-        val doing = service.doing(null).associateBy { it.id }
+        val doing = service.doingIgnoringContexts().associateBy { it.id }
         val since = store.valuesWithPrefix("doingSince:").mapKeys { it.key.removePrefix("doingSince:").toLong() }
         since.keys.filter { it !in doing }.forEach {
             store.setValue("doingSince:$it", null)
@@ -187,9 +190,9 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         doing.values.mapNotNull { task ->
             val entered = since[task.id]?.toLong() ?: now.also { store.setValue("doingSince:${task.id}", it.toString()) }
             val lastNudge = store.getValue("nudged:${task.id}")?.toLong() ?: entered
-            if (now - lastNudge < NUDGE_AFTER) return@mapNotNull null
+            if (now - lastNudge < NUDGE_AFTER - NUDGE_SLACK) return@mapNotNull null
             store.setValue("nudged:${task.id}", now.toString())
-            task to ((now - entered) / DAY_MS).toInt()
+            task to ((now - entered + NUDGE_SLACK) / DAY_MS).toInt()
         }
     }
 
