@@ -9,7 +9,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.FilterChip
-import com.kzhovn.todoapp.ui.FolderPickerDialog
+import com.kzhovn.todoapp.ui.setFolderMode
 import com.kzhovn.todoapp.ui.TaskCheckbox
 import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.ui.theme.LedgerInk
@@ -150,13 +150,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             LedgerTheme {
             val viewModel = remember { TaskListViewModel(repository, contextRepository, app.listInputChanges(), modeFolderId = { AppSettings.modeFolderId(app) }) }
-            // Folder mode: set here, it goes to every device with the next sync (straight away).
-            val setMode: (Long?) -> Unit = { id ->
-                AppSettings.setMode(app, id)
-                if (SyncSettings.config(app) != null) SyncWorker.requestSoon(app, delaySeconds = 0)
-            }
+            // Folder mode: switched in the side menu, or zoomed into from the All tree.
+            val setMode: (Long?) -> Unit = { id -> setFolderMode(app, id) }
             val mode by viewModel.mode.collectAsState()
-            var pickingMode by remember { mutableStateOf(false) }
             // Searching in a mode keeps to its folder, unless this is on.
             var everywhere by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
@@ -291,8 +287,6 @@ class MainActivity : ComponentActivity() {
                             query, searching = searchMode, onStart = { searchMode = true }, onChange = { query = it }, modifier = Modifier.weight(1f),
                             placeholder = mode?.takeUnless { everywhere }?.let { "Search ${it.title}" } ?: "Search tasks"
                         )
-                        // Folder mode's chip: the mode in its folder's colour (✕ leaves it), or "All folders" to pick one.
-                        if (!searchMode) ModeChip(mode, mode?.let { viewModel.allById.value.let { all -> folderColors(all.values)[it.id] } }, onPick = { pickingMode = true }, onLeave = { setMode(null) })
                         if (searchMode) {
                             IconButton(onClick = { showFilters = !showFilters }) {
                                 Icon(
@@ -313,10 +307,7 @@ class MainActivity : ComponentActivity() {
                     if (searchMode && mode != null) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp)) {
                         FilterChip(selected = everywhere, onClick = { everywhere = !everywhere }, label = { Text("Everywhere, not just ${mode!!.title}") })
                     }
-                    if (pickingMode) FolderPickerDialog(
-                        folders = folders, showNoFolderOption = true, title = "Mode", noFolderLabel = "All folders", selectedId = mode?.id,
-                        onPick = { setMode(it?.id); pickingMode = false }, onDismiss = { pickingMode = false }
-                    )
+
                     if (!searchMode) TabRow(selectedTabIndex = TaskListMode.entries.indexOf(selectedMode)) {
                         TaskListMode.entries.forEach { mode ->
                             Tab(
@@ -470,24 +461,6 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_MODE = "mode"
-    }
-}
-
-// Folder mode in the top bar: filled in the folder's colour with ✕ to leave, or a quiet "All folders".
-@Composable
-private fun ModeChip(mode: Task?, color: Color?, onPick: () -> Unit, onLeave: () -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
-    if (mode == null) {
-        Text(
-            "All folders ▾", fontSize = 13.sp, color = LedgerMuted, maxLines = 1,
-            modifier = Modifier.padding(start = 6.dp, end = 2.dp).clip(shape).border(1.dp, LedgerBorder, shape).clickable(onClick = onPick).padding(horizontal = 10.dp, vertical = 6.dp)
-        )
-    } else Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(start = 6.dp, end = 2.dp).clip(shape).background(color ?: LedgerAccent).clickable(onClick = onPick).padding(start = 10.dp)
-    ) {
-        Text(mode.title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1, modifier = Modifier.widthIn(max = 110.dp))
-        Icon(Icons.Filled.Close, contentDescription = "Leave ${mode.title} mode", tint = Color.White, modifier = Modifier.size(32.dp).clickable(onClick = onLeave).padding(8.dp))
     }
 }
 

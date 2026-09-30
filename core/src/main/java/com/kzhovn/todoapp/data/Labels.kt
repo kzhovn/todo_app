@@ -63,7 +63,7 @@ object Labels {
         "-s tomorrow · start mon 9am" to "start date",
         "today, mon, next fri, +3d, in 2 weeks, +2h, oct 12, next week, weekend, 2026-10-01" to "dates",
         "5pm, 9:30am, 14:00" to "times",
-        "work: …" to "into a folder or project (else Personal)",
+        "work: …" to "into a folder or project (else the mode's folder, or Personal)",
         "groceries: milk, eggs" to "items into a checklist",
         "packing [passport, charger]" to "a new checklist",
         "d: …" to "today only",
