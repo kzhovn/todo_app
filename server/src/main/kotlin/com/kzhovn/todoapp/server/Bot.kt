@@ -115,7 +115,7 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
                 println("Digest scheduled daily at $digestTime ${java.util.TimeZone.getDefault().id}")
                 scheduleDigest(LocalTime.parse(digestTime)) {
                     service.purgeExpired()
-                    val doing = service.doing()
+                    val doing = service.doing(null) // the digest covers everything, whatever the mode
                     // DM channels aren't cached by createLight, so a DM's id finds nothing here.
                     val channel = jda.getChannelById(MessageChannel::class.java, digestChannelId)
                     println("Digest: ${doing.size} in Doing, channel ${if (channel == null) "$digestChannelId NOT FOUND (a server channel the bot can see?)" else channel.name}")

@@ -2,6 +2,7 @@ package com.kzhovn.todoapp.server.web
 
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.data.inMode
 import com.kzhovn.todoapp.data.checklistItems
 import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.data.formatDuration
@@ -21,6 +22,8 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import kotlinx.html.DIV
+import kotlinx.html.checkBoxInput
+import kotlinx.html.label
 import kotlinx.html.InputType
 import kotlinx.html.details
 import kotlinx.html.input
@@ -55,7 +58,7 @@ fun Route.focusRoutes(service: TaskService) {
     get("/focus/search") {
         val q = call.request.queryParameters
         val finished = q["finished"]?.toLongOrNull()?.let(service::get)
-        call.respondText(createHTML().div { id = "focus-cands"; focusCandidates(service, finished, q["q"].orEmpty()) }, ContentType.Text.Html)
+        call.respondText(createHTML().div { id = "focus-cands"; focusCandidates(service, finished, q["q"].orEmpty(), q["everywhere"] != null) }, ContentType.Text.Html)
     }
     post("/focus/start") {
         call.request.queryParameters["task"]?.toLongOrNull()?.let(service::focus)
@@ -163,15 +166,17 @@ fun DIV.focusBody(service: TaskService, session: Task) {
 // Doing is empty), like the phone's picker. Search reaches any open task; or a new task.
 fun FlowContent.focusPicker(service: TaskService, finished: Task?) {
     // The search replaces the list below while it has a query, and brings it back when cleared.
+    // In folder mode it searches the mode's folder, unless Everywhere is ticked.
+    val mode = service.modeFolder()
     details(classes = "focus-search") {
-        summary { icon(Icon.SEARCH, "search-icon"); +"Search all tasks" }
-        input(type = InputType.search, name = "q") {
-            placeholder = "Any open task…"
-            attributes["autocomplete"] = "off"
+        summary { icon(Icon.SEARCH, "search-icon"); +(mode?.let { "Search ${it.title}" } ?: "Search all tasks") }
+        form(classes = "focus-search-form") {
             attributes["hx-get"] = "/focus/search" + (finished?.let { "?finished=${it.id}" } ?: "")
-            attributes["hx-trigger"] = "input changed delay:200ms, search"
+            attributes["hx-trigger"] = "input changed delay:200ms, search, change"
             attributes["hx-target"] = "#focus-cands"
             attributes["hx-swap"] = "outerHTML"
+            input(type = InputType.search, name = "q") { placeholder = "Any open task…"; attributes["autocomplete"] = "off" }
+            if (mode != null) label(classes = "pill") { checkBoxInput(name = "everywhere"); +"Everywhere" }
         }
     }
     div { id = "focus-cands"; focusCandidates(service, finished, query = "") }
@@ -181,14 +186,18 @@ fun FlowContent.focusPicker(service: TaskService, finished: Task?) {
     }
 }
 
-// The picker's list: Doing (or Active) with no query, any matching open task with one.
-fun FlowContent.focusCandidates(service: TaskService, finished: Task?, query: String) {
+// The picker's list: Doing (or Active) with no query, any matching open task with one (in the mode's
+// folder, unless `everywhere`).
+fun FlowContent.focusCandidates(service: TaskService, finished: Task?, query: String, everywhere: Boolean = false) {
     val all = service.tasks()
     val byId = all.associateBy { it.id }
     val candidates = if (query.isBlank()) {
         val active = service.active()
         nextFocusTasks(active, filterDoing(active, service.now(), byId, service.contextIdsByTask()), finished, byId).take(30)
-    } else focusSearch(all, query).take(30)
+    } else {
+        val mode = if (everywhere) null else service.modeFolderId()
+        focusSearch(all, query).filter { inMode(it, mode, byId) }.take(30)
+    }
     if (candidates.isEmpty()) p(classes = "empty") { +(if (query.isBlank()) "Nothing in Doing or Active" else "No open task matches") }
     candidates.forEach { t ->
         button(classes = "cand") {

@@ -226,6 +226,7 @@ class Indicator extends PanelMenu.Button {
             return;
         }
         this._popup.add_child(this._header());
+        if (this._state?.modes?.length) this._popup.add_child(this._modeRow());
         if (this._adding) this._popup.add_child(this._quickAdd());
         if (pinned) this._popup.add_child(this._pinnedRow(pinned));
 
@@ -272,6 +273,34 @@ class Indicator extends PanelMenu.Button {
             this._render();
         }));
         return header;
+    }
+
+    // Folder mode, shared by every device: "Mode: Work ▸" opens the folders (indented by depth) to
+    // switch; "All folders" leaves it. The lists and counts are the server's, already in the mode.
+    _modeRow() {
+        const box = new St.BoxLayout({vertical: true, x_expand: true});
+        const mode = this._state.mode;
+        box.add_child(this._button(
+            {label: `Mode: ${mode?.title ?? 'All folders'} ${this._pickingMode ? '▾' : '▸'}`, style_class: mode ? 'rb-mode rb-mode-on' : 'rb-mode', x_align: Clutter.ActorAlign.START},
+            () => {
+                this._pickingMode = !this._pickingMode;
+                this._render();
+            }
+        ));
+        if (this._pickingMode) {
+            const choices = [{id: null, title: 'All folders', depth: 0}, ...this._state.modes];
+            for (const f of choices) {
+                const on = (f.id ?? null) === (mode?.id ?? null);
+                box.add_child(this._button(
+                    {label: `${'    '.repeat(f.depth ?? 0)}${on ? '✓ ' : ''}${f.title}`, style_class: 'rb-mode-choice', x_align: Clutter.ActorAlign.START},
+                    () => {
+                        this._pickingMode = false;
+                        this._post(f.id == null ? '/api/mode' : `/api/mode?folder=${f.id}`);
+                    }
+                ));
+            }
+        }
+        return box;
     }
 
     // The phone's quick add: the text (the same syntax everywhere), then its chips: star, start, due,

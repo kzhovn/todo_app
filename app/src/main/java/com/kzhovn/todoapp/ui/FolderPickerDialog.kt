@@ -57,7 +57,9 @@ fun FolderPickerDialog(
     onPick: (Task?) -> Unit,
     onDismiss: () -> Unit,
     onCreateNew: (() -> Unit)? = null,
-    selectedId: Long? = null
+    selectedId: Long? = null,
+    title: String = "Choose a folder",
+    noFolderLabel: String = Labels.NO_FOLDER
 ) {
     val visible = if (excludeDescendantsOf != null) folders.filter { !wouldCreateCycle(it.id, excludeDescendantsOf, allById) } else folders
     val colors = remember(folders) { folderColors(folders) }
@@ -71,10 +73,10 @@ fun FolderPickerDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {},
-        title = { Text("Choose a folder") },
+        title = { Text(title) },
         text = {
             Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) {
-                if (showNoFolderOption) PickerRow(Labels.NO_FOLDER, Icons.Filled.FolderOff, LedgerMuted, depth = 0, selected = selectedId == null, muted = true) { onPick(null) }
+                if (showNoFolderOption) PickerRow(noFolderLabel, Icons.Filled.FolderOff, LedgerMuted, depth = 0, selected = selectedId == null, muted = true) { onPick(null) }
                 rows.forEach { (f, depth) ->
                     val checklist = f.type == TaskType.CHECKLIST
                     PickerRow(

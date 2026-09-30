@@ -5,6 +5,9 @@ import com.kzhovn.todoapp.quickadd.QuickAddParser
 import com.kzhovn.todoapp.data.completed
 import com.kzhovn.todoapp.data.CurrentTask
 import com.kzhovn.todoapp.data.DEFAULT_FOLDER
+import com.kzhovn.todoapp.data.dueOutsideMode
+import com.kzhovn.todoapp.data.inMode
+import com.kzhovn.todoapp.data.modeFolder
 import com.kzhovn.todoapp.quickadd.QuickAdd
 import com.kzhovn.todoapp.quickadd.planQuickAdd
 import com.kzhovn.todoapp.data.pinnedTask
@@ -78,7 +81,16 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     fun tasks(): List<Task> = clock().let { now -> decoded().let { d -> d.rows.mapNotNull { d.tasks[it.id]?.takeUnless { t -> t.isExpired(now) } } } }
 
-    fun active(folderId: Long? = null): List<Task> {
+    // Folder mode, shared by every device (see Store.setMode). A set here always wins: it's the newest.
+    fun modeFolder(): Task? = modeFolder(store.modeFolderId(), tasks().associateBy { it.id })
+    fun modeFolderId(): Long? = modeFolder()?.id
+    fun setMode(folderId: Long?) = store.setMode(folderId?.takeIf { get(it)?.type == TaskType.FOLDER }, maxOf(clock(), store.modeSetAt() + 1))
+
+    // Where a task goes when nothing says: the mode's folder, or Personal.
+    fun defaultFolderId(): Long? = modeFolderId() ?: findFolder(DEFAULT_FOLDER)?.id
+
+    // Active and Doing follow the mode unless given a folder; null means everything (the digest's).
+    fun active(folderId: Long? = modeFolderId()): List<Task> {
         val rows = liveRows()
         val all = tasks()
         val contexts = contextsByTaskId(rows)
@@ -95,12 +107,25 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     }
 
     // Review's "Waiting now": Active with contexts ignored, so a task held back only by a context counts.
-    fun waiting(): List<Task> = computeActiveTasks(
-        all = tasks(), contextsByTaskId = emptyMap(), contexts = emptyList(), timeWindows = emptyList(),
-        dependencies = liveRows().flatMap { row -> row.dependsOn().map { TaskDependency(row.id, it) } }, now = clock()
-    )
+    // In the mode's folder, unless `everywhere`.
+    fun waiting(everywhere: Boolean = false): List<Task> {
+        val all = tasks()
+        val byId = all.associateBy { it.id }
+        val mode = if (everywhere) null else modeFolderId()
+        return computeActiveTasks(
+            all = all, contextsByTaskId = emptyMap(), contexts = emptyList(), timeWindows = emptyList(),
+            dependencies = liveRows().flatMap { row -> row.dependsOn().map { TaskDependency(row.id, it) } }, now = clock()
+        ).filter { inMode(it, mode, byId) }
+    }
 
-    fun doing(folderId: Long? = null): List<Task> = filterDoing(active(folderId), clock(), tasks().associateBy { it.id }, contextIdsByTask())
+    fun doing(folderId: Long? = modeFolderId()): List<Task> = filterDoing(active(folderId), clock(), tasks().associateBy { it.id }, contextIdsByTask())
+
+    // Doing's line under the list in a mode: what's due today or overdue outside it.
+    fun dueOutsideMode(): List<Task> {
+        val byId = tasks().associateBy { it.id }
+        val contexts = contextIdsByTask()
+        return dueOutsideMode(doing(null), modeFolderId(), byId, clock()) { resolveEffective(it, byId, contexts).effectiveDueDate }
+    }
 
     fun effectiveDueDate(task: Task): Long? = resolveEffective(task, tasks().associateBy { it.id }, contextIdsByTask()).effectiveDueDate
 
@@ -156,7 +181,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     // being looked at) unless it names one. Added while looking at Doing, it starts starred so it shows
     // up right there, like the Doing widget's.
     fun quickAdd(text: String, fromDoing: Boolean, folderId: Long? = null): Task? {
-        val folder = folderId?.takeIf { get(it)?.type == TaskType.FOLDER } ?: findFolder(DEFAULT_FOLDER)?.id
+        val folder = folderId?.takeIf { get(it)?.type == TaskType.FOLDER } ?: defaultFolderId()
         return add(planQuickAdd(text), folder, star = fromDoing)
     }
 

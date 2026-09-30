@@ -630,6 +630,50 @@ class WebTest {
     }
 
     @Test
+    fun `folder mode zooms every list, quick add, search and review into one folder`() = web {
+        val personal = service.create(Task(type = TaskType.FOLDER, title = "Personal"))
+        val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
+        val clients = service.create(Task(type = TaskType.FOLDER, title = "Clients", parentId = work.id))
+        service.create(Task(title = "Send the report", parentId = clients.id, isStarred = true))
+        service.create(Task(title = "Call the dentist", parentId = personal.id, isStarred = true, dueDate = service.now()))
+        service.create(Task(title = "Water the plants", parentId = personal.id, isStarred = true))
+        client.post("/mode?folder=${work.id}")
+        assertEquals(work.id, service.modeFolderId())
+
+        val doing = client.get("/doing").bodyAsText()
+        assertTrue(doing.contains("Work mode"))
+        assertTrue(doing.contains("Send the report"))
+        assertFalse(doing.contains("Water the plants"))
+        assertTrue(doing.contains("1 due today outside Work")) // the dentist, due today, still shows up there
+        assertTrue(doing.contains("In Work")) // the sidebar lists Work's own folders
+        assertTrue(client.get("/all").bodyAsText().contains("Clients"))
+        assertFalse(client.get("/all").bodyAsText().contains("Water the plants"))
+
+        client.submitForm("/quickadd", parameters { append("text", "book the offsite") })
+        assertEquals(work.id, service.tasks().single { it.title == "book the offsite" }.parentId)
+        assertFalse(client.get("/search/results?q=the").bodyAsText().contains("Water the plants"))
+        assertTrue(client.get("/search/results?q=the&everywhere=on").bodyAsText().contains("Water the plants"))
+        assertTrue(client.get("/review").bodyAsText().contains("See all folders"))
+
+        client.post("/mode")
+        assertEquals(null, service.modeFolderId())
+        assertTrue(client.get("/doing").bodyAsText().contains("Water the plants"))
+    }
+
+    @Test
+    fun `folder mode syncs with the newest setting winning, and deleting the folder ends it`() = web {
+        val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
+        service.setMode(work.id)
+        val stale = store.sync(SyncRequest(0, emptyList(), modeFolderId = null, modeSetAt = 1))
+        assertEquals(work.id, stale.modeFolderId) // an older "no mode" from the phone loses
+        store.sync(SyncRequest(0, emptyList(), modeFolderId = null, modeSetAt = stale.modeSetAt + 1))
+        assertEquals(null, service.modeFolderId())
+        service.setMode(work.id)
+        service.delete(work.id)
+        assertEquals(null, service.modeFolderId())
+    }
+
+    @Test
     fun `the web sets the day rollover hour, and beats an older one from the phone`() = web {
         store.sync(SyncRequest(0, emptyList(), rolloverHour = 6, rolloverSetAt = 1))
         assertTrue(client.get("/settings").bodyAsText().contains("<option value=\"6\" selected"))

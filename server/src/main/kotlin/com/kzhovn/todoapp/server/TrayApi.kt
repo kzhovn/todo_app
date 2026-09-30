@@ -1,10 +1,11 @@
 package com.kzhovn.todoapp.server
 
-import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.data.TaskType
 import io.ktor.http.Parameters
 import com.kzhovn.todoapp.data.CurrentTask
 import com.kzhovn.todoapp.data.pinnedTask
+import com.kzhovn.todoapp.data.TaskOrder
+import com.kzhovn.todoapp.data.inMode
 import com.kzhovn.todoapp.repository.filterDoing
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.folderColorsArgb
@@ -36,11 +37,15 @@ data class TrayState(
     val now: Long = 0, // the server's clock, for the countdown
     // Quick add's Folder chip: folders and open checklists, starting on Personal. Only with a list.
     val folders: List<FolderRow> = emptyList(),
-    val defaultFolder: Long? = null
+    val defaultFolder: Long? = null,
+    // Folder mode: the folder every device is zoomed into, and the folders to pick one from (indented
+    // by depth, in tree order). Modes only with a list.
+    val mode: FolderRow? = null,
+    val modes: List<FolderRow> = emptyList()
 )
 
 @Serializable
-data class FolderRow(val id: Long, val title: String, val checklist: Boolean = false)
+data class FolderRow(val id: Long, val title: String, val checklist: Boolean = false, val depth: Int = 0)
 
 // The session's task; `done`: it's finished, and every device asks what's next. `notes`: the start of
 // its note, for the focus card.
@@ -68,7 +73,8 @@ fun trayState(service: TaskService, list: String?): TrayState {
     val byId = all.associateBy { it.id }
     val active = service.active()
     val doing = filterDoing(active, service.now(), byId, service.contextIdsByTask())
-    val allOpen = TodoWidgetPresenter.allOpen(all, byId)
+    val mode = service.modeFolder()
+    val allOpen = TodoWidgetPresenter.allOpen(all, byId).filter { inMode(it, mode?.id, byId) }
     fun rows(tasks: List<Task>, urgentOnTop: Boolean): List<WidgetTaskRow> {
         val contexts = service.contextIdsByTask()
         return TodoWidgetPresenter.toRows(
@@ -86,8 +92,13 @@ fun trayState(service: TaskService, list: String?): TrayState {
     val focus = CurrentTask.focusSession(all)?.let { FocusRow(it.id, it.title, it.isComplete, it.notes?.takeIf { n -> n.isNotBlank() }?.lines()?.take(4)?.joinToString("\n")?.take(300)) }
     val folders = if (list !in LISTS) emptyList() else all.filter { it.type == TaskType.FOLDER || (it.type == TaskType.CHECKLIST && !it.isComplete) }
         .sortedBy { it.title.lowercase() }.map { FolderRow(it.id, it.title, checklist = it.type == TaskType.CHECKLIST) }
-    val defaultFolder = if (list !in LISTS) null else service.findFolder(DEFAULT_FOLDER)?.id
-    return TrayState(pinned, TrayCounts(doing.size, active.size, allOpen.size), list, rows, focus, service.now(), folders, defaultFolder)
+    val defaultFolder = if (list !in LISTS) null else service.defaultFolderId()
+    val modes = if (list !in LISTS) emptyList() else {
+        fun under(parent: Long?, depth: Int): List<FolderRow> = all.filter { it.type == TaskType.FOLDER && it.parentId == parent }.sortedWith(TaskOrder)
+            .flatMap { listOf(FolderRow(it.id, it.title, depth = depth)) + under(it.id, depth + 1) }
+        under(null, 0)
+    }
+    return TrayState(pinned, TrayCounts(doing.size, active.size, allOpen.size), list, rows, focus, service.now(), folders, defaultFolder, mode?.let { FolderRow(it.id, it.title) }, modes)
 }
 
 // Bearer-token protected like /sync, so it's served even where the web pages aren't.
@@ -118,11 +129,13 @@ fun Route.trayRoutes(service: TaskService, hasToken: (RoutingContext) -> Boolean
     // Focus, on every device; done keeps the session (it asks what's next), leaving is unpinning.
     post("/api/tasks/{id}/focus") { act { id -> id?.let(service::focus) } }
     post("/api/focus/done") { act { service.focusSession()?.takeUnless { it.isComplete }?.let { service.completeWithDescendants(it.id) } } }
+    // Folder mode, on every device: ?folder=<id>, or none to leave it.
+    post("/api/mode") { act { service.setMode(call.request.queryParameters["folder"]?.toLongOrNull()) } }
     post("/api/quickadd") {
         if (!hasToken(this)) return@post call.respond(HttpStatusCode.Unauthorized)
         val params = call.receiveParameters()
         val add = service.planQuickAdd(params["text"].orEmpty(), params.quickAddChips())
-        service.add(add, defaultParent = service.findFolder(DEFAULT_FOLDER)?.id, star = params["mode"] == "doing")
+        service.add(add, defaultParent = service.defaultFolderId(), star = params["mode"] == "doing")
         call.respond(trayState(service, params["mode"]))
     }
 }

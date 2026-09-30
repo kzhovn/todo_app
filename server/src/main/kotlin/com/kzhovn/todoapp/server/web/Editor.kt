@@ -14,7 +14,6 @@ import com.kzhovn.todoapp.data.Task
 import kotlinx.html.summary
 import kotlinx.html.details
 import com.kzhovn.todoapp.data.formatDuration
-import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.TaskType
@@ -133,7 +132,7 @@ fun Route.editorRoutes(service: TaskService) {
     // starts at the top. With `text` (the top bar's "Edit all details"), a draft of that quick add.
     get("/tasks/new") {
         val type = call.request.queryParameters["type"]?.let { runCatching { TaskType.valueOf(it) }.getOrNull() } ?: TaskType.TASK
-        val parent = call.folder()?.takeIf { service.get(it)?.type == TaskType.FOLDER } ?: if (type == TaskType.TASK) service.findFolder(DEFAULT_FOLDER)?.id else null
+        val parent = call.folder()?.takeIf { service.get(it)?.type == TaskType.FOLDER } ?: if (type == TaskType.TASK) service.defaultFolderId() else null
         val draft = call.request.queryParameters["text"]?.let { text ->
             service.planQuickAdd(text, call.request.queryParameters.quickAddChips()).let { add -> add.takeIf { it.task != null } ?: QuickAdd(Task(title = text)) }
         }

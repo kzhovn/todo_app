@@ -1,6 +1,5 @@
 package com.kzhovn.todoapp.server
 
-import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.checklistItems
 import com.kzhovn.todoapp.data.hasTime
@@ -107,9 +106,9 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         if (!content.startsWith("--") && !logged) return null
         val add = service.planQuickAdd(content.removePrefix("--").removePrefix(DONE).trim()).takeUnless { it.isEmpty } ?: return null
         val task = add.task ?: return add.takeUnless { logged }
-        if (logged) return add.copy(task = task.copy(parentId = task.parentId ?: service.findFolder(DEFAULT_FOLDER)?.id, isStarred = false), pin = false, focus = false)
+        if (logged) return add.copy(task = task.copy(parentId = task.parentId ?: service.defaultFolderId(), isStarred = false), pin = false, focus = false)
         val bare = task.parentId == null && task.startDate == null && task.dueDate == null && !task.isMaybe
-        return add.copy(task = task.copy(parentId = task.parentId ?: service.findFolder(DEFAULT_FOLDER)?.id, isStarred = task.isStarred || bare))
+        return add.copy(task = task.copy(parentId = task.parentId ?: service.defaultFolderId(), isStarred = task.isStarred || bare))
     }
 
     // The new task alone (null for items added to a checklist).
@@ -179,7 +178,7 @@ class BotLogic(private val service: TaskService, private val store: Store) {
     // there (leaving resets it); it's nudged once it's been there 3 days, then every 3 days after.
     fun dueNudges(): List<Pair<Task, Int>> = store.transaction {
         val now = service.now()
-        val doing = service.doing().associateBy { it.id }
+        val doing = service.doing(null).associateBy { it.id }
         val since = store.valuesWithPrefix("doingSince:").mapKeys { it.key.removePrefix("doingSince:").toLong() }
         since.keys.filter { it !in doing }.forEach {
             store.setValue("doingSince:$it", null)
@@ -279,7 +278,7 @@ class BotLogic(private val service: TaskService, private val store: Store) {
     private fun newestList(taskId: Long): Pair<Long, Long>? =
         store.getValue("list:$taskId")?.split('/')?.mapNotNull { it.toLongOrNull() }?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
 
-    // `.doing`, `.list`, `.active`, `.rand` with an optional folder name. Returns null for
+    // `.doing`, `.list`, `.active`, `.rand` with an optional folder name (folder mode's by default). Returns null for
     // non-commands, or a plain reply for errors.
     fun command(content: String): Result<List<Task>>? {
         val name = content.substringBefore(' ').lowercase()
@@ -290,11 +289,12 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         if (name == ".list" && arg.isNotEmpty() && service.findFolder(arg) == null) service.findChecklist(arg)?.let { list ->
             return Result.success(checklistItems(list.id, service.tasks()).filterNot { it.isComplete })
         }
-        val folder = if (arg.isEmpty()) null else service.findFolder(arg)
+        // No folder named: the mode's, if there is one.
+        val folder = if (arg.isEmpty()) service.modeFolder() else service.findFolder(arg)
             ?: return Result.failure(IllegalArgumentException("No folder${if (name == ".list") " or checklist" else ""} named \"$arg\"."))
         val tasks = when (name) {
             ".doing" -> service.doing(folder?.id)
-            ".list" -> if (folder == null) service.doing() else service.openInFolder(folder.id)
+            ".list" -> if (arg.isEmpty() || folder == null) service.doing() else service.openInFolder(folder.id)
             ".active" -> service.active(folder?.id)
             else -> listOfNotNull(service.active(folder?.id).randomOrNull())
         }

@@ -3,6 +3,8 @@ package com.kzhovn.todoapp.widget
 import androidx.compose.ui.graphics.Color
 import com.kzhovn.todoapp.data.folderColorsArgb
 import com.kzhovn.todoapp.data.isUnder
+import com.kzhovn.todoapp.data.modeFolder
+import com.kzhovn.todoapp.AppSettings
 import com.kzhovn.todoapp.data.subtaskCounts
 import androidx.glance.appwidget.updateAll
 import androidx.glance.text.TextDecoration
@@ -106,15 +108,18 @@ class TodoWidget : GlanceAppWidget() {
             val allTasks = repository.getAllTasks()
             val allById = allTasks.associateBy { it.id }
             val contextsByTaskId = repository.getAllTaskContexts()
-            val tasks = when (mode) {
+            val listed = when (mode) {
                 WidgetMode.ALL -> TodoWidgetPresenter.allOpen(allTasks, allById)
                 else -> {
                     val active = repository.getActiveTasksFrom(allTasks, contextsByTaskId, now, minuteOfDay(now), dayOfWeekMask(now))
                     if (mode == WidgetMode.ACTIVE) active
                     else filterDoing(active, now, allById, contextsByTaskId)
                 }
-            }.filter { folderId == null || isUnder(it, folderId, allById) }
-            val folderName = folderId?.let { allById[it]?.title }
+            }
+            // A widget fixed to a folder keeps it; otherwise it follows folder mode.
+            val shownFolder = folderId ?: modeFolder(AppSettings.modeFolderId(context), allById)?.id
+            val tasks = listed.filter { shownFolder == null || isUnder(it, shownFolder, allById) }
+            val folderName = shownFolder?.let { allById[it]?.title }
             val effectiveDue = { t: Task -> resolveEffective(t, allById, contextsByTaskId).effectiveDueDate }
             return TodoWidgetPresenter.toRows(tasks, subtaskCounts(allTasks), now, allById, folderColorsArgb(allTasks), effectiveDue, urgentOnTop = mode != WidgetMode.ALL) to
                 mode.label.uppercase() + folderName?.let { " · $it" }.orEmpty()

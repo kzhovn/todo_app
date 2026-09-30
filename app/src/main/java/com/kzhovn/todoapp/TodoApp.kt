@@ -1,5 +1,8 @@
 package com.kzhovn.todoapp
 
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import androidx.glance.appwidget.updateAll
 import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.flow.debounce
@@ -69,13 +72,17 @@ class TodoApp : Application() {
 
     // Fires on any change to what decides a list: tasks, and also contexts (a place turning on at
     // home), their time windows, and dependencies, which don't touch the tasks table.
-    fun listInputChanges(): Flow<Unit> = callbackFlow {
-        val observer = object : InvalidationTracker.Observer(arrayOf("tasks", "contexts", "context_time_windows", "task_contexts", "task_dependencies")) {
-            override fun onInvalidated(tables: Set<String>) { trySend(Unit) }
-        }
-        database.invalidationTracker.addObserver(observer)
-        awaitClose { database.invalidationTracker.removeObserver(observer) }
-    }.conflate()
+    // Folder mode switching (here or synced from elsewhere) changes every list too.
+    fun listInputChanges(): Flow<Unit> = merge(
+        callbackFlow {
+            val observer = object : InvalidationTracker.Observer(arrayOf("tasks", "contexts", "context_time_windows", "task_contexts", "task_dependencies")) {
+                override fun onInvalidated(tables: Set<String>) { trySend(Unit) }
+            }
+            database.invalidationTracker.addObserver(observer)
+            awaitClose { database.invalidationTracker.removeObserver(observer) }
+        },
+        AppSettings.modeChanges.drop(1).map { }
+    ).conflate()
 
     override fun onCreate() {
         super.onCreate()

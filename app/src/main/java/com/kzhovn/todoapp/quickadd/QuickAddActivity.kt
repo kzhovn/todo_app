@@ -96,9 +96,11 @@ class QuickAddActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 // Checklists too: picking one makes the text its new items ("milk, eggs").
                 folders = repository.getAllTasks().filter { it.type == TaskType.FOLDER || (it.type == TaskType.CHECKLIST && !it.isComplete) }
-                // With no folder asked for, new tasks land in Personal (if it exists), as Discord adds do.
+                // With no folder asked for, new tasks land in folder mode's folder, or Personal (if it exists),
+                // as Discord adds do.
                 folder = if (initialFolderId != null) folders.firstOrNull { it.id == initialFolderId }
-                else findFolder(folders, DEFAULT_FOLDER)
+                else AppSettings.modeFolderId(this@QuickAddActivity)?.let { id -> folders.firstOrNull { it.id == id && it.type == TaskType.FOLDER } }
+                    ?: findFolder(folders, DEFAULT_FOLDER)
                 dependsOnTitle = dependsOnId?.let { repository.getTask(it)?.title }
                 focus.requestFocus()
             }

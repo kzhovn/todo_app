@@ -108,6 +108,23 @@ class ServerTest {
     }
 
     @Test
+    fun `in folder mode the top bar and Discord lists follow it, the digest's Doing doesn't`() = testApplication {
+        application { api(store, "secret") }
+        val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
+        service.create(Task(title = "Report", parentId = work.id, isStarred = true))
+        service.create(Task(title = "Sink", isStarred = true))
+        client.post("/api/mode?folder=${work.id}") { header("Authorization", "Bearer secret") }
+        val tray = SyncJson.decodeFromString(TrayState.serializer(), client.get("/api/tray?list=doing") { header("Authorization", "Bearer secret") }.bodyAsText())
+        assertEquals("Work", tray.mode?.title)
+        assertEquals(listOf("Report"), tray.rows.map { it.title })
+        assertEquals(work.id, tray.defaultFolder)
+        assertEquals(listOf("Report"), logic.command(".doing")!!.getOrThrow().map { it.title })
+        assertEquals(2, service.doing(null).size)
+        logic.onAdd(9L, "u", "-- book the offsite")
+        assertEquals(work.id, service.tasks().single { it.title == "book the offsite" }.parentId)
+    }
+
+    @Test
     fun `a Discord message starting with a check mark logs a completed task`() {
         val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
         assertTrue(logic.onAdd(1L, "u", "✅ fixed the sink"))

@@ -9,6 +9,11 @@
 .rb-menu { color: #2B4C7E; font-size: 18px; font-weight: bold; width: 32px; height: 30px; border-radius: 6px; }
 .rb-tab { color: #8A7A5C; font-size: 11px; font-weight: bold; padding: 4px 8px; border-radius: 6px; }
 .rb-tab-on { color: #2B4C7E; background-color: #DFE6EF; }
+/* Folder mode: the row under the tabs, filled in when a mode is on; its folder list when switching. */
+.rb-mode { color: #8A7A5C; font-size: 12px; padding: 3px 8px; margin: 2px 0 4px; border-radius: 6px; }
+.rb-mode-on { color: #FFFFFF; background-color: #B75037; font-weight: bold; }
+.rb-mode-choice { color: #2B2318; font-size: 13px; padding: 4px 12px; border-radius: 6px; }
+.rb-mode-choice:hover { background-color: #EFE8DC; }
 .rb-tool { width: 28px; height: 28px; border-radius: 6px; color: #8A7A5C; }
 .rb-add { width: 30px; height: 30px; border-radius: 15px; background-color: #DFE6EF; color: #2B4C7E; }
 .rb-icon { icon-size: 16px; }

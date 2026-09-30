@@ -36,7 +36,7 @@ import com.kzhovn.todoapp.ui.theme.LedgerSearchBackground
 
 // The top bar's search: a pill reading "Search tasks"; tapping it starts searching right there.
 @Composable
-fun SearchBar(query: String, searching: Boolean, onStart: () -> Unit, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
+fun SearchBar(query: String, searching: Boolean, onStart: () -> Unit, onChange: (String) -> Unit, modifier: Modifier = Modifier, placeholder: String = "Search tasks") {
     val shape = RoundedCornerShape(20.dp)
     val focusManager = LocalFocusManager.current
     BasicTextField(
@@ -55,7 +55,7 @@ fun SearchBar(query: String, searching: Boolean, onStart: () -> Unit, onChange: 
                 Icon(Icons.Filled.Search, contentDescription = null, tint = LedgerMuted, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Box(Modifier.weight(1f)) {
-                    if (query.isEmpty()) Text("Search tasks", fontSize = 15.sp, color = LedgerCheckBorder)
+                    if (query.isEmpty()) Text(placeholder, fontSize = 15.sp, color = LedgerCheckBorder)
                     field()
                 }
             }

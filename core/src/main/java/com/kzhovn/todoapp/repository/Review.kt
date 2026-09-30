@@ -2,6 +2,7 @@ package com.kzhovn.todoapp.repository
 
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.deadline
+import com.kzhovn.todoapp.data.inMode
 import com.kzhovn.todoapp.data.isChecklistItem
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.outermostFolder
@@ -164,9 +165,10 @@ class ReviewPage(
 
 private fun pattern(p: String) = DateTimeFormatter.ofPattern(p, Locale.US)
 
-fun review(all: List<Task>, waiting: List<Task>, now: Long, rolloverHour: Int, zoom: Zoom, end: LocalDate? = null): ReviewPage {
+// modeFolderId: folder mode's folder; only what was done under it counts.
+fun review(all: List<Task>, waiting: List<Task>, now: Long, rolloverHour: Int, zoom: Zoom, end: LocalDate? = null, modeFolderId: Long? = null): ReviewPage {
     val byId = all.associateBy { it.id }
-    val completed = all.filter { it.type.isDoable && !isChecklistItem(it, byId) && it.isComplete && it.completedAt != null }
+    val completed = all.filter { it.type.isDoable && !isChecklistItem(it, byId) && it.isComplete && it.completedAt != null && inMode(it, modeFolderId, byId) }
         .map { it to appDay(it.completedAt!!, rolloverHour) }
     val today = appDay(now, rolloverHour)
     val last = minOf(end ?: today, today)

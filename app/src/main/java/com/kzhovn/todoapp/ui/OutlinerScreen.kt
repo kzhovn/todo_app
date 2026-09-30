@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.material.icons.filled.OpenInFull
 import com.kzhovn.todoapp.data.OutlinerNode
 import com.kzhovn.todoapp.data.buildOutlinerTree
 import com.kzhovn.todoapp.data.subtaskCounts
@@ -84,7 +85,10 @@ fun OutlinerScreen(
     onReparent: (Long, Long) -> Unit,
     onAddSubtask: (Long) -> Unit,
     onMove: (taskId: Long, anchorId: Long, after: Boolean) -> Unit = { _, _, _ -> },
-    selectedIds: Set<Long> = emptySet()
+    selectedIds: Set<Long> = emptySet(),
+    // Folder mode: the tree starts inside this folder, and each other folder has a button to zoom into it.
+    rootId: Long? = null,
+    onZoom: ((Long) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val prefs = remember { OutlinerPreferences(context) }
@@ -95,7 +99,11 @@ fun OutlinerScreen(
         collapsed = prefs.collapsedIds()
     }
 
-    val tree = remember(tasks) { buildOutlinerTree(tasks, hideCompleted = true) }
+    val tree = remember(tasks, rootId) {
+        val whole = buildOutlinerTree(tasks, hideCompleted = true)
+        fun find(nodes: List<OutlinerNode>): OutlinerNode? = nodes.firstNotNullOfOrNull { if (it.task.id == rootId) it else find(it.children) }
+        if (rootId == null) whole else find(whole)?.children.orEmpty()
+    }
     val allById = remember(tasks) { tasks.associateBy { it.id } }
     val counts = remember(tasks) { subtaskCounts(tasks) }
 
@@ -127,7 +135,7 @@ fun OutlinerScreen(
         }
     }
 
-    val actions = OutlinerActions(::toggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt)
+    val actions = OutlinerActions(::toggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, onZoom)
     LazyColumn(state = listState, modifier = Modifier.onGloballyPositioned { listBounds = it.boundsInRoot() }) {
         renderNodes(tree, depth = 0, collapsed = collapsed, actions = actions, allById = allById, counts = counts, selectedIds = selectedIds)
     }
@@ -161,7 +169,8 @@ private data class OutlinerActions(
     val onReparent: (Long, Long) -> Unit,
     val onAddSubtask: (Long) -> Unit,
     val onMove: (Long, Long, Boolean) -> Unit,
-    val onDragAt: (Float?) -> Unit
+    val onDragAt: (Float?) -> Unit,
+    val onZoom: ((Long) -> Unit)?
 )
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -176,7 +185,7 @@ private fun OutlinerRow(
     itemCounts: Pair<Int, Int>?,
     selected: Boolean
 ) {
-    val (onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt) = actions
+    val (onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, onZoom) = actions
     val task = node.task
     val hasChildren = node.children.isNotEmpty()
     val indent = (8 + depth * 18).dp
@@ -280,6 +289,13 @@ private fun OutlinerRow(
                         color = LedgerInk,
                         modifier = Modifier.weight(1f).clickable { onEdit(task.id) }
                     )
+                    // Zoom the whole app into this folder (folder mode).
+                    onZoom?.let { zoom ->
+                        Icon(
+                            Icons.Filled.OpenInFull, contentDescription = "${task.title} mode", tint = LedgerMuted,
+                            modifier = Modifier.size(36.dp).clickable { zoom(task.id) }.padding(10.dp)
+                        )
+                    }
                 }
                 TaskType.TASK, TaskType.PROJECT, TaskType.CHECKLIST -> {
                     if (task.type == TaskType.PROJECT) ProjectMark(36.dp)

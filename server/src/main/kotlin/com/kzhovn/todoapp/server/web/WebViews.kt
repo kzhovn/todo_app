@@ -2,6 +2,7 @@ package com.kzhovn.todoapp.server.web
 
 import com.kzhovn.todoapp.widget.TodoWidgetPresenter
 import com.kzhovn.todoapp.data.isUnder
+import com.kzhovn.todoapp.data.inMode
 import com.kzhovn.todoapp.data.isChecklistItem
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.TaskOrder
@@ -83,6 +84,11 @@ class ListData(
 
     val all: List<Task> = service.tasks()
     val byId = all.associateBy { it.id }
+    // Folder mode: the folder every device is zoomed into (null: none). Doing and Active follow it
+    // (TaskService), and the All tree is rooted at it.
+    val modeFolder: Task? = service.modeFolder()
+    // Doing in a mode: what's due today or overdue outside it, in one line under the list.
+    val dueOutside: List<Task> = if (mode == ListMode.DOING && modeFolder != null) service.dueOutsideMode() else emptyList()
     private val contextIds = service.contextIdsByTask()
     private val folderColors = folderColorsHex(all)
     private val counts = subtaskCounts(all)
@@ -101,10 +107,11 @@ class ListData(
     // and projects stay, struck through.
     val tree: List<OutlinerNode> by lazy { buildOutlinerTree(all, hideCompleted = true) }
 
-    // The tree's top level for this view: a folder's contents, or everything.
+    // The tree's top level for this view: a folder's contents, the mode's, or everything.
     val roots: List<OutlinerNode> by lazy {
-        fun find(nodes: List<OutlinerNode>): OutlinerNode? = nodes.firstNotNullOfOrNull { if (it.task.id == folder) it else find(it.children) }
-        if (folder == null) tree else find(tree)?.children.orEmpty()
+        val root = folder ?: modeFolder?.id
+        fun find(nodes: List<OutlinerNode>): OutlinerNode? = nodes.firstNotNullOfOrNull { if (it.task.id == root) it else find(it.children) }
+        if (root == null) tree else find(tree)?.children.orEmpty()
     }
 
     // One open project whose steps are all done, to ask about (the phone asks the same, one at a time).
@@ -147,6 +154,7 @@ internal enum class Icon(val path: String) {
     CENTER_FOCUS("M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm-7 7H3v4c0 1.1.9 2 2 2h4v-2H5v-4zM5 5h4V3H5c-1.1 0-2 .9-2 2v4h2V5zm14-2h-4v2h4v4h2V5c0-1.1-.9-2-2-2zm0 16h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4z"), // CenterFocusStrong
     PUSH_PIN("M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z"),
     ADD("M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"),
+    OPEN_IN_FULL("M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z"),
     SEARCH("M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"),
     REFRESH("M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"),
     CHECKLIST("M22 7h-9v2h9V7zm0 8h-9v2h9v-2zM5.54 11L2 7.46l1.41-1.41 2.12 2.12 4.24-4.24 1.41 1.41L5.54 11zm0 8L2 15.46l1.41-1.41 2.12 2.12 4.24-4.24 1.41 1.41L5.54 19z"),
@@ -181,8 +189,15 @@ fun HTML.listPage(service: TaskService, data: ListData, deleted: Task? = null) =
 // The list column: a header (the list's name, bulk selection, New) over the list itself.
 fun FlowContent.listColumn(data: ListData) {
     div(classes = "list-head") {
-        h2 { +data.title }
+        h2 {
+            +data.title
+            if (data.folder == null) data.modeFolder?.let { span(classes = "mode-name") { +it.title } }
+        }
         if (data.mode != ListMode.ALL) span(classes = "list-count") { id = "list-count"; +data.tasks.size.toString() }
+        // A folder's view: zoom the whole app into it (z).
+        data.folder?.takeIf { it != data.modeFolder?.id }?.let { folder ->
+            button(classes = "zoom-in") { modeButton(folder, key = true); icon(Icon.OPEN_IN_FULL, ""); +"Zoom in" }
+        }
         // Bulk edit: app.js turns on selection, where clicking task rows picks them instead.
         div(classes = "list-tools") {
             attributes["data-mode"] = data.mode.name
@@ -205,12 +220,17 @@ fun FlowContent.listColumn(data: ListData) {
 val ListMode.path get() = "/${name.lowercase()}"
 
 // The sidebar's counts, and its folders (top level, in tree order) with their open tasks.
+// In folder mode: the counts are the mode's, and the folders are the mode folder's own.
 private class SideNav(service: TaskService) {
     val all = service.tasks()
     private val byId = all.associateBy { it.id }
-    val counts = mapOf(ListMode.DOING to service.doing().size, ListMode.ACTIVE to service.active().size, ListMode.ALL to TodoWidgetPresenter.allOpen(all, byId).size)
+    val mode = service.modeFolder()
+    val counts = mapOf(
+        ListMode.DOING to service.doing().size, ListMode.ACTIVE to service.active().size,
+        ListMode.ALL to TodoWidgetPresenter.allOpen(all, byId).count { inMode(it, mode?.id, byId) }
+    )
     val colors = folderColorsHex(all)
-    val folders = all.filter { it.type == TaskType.FOLDER && it.parentId == null }.sortedWith(TaskOrder).map { folder ->
+    val folders = all.filter { it.type == TaskType.FOLDER && it.parentId == mode?.id }.sortedWith(TaskOrder).map { folder ->
         folder to all.count { it.type.isDoable && !it.isComplete && !isChecklistItem(it, byId) && isUnder(it, folder.id, byId) }
     }
 }
@@ -257,6 +277,15 @@ private fun HTML.shell(
     div(classes = "shell") {
         aside(classes = "sidebar") {
             a(href = "/doing", classes = "brand") { img(src = "/static/icon-32.png", alt = "") ; +"Raspberry" }
+            // Folder mode, in the folder's colour; ✕ (or z, outside a folder's view) leaves it everywhere.
+            nav.mode?.let { mode ->
+                div(classes = "modebar") {
+                    nav.colors[mode.id]?.let { style = "background: $it" }
+                    icon(Icon.OPEN_IN_FULL, "")
+                    span { +"${mode.title} mode" }
+                    button(classes = "mode-leave") { modeButton(null, key = list?.folder == null); attributes["aria-label"] = "Leave ${mode.title} mode"; +"✕" }
+                }
+            }
             // Same parser as the app's quick add; new tasks go in Personal, or in the folder on screen.
             form(classes = "quickadd") {
                 attributes["hx-post"] = "/quickadd" + (list?.folder?.let { "?folder=$it" } ?: "")
@@ -267,7 +296,7 @@ private fun HTML.shell(
                 } else {
                     attributes["hx-swap"] = "none"
                 }
-                textInput(name = "text") { id = "quickadd"; placeholder = "Add a task… (n)"; attributes["autocomplete"] = "off" }
+                textInput(name = "text") { id = "quickadd"; placeholder = nav.mode?.let { "Add to ${it.title}… (n)" } ?: "Add a task… (n)"; attributes["autocomplete"] = "off" }
             }
             // The current task (pinned, or its timer running), shared with every device.
             service.pinned()?.let { now ->
@@ -284,14 +313,17 @@ private fun HTML.shell(
                 }
             }
             if (nav.folders.isNotEmpty()) {
-                div(classes = "nav-label") { +"Folders" }
+                div(classes = "nav-label") { +(nav.mode?.let { "In ${it.title}" } ?: "Folders") }
                 nav(classes = "nav folders") {
                     nav.folders.forEach { (folder, open) ->
                         val path = "/all?folder=${folder.id}"
-                        a(href = path, classes = if (path == current) "current" else null) {
-                            span(classes = "fdot") { nav.colors[folder.id]?.let { style = "background: $it" } }
-                            +folder.title
-                            span(classes = "n") { id = "n-${folder.id}"; +open.toString() }
+                        div(classes = "nav-folder") {
+                            a(href = path, classes = if (path == current) "current" else null) {
+                                span(classes = "fdot") { nav.colors[folder.id]?.let { style = "background: $it" } }
+                                +folder.title
+                                span(classes = "n") { id = "n-${folder.id}"; +open.toString() }
+                            }
+                            button(classes = "zoom") { modeButton(folder.id); attributes["title"] = "${folder.title} mode"; icon(Icon.OPEN_IN_FULL, "") }
                         }
                     }
                 }
@@ -367,6 +399,19 @@ fun DIV.listContents(data: ListData) {
     } else {
         data.tasks.forEach { taskRow(data, it, depth = 0) }
     }
+    // Folder mode hides the rest; this keeps it from hiding something due today.
+    if (data.dueOutside.isNotEmpty()) details(classes = "due-outside") {
+        summary { +"${data.dueOutside.size} due today outside ${data.modeFolder!!.title} · "; span(classes = "show") { +"show" } }
+        data.dueOutside.forEach { taskRow(data, it, depth = 0) }
+    }
+}
+
+// Enters folder mode on this folder (null: leaves it) on every device, then reloads the page into it.
+// key: z presses it.
+internal fun HTMLTag.modeButton(folderId: Long?, key: Boolean = false) {
+    attributes["hx-post"] = "/mode" + (folderId?.let { "?folder=$it" } ?: "")
+    attributes["hx-swap"] = "none"
+    if (key) attributes["data-key"] = "z"
 }
 
 // The All tree, as flat rows in outline order (app.js's keys and drag work off data-*).
@@ -394,6 +439,9 @@ private fun FlowContent.tree(data: ListData, nodes: List<OutlinerNode>, parentId
                 outline()
                 icon(Icon.FOLDER, "folder-icon", data.ownColor(item))
                 a(href = "/tasks/${item.id}?mode=${data.q}", classes = "edit") { openInPanel(); +item.title }
+                if (item.id != data.modeFolder?.id) button(classes = "zoom") {
+                    modeButton(item.id); attributes["tabindex"] = "-1"; attributes["title"] = "${item.title} mode"; icon(Icon.OPEN_IN_FULL, "")
+                }
             }
         } else {
             taskRow(data, item, depth, outline)

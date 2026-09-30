@@ -24,7 +24,10 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManagerFactory
 
-data class SyncConfig(val url: String, val token: String, val rolloverHour: Int? = null, val rolloverSetAt: Long = 0)
+data class SyncConfig(
+    val url: String, val token: String, val rolloverHour: Int? = null, val rolloverSetAt: Long = 0,
+    val modeFolderId: Long? = null, val modeSetAt: Long = 0
+)
 
 class SyncClient(
     private val context: Context,
@@ -45,12 +48,13 @@ class SyncClient(
     suspend fun sync(config: SyncConfig): Int = mutex.withLock {
         val (request, pushedTs) = db.withTransaction {
             val dirty = readDirty()
-            SyncRequest(cursor(), dirty.mapNotNull { (key, ts) -> changeFor(key, ts) }, config.rolloverHour, config.rolloverSetAt) to dirty
+            SyncRequest(cursor(), dirty.mapNotNull { (key, ts) -> changeFor(key, ts) }, config.rolloverHour, config.rolloverSetAt, config.modeFolderId, config.modeSetAt) to dirty
         }
         val response = withContext(Dispatchers.IO) { (transport ?: ::post)(config, request) }
         val result = db.withTransaction { apply(response, pushedTs) }
         // Set more recently elsewhere (the web): take it.
         response.rolloverHour?.takeIf { response.rolloverSetAt > config.rolloverSetAt }?.let { AppSettings.setRolloverHour(context, it, response.rolloverSetAt) }
+        if (response.modeSetAt > config.modeSetAt) AppSettings.setMode(context, response.modeFolderId, response.modeSetAt)
         result.applied.forEach { if (it.isComplete) reminders.cancel(it) else reminders.schedule(it) }
         result.removed.forEach(reminders::cancel)
         result.changedRows

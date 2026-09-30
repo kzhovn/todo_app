@@ -70,6 +70,21 @@ class SyncClientTest {
     }
 
     @Test
+    fun `folder mode set more recently wins, the phone's or the web's`() = runBlocking {
+        val work = repository.createTask(Task(title = "Work", type = com.kzhovn.todoapp.data.TaskType.FOLDER))
+        client.sync(config)
+        client.sync(config.copy(modeFolderId = work, modeSetAt = 100))
+        assertEquals(work, server.modeFolderId())
+
+        store.setMode(null, setAt = 200) // left on the web since
+        com.kzhovn.todoapp.AppSettings.setMode(context, work, setAt = 100)
+        client.sync(config.copy(modeFolderId = work, modeSetAt = 100))
+        assertEquals(null, server.modeFolderId())
+        assertEquals(null, com.kzhovn.todoapp.AppSettings.modeFolderId(context))
+        assertEquals(200, com.kzhovn.todoapp.AppSettings.modeSetAt(context))
+    }
+
+    @Test
     fun `local tasks, contexts, and assignments reach the server`() = runBlocking {
         val ctxId = contexts.createContext(TaskContext(name = "Work", type = ContextType.TIME))
         contexts.addTimeWindow(ContextTimeWindow(contextId = ctxId, windowStartMinute = 540, windowEndMinute = 1020))

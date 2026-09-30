@@ -427,6 +427,33 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .cand:hover { background: var(--accent-soft); }
 .cand .parent { color: var(--muted); }
 .focus-new { margin-top: 12px; }
+.focus-search-form { display: flex; align-items: center; gap: 8px; }
+.focus-search-form input[type=search] { flex: 1; }
+/* Folder mode: the sidebar's bar in the folder's colour, zoom buttons on folders, and Doing's line
+   for what's due outside the mode. */
+.modebar { display: flex; align-items: center; gap: 8px; background: var(--accent); color: #fff; border-radius: 8px; padding: 7px 8px 7px 10px; margin: 0 0 10px; font-weight: 600; font-size: 14px; }
+.modebar .icon { width: 15px; height: 15px; fill: currentColor; }
+.modebar .mode-leave { margin-left: auto; color: #fff; opacity: .85; padding: 0 4px; font-size: 14px; }
+.modebar .mode-leave:hover { opacity: 1; }
+.nav-folder { position: relative; }
+.nav-folder .zoom { position: absolute; right: 34px; top: 50%; transform: translateY(-50%); display: none; }
+.nav-folder:hover .zoom, .nav-folder .zoom:focus-visible { display: inline-flex; }
+.zoom { width: 22px; height: 22px; align-items: center; justify-content: center; border-radius: 5px; color: var(--muted); display: inline-flex; }
+.zoom .icon { width: 14px; height: 14px; }
+.zoom svg { fill: currentColor; }
+.zoom:hover { background: var(--tile); color: var(--ink); }
+.outline .folder .zoom { margin-left: 6px; visibility: hidden; }
+.outline .folder:hover .zoom, .outline .folder:focus-within .zoom { visibility: visible; }
+.zoom-in { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); border: 1px solid var(--border); border-radius: 7px; padding: 2px 8px; }
+.zoom-in .icon { width: 13px; height: 13px; }
+.zoom-in svg { fill: currentColor; }
+.zoom-in:hover { color: var(--ink); background: var(--tile); }
+.mode-name { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 8px; }
+.due-outside { margin: 12px 0 0; }
+.due-outside > summary { list-style: none; cursor: pointer; font-size: 13px; color: var(--muted); padding: 4px 20px; }
+.due-outside > summary::-webkit-details-marker { display: none; }
+.due-outside .show { color: var(--accent); }
+.due-outside[open] .show { display: none; }
 .focus-search { margin-bottom: 8px; }
 .focus-search summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); padding: 4px 0; }
 .focus-search summary::-webkit-details-marker { display: none; }

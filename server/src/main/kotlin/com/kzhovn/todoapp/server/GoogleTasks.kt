@@ -1,6 +1,5 @@
 package com.kzhovn.todoapp.server
 
-import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.net.URI
@@ -53,7 +52,7 @@ class GoogleTasksImport(
         }
         val due = task.dueDate ?: item.due?.let { day(it) }
         val bare = task.parentId == null && task.startDate == null && due == null && !task.isMaybe
-        service.add(add.copy(task = task.copy(dueDate = due)), service.findFolder(DEFAULT_FOLDER)?.id, star = bare)
+        service.add(add.copy(task = task.copy(dueDate = due)), service.defaultFolderId(), star = bare)
     }
 
     // "2026-10-02T00:00:00.000Z": Google Tasks keeps only the date.

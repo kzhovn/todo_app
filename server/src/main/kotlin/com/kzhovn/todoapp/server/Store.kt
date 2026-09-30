@@ -47,18 +47,30 @@ class Store(path: String) {
 
     private fun rolloverSetAt() = getValue(ROLLOVER_SET_AT_KEY)?.toLongOrNull() ?: 0
 
+    // Folder mode (null: none), newest wins. 0 is "never set", so a device that hasn't set it changes nothing.
+    fun setMode(folderId: Long?, setAt: Long) = transaction {
+        if (setAt > modeSetAt()) {
+            setValue(MODE_FOLDER_KEY, folderId?.toString())
+            setValue(MODE_SET_AT_KEY, setAt.toString())
+        }
+    }
+
+    fun modeFolderId(): Long? = getValue(MODE_FOLDER_KEY)?.toLongOrNull()
+    fun modeSetAt() = getValue(MODE_SET_AT_KEY)?.toLongOrNull() ?: 0
+
     @Synchronized
     fun sync(request: SyncRequest): SyncResponse {
         val changed = mutableListOf<Pair<SyncRow?, SyncRow>>()
         val response = transaction {
             request.rolloverHour?.let { setRolloverHour(it, request.rolloverSetAt) }
+            setMode(request.modeFolderId, request.modeSetAt)
             request.changes.forEach { incoming ->
                 val before = get(incoming.table, incoming.id)
                 val after = merge(before, incoming)
                 put(after)
                 changed += before to after
             }
-            SyncResponse(maxVersion(), since(request.cursor), getValue(ROLLOVER_HOUR_KEY)?.toIntOrNull(), rolloverSetAt())
+            SyncResponse(maxVersion(), since(request.cursor), getValue(ROLLOVER_HOUR_KEY)?.toIntOrNull(), rolloverSetAt(), modeFolderId(), modeSetAt())
         }
         changed.forEach { (before, after) ->
             onChange?.invoke(before, after)
@@ -161,6 +173,8 @@ class Store(path: String) {
     companion object {
         const val ROLLOVER_HOUR_KEY = "rolloverHour"
         const val ROLLOVER_SET_AT_KEY = "rolloverSetAt"
+        const val MODE_FOLDER_KEY = "modeFolderId"
+        const val MODE_SET_AT_KEY = "modeSetAt"
         private val clockSerializer = MapSerializer(String.serializer(), Long.serializer())
     }
 }

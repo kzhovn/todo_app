@@ -13,6 +13,8 @@ import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.repository.focusSearch
 import com.kzhovn.todoapp.repository.nextFocusTasks
 import com.kzhovn.todoapp.data.findFolder
+import com.kzhovn.todoapp.data.inMode
+import com.kzhovn.todoapp.data.modeFolder
 import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.data.Labels
 import androidx.compose.ui.text.input.ImeAction
@@ -132,7 +134,9 @@ class FocusActivity : ComponentActivity() {
                     val all = repository.getAllTasks().also { allTasks = it }
                     val byId = all.associateBy { it.id }
                     val contexts = repository.getAllTaskContexts()
-                    val active = repository.getActiveTasksFrom(all, contexts, now, minuteOfDay(now), dayOfWeekMask(now))
+                    // In folder mode, the mode's tasks (its search too).
+                    val mode = modeFolder(AppSettings.modeFolderId(this@FocusActivity), byId)?.id
+                    val active = repository.getActiveTasksFrom(all, contexts, now, minuteOfDay(now), dayOfWeekMask(now)).filter { inMode(it, mode, byId) }
                     val doing = filterDoing(active, now, byId, contexts)
                     return nextFocusTasks(active, doing, finished, byId)
                 }
@@ -226,7 +230,11 @@ class FocusActivity : ComponentActivity() {
                     TaskPickerDialog(
                         title = "Focus on",
                         tasks = list,
-                        searchAll = { query -> focusSearch(allTasks, query) },
+                        searchAll = { query ->
+                            val byId = allTasks.associateBy { it.id }
+                            val mode = modeFolder(AppSettings.modeFolderId(this@FocusActivity), byId)?.id
+                            focusSearch(allTasks, query).filter { inMode(it, mode, byId) }
+                        },
                         onPick = { candidates = null; focusOn(it) },
                         onCreateNew = { adding = true; addToFocus = true },
                         // Nothing picked: with no session there's nothing to focus on; after a task is done,
@@ -254,9 +262,10 @@ class FocusActivity : ComponentActivity() {
                         if (text.isNotBlank()) scope.launch {
                             val now = System.currentTimeMillis()
                             val add = repository.planQuickAdd(text, AppSettings.rolloverHour(this@FocusActivity), now)
-                            // Into Personal unless it names a folder, like quick add with no folder chosen.
-                            val personal = findFolder(repository.getFolders(), DEFAULT_FOLDER)
-                            val created = repository.quickAdd(add, personal?.id, now)?.let { repository.getTask(it) }
+                            // Into folder mode's folder or Personal unless it names a folder, like quick add with no folder chosen.
+                            val folders = repository.getFolders()
+                            val home = modeFolder(AppSettings.modeFolderId(this@FocusActivity), folders.associateBy { it.id }) ?: findFolder(folders, DEFAULT_FOLDER)
+                            val created = repository.quickAdd(add, home?.id, now)?.let { repository.getTask(it) }
                             if (focusOnIt && created != null && add.task != null) {
                                 candidates = null
                                 focusOn(created)

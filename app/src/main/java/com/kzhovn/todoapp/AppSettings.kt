@@ -2,6 +2,7 @@ package com.kzhovn.todoapp
 
 import android.content.Context
 import com.kzhovn.todoapp.data.DEFAULT_ROLLOVER_HOUR
+import kotlinx.coroutines.flow.MutableStateFlow
 
 // Device-level preferences that aren't sync credentials.
 object AppSettings {
@@ -15,4 +16,15 @@ object AppSettings {
 
     fun setRolloverHour(context: Context, hour: Int, setAt: Long = System.currentTimeMillis()) =
         prefs(context).edit().putInt("rolloverHour", hour).putLong("rolloverSetAt", setAt).apply()
+
+    // Folder mode (FolderMode.kt): the folder every device is zoomed into (null: none), synced like the
+    // rollover hour. modeChanges ticks on every change, so the lists and widgets redraw.
+    fun modeFolderId(context: Context): Long? = prefs(context).getLong("modeFolderId", 0L).takeIf { it != 0L }
+    fun modeSetAt(context: Context): Long = prefs(context).getLong("modeSetAt", 0)
+    val modeChanges = MutableStateFlow(0)
+
+    fun setMode(context: Context, folderId: Long?, setAt: Long = System.currentTimeMillis()) {
+        prefs(context).edit().putLong("modeFolderId", folderId ?: 0L).putLong("modeSetAt", setAt).apply()
+        modeChanges.value++
+    }
 }

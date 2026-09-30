@@ -60,6 +60,8 @@ import com.kzhovn.todoapp.AppSettings
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.inMode
+import com.kzhovn.todoapp.data.modeFolder
 import com.kzhovn.todoapp.data.sectionsByTopFolder
 import com.kzhovn.todoapp.data.walkParentChain
 import com.kzhovn.todoapp.repository.DONE_BUCKETS
@@ -100,6 +102,8 @@ class ReviewActivity : ComponentActivity() {
                 var waiting by remember { mutableStateOf<List<Task>>(emptyList()) }
                 var zoom by remember { mutableStateOf(Zoom.MONTH) }
                 var end by remember { mutableStateOf<LocalDate?>(null) } // null: today
+                // In folder mode, the mode's folder only, unless this is on.
+                var everywhere by remember { mutableStateOf(false) }
                 LaunchedEffect(Unit) {
                     val tasks = app.repository.getAllTasks()
                     val now = System.currentTimeMillis()
@@ -110,11 +114,15 @@ class ReviewActivity : ComponentActivity() {
                 val tasks = all
                 AppDrawer(rememberDrawerState(DrawerValue.Closed), reviewSelected = true) {
                     if (tasks != null) {
-                        val page = remember(tasks, waiting, zoom, end) {
-                            review(tasks, waiting, System.currentTimeMillis(), AppSettings.rolloverHour(app), zoom, end)
+                        val byId = remember(tasks) { tasks.associateBy { it.id } }
+                        val mode = modeFolder(AppSettings.modeFolderId(app), byId)
+                        val shown = mode?.takeUnless { everywhere }
+                        val page = remember(tasks, waiting, zoom, end, shown) {
+                            review(tasks, waiting.filter { inMode(it, shown?.id, byId) }, System.currentTimeMillis(), AppSettings.rolloverHour(app), zoom, end, shown?.id)
                         }
                         ReviewScreen(
                             page, tasks,
+                            modeTitle = mode?.title, everywhere = everywhere, onEverywhere = { everywhere = it },
                             go = { z, e -> zoom = z; end = e?.takeIf { it < page.today } },
                             openTask = { id -> startActivity(Intent(this, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, id)) }
                         )
@@ -127,7 +135,11 @@ class ReviewActivity : ComponentActivity() {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun ReviewScreen(page: ReviewPage, all: List<Task>, go: (Zoom, LocalDate?) -> Unit, openTask: (Long) -> Unit) {
+internal fun ReviewScreen(
+    page: ReviewPage, all: List<Task>, go: (Zoom, LocalDate?) -> Unit, openTask: (Long) -> Unit,
+    // Folder mode: its folder's name, and whether this shows all folders instead.
+    modeTitle: String? = null, everywhere: Boolean = false, onEverywhere: (Boolean) -> Unit = {}
+) {
     val byId = remember(all) { all.associateBy { it.id } }
     val colors = remember(all) { folderColors(all) }
     val colorOf = { folder: Task? -> folder?.let { colors[it.id] } ?: LedgerMuted }
@@ -150,7 +162,14 @@ internal fun ReviewScreen(page: ReviewPage, all: List<Task>, go: (Zoom, LocalDat
 
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize().background(LedgerBackground).padding(horizontal = 16.dp)) {
         item(key = "top") {
-            Text("Review", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk, modifier = Modifier.padding(top = 16.dp))
+            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 16.dp)) {
+                Text("Review", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk)
+                if (modeTitle != null && !everywhere) Text(modeTitle, fontSize = 13.sp, color = LedgerMuted, modifier = Modifier.padding(start = 8.dp, bottom = 3.dp))
+                Spacer(Modifier.weight(1f))
+                modeTitle?.let {
+                    Text(if (everywhere) "Just $it" else "See all folders", fontSize = 13.sp, color = LedgerAccent, modifier = Modifier.clickable { onEverywhere(!everywhere) }.padding(4.dp))
+                }
+            }
             // The zoom levels, then the window with its arrows.
             Row(Modifier.padding(top = 10.dp).clip(RoundedCornerShape(8.dp)).background(LedgerTile).border(1.dp, LedgerBorder, RoundedCornerShape(8.dp)).padding(2.dp)) {
                 Zoom.entries.forEach { z ->

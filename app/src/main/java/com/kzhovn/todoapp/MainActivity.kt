@@ -1,5 +1,20 @@
 package com.kzhovn.todoapp
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.FilterChip
+import com.kzhovn.todoapp.ui.FolderPickerDialog
+import com.kzhovn.todoapp.ui.TaskCheckbox
+import com.kzhovn.todoapp.data.dueStatus
+import com.kzhovn.todoapp.ui.theme.LedgerInk
+import com.kzhovn.todoapp.ui.theme.LedgerBorder
+import com.kzhovn.todoapp.ui.theme.folderColors
 import com.kzhovn.todoapp.ui.SearchBar
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.platform.LocalFocusManager
@@ -134,7 +149,16 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             LedgerTheme {
-            val viewModel = remember { TaskListViewModel(repository, contextRepository, app.listInputChanges()) }
+            val viewModel = remember { TaskListViewModel(repository, contextRepository, app.listInputChanges(), modeFolderId = { AppSettings.modeFolderId(app) }) }
+            // Folder mode: set here, it goes to every device with the next sync (straight away).
+            val setMode: (Long?) -> Unit = { id ->
+                AppSettings.setMode(app, id)
+                if (SyncSettings.config(app) != null) SyncWorker.requestSoon(app, delaySeconds = 0)
+            }
+            val mode by viewModel.mode.collectAsState()
+            var pickingMode by remember { mutableStateOf(false) }
+            // Searching in a mode keeps to its folder, unless this is on.
+            var everywhere by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
             val snackbarHostState = remember { SnackbarHostState() }
             var selectedMode by remember { mutableStateOf(requestedMode.value ?: TaskListMode.DOING) }
@@ -160,8 +184,9 @@ class MainActivity : ComponentActivity() {
             // What the list shows; it reloads itself on data changes (see TaskListViewModel). Resuming
             // reloads too, since time passing (a start date arriving) changes Doing/Active without any write.
             // In search mode the filters apply even with an empty query (every task matching them).
-            LifecycleResumeEffect(selectedMode, searchMode, query, filters) {
-                if (searchMode) viewModel.search(query, filters) else viewModel.load(selectedMode)
+            LifecycleResumeEffect(selectedMode, searchMode, query, filters, everywhere, mode?.id) {
+                if (searchMode) viewModel.search(query, filters.takeIf { it.folderId != null || everywhere } ?: filters.copy(folderId = mode?.id))
+                else viewModel.load(selectedMode)
                 onPauseOrDispose { }
             }
             // Folders and contexts are made on other screens (the FAB's long-press menu), so coming
@@ -262,7 +287,12 @@ class MainActivity : ComponentActivity() {
                         } else {
                             IconButton(onClick = { scope.launch { drawerState.open() } }) { Icon(Icons.Filled.Menu, contentDescription = "Menu") }
                         }
-                        SearchBar(query, searching = searchMode, onStart = { searchMode = true }, onChange = { query = it }, modifier = Modifier.weight(1f))
+                        SearchBar(
+                            query, searching = searchMode, onStart = { searchMode = true }, onChange = { query = it }, modifier = Modifier.weight(1f),
+                            placeholder = mode?.takeUnless { everywhere }?.let { "Search ${it.title}" } ?: "Search tasks"
+                        )
+                        // Folder mode's chip: the mode in its folder's colour (✕ leaves it), or "All folders" to pick one.
+                        if (!searchMode) ModeChip(mode, mode?.let { viewModel.allById.value.let { all -> folderColors(all.values)[it.id] } }, onPick = { pickingMode = true }, onLeave = { setMode(null) })
                         if (searchMode) {
                             IconButton(onClick = { showFilters = !showFilters }) {
                                 Icon(
@@ -280,6 +310,13 @@ class MainActivity : ComponentActivity() {
                     if (showFilters) {
                         FilterPanel(filters = filters, folders = folders, contexts = contexts, onFiltersChange = { filters = it })
                     }
+                    if (searchMode && mode != null) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp)) {
+                        FilterChip(selected = everywhere, onClick = { everywhere = !everywhere }, label = { Text("Everywhere, not just ${mode!!.title}") })
+                    }
+                    if (pickingMode) FolderPickerDialog(
+                        folders = folders, showNoFolderOption = true, title = "Mode", noFolderLabel = "All folders", selectedId = mode?.id,
+                        onPick = { setMode(it?.id); pickingMode = false }, onDismiss = { pickingMode = false }
+                    )
                     if (!searchMode) TabRow(selectedTabIndex = TaskListMode.entries.indexOf(selectedMode)) {
                         TaskListMode.entries.forEach { mode ->
                             Tab(
@@ -315,6 +352,8 @@ class MainActivity : ComponentActivity() {
                         val tasks by viewModel.tasks.collectAsState()
                         OutlinerScreen(
                             tasks = tasks,
+                            rootId = mode?.id,
+                            onZoom = setMode,
                             onCheck = onCheck,
                             onEdit = onEdit,
                             onStar = onStar,
@@ -328,8 +367,8 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         )
-                    } else {
-                        TaskListScreen(
+                    } else Column {
+                        Box(Modifier.weight(1f, fill = false)) { TaskListScreen(
                             viewModel = viewModel,
                             onCheck = onCheck,
                             onStar = onStar,
@@ -347,7 +386,10 @@ class MainActivity : ComponentActivity() {
                                 )
                             },
                             sectioned = selectedMode == TaskListMode.ACTIVE && !searchMode
-                        )
+                        ) }
+                        // Folder mode hides the rest; this keeps it from hiding something due today.
+                        val dueOutside by viewModel.dueOutside.collectAsState()
+                        if (!searchMode && dueOutside.isNotEmpty()) DueOutsideLine(dueOutside, mode?.title.orEmpty(), onOpen = onEdit, onCheck = onCheck)
                     }
                     // A project whose subtasks are all done asks what's next. "Later" only snoozes it for
                     // this session; it's asked again next time the app starts.
@@ -428,6 +470,42 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_MODE = "mode"
+    }
+}
+
+// Folder mode in the top bar: filled in the folder's colour with ✕ to leave, or a quiet "All folders".
+@Composable
+private fun ModeChip(mode: Task?, color: Color?, onPick: () -> Unit, onLeave: () -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    if (mode == null) {
+        Text(
+            "All folders ▾", fontSize = 13.sp, color = LedgerMuted, maxLines = 1,
+            modifier = Modifier.padding(start = 6.dp, end = 2.dp).clip(shape).border(1.dp, LedgerBorder, shape).clickable(onClick = onPick).padding(horizontal = 10.dp, vertical = 6.dp)
+        )
+    } else Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(start = 6.dp, end = 2.dp).clip(shape).background(color ?: LedgerAccent).clickable(onClick = onPick).padding(start = 10.dp)
+    ) {
+        Text(mode.title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1, modifier = Modifier.widthIn(max = 110.dp))
+        Icon(Icons.Filled.Close, contentDescription = "Leave ${mode.title} mode", tint = Color.White, modifier = Modifier.size(32.dp).clickable(onClick = onLeave).padding(8.dp))
+    }
+}
+
+// Under Doing in a mode: "2 due today outside Work", opening to the tasks themselves.
+@Composable
+private fun DueOutsideLine(tasks: List<Task>, modeTitle: String, onOpen: (Long) -> Unit, onCheck: (Long) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text(
+            "${tasks.size} due today outside $modeTitle" + if (open) "" else " · show", fontSize = 13.sp, color = LedgerMuted,
+            modifier = Modifier.clickable { open = !open }.padding(vertical = 6.dp)
+        )
+        if (open) tasks.forEach { task ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TaskCheckbox(checked = false, due = task.dueDate?.let { dueStatus(it, System.currentTimeMillis()) }, size = 18.dp, touchSize = 36.dp) { onCheck(task.id) }
+                Text(task.title, fontSize = 15.sp, color = LedgerInk, modifier = Modifier.weight(1f).clickable { onOpen(task.id) }.padding(vertical = 6.dp))
+            }
+        }
     }
 }
 

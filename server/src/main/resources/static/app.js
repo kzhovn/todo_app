@@ -7,7 +7,8 @@
   const help = "n  jump to quick add\ng, then d / a / t  go to Doing / Active / All\nEsc  leave a text box, close the task panel, or leave focus\n\n" +
     "All tree (click a row first):\n↑ ↓  move between rows    ← →  fold / unfold\nEnter  new task below    Tab / Shift-Tab  indent / outdent\n" +
     "Space  complete    Alt-↑ / Alt-↓  move up / down\ne  edit    s  star    f  focus\nDrag a row: top or bottom edge to reorder, middle to nest\n\n" +
-    "Review:\n← →  earlier / later    − / +  zoom out / in";
+    "Review:\n← →  earlier / later    − / +  zoom out / in\n\n" +
+    "z  zoom into the folder on screen (folder mode), or out of the mode";
   document.addEventListener("keydown", (e) => {
     const typing = e.target.closest("input, textarea, select");
     if (e.key === "Escape" && typing) { e.target.blur(); return; }
@@ -19,9 +20,9 @@
     const node = e.target.closest(".node");
     if (node && outlineKey(e, node)) { e.preventDefault(); return; }
     if (e.altKey) return;
-    // Review: ← → step through time, − / + zoom (links marked with data-key).
-    const reviewLink = document.querySelector(`.review a[data-key="${e.key === "=" ? "+" : e.key}"]`);
-    if (reviewLink) { location.href = reviewLink.href; return; }
+    // Keys marked on the page with data-key: Review's ← → (step) and − / + (zoom); z, folder mode.
+    const keyed = document.querySelector(`[data-key="${e.key === "=" ? "+" : e.key}"]`);
+    if (keyed) { if (keyed.href) location.href = keyed.href; else keyed.click(); return; }
     if (pendingG && go[e.key]) { location.href = go[e.key]; pendingG = false; return; }
     pendingG = e.key === "g";
     if (e.key === "n") { e.preventDefault(); document.getElementById("quickadd")?.focus(); }

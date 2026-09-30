@@ -113,7 +113,14 @@ fun Route.pageRoutes(service: TaskService) {
         val q = call.request.queryParameters
         val zoom = q["zoom"]?.let { z -> Zoom.entries.firstOrNull { it.name.equals(z, ignoreCase = true) } } ?: Zoom.MONTH
         val end = q["end"]?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-        call.respondHtml { reviewPage(service, zoom, end) }
+        call.respondHtml { reviewPage(service, zoom, end, everywhere = q["everywhere"] != null) }
+    }
+
+    // Folder mode on every device: ?folder=<id>, or none to leave. The page reloads into it.
+    post("/mode") {
+        service.setMode(call.request.queryParameters["folder"]?.toLongOrNull())
+        call.response.header("HX-Refresh", "true")
+        call.respondText("")
     }
 
     get("/settings") { call.respondHtml { settingsPage(service) } }
@@ -169,9 +176,10 @@ private fun HTML.searchPage(service: TaskService, p: Parameters) = shellPage(ser
         attributes["hx-target"] = "#results"
         attributes["hx-swap"] = "outerHTML"
         input(type = InputType.search, name = "q", classes = "search-q") {
-            value = p["q"].orEmpty(); placeholder = "Search tasks…"; attributes["autofocus"] = ""; attributes["autocomplete"] = "off"
+            value = p["q"].orEmpty(); placeholder = service.modeFolder()?.let { "Search ${it.title}…" } ?: "Search tasks…"; attributes["autofocus"] = ""; attributes["autocomplete"] = "off"
         }
         div(classes = "pills") {
+            if (service.modeFolder() != null) label(classes = "pill") { checkBoxInput(name = "everywhere") { checked = p["everywhere"] != null }; +"Everywhere" }
             label(classes = "pill") { checkBoxInput(name = "starred") { checked = p["starred"] != null }; +Labels.STARRED }
             label(classes = "pill") { checkBoxInput(name = "completed") { checked = p["completed"] != null }; +Labels.COMPLETED }
             select {
@@ -198,7 +206,9 @@ private fun HTML.searchPage(service: TaskService, p: Parameters) = shellPage(ser
 private fun DIV.searchResults(service: TaskService, p: Parameters) {
     id = "results"
     classes = setOf("results")
-    val results = service.search(p["q"].orEmpty(), p.searchFilters())
+    // In folder mode, within the mode's folder unless another folder or Everywhere is picked.
+    val filters = p.searchFilters().let { f -> if (f.folderId == null && p["everywhere"] == null) f.copy(folderId = service.modeFolderId()) else f }
+    val results = service.search(p["q"].orEmpty(), filters)
     val all = service.tasks()
     val byId = all.associateBy { it.id }
     val counts = subtaskCounts(all)
@@ -314,17 +324,20 @@ private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode)
 
 // Rolling windows, stepped and zoomed through links, so Back and bookmarks work without JavaScript
 // (app.js adds ← → − + keys that follow the links marked with data-key).
-private fun reviewUrl(zoom: Zoom, end: LocalDate, today: LocalDate) =
-    "/review?zoom=${zoom.name.lowercase()}" + if (zoom != Zoom.ALL && end != today) "&end=$end" else ""
+private fun reviewUrl(zoom: Zoom, end: LocalDate, today: LocalDate, everywhere: Boolean) =
+    "/review?zoom=${zoom.name.lowercase()}" + (if (zoom != Zoom.ALL && end != today) "&end=$end" else "") + if (everywhere) "&everywhere=1" else ""
 
-private fun HTML.reviewPage(service: TaskService, zoom: Zoom, end: LocalDate?) = shellPage(service, "Raspberry · Review", "/review") {
+// In folder mode, the mode's folder only, unless `everywhere`.
+private fun HTML.reviewPage(service: TaskService, zoom: Zoom, end: LocalDate?, everywhere: Boolean) = shellPage(service, "Raspberry · Review", "/review") {
     val all = service.tasks()
     val byId = all.associateBy { it.id }
     val colors = folderColorsHex(all)
     // Grouped and coloured by top-level folder, like the phone's Review.
     val colorOf = { folder: Task? -> folder?.let { colors[it.id] } ?: "var(--muted)" }
-    val page = review(all, service.waiting(), service.now(), service.rolloverHour(), zoom, end)
-    fun url(z: Zoom, e: LocalDate) = reviewUrl(z, e, page.today)
+    val mode = service.modeFolder()?.takeUnless { everywhere }
+    val waiting = if (everywhere) service.waiting(everywhere = true) else service.waiting()
+    val page = review(all, waiting, service.now(), service.rolloverHour(), zoom, end, modeFolderId = mode?.id)
+    fun url(z: Zoom, e: LocalDate, all: Boolean = everywhere) = reviewUrl(z, e, page.today, all)
     val ages = page.timeToDone.associate { it.task.id to it.ms }
     // The tick takes the task's own folder shade, as its row's colour bar does.
     fun FlowContent.taskRow(task: Task, right: String?, done: Boolean = true) = div(classes = "done-row") {
@@ -347,7 +360,17 @@ private fun HTML.reviewPage(service: TaskService, zoom: Zoom, end: LocalDate?) =
     }
 
     div(classes = "review") {
-        h1 { +"Review" }
+        h1 {
+            +"Review"
+            mode?.let { span(classes = "mode-name") { +it.title } }
+        }
+        // Folder mode: this is the mode's; the whole list is a click away (and back).
+        service.modeFolder()?.let { m ->
+            p(classes = "hint") {
+                if (everywhere) a(href = url(zoom, page.end, all = false)) { +"Just ${m.title}" }
+                else a(href = url(zoom, page.end, all = true)) { +"See all folders" }
+            }
+        }
         div(classes = "review-controls") {
             div(classes = "seg") {
                 Zoom.entries.forEach { z ->
