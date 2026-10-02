@@ -76,7 +76,8 @@ DIGEST_TIME=08:00
   Caddy's is it). Listening anywhere else, the server serves only `/sync` and `/api/*`.
 - `user.timezone` must be your time zone: recurrence, "today" and the digest time use it.
 - Leave out the four bot lines to run without the Discord bot, or the two digest lines to skip the
-  morning digest.
+  morning digest and the nudges that come with it. To stop just the digest, turn it off in Settings
+  (web or phone) instead.
 
 Start it:
 

@@ -56,6 +56,17 @@ class Store(path: String) {
     }
 
     fun modeFolderId(): Long? = getValue(MODE_FOLDER_KEY)?.toLongOrNull()
+
+    // Whether Discord posts the morning digest (on unless turned off), newest setting wins like the mode.
+    fun setDigestOn(on: Boolean, setAt: Long) = transaction {
+        if (setAt > digestSetAt()) {
+            setValue(DIGEST_ON_KEY, on.toString())
+            setValue(DIGEST_SET_AT_KEY, setAt.toString())
+        }
+    }
+
+    fun digestOn(): Boolean = getValue(DIGEST_ON_KEY)?.toBooleanStrictOrNull() ?: true
+    fun digestSetAt() = getValue(DIGEST_SET_AT_KEY)?.toLongOrNull() ?: 0
     fun modeSetAt() = getValue(MODE_SET_AT_KEY)?.toLongOrNull() ?: 0
 
     @Synchronized
@@ -64,13 +75,14 @@ class Store(path: String) {
         val response = transaction {
             request.rolloverHour?.let { setRolloverHour(it, request.rolloverSetAt) }
             setMode(request.modeFolderId, request.modeSetAt)
+            setDigestOn(request.digestOn, request.digestSetAt)
             request.changes.forEach { incoming ->
                 val before = get(incoming.table, incoming.id)
                 val after = merge(before, incoming)
                 put(after)
                 changed += before to after
             }
-            SyncResponse(maxVersion(), since(request.cursor), getValue(ROLLOVER_HOUR_KEY)?.toIntOrNull(), rolloverSetAt(), modeFolderId(), modeSetAt())
+            SyncResponse(maxVersion(), since(request.cursor), getValue(ROLLOVER_HOUR_KEY)?.toIntOrNull(), rolloverSetAt(), modeFolderId(), modeSetAt(), digestOn(), digestSetAt())
         }
         changed.forEach { (before, after) ->
             onChange?.invoke(before, after)
@@ -175,6 +187,8 @@ class Store(path: String) {
         const val ROLLOVER_SET_AT_KEY = "rolloverSetAt"
         const val MODE_FOLDER_KEY = "modeFolderId"
         const val MODE_SET_AT_KEY = "modeSetAt"
+        const val DIGEST_ON_KEY = "digestOn"
+        const val DIGEST_SET_AT_KEY = "digestSetAt"
         private val clockSerializer = MapSerializer(String.serializer(), Long.serializer())
     }
 }

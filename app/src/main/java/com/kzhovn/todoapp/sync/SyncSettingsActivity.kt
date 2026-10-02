@@ -1,5 +1,8 @@
 package com.kzhovn.todoapp.sync
 
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.Switch
 import com.kzhovn.todoapp.data.Labels
 import android.app.TimePickerDialog
 import android.os.Bundle
@@ -65,6 +68,20 @@ class SyncSettingsActivity : ComponentActivity() {
                         }
                     )
                     Text("“${Labels.TODAY_ONLY}” tasks are deleted at this time.", color = LedgerMuted, fontSize = 12.sp)
+                    Spacer(Modifier.height(16.dp))
+                    // Posted by the server's Discord bot; the setting reaches it with the next sync.
+                    var digestOn by remember { mutableStateOf(AppSettings.digestOn(app)) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Morning digest in Discord", color = LedgerInk, fontSize = 15.sp)
+                            Text("Doing, posted each morning. Off, the bot still nudges about tasks stuck in Doing.", color = LedgerMuted, fontSize = 12.sp)
+                        }
+                        Switch(checked = digestOn, onCheckedChange = {
+                            digestOn = it
+                            AppSettings.setDigestOn(app, it)
+                            if (SyncSettings.config(app) != null) SyncWorker.requestSoon(app)
+                        })
+                    }
                     Spacer(Modifier.height(20.dp))
                     Text("Sync", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = LedgerInk)
                     Spacer(Modifier.height(12.dp))

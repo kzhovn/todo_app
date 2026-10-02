@@ -17,6 +17,12 @@ object AppSettings {
     fun setRolloverHour(context: Context, hour: Int, setAt: Long = System.currentTimeMillis()) =
         prefs(context).edit().putInt("rolloverHour", hour).putLong("rolloverSetAt", setAt).apply()
 
+    // Whether Discord posts the morning digest (the server does it; synced like the rollover hour).
+    fun digestOn(context: Context): Boolean = prefs(context).getBoolean("digestOn", true)
+    fun digestSetAt(context: Context): Long = prefs(context).getLong("digestSetAt", 0)
+    fun setDigestOn(context: Context, on: Boolean, setAt: Long = System.currentTimeMillis()) =
+        prefs(context).edit().putBoolean("digestOn", on).putLong("digestSetAt", setAt).apply()
+
     // Folder mode (FolderMode.kt): the folder every device is zoomed into (null: none), synced like the
     // rollover hour. modeChanges ticks on every change, so the lists and widgets redraw.
     fun modeFolderId(context: Context): Long? = prefs(context).getLong("modeFolderId", 0L).takeIf { it != 0L }

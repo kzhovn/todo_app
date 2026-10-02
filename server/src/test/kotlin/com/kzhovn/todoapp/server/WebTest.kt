@@ -674,6 +674,18 @@ class WebTest {
     }
 
     @Test
+    fun `the morning digest is turned off in Settings, and the newest setting wins across devices`() = web {
+        assertTrue(service.digestOn())
+        assertTrue(client.get("/settings").bodyAsText().contains("name=\"digest\" checked"))
+        client.submitForm("/settings", parameters { append("rolloverHour", "4") }) // the box unticked
+        assertFalse(service.digestOn())
+        val stale = store.sync(SyncRequest(0, emptyList(), digestOn = true, digestSetAt = 1))
+        assertFalse(stale.digestOn) // an older "on" from the phone loses
+        store.sync(SyncRequest(0, emptyList(), digestOn = true, digestSetAt = stale.digestSetAt + 1))
+        assertTrue(service.digestOn())
+    }
+
+    @Test
     fun `the web sets the day rollover hour, and beats an older one from the phone`() = web {
         store.sync(SyncRequest(0, emptyList(), rolloverHour = 6, rolloverSetAt = 1))
         assertTrue(client.get("/settings").bodyAsText().contains("<option value=\"6\" selected"))

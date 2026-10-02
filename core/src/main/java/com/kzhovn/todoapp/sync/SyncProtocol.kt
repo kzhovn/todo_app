@@ -39,17 +39,20 @@ data class SyncRow(
 
 // The day-rollover hour ("today only" tasks end then), set on the phone or the web: the newer setting
 // (rolloverSetAt; 0 for one never set) wins, like a task field, so every device uses the same day.
-// Folder mode (the folder every device is zoomed into; null: none) syncs the same way, by modeSetAt.
+// Folder mode (the folder every device is zoomed into; null: none) and whether Discord posts the
+// morning digest sync the same way, by modeSetAt and digestSetAt.
 @Serializable
 data class SyncRequest(
     val cursor: Long, val changes: List<SyncRow>, val rolloverHour: Int? = null, val rolloverSetAt: Long = 0,
-    val modeFolderId: Long? = null, val modeSetAt: Long = 0
+    val modeFolderId: Long? = null, val modeSetAt: Long = 0,
+    val digestOn: Boolean = true, val digestSetAt: Long = 0
 )
 
 @Serializable
 data class SyncResponse(
     val cursor: Long, val rows: List<SyncRow>, val rolloverHour: Int? = null, val rolloverSetAt: Long = 0,
-    val modeFolderId: Long? = null, val modeSetAt: Long = 0
+    val modeFolderId: Long? = null, val modeSetAt: Long = 0,
+    val digestOn: Boolean = true, val digestSetAt: Long = 0
 )
 
 // Per-field last-write-wins. Ties keep `current`, so on the server, the server wins ties.

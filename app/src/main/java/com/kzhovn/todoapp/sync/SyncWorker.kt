@@ -61,7 +61,8 @@ object SyncSettings {
         val token = prefs.getString("token", null)?.takeIf { it.isNotBlank() } ?: return null
         return SyncConfig(
             url, token, AppSettings.rolloverHour(context), AppSettings.rolloverSetAt(context),
-            AppSettings.modeFolderId(context), AppSettings.modeSetAt(context)
+            AppSettings.modeFolderId(context), AppSettings.modeSetAt(context),
+            AppSettings.digestOn(context), AppSettings.digestSetAt(context)
         )
     }
 

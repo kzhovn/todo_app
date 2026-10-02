@@ -119,8 +119,10 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
                     // DM channels aren't cached by createLight, so a DM's id finds nothing here.
                     val channel = jda.getChannelById(MessageChannel::class.java, digestChannelId)
                     println("Digest: ${doing.size} in Doing, channel ${if (channel == null) "$digestChannelId NOT FOUND (a server channel the bot can see?)" else channel.name}")
-                    // Posts even when empty, so a quiet morning looks different from a broken bot.
-                    if (channel != null) {
+                    // Posts even when empty, so a quiet morning looks different from a broken bot. Turned off in
+                    // Settings, only the nudges post.
+                    if (!service.digestOn()) println("Digest: turned off in Settings")
+                    else if (channel != null) {
                         if (doing.isEmpty()) channel.sendMessage(EMPTY_DIGEST).queue() else bot.postList(channel, doing)
                     }
                     // Only with somewhere to post: working them out marks them as sent.

@@ -85,6 +85,15 @@ class SyncClientTest {
     }
 
     @Test
+    fun `the digest setting reaches the server, and a newer one from the web comes back`() = runBlocking {
+        client.sync(config.copy(digestOn = false, digestSetAt = 100))
+        assertEquals(false, server.digestOn())
+        store.setDigestOn(true, setAt = 200)
+        client.sync(config.copy(digestOn = false, digestSetAt = 100))
+        assertEquals(true, com.kzhovn.todoapp.AppSettings.digestOn(context))
+    }
+
+    @Test
     fun `local tasks, contexts, and assignments reach the server`() = runBlocking {
         val ctxId = contexts.createContext(TaskContext(name = "Work", type = ContextType.TIME))
         contexts.addTimeWindow(ContextTimeWindow(contextId = ctxId, windowStartMinute = 540, windowEndMinute = 1020))

@@ -125,7 +125,9 @@ fun Route.pageRoutes(service: TaskService) {
 
     get("/settings") { call.respondHtml { settingsPage(service) } }
     post("/settings") {
-        call.receiveParameters()["rolloverHour"]?.toIntOrNull()?.let(service::setRolloverHour)
+        val p = call.receiveParameters()
+        p["rolloverHour"]?.toIntOrNull()?.let(service::setRolloverHour)
+        service.setDigestOn(p["digest"] != null) // an unticked box sends nothing
         call.respondRedirect("/settings")
     }
     get("/contexts") {
@@ -547,6 +549,11 @@ private fun HTML.settingsPage(service: TaskService) = shellPage(service, "Raspbe
                 }
             }
             p(classes = "hint") { +"“${Labels.TODAY_ONLY}” tasks are deleted at this time, and a snooze to tomorrow wakes then. The phone uses it too." }
+            label {
+                checkBoxInput(name = "digest") { checked = service.digestOn() }
+                +" Morning digest in Discord"
+            }
+            p(classes = "hint") { +"Doing, posted each morning. Off, the bot still nudges about tasks stuck in Doing." }
             noScript { button(type = ButtonType.submit) { +Labels.SAVE } }
         }
     }
