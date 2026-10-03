@@ -205,6 +205,10 @@ private fun RecurrenceBadge() {
     }
 }
 
+// High priority, after the title.
+@Composable
+internal fun PriorityMark() = Text(" !", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = LedgerOverdue)
+
 // "There's more": the task has a note.
 @Composable
 internal fun NotesMark() {
@@ -287,6 +291,7 @@ private fun TaskRow(
                     Spacer(Modifier.width(4.dp))
                     RecurrenceBadge()
                 }
+                if (task.isHighPriority) PriorityMark()
                 if (!task.notes.isNullOrBlank()) NotesMark()
             }
             task.durationMinutes?.let { TimerButton(task, it) }

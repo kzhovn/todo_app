@@ -62,12 +62,16 @@ data class Task(
     // A focus session on it, on every device (see CurrentTask.focusSession).
     val focusedAt: Long? = null,
     // Free text: what to ask, the number to call, a link. Plain text; blank means none.
-    val notes: String? = null
+    val notes: String? = null,
+    // High priority ("!"): sorts to the top of Doing and Active, below only what's due today or overdue.
+    // The other end of the scale is isMaybe; a task is one, the other, or neither (normal).
+    @ColumnInfo(defaultValue = "0") val isHighPriority: Boolean = false
 ) {
     fun isExpired(now: Long): Boolean = expiresAt != null && expiresAt <= now
 
-    // The one place the maybe/star exclusion is enforced; every write path runs tasks through it.
-    fun starRule(): Task = if (isMaybe && isStarred) copy(isStarred = false) else this
+    // The one place the maybe exclusions are enforced (a maybe is never starred, nor high priority);
+    // every write path runs tasks through it.
+    fun starRule(): Task = if (isMaybe && (isStarred || isHighPriority)) copy(isStarred = false, isHighPriority = false) else this
 
     // starRule plus maybeSince bookkeeping; applied on every local write (app and server).
     fun withRules(now: Long): Task = starRule().let {

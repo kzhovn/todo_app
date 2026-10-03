@@ -674,6 +674,18 @@ class WebTest {
     }
 
     @Test
+    fun `the editor's Priority picks high, normal or maybe`() = web {
+        val task = service.create(Task(title = "Call the bank"))
+        val page = client.get("/tasks/${task.id}").bodyAsText()
+        assertTrue(page.contains("High !") && page.contains("name=\"priority\" value=\"normal\" checked"))
+        client.submitForm("/tasks/${task.id}", parameters {
+            append("base", taskFields(service.get(task.id)!!, emptySet(), emptySet()).toString())
+            append("title", "Call the bank"); append("type", "TASK"); append("priority", "high")
+        })
+        assertTrue(service.get(task.id)!!.isHighPriority)
+    }
+
+    @Test
     fun `a repeating task can be skipped this time, moving to its next time undone`() = web {
         val day = 24L * 60 * 60 * 1000
         val plants = service.create(Task(title = "Water plants", recurrenceType = com.kzhovn.todoapp.data.RecurrenceType.AFTER_COMPLETION, recurrenceRule = "4", startDate = service.now() - day, isStarred = true))

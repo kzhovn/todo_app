@@ -321,7 +321,8 @@ private fun parseForm(p: Parameters, base: EditState, recurrence: RecurrenceSele
         parentId = p["parent"]?.toLongOrNull(),
         recurrenceType = recurrenceType,
         recurrenceRule = recurrenceRule,
-        isMaybe = p["maybe"] != null,
+        isMaybe = p["priority"] == "maybe",
+        isHighPriority = p["priority"] == "high",
         durationMinutes = p["duration"]?.toIntOrNull()?.takeIf { it > 0 },
         expiresAt = if (p["today"] != null) base.task.expiresAt ?: nextRollover(service.now(), service.rolloverHour()) else null,
         sequential = p["sequential"] != null,
@@ -390,7 +391,7 @@ private fun merge(base: EditState, form: EditState, current: EditState): EditSta
         title = pick { it.title }, type = pick { it.type }, isStarred = pick { it.isStarred },
         startDate = pick { it.startDate }, dueDate = pick { it.dueDate }, reminderOffsetMinutes = pick { it.reminderOffsetMinutes },
         parentId = pick { it.parentId }, recurrenceType = recurrenceType, recurrenceRule = recurrenceRule,
-        isMaybe = pick { it.isMaybe }, expiresAt = pick { it.expiresAt }, sequential = pick { it.sequential }, activeWithSubtasks = pick { it.activeWithSubtasks },
+        isMaybe = pick { it.isMaybe }, isHighPriority = pick { it.isHighPriority }, expiresAt = pick { it.expiresAt }, sequential = pick { it.sequential }, activeWithSubtasks = pick { it.activeWithSubtasks },
         durationMinutes = pick { it.durationMinutes }, notes = pick { it.notes }
     )
     return EditState(
@@ -598,8 +599,16 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
                 label(classes = "pill") { checkBoxInput(name = "ctx") { value = c.id.toString(); checked = c.id in v.shown.contextIds }; +"@${c.name}" }
             }
             a(href = "/contexts", classes = "pill manage") { +Labels.MANAGE_CONTEXTS }
-            // Hidden from Active and Doing.
-            togglePill("maybe", t.isMaybe, Icon.QUESTION_MARK, Labels.MAYBE, "task-only")
+        }
+        // High (!), normal or maybe (?), picked like the type. A maybe is hidden from Active and Doing.
+        div(classes = "field-label section task-only") { +Labels.PRIORITY }
+        div(classes = "type-seg task-only") {
+            Labels.PRIORITIES.forEach { (high, maybe, text) ->
+                label {
+                    radioInput(name = "priority") { value = if (high) "high" else if (maybe) "maybe" else "normal"; checked = t.isHighPriority == high && t.isMaybe == maybe }
+                    +text
+                }
+            }
         }
 
         // A new task has no id for the related-task actions yet, so its subtasks, prerequisite and

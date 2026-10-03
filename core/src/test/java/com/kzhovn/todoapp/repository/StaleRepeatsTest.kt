@@ -41,4 +41,15 @@ class StaleRepeatsTest {
         // Skipped before its start: it moves a whole interval on from that start.
         assertEquals(start + 4 * day, RecurrenceEngine.skip(plants, start - day)!!.startDate)
     }
+
+    @Test
+    fun `high priority sorts below what's due today, above the rest, and quick add's "!" sets it`() {
+        val urgent = Task(id = 10, title = "Due today", isStarred = true, dueDate = start)
+        val high = Task(id = 11, title = "Important", isStarred = true, isHighPriority = true)
+        val plain = Task(id = 12, title = "Plain", isStarred = true)
+        assertEquals(listOf("Due today", "Important", "Plain"), filterDoing(listOf(plain, high, urgent), start).map { it.title })
+        val parsed = com.kzhovn.todoapp.quickadd.QuickAddParser.parse("call the bank!")
+        assertEquals("call the bank" to true, parsed.title to parsed.isHighPriority)
+        assertFalse(com.kzhovn.todoapp.quickadd.QuickAddParser.parse("maybe this!?").isHighPriority) // a maybe never is
+    }
 }

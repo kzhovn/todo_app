@@ -150,16 +150,33 @@ internal fun TitleBox(vm: TaskEditViewModel, pinned: Boolean, onTogglePin: () ->
 @Composable
 internal fun TypeRow(vm: TaskEditViewModel) {
     Spacer(Modifier.height(10.dp))
-    // One joined bar, the chosen type filled: a pick-one set, unlike the chips below.
+    JoinedChoice(Labels.TYPES.map { it.second }, Labels.TYPES.indexOfFirst { it.first == vm.task.type }) { i -> vm.task = vm.task.copy(type = Labels.TYPES[i].first) }
+}
+
+// High (!), normal or maybe (?). A maybe is hidden from Active and Doing and never starred.
+@Composable
+internal fun PrioritySection(vm: TaskEditViewModel) {
+    if (vm.task.type == TaskType.FOLDER) return
+    SectionLabel(Labels.PRIORITY)
+    val task = vm.task
+    JoinedChoice(Labels.PRIORITIES.map { it.third }, Labels.PRIORITIES.indexOfFirst { (high, maybe) -> task.isHighPriority == high && task.isMaybe == maybe }) { i ->
+        val (high, maybe) = Labels.PRIORITIES[i]
+        vm.task = task.copy(isHighPriority = high, isMaybe = maybe, isStarred = task.isStarred && !maybe)
+    }
+}
+
+// One joined bar, the chosen one filled: a pick-one set, unlike the chips.
+@Composable
+private fun JoinedChoice(labels: List<String>, selected: Int, onPick: (Int) -> Unit) {
     val shape = RoundedCornerShape(8.dp)
     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).clip(shape).border(1.dp, LedgerBorder, shape)) {
-        Labels.TYPES.forEachIndexed { i, (type, label) ->
+        labels.forEachIndexed { i, label ->
             if (i > 0) Box(Modifier.width(1.dp).fillMaxHeight().background(LedgerBorder))
-            val on = vm.task.type == type
+            val on = i == selected
             Text(
                 label, fontSize = 13.sp, color = if (on) LedgerAccentInk else LedgerMuted, textAlign = TextAlign.Center,
                 modifier = Modifier.weight(1f).background(if (on) LedgerAccent else Color.Transparent)
-                    .selectable(selected = on, role = Role.RadioButton) { vm.task = vm.task.copy(type = type) }
+                    .selectable(selected = on, role = Role.RadioButton) { onPick(i) }
                     .padding(vertical = 7.dp)
             )
         }
@@ -333,10 +350,6 @@ internal fun PropertiesSection(vm: TaskEditViewModel, onPickFolder: () -> Unit, 
                     onClick = { showContextMenu = false; onManageContexts() }
                 )
             }
-        }
-        // Hidden from Active and Doing; never starred, so turning it on unstars.
-        if (task.type != TaskType.FOLDER) TogglePill(Labels.MAYBE, Icons.Filled.QuestionMark, on = task.isMaybe) {
-            vm.task = task.copy(isMaybe = !task.isMaybe, isStarred = task.isStarred && task.isMaybe)
         }
     }
 }

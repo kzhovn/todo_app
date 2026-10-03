@@ -117,13 +117,14 @@ object QuickAddParser {
         val flags = pinRegex.findAll(text).map { it.groupValues[1].lowercase() }.toSet()
         text = text.replace(pinRegex, "")
         text = text.replace(Regex("\\s+"), " ").trim()
-        // A "?" or "*" ending the title itself (after the flags and phrases above are stripped) marks a
-        // maybe or a star; one elsewhere, like "update(?) bug", is just part of the title. A maybe is
-        // never starred.
+        // A "?", "*" or "!" ending the title itself (after the flags and phrases above are stripped) marks a
+        // maybe, a star or high priority; one elsewhere, like "update(?) bug", is just part of the title.
+        // A maybe is never starred nor high priority.
         var isMaybe = false
         var isStarred = false
-        while (text.endsWith("?") || text.endsWith("*")) {
-            if (text.endsWith("?")) isMaybe = true else isStarred = true
+        var isHighPriority = false
+        while (text.endsWith("?") || text.endsWith("*") || text.endsWith("!")) {
+            when (text.last()) { '?' -> isMaybe = true; '*' -> isStarred = true; else -> isHighPriority = true }
             text = text.dropLast(1).trimEnd()
         }
         var minutes = tildeRegex.find(text)?.takeIf { it.groupValues[1].isNotEmpty() || it.groupValues[2].isNotEmpty() }?.let { m ->
@@ -154,6 +155,7 @@ object QuickAddParser {
             dueDate = dueDate,
             isMaybe = isMaybe,
             isStarred = isStarred && !isMaybe,
+            isHighPriority = isHighPriority && !isMaybe,
             durationMinutes = minutes,
             recurrenceType = recurrenceType,
             recurrenceRule = recurrenceRule,

@@ -190,6 +190,7 @@ class TaskEditActivity : ComponentActivity() {
                 onPickFolder = { dialog = EditorDialog.FolderPicker },
                 onManageContexts = { startActivity(Intent(this@TaskEditActivity, ContextsActivity::class.java)) }
             )
+            PrioritySection(vm)
             if (vm.task.type == TaskType.CHECKLIST) ItemsSection(vm, onClearChecked = { dialog = EditorDialog.ClearChecked })
             RelatedSection(
                 vm, openTask,

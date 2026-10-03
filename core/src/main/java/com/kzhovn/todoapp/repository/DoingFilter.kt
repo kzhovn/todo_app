@@ -23,10 +23,11 @@ fun filterDoing(
 )
 
 // What's overdue or due today goes first, soonest first (so overdue leads), with repeats gone stale
-// (RecurrenceEngine.staleAt) among them, stalest first; the rest keep their order.
+// (RecurrenceEngine.staleAt) among them, stalest first; then high priority ("!"); the rest keep their order.
 fun urgentFirst(tasks: List<Task>, now: Long, effectiveDueDate: (Task) -> Long?): List<Task> {
     val (urgent, rest) = tasks.partition { t -> effectiveDueDate(t)?.let { dueStatus(it, now) != DueStatus.LATER } == true || isStale(t, now) }
-    return urgent.sortedBy { effectiveDueDate(it) ?: RecurrenceEngine.staleAt(it) } + rest
+    val (high, normal) = rest.partition { it.isHighPriority }
+    return urgent.sortedBy { effectiveDueDate(it) ?: RecurrenceEngine.staleAt(it) } + high + normal
 }
 
 private fun isStale(task: Task, now: Long) = RecurrenceEngine.staleAt(task)?.let { now >= it } == true

@@ -434,6 +434,7 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .cand:hover { background: var(--accent-soft); }
 .cand .parent { color: var(--muted); }
 .focus-new { margin-top: 12px; }
+.priority-high { color: var(--overdue); font-weight: 700; margin-left: 4px; }
 .date-quick { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .focus-search-form { display: flex; align-items: center; gap: 8px; }
 .focus-search-form input[type=search] { flex: 1; }

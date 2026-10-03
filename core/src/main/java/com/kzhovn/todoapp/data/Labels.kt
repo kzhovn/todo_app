@@ -72,7 +72,7 @@ object Labels {
         "every 4 days after done" to "repeat after completion",
         "remind 30m" to "reminder before the due time",
         "1 hour of …, ~30m" to "timed task",
-        "ends with * · ends with ?" to "starred · maybe",
+        "ends with * · ? · !" to "starred · maybe · high priority",
         "-p · -f" to "pin it · focus on it",
         "call bank // ask about fees" to "everything after // is the note",
     )
@@ -90,6 +90,9 @@ object Labels {
     const val SNOOZE_HOUR = "1 hour"
     const val SNOOZE_TOMORROW = "Tomorrow"
     const val SKIP = "Skip this time"
+    const val PRIORITY = "Priority"
+    // The priority picker, high to low: (high, maybe) flags and the label.
+    val PRIORITIES = listOf(Triple(true, false, "High !"), Triple(false, false, "Normal"), Triple(false, true, "Maybe ?"))
     const val SNOOZE_WEEK = "1 week"
 
     // Completing a task that still has open subtasks

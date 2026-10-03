@@ -38,7 +38,7 @@ Dates: `today`, `mon`, `next fri`, `+3d`, `in 2 weeks`, `+2h`, `oct 12`, `next w
 `-- x due fri 3pm remind 30m` a reminder
 `-- x @home` a context
 `-- x ~30m` / `-- 30m of x` a timed task
-`-- x*` starred · `-- x?` a maybe (hidden from Active, never starred)
+`-- x*` starred · `-- x!` high priority · `-- x?` a maybe (hidden from Active, never starred)
 `-- x -p` pin it · `-- x -f` focus on it
 `-- call bank // ask about fees` everything after // (or after the first line) is the note
 `✅ fixed the sink` logs something already done (a completed task, for Review)
@@ -318,7 +318,7 @@ class BotLogic(private val service: TaskService, private val store: Store) {
     }
 
     private fun describe(task: Task): String {
-        val title = task.title.take(120) + (if (task.isMaybe) " ?" else "")
+        val title = task.title.take(120) + (if (task.isMaybe) " ?" else "") + (if (task.isHighPriority) " !" else "")
         val due = service.effectiveDueDate(task)?.let {
             " · due " + SimpleDateFormat(if (hasTime(it)) "EEE d MMM h:mm a" else "EEE d MMM", Locale.US).format(Date(it))
         }.orEmpty()

@@ -493,6 +493,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                 // The parent part opens the parent's editor, as the title opens the subtask's.
                 if (data.mode != ListMode.ALL) data.parentTitle(task)?.let { a(href = "/tasks/${task.parentId}?mode=$mode", classes = "parent") { openInPanel(); +"$it: " } }
                 a(href = "/tasks/${task.id}?mode=$mode", classes = "edit") { openInPanel(); +task.title }
+                if (task.isHighPriority) span(classes = "priority-high") { attributes["title"] = "High priority"; +"!" }
                 // On the title's line, wrapping along with it.
                 due?.let { dueTail(it, status!!, data.now) }
                 // A start still to come (the All tree shows snoozed and future tasks).
