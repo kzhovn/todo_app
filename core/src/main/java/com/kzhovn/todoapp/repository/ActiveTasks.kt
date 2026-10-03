@@ -9,6 +9,7 @@ import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.isChecklistItem
+import com.kzhovn.todoapp.data.isUnder
 import com.kzhovn.todoapp.data.resolveEffective
 
 // Shared by every Active/Doing caller (app, widget, server) so all agree on "now" using the same
@@ -40,10 +41,23 @@ fun computeActiveTasks(
     val allContexts = contexts.associateBy { it.id }
     val windowsByContext = timeWindows.groupBy { it.contextId }
 
-    val blockedByDependency = dependencies
+    // Each task's open prerequisites.
+    val waitingOn = dependencies
         .filter { edge -> allById[edge.dependsOnTaskId]?.isComplete == false }
-        .map { it.taskId }
-        .toSet()
+        .groupBy({ it.taskId }, { it.dependsOnTaskId })
+    val blockedByDependency = waitingOn.keys
+
+    // A project never shows itself, only its steps, so a project waiting on a prerequisite holds its steps
+    // back too. Not one inside the project, though: that step would be waiting on itself.
+    fun inBlockedProject(task: Task): Boolean {
+        var parent = task.parentId?.let(allById::get)
+        while (parent != null) {
+            val project = parent
+            if (project.type == TaskType.PROJECT && waitingOn[project.id].orEmpty().any { p -> allById[p]?.let { it.id != task.id && !isUnder(it, project.id, allById) } == true }) return true
+            parent = project.parentId?.let(allById::get)
+        }
+        return false
+    }
 
     val childrenByParentId = all.groupBy { it.parentId }
 
@@ -76,7 +90,7 @@ fun computeActiveTasks(
         // A checklist is workable like a task (its open items never block it); its items aren't listed.
         if (!task.type.isDoable) return@filter false
         if (task.isComplete || task.isMaybe || task.isExpired(now) || isChecklistItem(task, allById)) return@filter false
-        if (task.id in blockedByDependency || isSequentiallyBlocked(task)) return@filter false
+        if (task.id in blockedByDependency || isSequentiallyBlocked(task) || inBlockedProject(task)) return@filter false
         // A task waits on its open subtasks, as on a dependency, unless set not to. A checklist doesn't:
         // its items are ticked off inside it.
         if (task.type == TaskType.TASK && !task.activeWithSubtasks && childrenByParentId[task.id].orEmpty().any { it.type != TaskType.FOLDER && !it.isComplete && !it.isExpired(now) }) return@filter false

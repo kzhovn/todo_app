@@ -6,6 +6,7 @@ import com.kzhovn.todoapp.data.clockTime
 import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.isDoable
+import com.kzhovn.todoapp.data.isLinkable
 import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.SearchFilters
@@ -311,7 +312,7 @@ private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode)
             select {
                 name = "dependsOn"
                 option { value = ""; +"Nothing new" }
-                all.filter { it.type.isDoable && !it.isComplete && it.id !in ids }.sortedBy { it.title.lowercase() }
+                all.filter { it.type.isLinkable && !it.isComplete && it.id !in ids }.sortedBy { it.title.lowercase() }
                     .forEach { option { value = it.id.toString(); +it.title } }
             }
         }

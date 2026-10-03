@@ -10,8 +10,13 @@ import kotlinx.serialization.Serializable
 enum class TaskType { TASK, FOLDER, PROJECT, CHECKLIST }
 
 // Something you do and tick off: a task or a checklist. Not a folder, nor a project (which completes
-// by its steps). What lists, pickers, dependencies and bulk edit deal in.
+// by its steps). What lists, pickers and bulk edit deal in.
 val TaskType.isDoable: Boolean get() = this == TaskType.TASK || this == TaskType.CHECKLIST
+
+// What can be a prerequisite or wait on one: anything that gets done, projects included (a project is
+// done when it's completed, and one waiting on something holds back its steps). Not a folder.
+val TaskType.isLinkable: Boolean get() = this != TaskType.FOLDER
+
 enum class RecurrenceType { RRULE, AFTER_COMPLETION }
 
 const val BACKBURNER_AFTER = 30L * 24 * 60 * 60 * 1000

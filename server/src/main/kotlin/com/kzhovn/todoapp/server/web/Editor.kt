@@ -3,6 +3,7 @@ package com.kzhovn.todoapp.server.web
 import com.kzhovn.todoapp.server.quickAddChips
 import com.kzhovn.todoapp.quickadd.QuickAdd
 import com.kzhovn.todoapp.data.isDoable
+import com.kzhovn.todoapp.data.isLinkable
 import com.kzhovn.todoapp.repository.changedInheritedFields
 import com.kzhovn.todoapp.data.checklistItems
 import com.kzhovn.todoapp.recurrence.ordinal
@@ -811,9 +812,9 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
         if (task.type != TaskType.FOLDER) {
             val otherEdges = edges.filter { it.taskId != id }
             adder(Labels.ADD_PREREQUISITE, "/tasks/$id/prerequisite?mode=$m", "prerequisite", "New task this depends on",
-                all.filter { it.id != id && it.type.isDoable && !it.isComplete && it !in prerequisites && !wouldCreateDependencyCycle(it.id, id, otherEdges) }.sortedBy { it.title.lowercase() })
+                all.filter { it.id != id && it.type.isLinkable && !it.isComplete && it !in prerequisites && !wouldCreateDependencyCycle(it.id, id, otherEdges) }.sortedBy { it.title.lowercase() })
             adder(Labels.ADD_DEPENDENT, "/tasks/$id/dependent?mode=$m", "dependent", "New task that depends on this",
-                all.filter { it.id != id && it.type.isDoable && !it.isComplete && it !in dependents && !wouldCreateDependencyCycle(id, it.id, edges) }.sortedBy { it.title.lowercase() })
+                all.filter { it.id != id && it.type.isLinkable && !it.isComplete && it !in dependents && !wouldCreateDependencyCycle(id, it.id, edges) }.sortedBy { it.title.lowercase() })
         }
     }
 }

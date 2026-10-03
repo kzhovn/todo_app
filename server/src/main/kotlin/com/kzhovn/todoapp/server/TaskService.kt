@@ -12,6 +12,7 @@ import com.kzhovn.todoapp.quickadd.QuickAdd
 import com.kzhovn.todoapp.quickadd.planQuickAdd
 import com.kzhovn.todoapp.data.pinnedTask
 import com.kzhovn.todoapp.data.isDoable
+import com.kzhovn.todoapp.data.isLinkable
 import com.kzhovn.todoapp.data.searchTasks
 import com.kzhovn.todoapp.data.findFolder
 import com.kzhovn.todoapp.repository.blockerFor
@@ -289,7 +290,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         // A folder can't be completed, so it can't wait on anything.
         val edges = dependencyEdges().filter { it.taskId != task.id }
         val deps = if (folder) emptySet() else dependsOn.filterTo(mutableSetOf()) {
-            it != task.id && byId[it]?.type.let { t -> t != null && (t.isDoable || t == TaskType.PROJECT) } && !wouldCreateDependencyCycle(it, task.id, edges)
+            it != task.id && byId[it]?.type?.isLinkable == true && !wouldCreateDependencyCycle(it, task.id, edges)
         }
         val contexts = contexts().map { it.id }.toSet().let { known -> contextIds.filterTo(mutableSetOf()) { it in known } }
         store.write(TASKS, task.id, JsonObject(taskFields(saved, contexts, deps) - DELETED_AT), clock())

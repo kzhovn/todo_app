@@ -674,6 +674,21 @@ class WebTest {
     }
 
     @Test
+    fun `projects can be prerequisites and wait on them, and a waiting project holds back its steps`() = web {
+        val passport = service.create(Task(title = "Renew passport"))
+        val trip = service.create(Task(title = "Trip", type = TaskType.PROJECT))
+        service.create(Task(title = "Book flights", parentId = trip.id))
+        val pack = service.create(Task(title = "Pack"))
+        // The editors offer projects in both directions.
+        assertTrue(client.get("/tasks/${pack.id}").bodyAsText().substringAfter("id=\"related\"").contains(">Trip</option>"))
+        client.submitForm("/tasks/${trip.id}/prerequisite", parameters { append("prerequisite", passport.id.toString()) })
+        client.submitForm("/tasks/${trip.id}/dependent", parameters { append("dependent", pack.id.toString()) })
+        assertEquals(setOf(passport.id), service.dependsOn(trip.id))
+        assertEquals(setOf(trip.id), service.dependsOn(pack.id))
+        assertEquals(listOf("Renew passport"), service.active(null).map { it.title })
+    }
+
+    @Test
     fun `the morning digest is turned off in Settings, and the newest setting wins across devices`() = web {
         assertTrue(service.digestOn())
         assertTrue(client.get("/settings").bodyAsText().contains("name=\"digest\" checked"))
