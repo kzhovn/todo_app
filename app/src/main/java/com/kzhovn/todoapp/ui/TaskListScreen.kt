@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.material.icons.filled.SkipNext
 import com.kzhovn.todoapp.data.notesMatch
 import androidx.compose.material.icons.automirrored.filled.Notes
 import com.kzhovn.todoapp.data.countdown
@@ -321,6 +322,14 @@ private fun TaskRow(
                 MenuRow("Focus", Icons.Filled.CenterFocusStrong) {
                     showSnoozeMenu = false
                     context.startActivity(Intent(context, FocusActivity::class.java).putExtra(FocusActivity.EXTRA_TASK_ID, task.id))
+                }
+                // A repeat: on to its next time without doing this one. The list follows the change itself.
+                if (task.recurrenceType != null) MenuRow(Labels.SKIP, Icons.Filled.SkipNext) {
+                    showSnoozeMenu = false
+                    scope.launch {
+                        (context.applicationContext as com.kzhovn.todoapp.TodoApp).repository.skip(task.id, System.currentTimeMillis())
+                        PinnedTask.refresh(context)
+                    }
                 }
             }
         }

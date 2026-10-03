@@ -243,6 +243,9 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     // Hidden from Active until then, like the app's snooze.
     fun snooze(id: Long, until: Long) = update(id) { it.copy(startDate = until) }
 
+    // A repeating task's "skip this time": on to its next time, not done (RecurrenceEngine.skip).
+    fun skip(id: Long) { get(id)?.let { RecurrenceEngine.skip(it, clock()) }?.let { skipped -> update(id) { skipped } } }
+
     fun contexts(): List<TaskContext> = store.all(CONTEXTS).filterNot { it.isDeleted }.map { it.toContext() }
 
     fun contextIdsByTask(): Map<Long, Set<Long>> = liveRows().associate { it.id to it.contextIds() }

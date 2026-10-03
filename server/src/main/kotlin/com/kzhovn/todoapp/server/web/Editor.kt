@@ -458,9 +458,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
             // An existing task pins at once, like the phone's; a new one when it's saved.
             if (isNew) label(classes = "pin-toggle") { attributes["title"] = Labels.PIN; checkBoxInput(name = "pin") { checked = v.pin }; icon(Icon.PUSH_PIN, "") }
             else if (t.type == TaskType.TASK && !t.isComplete) {
-                pinToggle(t.id, service.pinned()?.id == t.id)
-                // Every device goes into focus on it.
-                button(type = ButtonType.button, classes = "focus-toggle") { hx("post", "/focus/start?task=${t.id}", "this"); attributes["title"] = "Focus"; icon(Icon.CENTER_FOCUS, "") }
+                pinControl(t, service.pinned()?.id == t.id)
             }
             textArea(classes = "title-input") { name = "title"; rows = "1"; placeholder = Labels.TITLE; required = true; +t.title }
             label(classes = "flag-toggle star-toggle task-only") {

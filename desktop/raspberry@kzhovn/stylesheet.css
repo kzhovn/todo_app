@@ -11,6 +11,7 @@
 .rb-tab { color: #8A7A5C; font-size: 11px; font-weight: bold; padding: 4px 8px; border-radius: 6px; }
 .rb-tab-on { color: #2B4C7E; background-color: #DFE6EF; }
 /* Folder mode: the row under the tabs, filled in when a mode is on; its folder list when switching. */
+.rb-pin-menu { spacing: 6px; padding: 2px 0 6px 34px; }
 .rb-mode { color: #8A7A5C; font-size: 12px; padding: 3px 8px; margin: 2px 0 4px; border-radius: 6px; }
 .rb-mode-on { color: #FFFFFF; background-color: #B75037; font-weight: bold; }
 .rb-mode-choice { color: #2B2318; font-size: 13px; padding: 4px 12px; border-radius: 6px; }

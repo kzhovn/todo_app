@@ -254,19 +254,33 @@
   // pointer: snooze, pin, focus, a subtask. A click anywhere else on a row opens the task in the side
   // panel; the parent's name, buttons and links keep their own. (In selection mode the handler above
   // takes clicks first.)
-  const closeMenus = (except) => document.querySelectorAll("details.more[open]").forEach((d) => { if (d !== except) d.open = false; });
+  const closeMenus = (except) => {
+    document.querySelectorAll("details.more[open]").forEach((d) => { if (d !== except) d.open = false; });
+    document.querySelectorAll(".pin-control.open").forEach((p) => { if (p !== except) p.classList.remove("open"); });
+  };
+  const placeAt = (menu, e) => {
+    menu.style.left = `${Math.max(8, Math.min(e.clientX, innerWidth - menu.offsetWidth - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(e.clientY, innerHeight - menu.offsetHeight - 8))}px`;
+  };
   document.addEventListener("contextmenu", (e) => {
+    // The pin's own menu: focus, the timer.
+    const pin = e.target.closest(".pin-control");
+    if (pin) {
+      e.preventDefault();
+      closeMenus(pin);
+      pin.classList.add("open");
+      placeAt(pin.querySelector(".pin-menu"), e);
+      return;
+    }
     const more = e.target.closest(".row[data-task-id]")?.querySelector("details.more");
     if (!more || e.target.closest("input, textarea")) return;
     e.preventDefault();
     closeMenus(more);
     more.open = true;
-    const menu = more.querySelector(".menu");
-    menu.style.left = `${Math.max(8, Math.min(e.clientX, innerWidth - menu.offsetWidth - 8))}px`;
-    menu.style.top = `${Math.max(8, Math.min(e.clientY, innerHeight - menu.offsetHeight - 8))}px`;
+    placeAt(more.querySelector(".menu"), e);
   });
   document.addEventListener("click", (e) => {
-    if (!e.target.closest("details.more")) closeMenus();
+    if (!e.target.closest("details.more") || e.target.closest(".pin-menu")) closeMenus();
     if (e.target.closest("a, button, input, textarea, label, details, select")) return;
     e.target.closest("#list .row[data-task-id]")?.querySelector(".title a.edit")?.click();
   });

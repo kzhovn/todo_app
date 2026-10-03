@@ -117,6 +117,13 @@ class TaskRepository(
         taskDao.update(task.copy(isStarred = !task.isStarred))
     }
 
+    // A repeating task's "skip this time": on to its next time, not done (RecurrenceEngine.skip).
+    suspend fun skip(taskId: Long, now: Long) {
+        val skipped = taskDao.getById(taskId)?.let { RecurrenceEngine.skip(it, now) } ?: return
+        taskDao.update(skipped)
+        reminderScheduler.schedule(skipped, now)
+    }
+
     suspend fun snooze(taskId: Long, until: Long, now: Long) {
         val task = taskDao.getById(taskId) ?: return
         val updated = task.copy(startDate = until)

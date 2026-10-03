@@ -674,6 +674,18 @@ class WebTest {
     }
 
     @Test
+    fun `a repeating task can be skipped this time, moving to its next time undone`() = web {
+        val day = 24L * 60 * 60 * 1000
+        val plants = service.create(Task(title = "Water plants", recurrenceType = com.kzhovn.todoapp.data.RecurrenceType.AFTER_COMPLETION, recurrenceRule = "4", startDate = service.now() - day, isStarred = true))
+        assertTrue(client.get("/doing").bodyAsText().contains("Skip this time"))
+        client.post("/tasks/${plants.id}/skip?mode=DOING")
+        val skipped = service.get(plants.id)!!
+        assertTrue(kotlin.math.abs(service.now() + 4 * day - skipped.startDate!!) < 1000) // 4 days from now (the clock runs)
+        assertFalse(skipped.isComplete || skipped.isStarred)
+        assertEquals(1, service.tasks().count { it.title == "Water plants" }) // moved, not copied
+    }
+
+    @Test
     fun `every new-task box takes quick add's whole syntax`() = web {
         val home = service.saveContext(com.kzhovn.todoapp.data.TaskContext(name = "home", type = com.kzhovn.todoapp.data.ContextType.PLACE, wifiSsid = "Home"), emptyList())
         val project = service.create(Task(title = "Move house", type = TaskType.PROJECT))

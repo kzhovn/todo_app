@@ -429,13 +429,25 @@ class Indicator extends PanelMenu.Button {
         row.add_child(this._check(null, () => this._post(`/api/tasks/${pinned.id}/complete`)));
         row.add_child(this._titleButton(pinned.title, () => this._open(`/tasks/${pinned.id}?mode=DOING`)));
         row.add_child(this._timerControls(pinned));
-        const focus = this._iconButton('center-focus-symbolic', 'rb-tool rb-unpin', () => this._post(`/api/tasks/${pinned.id}/focus`));
-        focus.accessible_name = 'Focus';
-        row.add_child(focus);
-        const unpin = this._iconButton('push-pin-symbolic', 'rb-tool rb-unpin', () => this._post('/api/unpin'));
-        unpin.accessible_name = 'Unpin';
-        row.add_child(unpin);
-        return row;
+        // The pin: a click unpins; right-click opens its menu (focus, unpin) under the row.
+        const pin = new St.Button({style_class: 'rb-tool rb-unpin', y_align: Clutter.ActorAlign.CENTER, child: new St.Icon({gicon: appIcon('push-pin-symbolic'), style_class: 'rb-icon'}), button_mask: St.ButtonMask.ONE | St.ButtonMask.THREE});
+        pin.accessible_name = 'Unpin (right-click for more)';
+        pin.connect('clicked', (_button, which) => GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+            if (which === 3) {
+                this._pinMenu = !this._pinMenu;
+                this._render();
+            } else this._post('/api/unpin');
+            return GLib.SOURCE_REMOVE;
+        }));
+        row.add_child(pin);
+        if (!this._pinMenu) return row;
+        const box = new St.BoxLayout({vertical: true, x_expand: true});
+        box.add_child(row);
+        const menu = new St.BoxLayout({style_class: 'rb-pin-menu'});
+        menu.add_child(this._button({label: 'Focus', style_class: 'rb-btn'}, () => { this._pinMenu = false; this._post(`/api/tasks/${pinned.id}/focus`); }));
+        menu.add_child(this._button({label: 'Unpin', style_class: 'rb-btn'}, () => { this._pinMenu = false; this._post('/api/unpin'); }));
+        box.add_child(menu);
+        return box;
     }
 
     // The shared timer (on the task, like every device's): time left and Pause / Resume, "+10m" once

@@ -27,7 +27,8 @@ object RecurrenceEngine {
         // original (now stale) absolute timestamp.
         val startAnchor = task.startDate ?: completedAt
         val nextDueDate = task.dueDate?.plus(nextStart - startAnchor)
-        return task.copy(id = newId(), startDate = nextStart, dueDate = nextDueDate, isComplete = false, completedAt = null, recurrenceRule = nextRule, pinnedAt = null, timerEndsAt = null, timerRemaining = null, focusedAt = null)
+        // A star was for this time; the next one earns its own place (see staleAt).
+        return task.copy(id = newId(), startDate = nextStart, dueDate = nextDueDate, isComplete = false, completedAt = null, recurrenceRule = nextRule, isStarred = false, pinnedAt = null, timerEndsAt = null, timerRemaining = null, focusedAt = null)
     }
 
     // The instance that completing `completed` spawned, if it still exists unedited. Un-completing
@@ -69,6 +70,27 @@ object RecurrenceEngine {
     }
 
     // "3" days, "2w" weeks, "1m" months (calendar months: Jan 31 + 1m is Feb's last day).
+    // "Skip this time": the same task moved on to its next time, as if done now (or at its start, if
+    // that's still to come), without being done. Null when there's no next time (the last of "N times").
+    fun skip(task: Task, now: Long): Task? = nextInstance(task, maxOf(now, task.startDate ?: now))?.let { next ->
+        task.copy(startDate = next.startDate, dueDate = next.dueDate, recurrenceRule = next.recurrenceRule, isStarred = false, pinnedAt = null, timerEndsAt = null, timerRemaining = null, focusedAt = null)
+    }
+
+    // A repeat comes back into Active at its start (staleness 1: as long since it was last done as it
+    // repeats every), and is promoted to Doing half an interval later (staleness 1.5), sorting as if due
+    // then. The interval comes from the rule. A repeat with a due date of its own goes by that instead.
+    // Before its first time, a repeat counts from when it was added.
+    fun staleAt(task: Task): Long? {
+        if (task.recurrenceType == null || task.dueDate != null || task.isComplete) return null
+        val rule = task.recurrenceRule ?: return null
+        val start = task.startDate ?: (task.id shr 11).takeIf { it >= 1_577_836_800_000L } ?: return null
+        val next = when (task.recurrenceType) {
+            RecurrenceType.AFTER_COMPLETION -> afterCompletion(rule, start)
+            RecurrenceType.RRULE -> nextRRuleOccurrence(start, rule.replace(Regex(";?COUNT=\\d+"), ""), start)
+        } ?: return null
+        return start + (next - start) / 2
+    }
+
     private fun afterCompletion(rule: String, completedAt: Long): Long? {
         val n = rule.trimEnd('w', 'm').toIntOrNull() ?: return null
         return when (rule.last()) {

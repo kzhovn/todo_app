@@ -4,6 +4,7 @@ import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.data.DueStatus
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.dueStatus
+import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 
 private const val DOING_DUE_SOON_MILLIS = 2 * 24 * 60 * 60 * 1000L
 
@@ -16,16 +17,19 @@ fun filterDoing(
     now: Long,
     effectiveDueDate: (Task) -> Long? = { it.dueDate }
 ): List<Task> = urgentFirst(
-    tasks.filter { task -> task.isStarred || effectiveDueDate(task)?.let { it - now < DOING_DUE_SOON_MILLIS } ?: false },
+    tasks.filter { task -> task.isStarred || effectiveDueDate(task)?.let { it - now < DOING_DUE_SOON_MILLIS } ?: false || isStale(task, now) },
     now,
     effectiveDueDate
 )
 
-// What's overdue or due today goes first, soonest first (so overdue leads); the rest keep their order.
+// What's overdue or due today goes first, soonest first (so overdue leads), with repeats gone stale
+// (RecurrenceEngine.staleAt) among them, stalest first; the rest keep their order.
 fun urgentFirst(tasks: List<Task>, now: Long, effectiveDueDate: (Task) -> Long?): List<Task> {
-    val (urgent, rest) = tasks.partition { t -> effectiveDueDate(t)?.let { dueStatus(it, now) != DueStatus.LATER } == true }
-    return urgent.sortedBy { effectiveDueDate(it) } + rest
+    val (urgent, rest) = tasks.partition { t -> effectiveDueDate(t)?.let { dueStatus(it, now) != DueStatus.LATER } == true || isStale(t, now) }
+    return urgent.sortedBy { effectiveDueDate(it) ?: RecurrenceEngine.staleAt(it) } + rest
 }
+
+private fun isStale(task: Task, now: Long) = RecurrenceEngine.staleAt(task)?.let { now >= it } == true
 
 // The same, by the due date each task shows (its own, or inherited from an ancestor).
 fun filterDoing(tasks: List<Task>, now: Long, byId: Map<Long, Task>, contextsByTaskId: Map<Long, Set<Long>>): List<Task> =

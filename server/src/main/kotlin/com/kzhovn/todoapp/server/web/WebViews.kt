@@ -305,7 +305,7 @@ private fun HTML.shell(
                     span(classes = "now-label") { +"Now" }
                     a(href = "/tasks/${now.id}?mode=DOING", classes = "now-title") { openInPanel(); +now.title }
                     span(classes = "now-timer") {}
-                    button(classes = "now-focus") { hx("post", "/focus/start?task=${now.id}", "this"); attributes["title"] = "Focus"; icon(Icon.CENTER_FOCUS, "") }
+                    pinControl(now, pinned = true, refresh = true)
                 }
             }
             nav(classes = "nav") {
@@ -542,6 +542,12 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                     icon(Icon.CENTER_FOCUS, "")
                     +"Focus"
                 }
+                // A repeat: on to its next time without doing this one.
+                if (task.recurrenceType != null) button(classes = "menu-row") {
+                    hx("post", "/tasks/${task.id}/skip?mode=$mode")
+                    icon(Icon.REPEAT, "")
+                    +Labels.SKIP
+                }
                 // The phone's swipe right: a subtask under it (a checklist's are items).
                 form(classes = "inline menu-add") {
                     hx("post", "/tasks/${task.id}/add-subtask?mode=$mode")
@@ -631,11 +637,28 @@ fun DIV.askSubtasksToast(task: Task, open: Int, url: String, target: String, inc
     button(classes = "dismiss") { +"Cancel" }
 }
 
-// The editor's pin, like the phone's: applies at once (not on Save) and toggles in place.
-internal fun FlowContent.pinToggle(taskId: Long, pinned: Boolean) = button(type = ButtonType.button, classes = if (pinned) "pin-toggle on" else "pin-toggle") {
-    hx("post", "/tasks/$taskId/pin-toggle", "this")
-    attributes["title"] = if (pinned) Labels.UNPIN else Labels.PIN
-    icon(Icon.PUSH_PIN, "")
+// The pin, in the editor and the sidebar's Now box: a click pins or unpins at once (not on Save);
+// right-click (or a long press) opens the rest: focus, and the timer for a timed task. app.js places
+// the menu. `refresh`: reload the page after, so the Now box comes and goes.
+internal fun FlowContent.pinControl(task: Task, pinned: Boolean, refresh: Boolean = false) = span(classes = "pin-control") {
+    val toggle = "/tasks/${task.id}/pin-toggle" + if (refresh) "?refresh=1" else ""
+    button(type = ButtonType.button, classes = if (pinned) "pin-toggle on" else "pin-toggle") {
+        hx("post", toggle, "closest .pin-control")
+        attributes["title"] = (if (pinned) Labels.UNPIN else Labels.PIN) + " (right-click for more)"
+        icon(Icon.PUSH_PIN, "")
+    }
+    div(classes = "pin-menu") {
+        button(type = ButtonType.button, classes = "menu-row") { hx("post", toggle, "closest .pin-control"); icon(Icon.PUSH_PIN, ""); +(if (pinned) Labels.UNPIN else Labels.PIN) }
+        // Every device goes into focus on it.
+        button(type = ButtonType.button, classes = "menu-row") { hx("post", "/focus/start?task=${task.id}", "this"); icon(Icon.CENTER_FOCUS, ""); +"Focus" }
+        // app.js's play handler starts (or pauses) the shared timer, as a row's ▶ does.
+        task.durationMinutes?.let { minutes ->
+            button(type = ButtonType.button, classes = "menu-row play") {
+                attributes["data-task-id"] = task.id.toString(); attributes["data-minutes"] = minutes.toString(); attributes["data-title"] = task.title
+                icon(Icon.PLAY, ""); +"Timer · ${formatDuration(minutes)}"
+            }
+        }
+    }
 }
 
 fun DIV.pinnedToastContents(task: Task) {

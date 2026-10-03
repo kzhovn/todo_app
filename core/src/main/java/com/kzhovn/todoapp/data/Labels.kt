@@ -89,6 +89,7 @@ object Labels {
     const val SNOOZE = "Snooze"
     const val SNOOZE_HOUR = "1 hour"
     const val SNOOZE_TOMORROW = "Tomorrow"
+    const val SKIP = "Skip this time"
     const val SNOOZE_WEEK = "1 week"
 
     // Completing a task that still has open subtasks

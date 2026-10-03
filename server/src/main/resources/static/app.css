@@ -475,10 +475,14 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .now-label { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
 .now-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); font-weight: 600; text-decoration: none; }
 .now-timer { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--accent); }
-.now-focus, .focus-toggle { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; color: var(--accent); border-radius: 6px; flex-shrink: 0; }
-.now-focus .icon, .focus-toggle .icon { width: 17px; height: 17px; }
-.focus-toggle { width: 32px; height: 32px; color: var(--muted); }
-.now-focus:hover, .focus-toggle:hover { background: var(--tile); color: var(--accent); }
+/* The pin's menu (right-click): Pin/Unpin, Focus, the timer. Placed at the pointer by app.js. */
+.pin-control { display: inline-flex; flex-shrink: 0; }
+.pin-menu { display: none; position: fixed; z-index: 20; flex-direction: column; min-width: 180px; padding: 4px 0; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 14px #0002; }
+.pin-control.open .pin-menu { display: flex; }
+.pin-menu .menu-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; font-size: 13px; text-align: left; color: var(--ink); }
+.pin-menu .menu-row:hover { background: var(--accent-soft); }
+.pin-menu .icon { width: 16px; height: 16px; color: var(--muted); }
+.now .pin-toggle { color: var(--accent); }
 /* Focus on a checklist: its items, big. */
 .focus-items { width: min(420px, 100%); margin-top: 14px; display: flex; flex-direction: column; }
 .focus-item { display: flex; align-items: center; gap: 12px; padding: 10px 8px; border-bottom: 1px solid var(--border); font-size: 17px; text-align: left; }
