@@ -17,6 +17,7 @@ import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.sectionsByTopFolder
 import com.kzhovn.todoapp.data.walkParentChain
 import com.kzhovn.todoapp.data.dueStatus
+import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.repository.BulkEdit
 import com.kzhovn.todoapp.repository.DateChange
 import com.kzhovn.todoapp.repository.FolderChange
@@ -199,8 +200,12 @@ private fun HTML.searchPage(service: TaskService, p: Parameters) = shellPage(ser
                     option { value = c.id.toString(); selected = p["context"] == c.id.toString(); +"@${c.name}" }
                 }
             }
-            label(classes = "date-filter") { +"${Labels.DUE_AFTER} "; dateInput(name = "after") { value = p["after"].orEmpty() } }
-            label(classes = "date-filter") { +"${Labels.DUE_BEFORE} "; dateInput(name = "before") { value = p["before"].orEmpty() } }
+            span(classes = "date-filter") {
+                +"Due "
+                dateInput(name = "after") { value = p["after"].orEmpty(); attributes["aria-label"] = Labels.DUE_AFTER }
+                +"–"
+                dateInput(name = "before") { value = p["before"].orEmpty(); attributes["aria-label"] = Labels.DUE_BEFORE }
+            }
         }
     }
     div { searchResults(service, p) }
@@ -218,10 +223,13 @@ private fun DIV.searchResults(service: TaskService, p: Parameters) {
     val contextNames = service.contexts().associate { it.id to it.name }
     val contextIds = service.contextIdsByTask()
     val now = service.now()
+    val colors = folderColorsHex(all)
     val shown = if (results.size > MAX_RESULTS) ", showing the first $MAX_RESULTS" else ""
     p(classes = "hint") { +"${results.size} task${if (results.size == 1) "" else "s"}$shown" }
     results.take(MAX_RESULTS).forEach { task ->
+        // One line, like a list row: its folder's colour bar, the title, then where it lives and when it's due.
         div(classes = "result") {
+            task.parentId?.let { walkParentChain(it, byId) { id -> colors[id] } }?.let { style = "border-left-color: $it" }
             if (task.type == TaskType.TASK) button(classes = if (task.isComplete) "check done" else "check") {
                 attributes["hx-post"] = "/search/toggle/${task.id}"
                 attributes["hx-include"] = "form.search"
@@ -235,14 +243,14 @@ private fun DIV.searchResults(service: TaskService, p: Parameters) {
             } else span(classes = "project") { icon(Icon.PROJECT, "") }
             a(href = "/tasks/${task.id}?mode=ALL", classes = if (task.isComplete) "done" else null) { +task.title }
             if (!task.notes.isNullOrBlank()) span(classes = "has-notes") { attributes["title"] = "Has notes"; icon(Icon.NOTES, "") }
-            // Found by its notes: the line that matched.
-            notesMatch(task, p["q"].orEmpty())?.let { div(classes = "notes-line") { +it } }
             div(classes = "meta") {
-                resolveEffective(task, byId, contextIds).effectiveDueDate?.takeUnless { task.isComplete }?.let { dueTail(it, dueStatus(it, now), now) }
+                resolveEffective(task, byId, contextIds).effectiveDueDate?.takeUnless { task.isComplete }?.let { span(classes = "due " + dueStatus(it, now).name.lowercase()) { +dueText(it, now) } }
                 byId[task.parentId]?.let { span { +(if (it.type == TaskType.FOLDER) it.title else "↳ ${it.title}") } }
                 contextIds[task.id].orEmpty().mapNotNull(contextNames::get).forEach { span { +"@$it" } }
                 if (task.isStarred) span(classes = "starred") { +"★" }
             }
+            // Found by its notes: the line that matched, under the title.
+            notesMatch(task, p["q"].orEmpty())?.let { div(classes = "notes-line") { +it } }
         }
     }
 }

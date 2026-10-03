@@ -315,12 +315,7 @@ private fun TaskRow(
             Column(Modifier.width(236.dp)) {
                 Text(Labels.SNOOZE, fontSize = 11.sp, color = LedgerMuted, letterSpacing = 0.4.sp, modifier = Modifier.padding(start = 14.dp, top = 4.dp, bottom = 6.dp))
                 // Three equal tiles lined up with the rows' icons below.
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 10.dp)) {
-                    SnoozeTile(Labels.SNOOZE_HOUR, Icons.Filled.Schedule) { snooze { it + HOUR_MILLIS } }
-                    // "Tomorrow" starts at the day rollover (4am by default), not 24 hours from now.
-                    SnoozeTile(Labels.SNOOZE_TOMORROW, Icons.Filled.Bedtime) { snooze { nextRollover(it, AppSettings.rolloverHour(context)) } }
-                    SnoozeTile(Labels.SNOOZE_WEEK, Icons.Filled.DateRange) { snooze { it + WEEK_MILLIS } }
-                }
+                DateTiles(snoozeChoices(AppSettings.rolloverHour(context))) { until -> snooze { until } }
                 HorizontalDivider(color = LedgerBorder)
                 MenuRow(Labels.PIN, Icons.Filled.PushPin) { showSnoozeMenu = false; scope.launch { PinnedTask.pin(context, task.id) } }
                 MenuRow("Focus", Icons.Filled.CenterFocusStrong) {
@@ -329,6 +324,24 @@ private fun TaskRow(
                 }
             }
         }
+    }
+}
+
+// A choice of times as equal tiles: the snooze menu's, and the task editor's Start and Due on long press.
+class DateChoice(val label: String, val icon: ImageVector, val at: (now: Long) -> Long)
+
+// Snoozing (or setting a start): in an hour, tomorrow at the day rollover (4am by default, not 24 hours
+// from now), or a week from now.
+fun snoozeChoices(rolloverHour: Int) = listOf(
+    DateChoice(Labels.SNOOZE_HOUR, Icons.Filled.Schedule) { it + HOUR_MILLIS },
+    DateChoice(Labels.SNOOZE_TOMORROW, Icons.Filled.Bedtime) { nextRollover(it, rolloverHour) },
+    DateChoice(Labels.SNOOZE_WEEK, Icons.Filled.DateRange) { it + WEEK_MILLIS }
+)
+
+@Composable
+fun DateTiles(choices: List<DateChoice>, onPick: (Long) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 10.dp)) {
+        choices.forEach { c -> SnoozeTile(c.label, c.icon) { onPick(c.at(System.currentTimeMillis())) } }
     }
 }
 

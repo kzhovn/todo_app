@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import com.kzhovn.todoapp.data.hasTime
 import com.kzhovn.todoapp.data.atTime
 import java.text.DateFormat
@@ -40,6 +42,7 @@ import java.util.Locale
 // Shared by the quick-add overlay and the full edit screen. Always shows its label (e.g.
 // "Start"/"Due") alongside the value, so two chips holding the same-shaped value (two dates, in
 // particular) never look identical to each other the way the original quick-add chips did.
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PropertyChip(
     label: String,
@@ -50,14 +53,15 @@ fun PropertyChip(
     showLabelWhenSet: Boolean = true,
     // A set chip's colour, e.g. a folder's own; its fill is a pale version of it.
     tint: Color = LedgerAccent,
-    iconOnly: Boolean = false
+    iconOnly: Boolean = false,
+    onLongClick: (() -> Unit)? = null
 ) {
     val set = valueText != null
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(5.dp))
             .background(if (!set) Color.Transparent else if (tint == LedgerAccent) LedgerAccentSoft else tint.copy(alpha = 0.14f))
-            .clickable { onClick() }
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

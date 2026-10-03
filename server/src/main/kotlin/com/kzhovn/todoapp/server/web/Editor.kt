@@ -482,8 +482,15 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
         // Everything about when, as pills that open a small popover (app.js keeps their text current).
         div(classes = "field-label section") { +Labels.TIMING }
         div(classes = "pills when") {
-            datePill(Labels.START, "start", Icon.CALENDAR, t.startDate, "")
-            datePill(Labels.DUE, "due", Icon.FLAG, t.dueDate, "task-only")
+            // Quick choices under the fields: the snooze menu's for Start, days for Due (the phone's long press).
+            val now = service.now()
+            val day = { n: Long -> LocalDate.now().plusDays(n).toString() to "" }
+            fun at(ms: Long) = localDateTime(ms).let { it.toLocalDate().toString() to it.toLocalTime().withSecond(0).withNano(0).toString() }
+            datePill(Labels.START, "start", Icon.CALENDAR, t.startDate, "", listOf(
+                Labels.SNOOZE_HOUR to at(now + 60 * 60 * 1000), Labels.SNOOZE_TOMORROW to at(nextRollover(now, service.rolloverHour())),
+                Labels.SNOOZE_WEEK to at(now + 7L * 24 * 60 * 60 * 1000)
+            ))
+            datePill(Labels.DUE, "due", Icon.FLAG, t.dueDate, "task-only", listOf("Today" to day(0), Labels.SNOOZE_TOMORROW to day(1), "Next week" to day(7)))
             // Set here, rung by the phone: it schedules the alarm when this syncs to it.
             popPill(Labels.REMIND, Icon.BELL, t.reminderOffsetMinutes?.let { m -> Labels.REMINDERS.firstOrNull { it.first == m }?.second }, "select", "task-only reminder") {
                 select {
@@ -692,11 +699,17 @@ private fun FlowContent.popPill(label: String, icon: Icon, value: String?, kind:
         div(classes = "pop") { content() }
     }
 
-private fun FlowContent.datePill(label: String, prefix: String, icon: Icon, millis: Long?, classes: String) =
+// quick: (label, (date, time)) buttons that fill the fields and close the popover (app.js).
+private fun FlowContent.datePill(label: String, prefix: String, icon: Icon, millis: Long?, classes: String, quick: List<Pair<String, Pair<String, String>>> = emptyList()) =
     popPill(label, icon, millis?.let(::pillDate), "date", classes) {
         val at = millis?.let(::localDateTime)
         dateInput(name = "${prefix}Date") { value = at?.toLocalDate()?.toString().orEmpty() }
         timeInput(name = "${prefix}Time") { value = if (millis != null && hasTime(millis)) at!!.toLocalTime().withSecond(0).withNano(0).toString() else "" }
+        if (quick.isNotEmpty()) div(classes = "date-quick") {
+            quick.forEach { (text, value) ->
+                button(type = ButtonType.button, classes = "pill") { attributes["data-date"] = value.first; attributes["data-time"] = value.second; +text }
+            }
+        }
     }
 
 // The phone's chip date: "Sep 25", or "Sep 25 3:00 PM" with a time. app.js formats the same way.

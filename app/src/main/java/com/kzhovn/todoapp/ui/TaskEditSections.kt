@@ -1,5 +1,10 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.quickadd.startOfDay
+import androidx.compose.material.icons.filled.Today
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.DateRange
+import com.kzhovn.todoapp.ui.theme.LedgerSearchBackground
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.Column
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
@@ -185,6 +190,25 @@ private fun TogglePill(label: String, icon: ImageVector, on: Boolean, onToggle: 
     }
 }
 
+// Due dates are days: today, tomorrow, a week from today (no time).
+private val dueChoices = listOf(
+    DateChoice("Today", Icons.Filled.Today) { day(it, 0) },
+    DateChoice(Labels.SNOOZE_TOMORROW, Icons.Filled.Bedtime) { day(it, 1) },
+    DateChoice("Next week", Icons.Filled.DateRange) { day(it, 7) }
+)
+
+private fun day(now: Long, plusDays: Int) = java.util.Calendar.getInstance().apply { timeInMillis = now; add(java.util.Calendar.DAY_OF_YEAR, plusDays) }.startOfDay()
+
+@Composable
+private fun QuickDateMenu(expanded: Boolean, label: String, choices: List<DateChoice>, onDismiss: () -> Unit, onPick: (Long) -> Unit) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, containerColor = LedgerSearchBackground) {
+        Column(Modifier.width(236.dp)) {
+            Text(label, fontSize = 11.sp, color = LedgerMuted, letterSpacing = 0.4.sp, modifier = Modifier.padding(start = 14.dp, top = 4.dp, bottom = 6.dp))
+            DateTiles(choices) { onDismiss(); onPick(it) }
+        }
+    }
+}
+
 // Everything about when: dates, reminder, repeat, timer, and "today only".
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -192,23 +216,36 @@ internal fun TimingSection(vm: TaskEditViewModel, activity: Activity, onRepeat: 
     val task = vm.task
     SectionLabel(Labels.TIMING)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        PropertyChip(
-            label = Labels.START,
-            valueText = task.startDate?.let(::formatChipDate),
-            icon = Icons.Filled.Event,
-            onClick = { pickDate(activity, task.startDate, title = Labels.START) { vm.task = vm.task.copy(startDate = it) } },
-            onClear = { vm.task = vm.task.copy(startDate = null) },
-            showLabelWhenSet = false
-        )
-        if (task.type != TaskType.FOLDER) {
+        // A long press offers quick choices: the snooze menu's for Start, today/tomorrow/next week for Due.
+        var quickStart by remember { mutableStateOf(false) }
+        Box {
             PropertyChip(
-                label = Labels.DUE,
-                valueText = task.dueDate?.let(::formatChipDate),
-                icon = Icons.Filled.Flag,
-                onClick = { pickDate(activity, task.dueDate, title = Labels.DUE) { vm.task = vm.task.copy(dueDate = it) } },
-                onClear = { vm.task = vm.task.copy(dueDate = null) },
-                showLabelWhenSet = false
+                label = Labels.START,
+                valueText = task.startDate?.let(::formatChipDate),
+                icon = Icons.Filled.Event,
+                onClick = { pickDate(activity, task.startDate, title = Labels.START) { vm.task = vm.task.copy(startDate = it) } },
+                onClear = { vm.task = vm.task.copy(startDate = null) },
+                showLabelWhenSet = false,
+                onLongClick = { quickStart = true }
             )
+            QuickDateMenu(quickStart, Labels.START, snoozeChoices(AppSettings.rolloverHour(activity)), onDismiss = { quickStart = false }) {
+                vm.task = vm.task.copy(startDate = it)
+            }
+        }
+        if (task.type != TaskType.FOLDER) {
+            var quickDue by remember { mutableStateOf(false) }
+            Box {
+                PropertyChip(
+                    label = Labels.DUE,
+                    valueText = task.dueDate?.let(::formatChipDate),
+                    icon = Icons.Filled.Flag,
+                    onClick = { pickDate(activity, task.dueDate, title = Labels.DUE) { vm.task = vm.task.copy(dueDate = it) } },
+                    onClear = { vm.task = vm.task.copy(dueDate = null) },
+                    showLabelWhenSet = false,
+                    onLongClick = { quickDue = true }
+                )
+                QuickDateMenu(quickDue, Labels.DUE, dueChoices, onDismiss = { quickDue = false }) { vm.task = vm.task.copy(dueDate = it) }
+            }
         }
         if (task.type == TaskType.TASK && task.dueDate != null) {
             var showRemindMenu by remember { mutableStateOf(false) }

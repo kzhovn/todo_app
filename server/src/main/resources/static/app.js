@@ -250,6 +250,28 @@
   }, true);
   document.addEventListener("htmx:afterSwap", paintSelection);
 
+  // Rows work like the phone's. Right-click (a long press on a touchscreen) opens the row's menu at the
+  // pointer: snooze, pin, focus, a subtask. A click anywhere else on a row opens the task in the side
+  // panel; the parent's name, buttons and links keep their own. (In selection mode the handler above
+  // takes clicks first.)
+  const closeMenus = (except) => document.querySelectorAll("details.more[open]").forEach((d) => { if (d !== except) d.open = false; });
+  document.addEventListener("contextmenu", (e) => {
+    const more = e.target.closest(".row[data-task-id]")?.querySelector("details.more");
+    if (!more || e.target.closest("input, textarea")) return;
+    e.preventDefault();
+    closeMenus(more);
+    more.open = true;
+    const menu = more.querySelector(".menu");
+    menu.style.left = `${Math.max(8, Math.min(e.clientX, innerWidth - menu.offsetWidth - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(e.clientY, innerHeight - menu.offsetHeight - 8))}px`;
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("details.more")) closeMenus();
+    if (e.target.closest("a, button, input, textarea, label, details, select")) return;
+    e.target.closest("#list .row[data-task-id]")?.querySelector(".title a.edit")?.click();
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenus(); });
+
   // The row whose task is open in the panel stays highlighted, also after the list refreshes itself
   // or another task is opened in the panel (the URL is the task's).
   const markCurrent = () => {
@@ -424,6 +446,17 @@
   }
   document.addEventListener("input", (e) => { const pp = e.target.closest(".pp[data-kind]"); if (pp) refreshPill(pp); });
   document.addEventListener("change", (e) => { const pp = e.target.closest(".pp[data-kind]"); if (pp) refreshPill(pp); });
+  // A date pill's quick choice (in an hour, tomorrow...): fills the date and time, then closes.
+  document.addEventListener("click", (e) => {
+    const quick = e.target.closest(".date-quick [data-date]");
+    if (!quick) return;
+    const pp = quick.closest(".pp");
+    const date = pp.querySelector("input[type=date]");
+    date.value = quick.dataset.date;
+    pp.querySelector("input[type=time]").value = quick.dataset.time;
+    date.dispatchEvent(new Event("change", { bubbles: true })); // the pill's text, and the editor's save
+    pp.open = false;
+  });
   document.addEventListener("click", (e) => {
     const preset = e.target.closest(".pop .preset[data-minutes]");
     if (preset) {

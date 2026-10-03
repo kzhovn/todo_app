@@ -86,10 +86,10 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .star .icon { width: 24px; height: 24px; }
 .star.on { color: var(--star); }
 .maybe { font-weight: 700; color: var(--muted); width: 32px; text-align: center; }
-.more { position: relative; }
-.more summary { list-style: none; cursor: pointer; color: var(--muted); padding: 0 6px; }
-.more summary::-webkit-details-marker { display: none; }
-.more .menu { position: absolute; right: 0; top: 24px; z-index: 5; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; display: flex; flex-direction: column; min-width: 150px; box-shadow: 0 4px 14px #0002; }
+/* A row's menu opens on right-click, at the pointer (app.js places it); there's no button for it. */
+.more summary { display: none; }
+.row { cursor: pointer; }
+.more .menu { position: fixed; z-index: 20; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; display: flex; flex-direction: column; min-width: 150px; box-shadow: 0 4px 14px #0002; }
 .more .menu button { text-align: left; padding: 8px 12px; }
 .more .menu button:hover { background: var(--accent-soft); }
 .more .menu { min-width: 236px; padding-bottom: 10px; }
@@ -195,7 +195,10 @@ form.inline button { padding: 6px 10px; border: 1px solid var(--border); border-
 /* All-tree outliner */
 .chevron { width: 20px; height: 20px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); margin-left: 4px; }
 .chevron .icon { width: 18px; height: 18px; }
-.outline .row .check, .outline .row .project { margin-left: 2px; }
+/* Rows line up with folders at their depth: the chevron, then the checkbox where a folder has its icon. */
+.outline .row { gap: 4px; }
+.outline .row .chevron { margin-left: 0; }
+.outline .row .check, .outline .row .project { margin-left: 0; }
 .outline .folder { padding-top: 8px; padding-bottom: 4px; gap: 4px; }
 .node { cursor: default; }
 .node:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -205,16 +208,25 @@ form.inline button { padding: 6px 10px; border: 1px solid var(--border); border-
 .outline-new { display: block; width: calc(100% - 60px); margin: 4px 0; padding: 6px 8px; border: 1px solid var(--accent); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
 
 /* Search */
-.search { padding: 20px 24px 8px; display: flex; flex-direction: column; gap: 10px; }
-.search-q { width: 100%; padding: 8px 10px; font: inherit; font-size: 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); }
-.search select, .search input[type=date] { padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--ink); font: inherit; font-size: 13px; }
+.search { padding: 16px 20px 6px; display: flex; flex-direction: column; gap: 8px; }
+.search-q { width: 100%; padding: 8px 12px; font: inherit; font-size: 15px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--ink); }
+/* The filters: one row of chips, all the same height. */
+.search .pills { align-items: center; gap: 6px; }
+.search .pill, .search select, .search input[type=date] { height: 28px; box-sizing: border-box; padding: 0 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--muted); font: inherit; font-size: 13px; display: inline-flex; align-items: center; }
+.search select { max-width: 160px; }
+.search input[type=date] { padding: 0 6px; width: 128px; }
 .date-filter { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
-.results { padding: 0 24px 24px; }
-.result { padding: 8px 0; border-bottom: 1px solid var(--border); }
-.result a { color: var(--ink); text-decoration: none; font-weight: 600; }
-.result a:hover { text-decoration: underline; }
-.row.done .edit { color: var(--muted); text-decoration: line-through; font-weight: 400; }
-.result a.done { color: var(--muted); text-decoration: line-through; font-weight: 400; }
+.results { padding: 0 20px 24px; }
+.results > .hint { margin: 0 0 4px; font-size: 12px; }
+/* A result is one line, like a list row; a matched notes line goes under the title. */
+.result { display: flex; align-items: center; flex-wrap: wrap; gap: 0 8px; min-height: 38px; padding: 3px 8px 3px 6px; border-left: 4px solid var(--border); border-bottom: 1px solid var(--border); }
+.result .check, .result .project { margin-left: 0; display: flex; align-items: center; justify-content: center; }
+.result > a { flex: 1; min-width: 0; color: var(--ink); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.result > a:hover { text-decoration: underline; }
+.result > a.count { flex: none; }
+.result .meta { margin: 0 0 0 auto; gap: 8px; white-space: nowrap; flex-shrink: 0; }
+.result .notes-line { flex-basis: 100%; padding: 0 0 4px 30px; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.result a.done { color: var(--muted); text-decoration: line-through; }
 .starred { color: var(--star); }
 
 /* Review */
@@ -299,9 +311,6 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .stalled input[type=text] { flex: 1; min-width: 160px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
 #toast.question { flex-wrap: wrap; max-width: calc(100vw - 32px); }
 #toast .dismiss { color: var(--bg); font-weight: 400; opacity: .7; }
-.result { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
-.result .check, .result .project { margin-left: 0; margin-top: 2px; display: flex; align-items: center; justify-content: center; }
-.result .meta { width: 100%; padding-left: 30px; }
 .bulk h1 { font-size: 20px; margin: 0; }
 
 
@@ -427,6 +436,7 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .cand:hover { background: var(--accent-soft); }
 .cand .parent { color: var(--muted); }
 .focus-new { margin-top: 12px; }
+.date-quick { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .focus-search-form { display: flex; align-items: center; gap: 8px; }
 .focus-search-form input[type=search] { flex: 1; }
 /* Folder mode: the sidebar's bar in the folder's colour, zoom buttons on folders, and Doing's line
@@ -483,7 +493,6 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 /* A task with a note: a small mark after its title; search shows the line it matched. */
 .has-notes { display: inline-flex; vertical-align: -2px; margin-left: 5px; color: var(--muted); }
 .has-notes .icon { width: 14px; height: 14px; }
-.result .notes-line { flex-basis: 100%; font-size: 13px; color: var(--muted); }
 .focus-notes { width: min(520px, 100%); max-height: 40vh; overflow-y: auto; margin-top: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
 .focus-notes a { color: var(--accent); }
 /* The editor's default button for Enter (see Editor.kt): there, but not seen. */
