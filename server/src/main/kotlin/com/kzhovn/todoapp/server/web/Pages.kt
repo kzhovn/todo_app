@@ -406,12 +406,6 @@ private fun HTML.reviewPage(service: TaskService, zoom: Zoom, end: LocalDate?, e
                 span { span(classes = "swatch") { style = "background: ${colorOf(folder)}" }; +(folder?.title ?: Labels.NO_FOLDER) }
             }
         }
-        div(classes = "summary") {
-            page.summary.forEach { (label, line) ->
-                div(classes = "k") { +label }
-                div { b { +line.substringBefore(" · ") }; if (" · " in line) +(" · " + line.substringAfter(" · ")) }
-            }
-        }
 
         if (page.timeToDone.isNotEmpty()) {
             section("Time to done", "from start or creation · ${page.timeToDone.size} tasks, repeats left out")

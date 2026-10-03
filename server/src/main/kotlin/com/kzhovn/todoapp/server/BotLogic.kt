@@ -318,7 +318,7 @@ class BotLogic(private val service: TaskService, private val store: Store) {
     }
 
     private fun describe(task: Task): String {
-        val title = task.title.take(120) + (if (task.isMaybe) " ?" else "") + (if (!task.notes.isNullOrBlank()) " 📝" else "")
+        val title = task.title.take(120) + (if (task.isMaybe) " ?" else "")
         val due = service.effectiveDueDate(task)?.let {
             " · due " + SimpleDateFormat(if (hasTime(it)) "EEE d MMM h:mm a" else "EEE d MMM", Locale.US).format(Date(it))
         }.orEmpty()

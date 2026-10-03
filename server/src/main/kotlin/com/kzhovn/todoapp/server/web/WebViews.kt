@@ -2,6 +2,7 @@ package com.kzhovn.todoapp.server.web
 
 import com.kzhovn.todoapp.widget.TodoWidgetPresenter
 import com.kzhovn.todoapp.data.isUnder
+import com.kzhovn.todoapp.data.startText
 import com.kzhovn.todoapp.data.inMode
 import com.kzhovn.todoapp.data.isChecklistItem
 import com.kzhovn.todoapp.data.isDoable
@@ -494,6 +495,8 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                 a(href = "/tasks/${task.id}?mode=$mode", classes = "edit") { openInPanel(); +task.title }
                 // On the title's line, wrapping along with it.
                 due?.let { dueTail(it, status!!, data.now) }
+                // A start still to come (the All tree shows snoozed and future tasks).
+                task.startDate?.takeIf { it > data.now && !task.isComplete }?.let { span(classes = "tail") { +" · ${startText(it, data.now)}" } }
                 if (task.type != TaskType.CHECKLIST) data.subtaskCounts(task)?.let { (done, total) -> span(classes = "tail") { +" · $done/$total" } }
                 if (task.recurrenceType != null) span(classes = "badge") { attributes["title"] = "Recurring"; icon(Icon.REPEAT, "") }
                 if (!task.notes.isNullOrBlank()) span(classes = "has-notes") { attributes["title"] = "Has notes"; icon(Icon.NOTES, "") }

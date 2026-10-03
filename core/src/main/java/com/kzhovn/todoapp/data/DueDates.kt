@@ -16,10 +16,15 @@ fun dueStatus(due: Long, now: Long): DueStatus = when {
 
 // A row's due text: "due today", "due 3:00 PM" (today, with a time), "due tomorrow",
 // "due yesterday", "due Fri" (within the week ahead), else "due Oct 3".
-fun dueText(due: Long, now: Long): String {
+fun dueText(due: Long, now: Long): String = "due " + dayText(due, now)
+
+// "starts Fri": a start date still to come, in the same words.
+fun startText(start: Long, now: Long): String = "starts " + dayText(start, now)
+
+private fun dayText(due: Long, now: Long): String {
     val days = dayIndex(due) - dayIndex(now)
     val date = Date(due)
-    return "due " + when {
+    return when {
         days == 0L -> if (hasTime(due)) SimpleDateFormat("h:mm a", Locale.US).format(date) else "today"
         days == 1L -> "tomorrow"
         days == -1L -> "yesterday"

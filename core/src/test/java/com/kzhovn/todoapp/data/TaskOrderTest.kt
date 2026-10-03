@@ -30,6 +30,19 @@ class TaskOrderTest {
     }
 
     @Test
+    fun `a folder's list leads with folders, then projects, then tasks, each newcomer first in its group`() {
+        val home = Task(id = 1, title = "Home", type = TaskType.FOLDER)
+        val all = mutableListOf(
+            home, Task(id = 2, title = "Sub", type = TaskType.FOLDER, parentId = 1),
+            Task(id = 3, title = "Garden", type = TaskType.PROJECT, parentId = 1), Task(id = 4, title = "old task", parentId = 1)
+        )
+        fun add(t: Task) { val p = newTaskPositions(all, t); all.replaceAll { it.copy(position = p[it.id] ?: it.position) }; all += t.copy(position = p[t.id]) }
+        add(Task(id = 10, title = "new task", parentId = 1))
+        add(Task(id = 11, title = "new project", type = TaskType.PROJECT, parentId = 1))
+        assertEquals(listOf("Sub", "new project", "Garden", "new task", "old task"), all.filter { it.parentId == 1L }.sortedWith(TaskOrder).map { it.title })
+    }
+
+    @Test
     fun `a new task goes first below the folders, moving no sibling until there's no room`() {
         val home = Task(id = 1, title = "Home", type = TaskType.FOLDER)
         val all = mutableListOf(home, Task(id = 2, title = "Sub", type = TaskType.FOLDER, parentId = 1), Task(id = 3, title = "old", parentId = 1))

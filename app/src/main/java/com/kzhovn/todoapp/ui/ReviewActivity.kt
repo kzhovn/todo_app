@@ -210,18 +210,7 @@ internal fun ReviewScreen(
                 }
             }
 
-            // The summary: a label and a line each, the line's first part bold.
-            HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(top = 10.dp))
-            page.summary.forEach { (label, line) ->
-                Row(Modifier.padding(vertical = 3.dp)) {
-                    Text(label, fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.width(92.dp).padding(top = 1.dp))
-                    Text(buildAnnotatedString {
-                        withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(line.substringBefore(" · ")) }
-                        if (" · " in line) append(" · " + line.substringAfter(" · "))
-                    }, fontSize = 13.sp, color = LedgerInk)
-                }
-            }
-            HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(bottom = 6.dp))
+            HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(top = 10.dp, bottom = 6.dp))
 
             if (page.timeToDone.isNotEmpty()) {
                 SectionTitle("Time to done", "from start or creation · ${page.timeToDone.size} tasks, repeats left out")

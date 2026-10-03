@@ -261,8 +261,6 @@ form.inline button { padding: 6px 10px; border: 1px solid var(--border); border-
 .chart.dense { gap: 1px; }
 .chart.dense .bar { width: 72%; gap: 1px; border-radius: 2px 2px 0 0; }
 .review h2:target { color: var(--accent); }
-.summary { display: grid; grid-template-columns: max-content 1fr; gap: 5px 16px; font-size: 14px; margin: 6px 0; padding: 10px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-.summary .k { color: var(--muted); font-size: 13px; }
 .review .sec { font-size: 14px; font-weight: 700; margin: 20px 0 6px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
 .review .sec .cap { font-weight: 400; color: var(--muted); font-size: 12px; }
 .twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; }
@@ -342,9 +340,9 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .title-card { border: 1px solid var(--border); border-radius: 6px; background: var(--panel); }
 .title-card:focus-within { border-color: var(--accent); }
 .title-box { display: flex; align-items: flex-start; gap: 4px; padding: 2px 4px 2px 10px; }
-/* The note, under the title in the same card. Empty, it only shows while the card is edited or hovered. */
+/* The note, under the title in the same card. Empty, it only shows while the card is being edited. */
 .notes { border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent); padding: 6px 10px 8px; }
-.title-card:not(:hover):not(:focus-within) .notes:has(.notes-input:placeholder-shown):not(:has(.notes-preview)) { display: none; }
+.title-card:not(:focus-within) .notes:has(.notes-input:placeholder-shown):not(:has(.notes-preview)) { display: none; }
 .notes-input { display: block; width: 100%; border: 0 !important; background: none !important; padding: 0 !important; font: inherit; font-size: 14px; line-height: 1.45; color: var(--ink); resize: none; field-sizing: content; min-height: 1.45em; outline: none; }
 .notes-preview { font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; overflow: hidden; }
 .notes-preview a { color: var(--accent); }

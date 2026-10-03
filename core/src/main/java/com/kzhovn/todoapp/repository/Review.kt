@@ -133,34 +133,6 @@ class ReviewPage(
             Zoom.ALL -> bar.first.format(pattern("MMMMM"))
         }
     }
-
-    private val before: String get() = when (zoom) {
-        Zoom.WEEK -> "the 7 days before"
-        Zoom.MONTH -> "the 30 days before"
-        else -> "the year before"
-    }
-
-    // The summary under the chart: (label, line). The line's first part (up to " · ") is its headline.
-    val summary: List<Pair<String, String>> get() = buildList {
-        val perDay = String.format(Locale.US, "%.1f", done.size.toDouble() / days)
-        val vsBefore = previousDone?.let { p ->
-            if (p.isEmpty()) " · none $before"
-            else {
-                val change = Math.round((done.size - p.size) * 100.0 / p.size)
-                " · ${if (change >= 0) "↑" else "↓"} ${kotlin.math.abs(change)}% on $before (${p.size})"
-            }
-        }.orEmpty()
-        add("Done" to "${done.size} · $perDay a day$vsBefore")
-        medianMs(timeToDone)?.let { median ->
-            add("Time to done" to "median ${shortAge(median)}" + previousTimeToDone?.let(::medianMs)?.let { " · ${shortAge(it)} $before" }.orEmpty())
-        }
-        if (dueOutcomes.isNotEmpty()) {
-            val late = dueOutcomes.filter { it.ms > 0 }
-            val onTime = dueOutcomes.size - late.size
-            add("Due dates" to "$onTime of ${dueOutcomes.size} on time (${onTime * 100 / dueOutcomes.size}%)" +
-                medianMs(late)?.let { " · the late ones by ${shortAge(it, "under a day")} (median)" }.orEmpty())
-        }
-    }
 }
 
 private fun pattern(p: String) = DateTimeFormatter.ofPattern(p, Locale.US)

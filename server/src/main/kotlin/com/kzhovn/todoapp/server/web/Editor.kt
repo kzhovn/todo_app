@@ -406,7 +406,7 @@ private fun localDateTime(millis: Long) = Instant.ofEpochMilli(millis).atZone(Zo
 private fun TaskService.folderIdOf(task: Task): Long? = task.parentId?.takeIf { get(it)?.type == TaskType.FOLDER }
 
 // A note, collapsed (5 lines; 2 on a phone's screen) with links that open; clicking it edits the whole
-// note (app.js). With no note it's only shown while the title card is being edited or hovered (CSS).
+// note (app.js). With no note it's only shown while the title card is being edited (CSS).
 private fun FlowContent.notesField(notes: String?) = div(classes = "notes") {
     if (!notes.isNullOrBlank()) div(classes = "notes-preview") { linkified(notes) }
     textArea(classes = "notes-input") { name = "notes"; rows = "1"; placeholder = "Notes"; +notes.orEmpty() }

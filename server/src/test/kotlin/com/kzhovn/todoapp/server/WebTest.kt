@@ -246,8 +246,8 @@ class WebTest {
         service.create(Task(title = "Done today", isComplete = true, completedAt = service.now(), dueDate = service.now() - 3 * day))
         service.create(Task(title = "Still open"))
         val review = client.get("/review").bodyAsText()
-        assertTrue(review.contains("<b>1</b> · 0.0 a day · none the 30 days before"))
-        assertTrue(review.contains("0 of 1 on time"))
+        assertTrue(review.contains("Due dates"))
+        assertTrue(review.contains("3d late"))
         assertTrue(review.contains("Done today"))
         assertTrue(review.substringAfter("Waiting now").contains("Still open"))
 

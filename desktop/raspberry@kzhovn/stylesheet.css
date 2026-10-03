@@ -1,6 +1,7 @@
 /* The phone widget's look: the Ledger palette (app/.../ui/theme/Color.kt) on a cream card. */
 .rb-panel-icon { icon-size: 16px; border-radius: 3px; }
 .rb-panel-label { padding-left: 6px; }
+.rb-panel-count { padding-left: 3px; font-size: 11px; font-weight: bold; }
 
 .rb-item { padding: 0; }
 .rb-popup { background-color: #F0EAE0; color: #2B2318; border-radius: 10px; padding: 4px 4px 6px; width: 400px; }

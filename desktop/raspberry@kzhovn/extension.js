@@ -97,6 +97,9 @@ class Indicator extends PanelMenu.Button {
         const bar = new St.BoxLayout({style_class: 'panel-status-menu-box'});
         bar.add_child(new St.Icon({gicon: Gio.icon_new_for_string(`${extension.path}/raspberry.png`), style_class: 'rb-panel-icon'}));
         // The pinned task's title; with nothing pinned, just the icon.
+        // How many are in Doing: a small number beside the icon (none when Doing is empty).
+        this._countLabel = new St.Label({style_class: 'rb-panel-count', y_align: Clutter.ActorAlign.CENTER, visible: false});
+        bar.add_child(this._countLabel);
         this._pinLabel = new St.Label({style_class: 'rb-panel-label', y_align: Clutter.ActorAlign.CENTER, visible: false});
         bar.add_child(this._pinLabel);
         this.add_child(bar);
@@ -185,6 +188,9 @@ class Indicator extends PanelMenu.Button {
         }
         this._pinLabel.visible = !!text;
         if (text) this._pinLabel.text = text;
+        const doing = this._state?.counts?.doing ?? 0;
+        this._countLabel.visible = doing > 0;
+        this._countLabel.text = `${doing}`;
         if (this._countdownLabel) this._countdownLabel.text = this._countdownText();
     }
 

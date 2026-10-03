@@ -10,9 +10,10 @@ private fun sortKey(task: Task) = task.position ?: task.id
 // Room between positions, so a new task can usually slot in without moving its siblings.
 private const val GAP = 1024L
 
-// Where a new task goes: under a folder (or at the top level) it's first, just below the folders
-// that lead the list; under a task, project or sequential folder it stays last, so steps keep the
-// order they were added in. Returns the positions to write (the new task's included). Normally that's
+// Where a new task goes: under a folder (or at the top level) the list leads with folders, then
+// projects, then everything else, and a newcomer goes first in its group (a new folder, last of the
+// folders). Under a task, project or sequential folder it stays last, so steps keep the order they
+// were added in. Returns the positions to write (the new task's included). Normally that's
 // just the new task: a key below the first task, or between the last folder and it. Only when there's
 // no room left there are the siblings respaced (every write is a row to sync, so moving a whole
 // folder's worth of tasks for each add was costly).
@@ -20,7 +21,8 @@ fun newTaskPositions(all: List<Task>, new: Task): Map<Long, Long> {
     val parent = new.parentId?.let { id -> all.firstOrNull { it.id == id } }
     if (parent != null && (parent.type != TaskType.FOLDER || parent.sequential)) return emptyMap()
     val siblings = all.filter { it.parentId == new.parentId && it.id != new.id }.sortedWith(TaskOrder).toMutableList()
-    val folders = siblings.takeWhile { it.type == TaskType.FOLDER }.size
+    fun group(t: Task) = when (t.type) { TaskType.FOLDER -> 0; TaskType.PROJECT -> 1; else -> 2 }
+    val folders = siblings.takeWhile { if (new.type == TaskType.FOLDER) group(it) == 0 else group(it) < group(new) }.size
     val above = siblings.getOrNull(folders - 1)?.let(::sortKey)
     val below = siblings.getOrNull(folders)?.let(::sortKey) ?: return emptyMap() // nothing below: its id sorts last
     val key = when {

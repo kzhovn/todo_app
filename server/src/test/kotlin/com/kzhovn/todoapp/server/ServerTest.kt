@@ -101,7 +101,7 @@ class ServerTest {
         assertEquals("ask about the fee\nref 4417", task.notes)
         logic.onEdit(1L, "-- call bank // ask about the overdraft")
         assertEquals("ask about the overdraft", service.get(task.id)!!.notes)
-        assertTrue(logic.listChunks(listOf(service.get(task.id)!!)).single().content.contains("call bank 📝"))
+        assertFalse(logic.listChunks(listOf(service.get(task.id)!!)).single().content.contains("📝"))
         assertTrue(trayState(service, "doing").rows.single { it.id == task.id }.hasNotes)
         service.focus(task.id)
         assertEquals("ask about the overdraft", trayState(service, "none").focus?.notes)
