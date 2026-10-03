@@ -22,7 +22,6 @@ import com.kzhovn.todoapp.data.hasTime
 import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
-import com.kzhovn.todoapp.quickadd.QuickAddParser
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
 import com.kzhovn.todoapp.recurrence.RecurrenceSelection
 import com.kzhovn.todoapp.recurrence.RecurrenceUnit
@@ -187,8 +186,7 @@ fun Route.editorRoutes(service: TaskService) {
         val id = call.taskId() ?: return@post
         val params = call.receiveParameters()
         params["child"]?.toLongOrNull()?.let { service.reparent(it, id) }
-        val parsed = QuickAddParser.parse(params["text"].orEmpty())
-        if (parsed.title.isNotBlank() && service.get(id) != null) service.create(parsed.copy(parentId = id))
+        if (service.get(id) != null) service.addTyped(params["text"].orEmpty(), under = id)
         call.respondSubtasks(service, id)
     }
     // An existing task (prerequisite), or a new one (text), that this one depends on. A new one goes in
@@ -197,12 +195,7 @@ fun Route.editorRoutes(service: TaskService) {
         val id = call.taskId() ?: return@post
         val params = call.receiveParameters()
         params["prerequisite"]?.toLongOrNull()?.let { service.addDependency(id, it) }
-        val parsed = QuickAddParser.parse(params["text"].orEmpty())
-        val task = service.get(id)
-        if (parsed.title.isNotBlank() && task != null) {
-            val folderId = service.folderIdOf(task)
-            service.addDependency(id, service.create(parsed.copy(parentId = folderId)).id)
-        }
+        service.get(id)?.let { task -> service.addTyped(params["text"].orEmpty(), folder = service.folderIdOf(task))?.let { service.addDependency(id, it.id) } }
         call.respondSubtasks(service, id)
     }
     post("/tasks/{id}/prerequisite/{other}/remove") {
@@ -221,12 +214,7 @@ fun Route.editorRoutes(service: TaskService) {
         val id = call.taskId() ?: return@post
         val params = call.receiveParameters()
         params["dependent"]?.toLongOrNull()?.let { service.addDependency(it, id) }
-        val parsed = QuickAddParser.parse(params["text"].orEmpty())
-        val task = service.get(id)
-        if (parsed.title.isNotBlank() && task != null) {
-            val folderId = service.folderIdOf(task)
-            service.addDependency(service.create(parsed.copy(parentId = folderId)).id, id)
-        }
+        service.get(id)?.let { task -> service.addTyped(params["text"].orEmpty(), folder = service.folderIdOf(task))?.let { service.addDependency(it.id, id) } }
         call.respondSubtasks(service, id)
     }
     // A checklist's items: add ("milk, eggs" is two), uncheck all, clear checked.
@@ -295,7 +283,7 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     // A new task's prerequisite and dependent, typed in the form: made in its folder, as related work
     // usually belongs together.
     val folderId = service.folderIdOf(merged.task)
-    fun createTyped(text: String) = QuickAddParser.parse(text).takeIf { it.title.isNotBlank() }?.let { service.create(it.copy(parentId = folderId)).id }
+    fun createTyped(text: String) = service.addTyped(text, folder = folderId)?.id
     val blocker = createTyped(newDep)
     val dependsOn = merged.dependsOn + listOfNotNull(blocker)
     val savedId = if (id == null) {
@@ -306,9 +294,9 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
         id
     }
     if (inherit == "update") service.clearInherited(overriding, changed)
-    if (needsFirstStep) service.create(Task(title = firstStep, parentId = savedId))
+    if (needsFirstStep) service.addTyped(firstStep, under = savedId)
     if (id == null && params["pin"] != null) service.pin(savedId)
-    newSubtasks.forEach { service.create(QuickAddParser.parse(it).copy(parentId = savedId)) }
+    newSubtasks.forEach { service.addTyped(it, under = savedId) }
     createTyped(newDependent)?.let { service.addDependency(it, savedId) }
     call.respondRedirect(call.listPath())
 }

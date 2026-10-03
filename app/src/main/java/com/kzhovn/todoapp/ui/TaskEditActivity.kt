@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
@@ -61,16 +62,12 @@ import kotlinx.coroutines.launch
 // Which of the editor's dialogs is open; only ever one at a time.
 private sealed interface EditorDialog {
     data class Delete(val descendants: Int) : EditorDialog
-    data object FirstStep : EditorDialog
     data class UpdateSubtasks(val question: Question.UpdateSubtasks) : EditorDialog
     data object SubtaskPicker : EditorDialog
     data object DependentPicker : EditorDialog
     data object PrerequisitePicker : EditorDialog
     data object Repeat : EditorDialog
     data object Timer : EditorDialog
-    data object NewPendingSubtask : EditorDialog
-    data object NewPendingDependent : EditorDialog
-    data object NewPrerequisite : EditorDialog
     data object FolderPicker : EditorDialog
     data object NewFolder : EditorDialog
     data object ClearChecked : EditorDialog
@@ -78,6 +75,23 @@ private sealed interface EditorDialog {
 }
 
 class TaskEditActivity : ComponentActivity() {
+    // A new subtask, prerequisite or dependent: made with the usual quick add, in this task's folder, then
+    // linked like a picked one (on Save, for a task not saved yet).
+    // ponytail: the callback is lost if Android destroys this screen while quick add is open.
+    private var onQuickAdded: ((List<Long>) -> Unit)? = null
+    private val quickAddForResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        result.data?.getLongArrayExtra(QuickAddActivity.EXTRA_CREATED_IDS)?.toList()?.takeIf { it.isNotEmpty() }?.let { onQuickAdded?.invoke(it) }
+        onQuickAdded = null
+    }
+
+    private fun quickAddLinked(folderId: Long?, then: (List<Long>) -> Unit) {
+        onQuickAdded = then
+        quickAddForResult.launch(
+            Intent(this, QuickAddActivity::class.java).putExtra(QuickAddActivity.EXTRA_RETURN_IDS, true)
+                .apply { folderId?.let { putExtra(QuickAddActivity.EXTRA_FOLDER_ID, it) } }
+        )
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as TodoApp
@@ -120,8 +134,8 @@ class TaskEditActivity : ComponentActivity() {
             onPauseOrDispose { }
         }
 
-        fun save(clearOn: List<Task> = emptyList(), fields: Set<com.kzhovn.todoapp.repository.InheritedField> = emptySet(), firstStep: String? = null) =
-            vm.saveEdits(clearOn, fields, firstStep) { savedId, _ ->
+        fun save(clearOn: List<Task> = emptyList(), fields: Set<com.kzhovn.todoapp.repository.InheritedField> = emptySet()) =
+            vm.saveEdits(clearOn, fields) { savedId, _ ->
                 if (vm.isNew && pinned) PinnedTask.pin(this, savedId)
                 finish()
             }
@@ -130,7 +144,11 @@ class TaskEditActivity : ComponentActivity() {
             scope.launch {
                 when (val question = vm.questionBeforeSave()) {
                     null -> save()
-                    Question.FirstStep -> dialog = EditorDialog.FirstStep
+                    // A project needs a first step: quick add it, then save with it.
+                    Question.FirstStep -> {
+                        Toast.makeText(this@TaskEditActivity, "A project needs a first step", Toast.LENGTH_SHORT).show()
+                        quickAddLinked(vm.folderId()) { ids -> vm.pendingChildIds = vm.pendingChildIds + ids; save() }
+                    }
                     is Question.UpdateSubtasks -> dialog = EditorDialog.UpdateSubtasks(question)
                 }
             }
@@ -206,9 +224,6 @@ class TaskEditActivity : ComponentActivity() {
                 },
                 onDismiss = close
             )
-            EditorDialog.FirstStep -> TextDialog(
-                title = "First step of this project", placeholder = "Subtask", confirmLabel = "Save project", onDismiss = close
-            ) { close(); save(firstStep = it.trim()) }
             is EditorDialog.UpdateSubtasks -> {
                 val (overriding, fields) = d.question
                 val one = overriding.size == 1
@@ -234,8 +249,9 @@ class TaskEditActivity : ComponentActivity() {
                     tasks = candidates,
                     onPick = { close(); vm.adoptSubtask(it) },
                     onCreateNew = {
-                        if (vm.isNew) dialog = EditorDialog.NewPendingSubtask
-                        else { close(); startActivity(Intent(this, QuickAddActivity::class.java).putExtra(QuickAddActivity.EXTRA_PARENT_ID, task.id)) }
+                        close()
+                        if (vm.isNew) quickAddLinked(vm.folderId()) { ids -> vm.pendingChildIds = vm.pendingChildIds + ids }
+                        else startActivity(Intent(this, QuickAddActivity::class.java).putExtra(QuickAddActivity.EXTRA_PARENT_ID, task.id))
                     },
                     onDismiss = close
                 )
@@ -257,9 +273,9 @@ class TaskEditActivity : ComponentActivity() {
                         vm.addDependent(picked) { Toast.makeText(this, "“${picked.title}” now depends on this", Toast.LENGTH_SHORT).show() }
                     },
                     onCreateNew = {
-                        if (vm.isNew) dialog = EditorDialog.NewPendingDependent
+                        close()
+                        if (vm.isNew) quickAddLinked(vm.folderId()) { ids -> vm.pendingDependentIds = vm.pendingDependentIds + ids }
                         else {
-                            close()
                             // The new task goes in this task's folder by default, since dependent work usually belongs together.
                             startActivity(
                                 Intent(this, QuickAddActivity::class.java)
@@ -284,7 +300,8 @@ class TaskEditActivity : ComponentActivity() {
                     title = "Add a prerequisite",
                     tasks = candidates,
                     onPick = { picked -> vm.dependencyIds = vm.dependencyIds + picked.id; close() },
-                    onCreateNew = { dialog = EditorDialog.NewPrerequisite },
+                    // Linked when the task saves, like a picked one.
+                    onCreateNew = { close(); quickAddLinked(vm.folderId()) { ids -> vm.dependencyIds = vm.dependencyIds + ids } },
                     onDismiss = close
                 )
             }
@@ -295,19 +312,6 @@ class TaskEditActivity : ComponentActivity() {
                 onDismiss = close
             )
             EditorDialog.Timer -> TimerDialog(vm, onDismiss = close)
-            EditorDialog.NewPendingSubtask -> TextDialog(title = "Add a subtask", placeholder = "Subtask", confirmLabel = "Add", onDismiss = close) {
-                it.trim().takeIf(String::isNotEmpty)?.let { title -> vm.pendingSubtasks = vm.pendingSubtasks + title }
-                close()
-            }
-            EditorDialog.NewPendingDependent -> TextDialog(title = "Add a dependent task", placeholder = Labels.DEPENDENT, confirmLabel = "Add", onDismiss = close) {
-                it.trim().takeIf(String::isNotEmpty)?.let { title -> vm.pendingDependents = vm.pendingDependents + title }
-                close()
-            }
-            // Created right away (in this task's folder) and ticked; the dependency saves with the task.
-            EditorDialog.NewPrerequisite -> TextDialog(title = "New task this depends on", placeholder = "Task", confirmLabel = "Add", onDismiss = close) {
-                close()
-                vm.createPrerequisite(it)
-            }
             EditorDialog.FolderPicker -> FolderPickerDialog(
                 folders = vm.folders,
                 excludeDescendantsOf = vm.task.id,

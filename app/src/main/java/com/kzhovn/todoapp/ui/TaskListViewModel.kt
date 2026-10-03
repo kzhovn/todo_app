@@ -129,14 +129,6 @@ class TaskListViewModel(
         }
     }
 
-    fun addSubtask(parentId: Long, title: String) {
-        if (title.isBlank()) return
-        viewModelScope.launch {
-            repository.createTask(Task(title = title, parentId = parentId))
-            reload()
-        }
-    }
-
     fun move(taskId: Long, anchorId: Long, after: Boolean) {
         viewModelScope.launch {
             repository.moveNextTo(taskId, anchorId, after)

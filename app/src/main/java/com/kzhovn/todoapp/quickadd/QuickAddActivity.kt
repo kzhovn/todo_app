@@ -80,6 +80,9 @@ class QuickAddActivity : ComponentActivity() {
         // "Add dependent task": the new task depends on this one.
         val dependsOnId = intent.getLongExtra(EXTRA_DEPENDS_ON, 0L).takeIf { it != 0L }
         val startStarred = intent.getBooleanExtra(EXTRA_STARRED, false)
+        // Opened for a result (the task editor linking a new task): hand back what was created.
+        val returnIds = intent.getBooleanExtra(EXTRA_RETURN_IDS, false)
+        val created = mutableListOf<Long>()
         setContent {
             LedgerTheme {
             var title by remember { mutableStateOf("") }
@@ -135,6 +138,10 @@ class QuickAddActivity : ComponentActivity() {
                     val add = buildAdd()
                     val id = repository.quickAdd(add, defaultParent = null, System.currentTimeMillis()) ?: return@launch
                     if (add.task != null) dependsOnId?.let { repository.addDependency(id, it) }
+                    if (add.task != null && returnIds) {
+                        created += id
+                        setResult(RESULT_OK, Intent().putExtra(EXTRA_CREATED_IDS, created.toLongArray()))
+                    }
                     // "-f": every device goes into focus on it, this one included.
                     if (add.focus) startActivity(Intent(this@QuickAddActivity, FocusActivity::class.java))
                     if (keepOpen) {
@@ -212,8 +219,9 @@ class QuickAddActivity : ComponentActivity() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Opens the full editor on an unsaved draft of what's typed so far; backing out of
-                    // the editor leaves nothing behind.
-                    TextButton(onClick = {
+                    // the editor leaves nothing behind. Not when opened for a result: what that editor
+                    // saved couldn't be handed back.
+                    if (!returnIds) TextButton(onClick = {
                         lifecycleScope.launch {
                             val draft = buildAdd().task ?: Task(title = title)
                             startActivity(
@@ -269,5 +277,7 @@ class QuickAddActivity : ComponentActivity() {
         const val EXTRA_FOLDER_ID = "folder_id"
         const val EXTRA_DEPENDS_ON = "depends_on"
         const val EXTRA_STARRED = "starred"
+        const val EXTRA_RETURN_IDS = "return_ids"
+        const val EXTRA_CREATED_IDS = "created_ids"
     }
 }

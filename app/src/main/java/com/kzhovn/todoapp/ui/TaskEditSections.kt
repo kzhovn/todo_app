@@ -361,9 +361,6 @@ internal fun RelatedSection(vm: TaskEditViewModel, openTask: (Long) -> Unit, onA
         vm.pendingDependentIds.mapNotNull(vm.allById::get).forEach { dependent ->
             RelatedRow(Labels.DEPENDENT, dependent.title, onOpen = { openTask(dependent.id) }) { RemoveButton { vm.pendingDependentIds = vm.pendingDependentIds - dependent.id } }
         }
-        vm.pendingDependents.forEachIndexed { index, title ->
-            RelatedRow(Labels.DEPENDENT, title, onOpen = null) { RemoveButton { vm.pendingDependents = vm.pendingDependents.filterIndexed { i, _ -> i != index } } }
-        }
         (dependentIds - subtaskIds).mapNotNull(vm.allById::get).forEach { dependent ->
             RelatedRow(Labels.DEPENDENT, dependent.title, done = dependent.isComplete, onOpen = { openTask(dependent.id) }) {
                 RemoveButton { vm.removeDependent(dependent.id) }

@@ -22,7 +22,6 @@ import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.focus.FocusActivity
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.Labels
-import com.kzhovn.todoapp.ui.TextInputDialog
 import androidx.compose.material.icons.filled.AccountTree
 import android.Manifest
 import android.content.Intent
@@ -386,9 +385,7 @@ class MainActivity : ComponentActivity() {
                     // this session; it's asked again next time the app starts.
                     val stalled by viewModel.stalledProjects.collectAsState()
                     var snoozedProjects by remember { mutableStateOf(emptySet<Long>()) }
-                    var nextStepFor by remember { mutableStateOf<Task?>(null) }
-                    var nextStepTitle by remember { mutableStateOf("") }
-                    stalled.firstOrNull { it.id !in snoozedProjects }?.takeIf { nextStepFor == null }?.let { project ->
+                    stalled.firstOrNull { it.id !in snoozedProjects }?.let { project ->
                         AlertDialog(
                             onDismissRequest = { snoozedProjects = snoozedProjects + project.id },
                             title = { Text(Labels.allSubtasksDone(project.title)) },
@@ -398,25 +395,15 @@ class MainActivity : ComponentActivity() {
                             },
                             dismissButton = {
                                 Row {
-                                    Button(onClick = { nextStepFor = project; nextStepTitle = "" }) { Text(Labels.ADD_NEXT) }
+                                    // The usual quick add, as the next step under the project.
+                                    Button(onClick = {
+                                        snoozedProjects = snoozedProjects + project.id
+                                        startActivity(Intent(this@MainActivity, QuickAddActivity::class.java).putExtra(QuickAddActivity.EXTRA_PARENT_ID, project.id))
+                                    }) { Text(Labels.ADD_NEXT) }
                                     Spacer(Modifier.width(8.dp))
                                     Button(onClick = { snoozedProjects = snoozedProjects + project.id }) { Text(Labels.LATER) }
                                 }
                             }
-                        )
-                    }
-                    nextStepFor?.let { project ->
-                        TextInputDialog(
-                            title = "Next step for “${project.title}”",
-                            placeholder = "Subtask",
-                            confirmLabel = "Add",
-                            value = nextStepTitle,
-                            onValueChange = { nextStepTitle = it },
-                            onConfirm = {
-                                viewModel.addSubtask(project.id, nextStepTitle.trim())
-                                nextStepFor = null
-                            },
-                            onDismiss = { nextStepFor = null }
                         )
                     }
                     completeDecision?.let { (taskId, activeCount) ->

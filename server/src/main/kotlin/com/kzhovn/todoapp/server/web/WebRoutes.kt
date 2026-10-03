@@ -6,7 +6,6 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonObject
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.nextRollover
-import com.kzhovn.todoapp.quickadd.QuickAddParser
 import com.kzhovn.todoapp.server.TaskService
 import io.ktor.http.ContentType
 import io.ktor.http.Cookie
@@ -79,9 +78,8 @@ fun Route.webRoutes(service: TaskService) {
             // Enter: a new task right after this one, same parent. app.js focuses it (X-Focus).
             "sibling" -> {
                 val anchor = service.get(id)
-                val parsed = QuickAddParser.parse(params["text"].orEmpty())
-                if (anchor != null && parsed.title.isNotBlank()) {
-                    val created = service.create(parsed.copy(parentId = anchor.parentId))
+                val created = anchor?.let { service.addTyped(params["text"].orEmpty(), folder = it.parentId, under = it.parentId) }
+                if (created != null) {
                     service.moveNextTo(created.id, id, after = true)
                     call.response.header("X-Focus", created.id.toString())
                 }
@@ -112,9 +110,7 @@ fun Route.webRoutes(service: TaskService) {
         if (parent.type == TaskType.CHECKLIST) service.addItems(parent.id, text)
         // The parent now waits on its new subtask, so in Doing a starred parent's subtask starts starred and
         // takes its place there, as on the phone.
-        else QuickAddParser.parse(text).takeIf { it.title.isNotBlank() }?.let { t ->
-            service.create(t.copy(parentId = parent.id, isStarred = t.isStarred || (call.mode() == ListMode.DOING && parent.isStarred)))
-        }
+        else service.addTyped(text, under = parent.id, star = call.mode() == ListMode.DOING && parent.isStarred)
         call.respondList(service, call.mode())
     }
     post("/tasks/{id}/uncomplete") { call.taskId()?.let(service::uncomplete); call.respondList(service, call.mode()) }
@@ -144,8 +140,7 @@ fun Route.webRoutes(service: TaskService) {
     // A stalled project's "Add next" step.
     post("/tasks/{id}/next") {
         val id = call.taskId() ?: return@post
-        val title = call.receiveParameters()["text"].orEmpty().trim()
-        if (title.isNotEmpty() && service.get(id) != null) service.create(Task(title = title, parentId = id))
+        if (service.get(id) != null) service.addTyped(call.receiveParameters()["text"].orEmpty(), under = id)
         call.respondList(service, call.mode())
     }
     post("/quickadd") {

@@ -40,11 +40,10 @@ class TaskEditViewModel(
     var contextIds by mutableStateOf<Set<Long>>(emptySet())
     var dependencyIds by mutableStateOf<Set<Long>>(emptySet())
 
-    // A new task has no id yet: its related tasks wait here and are linked on save.
+    // A new task has no id yet: its related tasks (and a new checklist's items) wait here, linked on save.
     var pendingSubtasks by mutableStateOf<List<String>>(emptyList())
     var pendingChildIds by mutableStateOf<Set<Long>>(emptySet())
     var pendingDependentIds by mutableStateOf<Set<Long>>(emptySet())
-    var pendingDependents by mutableStateOf<List<String>>(emptyList())
 
     var allTasks by mutableStateOf<List<Task>>(emptyList())
         private set
@@ -138,18 +137,16 @@ class TaskEditViewModel(
     // Saves the task with its contexts, dependencies and pending relations. clearOn/fields: subtasks to
     // make follow this task again (see Question.UpdateSubtasks). Afterwards the saved state is the
     // baseline for isDirty, since an auto-save keeps the editor open.
-    fun saveEdits(clearOn: List<Task> = emptyList(), fields: Set<InheritedField> = emptySet(), firstStep: String? = null, onSaved: suspend (savedId: Long, saved: Task) -> Unit) {
+    fun saveEdits(clearOn: List<Task> = emptyList(), fields: Set<InheritedField> = emptySet(), onSaved: suspend (savedId: Long, saved: Task) -> Unit) {
         val (toSave, dependencies) = taskToSave()
         val contexts = contextIds
         save(toSave) { savedId ->
             repository.setDependencies(savedId, dependencies)
             contextRepository.setTaskContexts(savedId, contexts)
             repository.clearInherited(clearOn, fields)
-            firstStep?.let { repository.createTask(Task(title = it, parentId = savedId)) }
             pendingSubtasks.forEach { repository.createTask(QuickAddParser.parse(it).copy(parentId = savedId)) }
             pendingChildIds.forEach { repository.reparent(it, savedId) }
             pendingDependentIds.forEach { repository.addDependency(it, savedId) }
-            pendingDependents.forEach { repository.addDependency(repository.createTask(QuickAddParser.parse(it).copy(parentId = folderId(toSave))), savedId) }
             task = toSave
             markSaved(toSave)
             onSaved(savedId, toSave)
@@ -199,12 +196,6 @@ class TaskEditViewModel(
     }
 
     fun removeDependent(dependentId: Long) = act { repository.removeDependency(dependentId, taskId) }
-
-    // The prerequisite is created right away and ticked; the dependency itself saves with the task.
-    fun createPrerequisite(text: String) {
-        val parsed = QuickAddParser.parse(text)
-        if (parsed.title.isNotBlank()) act { dependencyIds = dependencyIds + repository.createTask(parsed.copy(parentId = folderId())) }
-    }
 
     fun createFolder(name: String) = act { task = task.copy(parentId = repository.createTask(Task(type = TaskType.FOLDER, title = name))) }
 

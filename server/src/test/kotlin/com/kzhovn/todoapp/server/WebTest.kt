@@ -674,6 +674,18 @@ class WebTest {
     }
 
     @Test
+    fun `every new-task box takes quick add's whole syntax`() = web {
+        val home = service.saveContext(com.kzhovn.todoapp.data.TaskContext(name = "home", type = com.kzhovn.todoapp.data.ContextType.PLACE, wifiSsid = "Home"), emptyList())
+        val project = service.create(Task(title = "Move house", type = TaskType.PROJECT))
+        client.submitForm("/tasks/${project.id}/next", parameters { append("text", "book movers @home // ask about Sundays") })
+        val step = service.tasks().single { it.title == "book movers" }
+        assertEquals(project.id to "ask about Sundays", step.parentId to step.notes)
+        assertEquals(setOf(home.id), service.contextIdsByTask()[step.id])
+        client.submitForm("/tasks/${project.id}/subtasks", parameters { append("text", "pack books -d tomorrow") })
+        assertNotNull(service.tasks().single { it.title == "pack books" }.dueDate)
+    }
+
+    @Test
     fun `projects can be prerequisites and wait on them, and a waiting project holds back its steps`() = web {
         val passport = service.create(Task(title = "Renew passport"))
         val trip = service.create(Task(title = "Trip", type = TaskType.PROJECT))

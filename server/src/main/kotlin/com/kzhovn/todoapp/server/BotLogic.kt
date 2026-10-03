@@ -170,8 +170,8 @@ class BotLogic(private val service: TaskService, private val store: Store) {
     // waits on them, so the first step is starred to take its place in Doing; the rest aren't, so
     // breaking a task up doesn't flood Doing.
     private fun breakUp(taskId: Long, content: String): Boolean {
-        val steps = content.lines().map { it.trim() }.mapNotNull(::parseAdd)
-        steps.forEachIndexed { i, step -> service.create(step.copy(parentId = taskId, isStarred = i == 0)) }
+        val steps = content.lines().map { it.trim() }.filter { it.startsWith("--") }
+            .mapIndexedNotNull { i, line -> service.addTyped(line.removePrefix("--").trim(), under = taskId, star = i == 0) }
         return steps.isNotEmpty()
     }
 

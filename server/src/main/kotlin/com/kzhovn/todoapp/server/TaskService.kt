@@ -227,6 +227,15 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         created
     }
 
+    // Any "new task" box: quick add's whole syntax (a folder prefix, @contexts, [items], -p, notes...).
+    // `under` puts it there whatever the text says (a subtask, a next step); otherwise it goes in `folder`
+    // unless the text names one. Returns the new task (null for nothing, or items into a checklist).
+    fun addTyped(text: String, folder: Long? = null, under: Long? = null, star: Boolean = false): Task? {
+        val add = planQuickAdd(text)
+        val task = add.task ?: return null.also { add(add, defaultParent = folder) }
+        return add(add.copy(task = if (under != null) task.copy(parentId = under) else task), defaultParent = folder, star = star)
+    }
+
     fun setStarred(id: Long, starred: Boolean) = update(id) { it.copy(isStarred = starred) }
 
     fun toggleStar(id: Long) = update(id) { it.copy(isStarred = !it.isStarred) }
