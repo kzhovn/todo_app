@@ -122,7 +122,8 @@ class TodoWidget : GlanceAppWidget() {
             val folderName = shownFolder?.let { allById[it]?.title }
             val effectiveDue = { t: Task -> resolveEffective(t, allById, contextsByTaskId).effectiveDueDate }
             return TodoWidgetPresenter.toRows(tasks, subtaskCounts(allTasks), now, allById, folderColorsArgb(allTasks), effectiveDue, urgentOnTop = mode != WidgetMode.ALL) to
-                mode.label.uppercase() + folderName?.let { " · $it" }.orEmpty()
+                // How many it holds, beside its name: "ACTIVE 17 · Work".
+                "${mode.label.uppercase()} ${tasks.size}" + folderName?.let { " · $it" }.orEmpty()
         }
         val initial = load()
         // Reloaded whenever a task, context or dependency changes. A widget's session outlives a single
