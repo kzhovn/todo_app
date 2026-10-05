@@ -69,6 +69,22 @@ class SyncSettingsActivity : ComponentActivity() {
                     )
                     Text("“${Labels.TODAY_ONLY}” tasks are deleted at this time.", color = LedgerMuted, fontSize = 12.sp)
                     Spacer(Modifier.height(16.dp))
+                    var reminderHour by remember { mutableStateOf(AppSettings.reminderHour(app)) }
+                    Text(
+                        "Reminders on a date with no time at ${"%02d".format(reminderHour)}:00",
+                        color = LedgerInk, fontSize = 15.sp,
+                        modifier = Modifier.clickable {
+                            TimePickerDialog(this@SyncSettingsActivity, { _, hour, _ ->
+                                reminderHour = hour
+                                AppSettings.setReminderHour(app, hour)
+                                // Every date-only reminder moves to the new hour.
+                                scope.launch { app.repository.getAllTasks().forEach { app.reminderScheduler.schedule(it) } }
+                                if (SyncSettings.config(app) != null) SyncWorker.requestSoon(app)
+                            }, reminderHour, 0, true).show()
+                        }
+                    )
+                    Text("When it starts, before it's due, or on a day you pick, when that date has no time.", color = LedgerMuted, fontSize = 12.sp)
+                    Spacer(Modifier.height(16.dp))
                     // Posted by the server's Discord bot; the setting reaches it with the next sync.
                     var digestOn by remember { mutableStateOf(AppSettings.digestOn(app)) }
                     Row(verticalAlignment = Alignment.CenterVertically) {

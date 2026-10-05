@@ -12,6 +12,7 @@ import com.kzhovn.todoapp.data.MIGRATION_10_11
 import com.kzhovn.todoapp.data.MIGRATION_11_12
 import com.kzhovn.todoapp.data.MIGRATION_12_13
 import com.kzhovn.todoapp.data.MIGRATION_13_14
+import com.kzhovn.todoapp.data.MIGRATION_14_15
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.callbackFlow
@@ -49,7 +50,7 @@ import com.kzhovn.todoapp.sync.TRACKED_TABLES
 class TodoApp : Application() {
     val database: TodoDatabase by lazy {
         Room.databaseBuilder(this, TodoDatabase::class.java, "todo.db")
-            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
             .addCallback(SyncTracking)
             .build()
     }

@@ -27,8 +27,10 @@ object RecurrenceEngine {
         // original (now stale) absolute timestamp.
         val startAnchor = task.startDate ?: completedAt
         val nextDueDate = task.dueDate?.plus(nextStart - startAnchor)
+        // A reminder at a set time moves along with the task, like the due date.
+        val nextRemindAt = task.remindAt?.plus(nextStart - startAnchor)
         // A star was for this time; the next one earns its own place (see staleAt).
-        return task.copy(id = newId(), startDate = nextStart, dueDate = nextDueDate, isComplete = false, completedAt = null, recurrenceRule = nextRule, isStarred = false, pinnedAt = null, timerEndsAt = null, timerRemaining = null, focusedAt = null)
+        return task.copy(id = newId(), startDate = nextStart, dueDate = nextDueDate, remindAt = nextRemindAt, isComplete = false, completedAt = null, recurrenceRule = nextRule, isStarred = false, pinnedAt = null, timerEndsAt = null, timerRemaining = null, focusedAt = null)
     }
 
     // The instance that completing `completed` spawned, if it still exists unedited. Un-completing
@@ -73,7 +75,7 @@ object RecurrenceEngine {
     // "Skip this time": the same task moved on to its next time, as if done now (or at its start, if
     // that's still to come), without being done. Null when there's no next time (the last of "N times").
     fun skip(task: Task, now: Long): Task? = nextInstance(task, maxOf(now, task.startDate ?: now))?.let { next ->
-        task.copy(startDate = next.startDate, dueDate = next.dueDate, recurrenceRule = next.recurrenceRule, isStarred = false, pinnedAt = null, timerEndsAt = null, timerRemaining = null, focusedAt = null)
+        task.copy(startDate = next.startDate, dueDate = next.dueDate, remindAt = next.remindAt, recurrenceRule = next.recurrenceRule, isStarred = false, pinnedAt = null, timerEndsAt = null, timerRemaining = null, focusedAt = null)
     }
 
     // A repeat comes back into Active at its start (staleness 1: as long since it was last done as it

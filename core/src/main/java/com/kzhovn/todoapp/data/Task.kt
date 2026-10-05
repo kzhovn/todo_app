@@ -65,7 +65,11 @@ data class Task(
     val notes: String? = null,
     // High priority ("!"): sorts to the top of Doing and Active, below only what's due today or overdue.
     // The other end of the scale is isMaybe; a task is one, the other, or neither (normal).
-    @ColumnInfo(defaultValue = "0") val isHighPriority: Boolean = false
+    @ColumnInfo(defaultValue = "0") val isHighPriority: Boolean = false,
+    // Reminders beyond reminderOffsetMinutes (before due): one when it starts, and one at any time.
+    // See reminderTimes.
+    @ColumnInfo(defaultValue = "0") val remindAtStart: Boolean = false,
+    val remindAt: Long? = null
 ) {
     fun isExpired(now: Long): Boolean = expiresAt != null && expiresAt <= now
 

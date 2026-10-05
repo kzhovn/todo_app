@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.data.DEFAULT_REMINDER_HOUR
 import com.kzhovn.todoapp.sync.SyncJson
 import com.kzhovn.todoapp.sync.SyncRequest
 import com.kzhovn.todoapp.sync.SyncResponse
@@ -65,6 +66,17 @@ class Store(path: String) {
         }
     }
 
+    // The hour a date-only reminder goes off (see reminderTimes), newest setting wins like the digest's.
+    fun setReminderHour(hour: Int, setAt: Long) = transaction {
+        if (setAt > reminderHourSetAt()) {
+            setValue(REMINDER_HOUR_KEY, hour.toString())
+            setValue(REMINDER_HOUR_SET_AT_KEY, setAt.toString())
+        }
+    }
+
+    fun reminderHour(): Int = getValue(REMINDER_HOUR_KEY)?.toIntOrNull() ?: DEFAULT_REMINDER_HOUR
+    fun reminderHourSetAt() = getValue(REMINDER_HOUR_SET_AT_KEY)?.toLongOrNull() ?: 0
+
     fun digestOn(): Boolean = getValue(DIGEST_ON_KEY)?.toBooleanStrictOrNull() ?: true
     fun digestSetAt() = getValue(DIGEST_SET_AT_KEY)?.toLongOrNull() ?: 0
     fun modeSetAt() = getValue(MODE_SET_AT_KEY)?.toLongOrNull() ?: 0
@@ -76,13 +88,14 @@ class Store(path: String) {
             request.rolloverHour?.let { setRolloverHour(it, request.rolloverSetAt) }
             setMode(request.modeFolderId, request.modeSetAt)
             setDigestOn(request.digestOn, request.digestSetAt)
+            request.reminderHour?.let { setReminderHour(it, request.reminderHourSetAt) }
             request.changes.forEach { incoming ->
                 val before = get(incoming.table, incoming.id)
                 val after = merge(before, incoming)
                 put(after)
                 changed += before to after
             }
-            SyncResponse(maxVersion(), since(request.cursor), getValue(ROLLOVER_HOUR_KEY)?.toIntOrNull(), rolloverSetAt(), modeFolderId(), modeSetAt(), digestOn(), digestSetAt())
+            SyncResponse(maxVersion(), since(request.cursor), getValue(ROLLOVER_HOUR_KEY)?.toIntOrNull(), rolloverSetAt(), modeFolderId(), modeSetAt(), digestOn(), digestSetAt(), reminderHour(), reminderHourSetAt())
         }
         changed.forEach { (before, after) ->
             onChange?.invoke(before, after)
@@ -189,6 +202,8 @@ class Store(path: String) {
         const val MODE_SET_AT_KEY = "modeSetAt"
         const val DIGEST_ON_KEY = "digestOn"
         const val DIGEST_SET_AT_KEY = "digestSetAt"
+        const val REMINDER_HOUR_KEY = "reminderHour"
+        const val REMINDER_HOUR_SET_AT_KEY = "reminderHourSetAt"
         private val clockSerializer = MapSerializer(String.serializer(), Long.serializer())
     }
 }

@@ -70,10 +70,11 @@ object Labels {
         "@home" to "a context",
         "every day, every mon, thu, every 2 weeks, every 1st sat" to "repeat on a schedule",
         "every 4 days after done" to "repeat after completion",
-        "remind 30m" to "reminder before the due time",
         "1 hour of …, ~30m" to "timed task",
         "ends with * · ? · !" to "starred · maybe · high priority",
         "-p · -f" to "pin it · focus on it",
+        "remind start · remind 30m before" to "a reminder when it starts · before it's due",
+        "remind fri 5pm · remind 30m" to "a reminder at a time · in 30 minutes",
         "call bank // ask about fees" to "everything after // is the note",
     )
 

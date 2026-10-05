@@ -129,6 +129,7 @@ fun Route.pageRoutes(service: TaskService) {
     post("/settings") {
         val p = call.receiveParameters()
         p["rolloverHour"]?.toIntOrNull()?.let(service::setRolloverHour)
+        p["reminderHour"]?.toIntOrNull()?.takeIf { it in 0..23 }?.let(service::setReminderHour)
         service.setDigestOn(p["digest"] != null) // an unticked box sends nothing
         call.respondRedirect("/settings")
     }
@@ -552,6 +553,14 @@ private fun HTML.settingsPage(service: TaskService) = shellPage(service, "Raspbe
                 }
             }
             p(classes = "hint") { +"“${Labels.TODAY_ONLY}” tasks are deleted at this time, and a snooze to tomorrow wakes then. The phone uses it too." }
+            label {
+                +"Reminders on a date with no time go off at "
+                select {
+                    name = "reminderHour"
+                    (0..23).forEach { h -> option { value = "$h"; selected = h == service.reminderHour(); +"%02d:00".format(h) } }
+                }
+            }
+            p(classes = "hint") { +"For a reminder when a task starts, before it's due, or on a day you pick, when that date has no time. Rung on the phone." }
             label {
                 checkBoxInput(name = "digest") { checked = service.digestOn() }
                 +" Morning digest in Discord"

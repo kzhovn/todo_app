@@ -446,6 +446,16 @@
     switch (pp.dataset.kind) {
       case "date": return pillDate(pop.querySelector("input[type=date]").value, pop.querySelector("input[type=time]").value);
       case "select": { const s = pop.querySelector("select"); return s.value ? s.selectedOptions[0].textContent : null; }
+      case "remind": {
+        // The same short form as the server's reminderSummary.
+        const parts = [];
+        if (pop.querySelector("[name=remindStart]").checked) parts.push("At start");
+        const before = pop.querySelector("select");
+        if (before.value) parts.push(before.value === "0" ? "At due time" : before.selectedOptions[0].textContent.replace(" min", "m").replace(" hour", "h").replace(" day", "d").replace("before", "before due"));
+        const date = pop.querySelector("[name=remindAtDate]").value;
+        if (date) parts.push(pillDate(date, pop.querySelector("[name=remindAtTime]").value));
+        return parts.length ? parts.join(" · ") : null;
+      }
       case "timer": { const m = +pop.querySelector("[name=duration]").value; return m > 0 ? duration(m) : null; }
       case "repeat": return repeatText(pop);
     }

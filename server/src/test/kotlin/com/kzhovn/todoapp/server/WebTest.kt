@@ -674,6 +674,23 @@ class WebTest {
     }
 
     @Test
+    fun `the editor's Remind sets a start reminder and one at a time, and the hour is a synced setting`() = web {
+        val task = service.create(Task(title = "Follow up on Apoquel", startDate = service.now() + 86_400_000))
+        client.submitForm("/tasks/${task.id}", parameters {
+            append("base", taskFields(service.get(task.id)!!, emptySet(), emptySet()).toString())
+            append("title", "Follow up on Apoquel"); append("type", "TASK"); append("startDate", "2030-01-01"); append("remindStart", "on")
+            append("remindAtDate", "2030-01-02"); append("remindAtTime", "15:30")
+        })
+        val saved = service.get(task.id)!!
+        assertTrue(saved.remindAtStart)
+        assertNotNull(saved.remindAt)
+        val page = client.get("/tasks/${task.id}").bodyAsText()
+        assertTrue(page.substringAfter("At start").take(60), page.contains("At start · Jan 2 3:30 PM"))
+        client.submitForm("/settings", parameters { append("rolloverHour", "4"); append("reminderHour", "8"); append("digest", "on") })
+        assertEquals(8, store.sync(SyncRequest(0, emptyList())).reminderHour)
+    }
+
+    @Test
     fun `the editor's Priority picks high, normal or maybe`() = web {
         val task = service.create(Task(title = "Call the bank"))
         val page = client.get("/tasks/${task.id}").bodyAsText()

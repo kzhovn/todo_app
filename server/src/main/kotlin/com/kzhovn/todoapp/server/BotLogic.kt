@@ -35,7 +35,7 @@ val HELP = """
 Dates: `today`, `mon`, `next fri`, `+3d`, `in 2 weeks`, `+2h`, `oct 12`, `next week`, `weekend`
 `-- x every mon, thu` / `every 2 weeks` / `every 1st sat` repeats
 `-- x every 4 days after done` repeats after completion
-`-- x due fri 3pm remind 30m` a reminder
+`-- x due fri 3pm remind 30m before` · `remind start` · `remind fri 5pm` reminders (on the phone)
 `-- x @home` a context
 `-- x ~30m` / `-- 30m of x` a timed task
 `-- x*` starred · `-- x!` high priority · `-- x?` a maybe (hidden from Active, never starred)

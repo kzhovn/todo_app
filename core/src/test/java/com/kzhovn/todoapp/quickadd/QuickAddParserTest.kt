@@ -1,6 +1,7 @@
 package com.kzhovn.todoapp.quickadd
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -186,10 +187,20 @@ class QuickAddParserTest {
 
     @Test
     fun `reminders, star, pin, focus, tilde durations and new checklists`() {
-        assertEquals(30, read("call dentist due fri 3pm remind 30m").task!!.reminderOffsetMinutes)
+        // "before" is before the due date; "start" when it starts; anything else is a time of its own.
+        assertEquals(30, read("call dentist due fri 3pm remind 30m before").task!!.reminderOffsetMinutes)
         assertEquals(60, read("call dentist due fri remind me 1h before").task!!.reminderOffsetMinutes)
-        assertNull(read("call dentist remind 30m").task!!.reminderOffsetMinutes) // no due date
-        assertEquals("call dentist", read("call dentist remind 30m").task!!.title)
+        assertNull(read("call dentist remind 30m before").task!!.reminderOffsetMinutes) // no due date
+        val inHalfAnHour = read("call dentist remind 30m").task!!
+        assertEquals("call dentist" to wed + 30 * 60_000L, inHalfAnHour.title to inHalfAnHour.remindAt)
+        assertNull(inHalfAnHour.reminderOffsetMinutes)
+        val atStart = read("call vet -s tomorrow remind start").task!!
+        assertEquals("call vet" to true, atStart.title to atStart.remindAtStart)
+        assertFalse(read("call vet remind start").task!!.remindAtStart) // no start date
+        val friday = read("call bank remind fri 5pm").task!!
+        assertEquals("call bank", friday.title)
+        assertEquals(17, java.util.Calendar.getInstance().apply { timeInMillis = friday.remindAt!! }.get(java.util.Calendar.HOUR_OF_DAY))
+        assertNotNull(read("laundry remind in 45 minutes").task!!.remindAt)
 
         val starred = read("call mom*")
         assertEquals("call mom" to true, starred.task!!.title to starred.task!!.isStarred)

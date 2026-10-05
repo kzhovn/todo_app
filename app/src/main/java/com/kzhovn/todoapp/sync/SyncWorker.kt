@@ -62,7 +62,8 @@ object SyncSettings {
         return SyncConfig(
             url, token, AppSettings.rolloverHour(context), AppSettings.rolloverSetAt(context),
             AppSettings.modeFolderId(context), AppSettings.modeSetAt(context),
-            AppSettings.digestOn(context), AppSettings.digestSetAt(context)
+            AppSettings.digestOn(context), AppSettings.digestSetAt(context),
+            AppSettings.reminderHour(context), AppSettings.reminderHourSetAt(context)
         )
     }
 

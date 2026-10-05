@@ -87,6 +87,10 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun modeFolderId(): Long? = modeFolder()?.id
     fun setMode(folderId: Long?) = store.setMode(folderId?.takeIf { get(it)?.type == TaskType.FOLDER }, maxOf(clock(), store.modeSetAt() + 1))
 
+    // When a date-only reminder goes off, from either Settings page.
+    fun reminderHour(): Int = store.reminderHour()
+    fun setReminderHour(hour: Int) { if (hour != reminderHour()) store.setReminderHour(hour, maxOf(clock(), store.reminderHourSetAt() + 1)) }
+
     // Discord's morning digest, on or off from either Settings page.
     fun digestOn(): Boolean = store.digestOn()
     fun setDigestOn(on: Boolean) { if (on != digestOn()) store.setDigestOn(on, maxOf(clock(), store.digestSetAt() + 1)) }

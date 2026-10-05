@@ -3,6 +3,7 @@ package com.kzhovn.todoapp.server.web
 import com.kzhovn.todoapp.server.quickAddChips
 import com.kzhovn.todoapp.quickadd.QuickAdd
 import com.kzhovn.todoapp.data.isDoable
+import com.kzhovn.todoapp.data.reminderSummary
 import com.kzhovn.todoapp.data.isLinkable
 import com.kzhovn.todoapp.repository.changedInheritedFields
 import com.kzhovn.todoapp.data.checklistItems
@@ -318,6 +319,8 @@ private fun parseForm(p: Parameters, base: EditState, recurrence: RecurrenceSele
         startDate = dateTime(p["startDate"], p["startTime"]),
         dueDate = dateTime(p["dueDate"], p["dueTime"]),
         reminderOffsetMinutes = p["reminder"]?.toIntOrNull(),
+        remindAtStart = p["remindStart"] != null,
+        remindAt = dateTime(p["remindAtDate"], p["remindAtTime"]),
         parentId = p["parent"]?.toLongOrNull(),
         recurrenceType = recurrenceType,
         recurrenceRule = recurrenceRule,
@@ -389,7 +392,7 @@ private fun merge(base: EditState, form: EditState, current: EditState): EditSta
     val (recurrenceType, recurrenceRule) = pick { it.recurrenceType to it.recurrenceRule }
     val task = current.task.copy(
         title = pick { it.title }, type = pick { it.type }, isStarred = pick { it.isStarred },
-        startDate = pick { it.startDate }, dueDate = pick { it.dueDate }, reminderOffsetMinutes = pick { it.reminderOffsetMinutes },
+        startDate = pick { it.startDate }, dueDate = pick { it.dueDate }, reminderOffsetMinutes = pick { it.reminderOffsetMinutes }, remindAtStart = pick { it.remindAtStart }, remindAt = pick { it.remindAt },
         parentId = pick { it.parentId }, recurrenceType = recurrenceType, recurrenceRule = recurrenceRule,
         isMaybe = pick { it.isMaybe }, isHighPriority = pick { it.isHighPriority }, expiresAt = pick { it.expiresAt }, sequential = pick { it.sequential }, activeWithSubtasks = pick { it.activeWithSubtasks },
         durationMinutes = pick { it.durationMinutes }, notes = pick { it.notes }
@@ -491,12 +494,20 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
             ))
             datePill(Labels.DUE, "due", Icon.FLAG, t.dueDate, "task-only", listOf("Today" to day(0), Labels.SNOOZE_TOMORROW to day(1), "Next week" to day(7)))
             // Set here, rung by the phone: it schedules the alarm when this syncs to it.
-            popPill(Labels.REMIND, Icon.BELL, t.reminderOffsetMinutes?.let { m -> Labels.REMINDERS.firstOrNull { it.first == m }?.second }, "select", "task-only reminder") {
+            // Set here, rung by the phone: when it starts, before it's due, and/or at a time of its own. A
+            // date with no time rings at the reminder hour in Settings.
+            popPill(Labels.REMIND, Icon.BELL, reminderSummary(t, service.reminderHour()), "remind", "task-only reminder") {
+                label { checkBoxInput(name = "remindStart") { checked = t.remindAtStart }; +" When it starts" }
+                div(classes = "pop-label") { +"Before it's due" }
                 select {
                     name = "reminder"
                     Labels.REMINDERS.forEach { (m, label) -> option { value = m?.toString().orEmpty(); selected = t.reminderOffsetMinutes == m; +label } }
                 }
-                p(classes = "hint") { +"Rings on your phone, counted back from the due date (from midnight if it has no time)." }
+                div(classes = "pop-label") { +"At a time" }
+                val at = t.remindAt?.let(::localDateTime)
+                dateInput(name = "remindAtDate") { value = at?.toLocalDate()?.toString().orEmpty() }
+                timeInput(name = "remindAtTime") { value = if (t.remindAt != null && hasTime(t.remindAt!!)) at!!.toLocalTime().withSecond(0).withNano(0).toString() else "" }
+                p(classes = "hint") { +"Rings on your phone. A date with no time rings at ${"%02d:00".format(service.reminderHour())} (Settings)." }
             }
             val r = v.recurrence
             // Presets on top (one click); "After completion…" and "Custom…" open the builder below.

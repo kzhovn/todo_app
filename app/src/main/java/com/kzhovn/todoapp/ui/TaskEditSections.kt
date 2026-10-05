@@ -1,5 +1,10 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.ReminderKind
+import com.kzhovn.todoapp.data.reminderTimes
+import com.kzhovn.todoapp.data.reminderSummary
+import com.kzhovn.todoapp.data.reminderTimeText
+import androidx.compose.material3.HorizontalDivider
 import com.kzhovn.todoapp.quickadd.startOfDay
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.Bedtime
@@ -264,21 +269,49 @@ internal fun TimingSection(vm: TaskEditViewModel, activity: Activity, onRepeat: 
                 QuickDateMenu(quickDue, Labels.DUE, dueChoices, onDismiss = { quickDue = false }) { vm.task = vm.task.copy(dueDate = it) }
             }
         }
-        if (task.type == TaskType.TASK && task.dueDate != null) {
+        // Reminders: when it starts (if that's still to come), before it's due (with a due date), and/or at
+        // a time of its own. A date with no time rings at the reminder hour in Settings.
+        if (task.type == TaskType.TASK) {
             var showRemindMenu by remember { mutableStateOf(false) }
+            val hour = AppSettings.reminderHour(activity)
+            val now = System.currentTimeMillis()
+            val startAt = task.startDate?.let { reminderTimes(task.copy(remindAtStart = true), hour)[ReminderKind.START] }
             Box {
                 PropertyChip(
                     label = Labels.REMIND,
-                    valueText = task.reminderOffsetMinutes?.let { offset -> Labels.REMINDERS.firstOrNull { it.first == offset }?.second },
+                    valueText = reminderSummary(task, hour),
                     icon = Icons.Filled.Notifications,
                     onClick = { showRemindMenu = true },
-                    onClear = { vm.task = vm.task.copy(reminderOffsetMinutes = null) },
+                    onClear = { vm.task = vm.task.copy(reminderOffsetMinutes = null, remindAtStart = false, remindAt = null) },
                     showLabelWhenSet = false
                 )
-                DropdownMenu(expanded = showRemindMenu, onDismissRequest = { showRemindMenu = false }) {
-                    Labels.REMINDERS.forEach { (offset, label) ->
-                        DropdownMenuItem(text = { Text(label) }, onClick = { vm.task = vm.task.copy(reminderOffsetMinutes = offset); showRemindMenu = false })
+                DropdownMenu(expanded = showRemindMenu, onDismissRequest = { showRemindMenu = false }, containerColor = LedgerSearchBackground) {
+                    @Composable
+                    fun Item(text: String, on: Boolean, enabled: Boolean = true, trailing: String? = null, onClick: () -> Unit) = DropdownMenuItem(
+                        text = { Text(text, fontWeight = if (on) FontWeight.SemiBold else null) },
+                        leadingIcon = { Text(if (on) "✓" else "", color = LedgerAccent, modifier = Modifier.width(14.dp)) },
+                        trailingIcon = trailing?.let { { Text(it, fontSize = 12.sp, color = LedgerMuted) } },
+                        enabled = enabled, onClick = onClick
+                    )
+                    // Offered while the start is still to come (or to turn one off).
+                    if (task.remindAtStart || (startAt != null && startAt > now)) {
+                        Item("When it starts", task.remindAtStart, trailing = startAt?.let(::reminderTimeText)) { vm.task = vm.task.copy(remindAtStart = !task.remindAtStart) }
+                        HorizontalDivider(color = LedgerBorder)
                     }
+                    Text("BEFORE IT'S DUE", fontSize = 11.sp, color = LedgerMuted, letterSpacing = 0.4.sp, modifier = Modifier.padding(start = 14.dp, top = 6.dp, bottom = 2.dp))
+                    Labels.REMINDERS.filter { it.first != null }.forEach { (offset, label) ->
+                        Item(label, task.reminderOffsetMinutes == offset, enabled = task.dueDate != null) {
+                            vm.task = vm.task.copy(reminderOffsetMinutes = offset.takeUnless { it == task.reminderOffsetMinutes }); showRemindMenu = false
+                        }
+                    }
+                    if (task.dueDate == null) Text("Set a due date for these", fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.padding(start = 40.dp, bottom = 6.dp))
+                    HorizontalDivider(color = LedgerBorder)
+                    Item(if (task.remindAt != null) "At ${reminderTimeText(task.remindAt!!)}" else "At a time…", task.remindAt != null) {
+                        showRemindMenu = false
+                        pickDate(activity, task.remindAt, title = Labels.REMIND) { vm.task = vm.task.copy(remindAt = it) }
+                    }
+                    HorizontalDivider(color = LedgerBorder)
+                    Item("No reminder", false) { vm.task = vm.task.copy(reminderOffsetMinutes = null, remindAtStart = false, remindAt = null); showRemindMenu = false }
                 }
             }
         }

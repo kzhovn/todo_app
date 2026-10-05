@@ -56,7 +56,13 @@ object QuickAddParser {
     private val everyRegex = Regex(
         "(?<!\\S)every\\s+(?:(?:(\\d+)\\s+)?($UNIT)|(weekday)|($NTH)\\s+($WEEKDAY)|((?:$WEEKDAY)(?:\\s*(?:,|and|&)\\s*(?:$WEEKDAY))*))(?!\\S)", I
     )
-    private val remindRegex = Regex("(?<!\\S)remind(?:\\s+me)?\\s+(\\d+)\\s*(m|mins?|minutes?|h|hrs?|hours?|d|days?)(?:\\s+before)?(?!\\S)", I)
+    // Reminders: "remind start" (when it starts), "remind 30m before" (before it's due), and any other
+    // "remind" at a time: "remind 30m" or "remind in 2 hours" (from now), "remind fri 5pm", "remind tomorrow".
+    private val remindStartRegex = Regex("(?<!\\S)remind(?:\\s+me)?\\s+(?:at\\s+|when\\s+it\\s+)?starts?(?!\\S)", I)
+    private val remindBeforeRegex = Regex("(?<!\\S)remind(?:\\s+me)?\\s+(\\d+)\\s*(m|mins?|minutes?|h|hrs?|hours?|d|days?)\\s+before(?:\\s+(?:it'?s\\s+)?due)?(?!\\S)", I)
+    private val remindAtRegex = Regex(
+        "(?<!\\S)remind(?:\\s+me)?\\s+(?:(?:on|at)\\s+)?(?:(\\d+)\\s*(m|mins?|minutes?|h|hrs?|hours?|d|days?)|($DATE)(?:\\s+(?:at\\s+)?($TIME))?|($TIME))(?!\\S)", I
+    )
     private val pinRegex = Regex("(?<!\\S)-([pf])(?!\\S)", I)
     // "~30m", "~1h", "~1h30m", "~1.5h": a timed task, anywhere in the text.
     private val tildeRegex = Regex("(?<!\\S)~(?:(\\d+(?:\\.\\d+)?)h)?\\s?(?:(\\d+)m)?(?!\\S)", I)
@@ -109,10 +115,16 @@ object QuickAddParser {
             text = text.removeRange(m.range)
             schedule(m.groupValues)
         }
-        val remind = remindRegex.find(text)?.let { m ->
+        fun minutes(n: String, unit: String) = n.toInt() * when (unit.lowercase().first()) { 'h' -> 60; 'd' -> 24 * 60; else -> 1 }
+        val remindStart = remindStartRegex.find(text)?.also { text = text.removeRange(it.range) } != null
+        val remind = remindBeforeRegex.find(text)?.let { m ->
             text = text.removeRange(m.range)
-            val n = m.groupValues[1].toInt()
-            when (m.groupValues[2].lowercase().first()) { 'h' -> n * 60; 'd' -> n * 24 * 60; else -> n }
+            minutes(m.groupValues[1], m.groupValues[2])
+        }
+        val remindAt = remindAtRegex.find(text)?.let { m ->
+            text = text.removeRange(m.range)
+            if (m.groupValues[1].isNotEmpty()) now + minutes(m.groupValues[1], m.groupValues[2]) * 60_000L
+            else resolve(m.groupValues[3], m.groupValues[4].ifEmpty { m.groupValues[5] }, now)
         }
         val flags = pinRegex.findAll(text).map { it.groupValues[1].lowercase() }.toSet()
         text = text.replace(pinRegex, "")
@@ -159,8 +171,10 @@ object QuickAddParser {
             durationMinutes = minutes,
             recurrenceType = recurrenceType,
             recurrenceRule = recurrenceRule,
-            // A reminder is timed from the due date, so without one it has nothing to go by.
-            reminderOffsetMinutes = remind?.takeIf { dueDate != null }
+            // "Before" and "at start" are timed from those dates, so without one they have nothing to go by.
+            reminderOffsetMinutes = remind?.takeIf { dueDate != null },
+            remindAtStart = remindStart && startDate != null,
+            remindAt = remindAt
         )
         return QuickAdd(task, items = items.orEmpty(), pin = "p" in flags, focus = "f" in flags)
     }

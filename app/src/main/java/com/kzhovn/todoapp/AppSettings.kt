@@ -1,6 +1,7 @@
 package com.kzhovn.todoapp
 
 import android.content.Context
+import com.kzhovn.todoapp.data.DEFAULT_REMINDER_HOUR
 import com.kzhovn.todoapp.data.DEFAULT_ROLLOVER_HOUR
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -16,6 +17,12 @@ object AppSettings {
 
     fun setRolloverHour(context: Context, hour: Int, setAt: Long = System.currentTimeMillis()) =
         prefs(context).edit().putInt("rolloverHour", hour).putLong("rolloverSetAt", setAt).apply()
+
+    // The hour a reminder on a date with no time goes off (see reminderTimes), synced like the rollover hour.
+    fun reminderHour(context: Context): Int = prefs(context).getInt("reminderHour", DEFAULT_REMINDER_HOUR)
+    fun reminderHourSetAt(context: Context): Long = prefs(context).getLong("reminderHourSetAt", 0)
+    fun setReminderHour(context: Context, hour: Int, setAt: Long = System.currentTimeMillis()) =
+        prefs(context).edit().putInt("reminderHour", hour).putLong("reminderHourSetAt", setAt).apply()
 
     // Whether Discord posts the morning digest (the server does it; synced like the rollover hour).
     fun digestOn(context: Context): Boolean = prefs(context).getBoolean("digestOn", true)
