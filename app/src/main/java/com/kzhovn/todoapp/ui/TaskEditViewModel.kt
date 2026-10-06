@@ -124,12 +124,11 @@ class TaskEditViewModel(
         return Question.UpdateSubtasks(overriding, changed.filterTo(mutableSetOf()) { repository.descendantsOverriding(taskId, setOf(it)).isNotEmpty() })
     }
 
-    // The task as it will be stored. Folders don't carry task-only fields or relations: a due date
-    // would keep scheduling a reminder, and a folder can't be completed, so leaving it as someone's
-    // dependency would block that task forever. They keep contexts (children inherit them).
+    // The task as it will be stored (see Task.typeRule). A folder can't be completed, so leaving it as
+    // someone's dependency would block that task forever. It keeps contexts (children inherit them).
     private fun taskToSave(): Pair<Task, Set<Long>> =
         if (task.type == TaskType.FOLDER) {
-            task.copy(dueDate = null, recurrenceType = null, recurrenceRule = null, reminderOffsetMinutes = null, durationMinutes = null) to emptySet()
+            task.typeRule() to emptySet()
         } else {
             val (recurrenceType, recurrenceRule) = if (recurrence == loadedRecurrence) task.recurrenceType to task.recurrenceRule else recurrence.toTaskFields()
             task.copy(recurrenceType = recurrenceType, recurrenceRule = recurrenceRule) to dependencyIds

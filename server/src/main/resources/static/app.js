@@ -408,7 +408,7 @@
   });
 
   // --- Task editor. Pills open popovers (one at a time); their text follows the controls inside, in
-  // the same words as the phone's chips (Labels / pillDate / formatDuration in Kotlin).
+  // the same words as the phone's chips (Labels / chipDate / formatDuration in Kotlin).
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const pillDate = (date, time) => {
     // A time alone is today's (the server reads it so too).

@@ -311,15 +311,11 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         val current = byId[task.id] ?: return@transaction
         val parentId = task.parentId.let { p -> if (p == null || (p in byId && !wouldCreateCycle(p, task.id, byId))) p else current.parentId }
         val folder = task.type == TaskType.FOLDER
+        // withRules drops what the type can't carry (Task.typeRule).
         val saved = task.copy(
             parentId = parentId,
             // Lands at the end of a new sibling list, like reparent.
-            position = if (parentId != current.parentId) null else task.position,
-            dueDate = task.dueDate.takeUnless { folder },
-            recurrenceType = task.recurrenceType.takeUnless { folder },
-            recurrenceRule = task.recurrenceRule.takeUnless { folder },
-            reminderOffsetMinutes = task.reminderOffsetMinutes.takeUnless { folder },
-            durationMinutes = task.durationMinutes.takeUnless { folder }
+            position = if (parentId != current.parentId) null else task.position
         ).withRules(clock())
         // A folder can't be completed, so it can't wait on anything.
         val edges = dependencyEdges().filter { it.taskId != task.id }

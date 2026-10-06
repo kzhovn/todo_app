@@ -16,6 +16,8 @@ import com.kzhovn.todoapp.data.TaskContextCrossRef
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.newId
+import com.kzhovn.todoapp.data.wouldCreateCycle
+import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
 import com.kzhovn.todoapp.notifications.ReminderScheduler
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 import com.kzhovn.todoapp.quickadd.QuickAdd
@@ -76,8 +78,10 @@ class TaskRepository(
     }
 
     // Lands at the end of its new sibling list (a stale position from the old list would misplace it).
+    // Refused if it would put the task inside itself, as on the server.
     suspend fun reparent(taskId: Long, newParentId: Long?) {
         val task = taskDao.getById(taskId) ?: return
+        if (newParentId != null && wouldCreateCycle(newParentId, taskId, taskDao.getAllOnce().associateBy { it.id })) return
         taskDao.update(task.copy(parentId = newParentId, position = null))
     }
 
@@ -202,8 +206,11 @@ class TaskRepository(
 
     suspend fun removeDependency(taskId: Long, dependsOnTaskId: Long) = taskDao.removeDependency(taskId, dependsOnTaskId)
 
-    suspend fun addDependency(taskId: Long, dependsOnTaskId: Long) =
+    // Refused if it would make a loop, as on the server.
+    suspend fun addDependency(taskId: Long, dependsOnTaskId: Long) {
+        if (dependsOnTaskId == taskId || wouldCreateDependencyCycle(dependsOnTaskId, taskId, taskDao.getAllDependencies())) return
         taskDao.insertDependency(TaskDependency(taskId, dependsOnTaskId))
+    }
 
     suspend fun getDependencyIds(taskId: Long): Set<Long> = taskDao.getDependencyIds(taskId).toSet()
 

@@ -20,6 +20,7 @@ import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.hasTime
+import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.data.ancestors
@@ -408,12 +409,12 @@ private fun parseForm(p: Parameters, base: EditState, recurrence: RecurrenceSele
         if (recurrence == recurrenceSelectionFromTask(base.task.recurrenceType, base.task.recurrenceRule)) base.task.recurrenceType to base.task.recurrenceRule
         else recurrence.toTaskFields()
     val type = p["type"]?.let { runCatching { TaskType.valueOf(it) }.getOrNull() } ?: base.task.type
-    // A waiting item has no star or priority; its date is "Resolves on", and it has a check-in interval.
+    // A waiting item's date is "Resolves on" (Task.typeRule drops its star and priority on save).
     val waiting = type == TaskType.WAITING
     val task = base.task.copy(
         title = p["title"].orEmpty().trim(),
         type = type,
-        isStarred = p["starred"] != null && !waiting,
+        isStarred = p["starred"] != null,
         startDate = dateTime(p["startDate"], p["startTime"]),
         dueDate = if (waiting) dateTime(p["resolvesDate"], p["resolvesTime"]) else dateTime(p["dueDate"], p["dueTime"]),
         checkInDays = p["checkIn"]?.toIntOrNull() ?: base.task.checkInDays,
@@ -423,8 +424,8 @@ private fun parseForm(p: Parameters, base: EditState, recurrence: RecurrenceSele
         parentId = p["parent"]?.toLongOrNull(),
         recurrenceType = recurrenceType,
         recurrenceRule = recurrenceRule,
-        isMaybe = p["priority"] == "maybe" && !waiting,
-        isHighPriority = p["priority"] == "high" && !waiting,
+        isMaybe = p["priority"] == "maybe",
+        isHighPriority = p["priority"] == "high",
         durationMinutes = p["duration"]?.toIntOrNull()?.takeIf { it > 0 },
         expiresAt = if (p["today"] != null) base.task.expiresAt ?: nextRollover(service.now(), service.rolloverHour()) else null,
         sequential = p["sequential"] != null,
@@ -598,7 +599,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
         }
         if (t.type == TaskType.WAITING && !isNew) p(classes = "hint waiting-only") {
             val now = service.now()
-            +(t.dueDate?.let { "Resolves itself on ${pillDate(it)}." }
+            +(t.dueDate?.let { "Resolves itself on ${chipDate(it)}." }
                 ?: checkInText(t, now))
         }
         // Everything about when, as pills that open a small popover (app.js keeps their text current).
@@ -843,7 +844,7 @@ private fun FlowContent.popPill(label: String, icon: Icon, value: String?, kind:
 
 // quick: (label, (date, time)) buttons that fill the fields and close the popover (app.js).
 private fun FlowContent.datePill(label: String, prefix: String, icon: Icon, millis: Long?, classes: String, quick: List<Pair<String, Pair<String, String>>> = emptyList()) =
-    popPill(label, icon, millis?.let(::pillDate), "date", classes) {
+    popPill(label, icon, millis?.let(::chipDate), "date", classes) {
         val at = millis?.let(::localDateTime)
         dateInput(name = "${prefix}Date") { value = at?.toLocalDate()?.toString().orEmpty() }
         timeInput(name = "${prefix}Time") { value = if (millis != null && hasTime(millis)) at!!.toLocalTime().withSecond(0).withNano(0).toString() else "" }
@@ -855,10 +856,6 @@ private fun FlowContent.datePill(label: String, prefix: String, icon: Icon, mill
     }
 
 // The phone's chip date: "Sep 25", or "Sep 25 3:00 PM" with a time. app.js formats the same way.
-internal fun pillDate(millis: Long): String =
-    java.text.SimpleDateFormat("MMM d", java.util.Locale.US).format(java.util.Date(millis)) +
-        if (hasTime(millis)) " " + java.text.SimpleDateFormat("h:mm a", java.util.Locale.US).format(java.util.Date(millis)) else ""
-
 internal fun folderPath(folder: Task, byId: Map<Long, Task>): String =
     generateSequence(folder) { byId[it.parentId]?.takeIf { p -> p.type == TaskType.FOLDER } }.map { it.title }.toList().reversed().joinToString(" / ")
 

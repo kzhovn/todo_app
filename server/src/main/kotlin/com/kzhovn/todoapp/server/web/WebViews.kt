@@ -19,6 +19,7 @@ import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.waitingFor
+import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.DueStatus
 import com.kzhovn.todoapp.data.dueStatus
@@ -525,7 +526,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                 due?.let { dueTail(it, status!!, data.now) }
                 // A start still to come (the All tree shows snoozed and future tasks); a waiting item's own line.
                 if (task.type == TaskType.WAITING) {
-                    if (!task.isComplete) (task.dueDate?.let { "resolves ${pillDate(it)}" } ?: waitingFor(task, data.now)?.let { "waiting $it" })?.let { span(classes = "tail") { +" · $it" } }
+                    if (!task.isComplete) (task.dueDate?.let { "resolves ${chipDate(it)}" } ?: waitingFor(task, data.now)?.let { "waiting $it" })?.let { span(classes = "tail") { +" · $it" } }
                 } else task.startDate?.takeIf { it > data.now && !task.isComplete }?.let { span(classes = "tail") { +" · ${startText(it, data.now)}" } }
                 if (task.type != TaskType.CHECKLIST) data.subtaskCounts(task)?.let { (done, total) -> span(classes = "tail") { +" · $done/$total" } }
                 if (task.recurrenceType != null) span(classes = "badge") { attributes["title"] = "Recurring"; icon(Icon.REPEAT, "") }

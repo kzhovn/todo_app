@@ -179,11 +179,7 @@ internal fun TitleBox(vm: TaskEditViewModel, pinned: Boolean, onTogglePin: () ->
 @Composable
 internal fun TypeRow(vm: TaskEditViewModel) {
     Spacer(Modifier.height(10.dp))
-    JoinedChoice(Labels.TYPES.map { it.second }, Labels.TYPES.indexOfFirst { it.first == vm.task.type }) { i ->
-        val type = Labels.TYPES[i].first
-        // A waiting item has no star or priority (it never shows in Doing or Active).
-        vm.task = if (type == TaskType.WAITING) vm.task.copy(type = type, isStarred = false, isHighPriority = false, isMaybe = false) else vm.task.copy(type = type)
-    }
+    JoinedChoice(Labels.TYPES.map { it.second }, Labels.TYPES.indexOfFirst { it.first == vm.task.type }) { i -> vm.task = vm.task.copy(type = Labels.TYPES[i].first) }
 }
 
 // A waiting item's timing: how often it comes up for a check-in, or the day it resolves itself (then

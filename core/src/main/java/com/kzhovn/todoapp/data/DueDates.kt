@@ -18,6 +18,10 @@ fun dueStatus(due: Long, now: Long): DueStatus = when {
 // "due yesterday", "due Fri" (within the week ahead), else "due Oct 3".
 fun dueText(due: Long, now: Long): String = "due " + dayText(due, now)
 
+// A date as the editor's chips and pills show it: "Oct 6", or "Oct 6 5:00 PM" with a time.
+fun chipDate(millis: Long): String =
+    SimpleDateFormat("MMM d", Locale.US).format(Date(millis)) + if (hasTime(millis)) " " + SimpleDateFormat("h:mm a", Locale.US).format(Date(millis)) else ""
+
 // "starts Fri": a start date still to come, in the same words.
 fun startText(start: Long, now: Long): String = "starts " + dayText(start, now)
 

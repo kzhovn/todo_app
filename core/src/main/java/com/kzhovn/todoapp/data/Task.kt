@@ -80,8 +80,17 @@ data class Task(
     // every write path runs tasks through it.
     fun starRule(): Task = if (isMaybe && (isStarred || isHighPriority)) copy(isStarred = false, isHighPriority = false) else this
 
-    // starRule plus maybeSince bookkeeping; applied on every local write (app and server).
-    fun withRules(now: Long): Task = starRule().let {
+    // What a type can't carry. A folder can't be done, so it has no due date, repeat, reminder or timer
+    // (a due date would keep scheduling a reminder); a waiting item never shows in Doing or Active, so it
+    // has no star or priority.
+    fun typeRule(): Task = when (type) {
+        TaskType.FOLDER -> copy(dueDate = null, recurrenceType = null, recurrenceRule = null, reminderOffsetMinutes = null, durationMinutes = null)
+        TaskType.WAITING -> copy(isStarred = false, isHighPriority = false, isMaybe = false)
+        else -> this
+    }
+
+    // typeRule, starRule and maybeSince bookkeeping; applied on every local write (app and server).
+    fun withRules(now: Long): Task = typeRule().starRule().let {
         when {
             it.isMaybe && it.maybeSince == null -> it.copy(maybeSince = now)
             !it.isMaybe && it.maybeSince != null -> it.copy(maybeSince = null)
