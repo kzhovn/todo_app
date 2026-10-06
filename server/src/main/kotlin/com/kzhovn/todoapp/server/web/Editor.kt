@@ -939,7 +939,7 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
     // kind switch says what to add; a checklist only links, a folder only takes subtasks.
     val kinds = buildList {
         if (!isChecklist) add("subtask" to "Subtask")
-        if (task.type != TaskType.FOLDER) { add("prerequisite" to "Needs"); add("dependent" to "Unlocks") }
+        if (task.type != TaskType.FOLDER) { add("prerequisite" to Labels.PREREQUISITE); add("dependent" to Labels.DEPENDENT) }
     }
     if (kinds.isNotEmpty()) form(classes = "add-related") {
         htmx("/tasks/$id/related?mode=$m")
