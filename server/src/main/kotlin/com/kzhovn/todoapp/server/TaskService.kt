@@ -28,7 +28,12 @@ import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.DEFAULT_ROLLOVER_HOUR
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
-import com.kzhovn.todoapp.data.resolvesBy
+import com.kzhovn.todoapp.repository.TaskChanges
+import com.kzhovn.todoapp.repository.planComplete
+import com.kzhovn.todoapp.repository.planCompleteChecklist
+import com.kzhovn.todoapp.repository.planCompleteWithDescendants
+import com.kzhovn.todoapp.repository.planResolveWaiting
+import com.kzhovn.todoapp.repository.planUncomplete
 import com.kzhovn.todoapp.data.stillWaiting
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskDependency
@@ -78,7 +83,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     // Deletes "Today only" tasks past their day, and resolves waiting items whose date has come.
     fun purgeExpired() = store.transaction {
         val now = clock()
-        tasks().filter { it.resolvesBy(now) }.forEach { complete(it.id) }
+        apply(planResolveWaiting(tasks(), contextIdsByTask(), now))
         store.all(TASKS).filter { !it.isDeleted && it.toTask().isExpired(now) }.forEach { tombstone(it.id, now) }
     }
 
@@ -395,22 +400,16 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         store.write(TASKS, taskId, JsonObject(taskFields(row.toTask(), row.contextIds(), row.dependsOn() + dependsOnId) - DELETED_AT), clock())
     }
 
-    // Mirrors TaskRepository.markComplete: the next instance keeps the task's contexts (not its
-    // dependencies) and gets fresh copies of its subtasks.
-    fun complete(id: Long) = store.transaction {
+    // Carries out a change planned in :core (see TaskChanges), as the app's TaskRepository does.
+    private fun apply(changes: TaskChanges) = store.transaction {
         val now = clock()
-        val task = get(id)?.takeUnless { it.isComplete } ?: return@transaction
-        val completed = task.completed(now)
-        update(id) { completed }
-        RecurrenceEngine.nextInstance(completed, now)?.let { next ->
-            val rows = liveRows().associateBy { it.id }
-            val descendants = (subtreeIds(id) - id).mapNotNull { rows[it]?.toTask() }
-            val copies = listOf(id to next) + RecurrenceEngine.successorSubtasks(completed, next, descendants)
-            for ((originalId, copy) in copies) {
-                store.write(TASKS, copy.id, taskFields(copy, rows[originalId]?.contextIds().orEmpty(), emptySet()), now)
-            }
-        }
+        changes.creates.forEach { (task, contextIds) -> store.write(TASKS, task.id, taskFields(task, contextIds, emptySet()), now) }
+        changes.updates.forEach { t -> update(t.id) { t } }
+        changes.deletes.forEach { tombstone(it, now) }
     }
+
+    // See planComplete (shared with the app).
+    fun complete(id: Long) = apply(planComplete(tasks(), contextIdsByTask(), id, clock()))
 
     fun activeDescendantCount(id: Long): Int =
         (subtreeIds(id) - id).mapNotNull(::get).count { it.type != TaskType.FOLDER && !it.isComplete }
@@ -431,23 +430,10 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     fun uncheckAll(checklistId: Long) = store.transaction { tasks().filter { it.parentId == checklistId && it.isComplete }.forEach { uncomplete(it.id) } }
 
-    fun completeChecklist(checklistId: Long, moveUncheckedToNewList: Boolean) = store.transaction {
-        val row = liveRows().firstOrNull { it.id == checklistId } ?: return@transaction
-        val unchecked = tasks().filter { it.parentId == checklistId && !it.isComplete }
-        if (moveUncheckedToNewList && unchecked.isNotEmpty()) {
-            val copy = row.toTask().copy(id = newId(), position = null, recurrenceType = null, recurrenceRule = null)
-            store.write(TASKS, copy.id, taskFields(copy, row.contextIds(), emptySet()), clock())
-            unchecked.forEach { item -> update(item.id) { it.copy(parentId = copy.id) } }
-        }
-        completeWithDescendants(checklistId)
-    }
+    fun completeChecklist(checklistId: Long, moveUncheckedToNewList: Boolean) =
+        apply(planCompleteChecklist(tasks(), contextIdsByTask(), checklistId, moveUncheckedToNewList, clock()))
 
-    // Mirrors TaskRepository.completeWithDescendants: each goes through complete(), so a recurring
-    // subtask still spawns its next instance.
-    fun completeWithDescendants(id: Long) = store.transaction {
-        (subtreeIds(id) - id).mapNotNull(::get).filter { it.type != TaskType.FOLDER && !it.isComplete }.forEach { complete(it.id) }
-        complete(id)
-    }
+    fun completeWithDescendants(id: Long) = apply(planCompleteWithDescendants(tasks(), contextIdsByTask(), id, clock()))
 
     // Mirrors TaskRepository.promoteChildrenToTopLevel: only direct children move out, so they
     // survive as independent tasks.
@@ -470,14 +456,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         }
     }
 
-    fun uncomplete(id: Long) = store.transaction {
-        val task = get(id)?.takeIf { it.isComplete } ?: return@transaction
-        RecurrenceEngine.untouchedSuccessor(task, tasks())?.let { successor ->
-            val now = clock()
-            subtreeIds(successor.id).forEach { tombstone(it, now) }
-        }
-        update(id) { it.copy(isComplete = false, completedAt = null) }
-    }
+    fun uncomplete(id: Long) = apply(planUncomplete(tasks(), id))
 
     // Soft-deletes the whole subtree with one shared timestamp, which is how restore() knows which
     // descendants went down together (vs. ones deleted separately earlier).

@@ -10,7 +10,6 @@ import com.kzhovn.todoapp.data.newTaskPositions
 import com.kzhovn.todoapp.data.folderColorAssignments
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
-import com.kzhovn.todoapp.data.resolvesBy
 import com.kzhovn.todoapp.data.TaskContextDao
 import com.kzhovn.todoapp.data.TaskDao
 import com.kzhovn.todoapp.data.TaskContextCrossRef
@@ -132,38 +131,23 @@ class TaskRepository(
         reminderScheduler.schedule(updated, now)
     }
 
-    suspend fun markComplete(taskId: Long, now: Long) {
-        val task = taskDao.getById(taskId) ?: return
-        val completedTask = task.completed(now)
-        taskDao.update(completedTask)
-        reminderScheduler.cancel(completedTask)
-        // The next instance keeps the task's contexts and gets fresh copies of its subtasks.
-        RecurrenceEngine.nextInstance(completedTask, now)?.let { next ->
-            val copies = listOf(taskId to next) +
-                RecurrenceEngine.successorSubtasks(completedTask, next, taskDao.getDescendants(taskId))
-            for ((originalId, copy) in copies) {
-                taskDao.insert(copy)
-                taskContextDao.getContextIdsForTask(originalId).forEach { taskContextDao.assignContext(TaskContextCrossRef(copy.id, it)) }
-                reminderScheduler.schedule(copy, now)
-            }
+    // Carries out a change planned in :core (see TaskChanges), keeping the reminder alarms in step.
+    private suspend fun apply(changes: TaskChanges, now: Long) {
+        for ((task, contextIds) in changes.creates) {
+            taskDao.insert(task)
+            contextIds.forEach { taskContextDao.assignContext(TaskContextCrossRef(task.id, it)) }
+            reminderScheduler.schedule(task, now)
         }
+        changes.updates.forEach { taskDao.update(it); reminderScheduler.schedule(it, now) }
+        changes.deletes.forEach { id -> taskDao.getById(id)?.let { taskDao.deleteById(id); reminderScheduler.cancel(it) } }
     }
+
+    // See planComplete (shared with the server).
+    suspend fun markComplete(taskId: Long, now: Long) = apply(planComplete(taskDao.getAllOnce(), getAllTaskContexts(), taskId, now), now)
 
     suspend fun toggleComplete(taskId: Long, now: Long) {
         val task = taskDao.getById(taskId) ?: return
-        if (task.isComplete) {
-            RecurrenceEngine.untouchedSuccessor(task, taskDao.getAllOnce())?.let { successor ->
-                (taskDao.getDescendants(successor.id) + successor).forEach {
-                    taskDao.deleteById(it.id)
-                    reminderScheduler.cancel(it)
-                }
-            }
-            val reopened = task.copy(isComplete = false, completedAt = null)
-            taskDao.update(reopened)
-            reminderScheduler.schedule(reopened, now)
-        } else {
-            markComplete(taskId, now)
-        }
+        if (task.isComplete) apply(planUncomplete(taskDao.getAllOnce(), taskId), now) else markComplete(taskId, now)
     }
 
     // Entry point for callers without task/context data in hand. TaskListViewModel and TodoWidget
@@ -263,28 +247,12 @@ class TaskRepository(
     suspend fun uncheckAll(checklistId: Long) =
         taskDao.getAllOnce().filter { it.parentId == checklistId && it.isComplete }.forEach { taskDao.update(it.copy(isComplete = false, completedAt = null)) }
 
-    // Completing a checklist with items still unchecked: they either move to a fresh copy of the
-    // list (same place, contexts and star), or are completed along with it.
-    suspend fun completeChecklist(checklistId: Long, moveUncheckedToNewList: Boolean, now: Long) {
-        val checklist = taskDao.getById(checklistId) ?: return
-        val unchecked = taskDao.getAllOnce().filter { it.parentId == checklistId && !it.isComplete }
-        if (moveUncheckedToNewList && unchecked.isNotEmpty()) {
-            val copy = checklist.copy(id = newId(), position = null, recurrenceType = null, recurrenceRule = null)
-            taskDao.insert(copy)
-            taskContextDao.getContextIdsForTask(checklistId).forEach { taskContextDao.assignContext(TaskContextCrossRef(copy.id, it)) }
-            unchecked.forEach { taskDao.update(it.copy(parentId = copy.id)) }
-        }
-        completeWithDescendants(checklistId, now)
-    }
+    // See planCompleteChecklist and planCompleteWithDescendants (shared with the server).
+    suspend fun completeChecklist(checklistId: Long, moveUncheckedToNewList: Boolean, now: Long) =
+        apply(planCompleteChecklist(taskDao.getAllOnce(), getAllTaskContexts(), checklistId, moveUncheckedToNewList, now), now)
 
-    // Cascades completion to every active descendant first — each goes through markComplete
-    // individually so a recurring descendant still spawns its own next instance.
-    suspend fun completeWithDescendants(taskId: Long, now: Long) {
-        taskDao.getDescendants(taskId)
-            .filter { it.type != TaskType.FOLDER && !it.isComplete }
-            .forEach { markComplete(it.id, now) }
-        markComplete(taskId, now)
-    }
+    suspend fun completeWithDescendants(taskId: Long, now: Long) =
+        apply(planCompleteWithDescendants(taskDao.getAllOnce(), getAllTaskContexts(), taskId, now), now)
 
     // Only tasks and checklists (isDoable): none of the bulk properties apply to folders or projects. A move or dependency that
     // would create a cycle is skipped for that task rather than failing the whole edit.
@@ -307,7 +275,7 @@ class TaskRepository(
     // waiting items whose date has come. Bypasses deleteTask so it doesn't offer an undo for something
     // the user didn't just do.
     suspend fun purgeExpired(now: Long) {
-        taskDao.getAllOnce().filter { it.resolvesBy(now) }.forEach { markComplete(it.id, now) }
+        apply(planResolveWaiting(taskDao.getAllOnce(), getAllTaskContexts(), now), now)
         taskDao.getAllOnce().filter { it.isExpired(now) }.forEach { task ->
             (taskDao.getDescendants(task.id) + task).forEach {
                 taskDao.deleteById(it.id)
