@@ -22,6 +22,9 @@ import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.hasTime
 import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.data.wouldCreateCycle
+import com.kzhovn.todoapp.data.ancestors
+import com.kzhovn.todoapp.data.moveOutFolderId
+import com.kzhovn.todoapp.data.subtaskProgress
 import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
 import com.kzhovn.todoapp.recurrence.RecurrenceSelection
@@ -218,6 +221,67 @@ fun Route.editorRoutes(service: TaskService) {
         service.get(id)?.let { task -> service.addTyped(params["text"].orEmpty(), folder = service.folderIdOf(task))?.let { service.addDependency(it.id, id) } }
         call.respondSubtasks(service, id)
     }
+    // The one add field: `kind` picks subtask, prerequisite or dependent; `existing` (a suggestion) or
+    // `text` (a new task, through quick add; pasted lines make a subtask each).
+    post("/tasks/{id}/related") {
+        val id = call.taskId() ?: return@post
+        val p = call.receiveParameters()
+        val existing = p["existing"]?.toLongOrNull()
+        val text = p["text"].orEmpty()
+        val task = service.get(id)
+        val kind = p["kind"] ?: "subtask"
+        if (task != null) when (kind) {
+            "prerequisite" -> existing?.let { service.addDependency(id, it) } ?: service.addTyped(text, folder = service.folderIdOf(task))?.let { service.addDependency(id, it.id) }
+            "dependent" -> existing?.let { service.addDependency(it, id) } ?: service.addTyped(text, folder = service.folderIdOf(task))?.let { service.addDependency(it.id, id) }
+            else -> existing?.let { service.reparent(it, id) } ?: text.lines().filter { it.isNotBlank() }.forEach { service.addTyped(it, under = id) }
+        }
+        call.respondSubtasks(service, id, focusAddItem = true, kind = kind)
+    }
+    // The add field's suggestions: existing tasks matching what's typed, that can be linked this way.
+    get("/tasks/{id}/related/suggest") {
+        val id = call.taskId() ?: return@get
+        val q = call.request.queryParameters["text"].orEmpty().trim()
+        val kind = call.request.queryParameters["kind"] ?: "subtask"
+        val all = service.tasks()
+        val byId = all.associateBy { it.id }
+        val task = byId[id] ?: return@get
+        val matches = if (q.isEmpty()) emptyList() else relatedCandidates(service, task, kind, all).filter { it.title.contains(q, ignoreCase = true) }.take(8)
+        call.respondText(createHTML().div(classes = "suggest") {
+            if (q.isNotEmpty()) button(type = ButtonType.submit, classes = "sugg new") { +"↵ New ${KIND_NOUNS[kind] ?: "subtask"} “$q”" }
+            matches.forEach { t ->
+                button(type = ButtonType.submit, classes = "sugg") {
+                    name = "existing"; value = t.id.toString()
+                    span { +t.title }
+                    span(classes = "where") { +ancestors(t, byId).joinToString(" › ") { it.title } }
+                }
+            }
+        }, ContentType.Text.Html)
+    }
+    // A subtask's ✕ menu: move it out to this task's folder (and with unlink=1 drop its dependency on or
+    // from this task too), or delete it.
+    post("/tasks/{id}/subtasks/{sub}/moveout") {
+        val id = call.taskId() ?: return@post
+        val task = service.get(id)
+        call.parameters["sub"]?.toLongOrNull()?.let(service::get)?.takeIf { task != null && it.parentId == id }?.let { sub ->
+            service.update(sub.id) { it.copy(parentId = moveOutFolderId(task!!, service.tasks().associateBy { t -> t.id }), position = null) }
+            if (call.request.queryParameters["unlink"] == "1") { service.removeDependency(id, sub.id); service.removeDependency(sub.id, id) }
+        }
+        call.respondSubtasks(service, id)
+    }
+    post("/tasks/{id}/subtasks/{sub}/delete") {
+        val id = call.taskId() ?: return@post
+        call.parameters["sub"]?.toLongOrNull()?.let(service::get)?.takeIf { it.parentId == id }?.let { service.delete(it.id) }
+        call.respondSubtasks(service, id)
+    }
+    // Drag (or Alt+arrows): the subtask goes right before/after another of this task's subtasks.
+    post("/tasks/{id}/subtasks/{sub}/move") {
+        val id = call.taskId() ?: return@post
+        val p = call.receiveParameters()
+        val sub = call.parameters["sub"]?.toLongOrNull()
+        val anchor = p["anchor"]?.toLongOrNull()?.let(service::get)?.takeIf { it.parentId == id }
+        if (sub != null && anchor != null && service.get(sub)?.parentId == id) service.moveNextTo(sub, anchor.id, after = p["after"] == "1")
+        call.respondSubtasks(service, id)
+    }
     // A checklist's items: add ("milk, eggs" is two), uncheck all, clear checked.
     post("/tasks/{id}/items") {
         val id = call.taskId() ?: return@post
@@ -241,9 +305,11 @@ fun Route.editorRoutes(service: TaskService) {
         service.completeChecklist(id, moveUncheckedToNewList = call.request.queryParameters["move"] == "1")
         call.respondRedirect(call.listPath())
     }
+    // Ticks a subtask, prerequisite or dependent off (or back on) from this task's editor.
     post("/tasks/{id}/subtasks/{sub}/toggle") {
         val id = call.taskId() ?: return@post
-        call.parameters["sub"]?.toLongOrNull()?.let(service::get)?.takeIf { it.parentId == id }?.let {
+        val linked = service.dependencyEdges().filter { it.taskId == id || it.dependsOnTaskId == id }.flatMap { listOf(it.taskId, it.dependsOnTaskId) }.toSet()
+        call.parameters["sub"]?.toLongOrNull()?.let(service::get)?.takeIf { it.parentId == id || it.id in linked }?.let {
             if (it.isComplete) service.uncomplete(it.id) else service.complete(it.id)
         }
         call.respondSubtasks(service, id)
@@ -302,8 +368,30 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     call.respondRedirect(call.listPath())
 }
 
-private suspend fun io.ktor.server.application.ApplicationCall.respondSubtasks(service: TaskService, id: Long, focusAddItem: Boolean = false) =
-    respondText(createHTML().div { relatedSection(service, id, mode(), focusAddItem) }, ContentType.Text.Html)
+private suspend fun io.ktor.server.application.ApplicationCall.respondSubtasks(service: TaskService, id: Long, focusAddItem: Boolean = false, kind: String = "subtask") =
+    respondText(createHTML().div { relatedSection(service, id, mode(), focusAddItem, kind) }, ContentType.Text.Html)
+
+private val KIND_NOUNS = mapOf("subtask" to "subtask", "prerequisite" to "prerequisite", "dependent" to "dependent task")
+
+// What the add field may link as `kind`: no folders, nothing done, nothing already linked, and no loops.
+private fun relatedCandidates(service: TaskService, task: Task, kind: String, all: List<Task>): List<Task> {
+    val id = task.id
+    val byId = all.associateBy { it.id }
+    val edges = service.dependencyEdges()
+    val open = all.filter { it.id != id && !it.isComplete }
+    return when (kind) {
+        "prerequisite" -> {
+            val linked = edges.filter { it.taskId == id }.map { it.dependsOnTaskId }.toSet()
+            val otherEdges = edges.filter { it.taskId != id }
+            open.filter { it.type.isLinkable && it.id !in linked && !wouldCreateDependencyCycle(it.id, id, otherEdges) }
+        }
+        "dependent" -> {
+            val linked = edges.filter { it.dependsOnTaskId == id }.map { it.taskId }.toSet()
+            open.filter { it.type.isLinkable && it.id !in linked && !wouldCreateDependencyCycle(id, it.id, edges) }
+        }
+        else -> open.filter { it.type != TaskType.FOLDER && it.parentId != id && !wouldCreateCycle(id, it.id, byId) }
+    }.sortedBy { it.title.lowercase() }
+}
 
 private fun Parameters.ids(name: String) = getAll(name).orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
 
@@ -457,6 +545,10 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
         // The title wraps (up to four lines), with the star inside the box by the first line. A starred
         // task is never a maybe (Maybe is under Properties); app.js unticks the other when one is ticked.
         // The note sits under it, in the same card.
+        // Where it lives, outermost first; each step opens that folder or task.
+        if (!isNew) ancestors(t, byId).takeIf { it.isNotEmpty() }?.let { path ->
+            div(classes = "crumbs") { path.forEach { step -> a(href = "/tasks/${step.id}?mode=${v.list.q}") { +step.title }; span(classes = "sep") { +"›" } } }
+        }
         div(classes = "title-card") {
         div(classes = "title-box") {
             // An existing task pins at once, like the phone's; a new one when it's saved.
@@ -742,7 +834,7 @@ internal fun folderPath(folder: Task, byId: Map<Long, Task>): String =
 // it), each added or unlinked at once via htmx. Filled into a div by the caller so the fragment's
 // root is #related, which htmx swaps.
 // focusAddItem: after adding items, the new field is focused again, for typing a list in one go.
-fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddItem: Boolean = false) {
+fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddItem: Boolean = false, addKind: String = "subtask") {
     this.id = "related"
     classes = setOf("related")
     val all = service.tasks()
@@ -789,51 +881,87 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
     }
     div(classes = "field-label section") { +Labels.RELATED }
     val edges = service.dependencyEdges()
+    // The parent task (folders are in the breadcrumb), with how far along its subtasks are.
+    byId[task.parentId]?.takeIf { it.type != TaskType.FOLDER }?.let { parent ->
+        val (done, total) = subtaskProgress(parent.id, all)
+        div(classes = "rel-row parent-row") {
+            span(classes = "rel-kind") { +Labels.PARENT }
+            span(classes = "check-space") {}
+            div(classes = "parent-title") {
+                a(href = "/tasks/${parent.id}?mode=$m", classes = if (parent.isComplete) "done" else null) { +parent.title }
+                if (total > 0) div(classes = "progress") { span { attributes["style"] = "width:${done * 100 / total}%" } }
+            }
+            span(classes = "progress-count") { +"$done of $total" }
+        }
+    }
     // A folder can't be completed, so it neither depends on tasks nor has any depending on it.
     val prerequisites = if (task.type == TaskType.FOLDER) emptyList() else service.dependsOn(id).mapNotNull(byId::get).sortedBy { it.title.lowercase() }
     val dependents = if (task.type == TaskType.FOLDER) emptyList() else edges.filter { it.dependsOnTaskId == id }.mapNotNull { byId[it.taskId] }
     val subtasks = all.filter { it.parentId == id && !isChecklist }.sortedWith(TaskOrder)
+    val outFolder = moveOutFolderId(task, byId)?.let { byId[it]?.title }
+    // A task's checkbox goes in front of its title (projects and checklists keep the space).
+    fun FlowContent.check(t: Task) = if (t.type == TaskType.TASK) button(classes = if (t.isComplete) "check done" else "check") {
+        htmx("/tasks/$id/subtasks/${t.id}/toggle?mode=$m")
+        attributes["aria-label"] = if (t.isComplete) "Mark not done" else "Complete"
+        if (t.isComplete) icon(Icon.CHECK, "")
+    } else span(classes = "check-space") {}
     subtasks.forEach { sub ->
         val kind = when (sub) { in prerequisites -> Labels.PREREQUISITE_SUBTASK; in dependents -> Labels.DEPENDENT_SUBTASK; else -> Labels.SUBTASK }
-        row(kind, sub, leading = {
-            if (sub.type == TaskType.TASK) button(classes = if (sub.isComplete) "check done" else "check") {
-                htmx("/tasks/$id/subtasks/${sub.id}/toggle?mode=$m")
-                attributes["aria-label"] = if (sub.isComplete) "Mark not done" else "Complete"
-                if (sub.isComplete) icon(Icon.CHECK, "")
-            } else span(classes = "check-space") {}
-        }) {
-            // ✕ unlinks the dependency; the subtask stays.
-            if (sub in prerequisites) unlink("/tasks/$id/prerequisite/${sub.id}/remove?mode=$m")
-            else if (sub in dependents) unlink("/tasks/$id/dependent/${sub.id}/remove?mode=$m")
+        // Dragged by its handle (app.js), or moved with Alt+Up/Down.
+        div(classes = "rel-row sub") {
+            attributes["data-sub"] = sub.id.toString()
+            attributes["data-task"] = id.toString()
+            span(classes = "drag-handle") { attributes["draggable"] = "true"; attributes["title"] = "Drag to reorder"; +"⠿" }
+            span(classes = "rel-kind") { +kind }
+            check(sub)
+            a(href = "/tasks/${sub.id}?mode=$m", classes = if (sub.isComplete) "done" else null) { +sub.title }
+            // ✕: move it out, unlink it (it stays a subtask), both, or delete it.
+            details(classes = "pp unlink-menu") {
+                summary(classes = "unlink") { attributes["aria-label"] = "Remove"; +"✕" }
+                div(classes = "pop") {
+                    button(classes = "menu-item") { htmx("/tasks/$id/subtasks/${sub.id}/moveout?mode=$m"); +Labels.moveOutTo(outFolder) }
+                    if (sub in prerequisites) button(classes = "menu-item") { htmx("/tasks/$id/prerequisite/${sub.id}/remove?mode=$m"); +Labels.NOT_PREREQUISITE }
+                    if (sub in dependents) button(classes = "menu-item") { htmx("/tasks/$id/dependent/${sub.id}/remove?mode=$m"); +Labels.NOT_DEPENDENT }
+                    if (sub in prerequisites || sub in dependents) button(classes = "menu-item") { htmx("/tasks/$id/subtasks/${sub.id}/moveout?mode=$m&unlink=1"); +Labels.MOVE_OUT_AND_UNLINK }
+                    button(classes = "menu-item danger") {
+                        htmx("/tasks/$id/subtasks/${sub.id}/delete?mode=$m")
+                        attributes["hx-confirm"] = "Delete “${sub.title}”?"
+                        +Labels.DELETE_TASK.removeSuffix("…")
+                    }
+                }
+            }
         }
     }
-    (prerequisites - subtasks.toSet()).forEach { p -> row(Labels.PREREQUISITE, p) { unlink("/tasks/$id/prerequisite/${p.id}/remove?mode=$m") } }
-    (dependents - subtasks.toSet()).forEach { d -> row(Labels.DEPENDENT, d) { unlink("/tasks/$id/dependent/${d.id}/remove?mode=$m") } }
+    (prerequisites - subtasks.toSet()).forEach { p -> row(Labels.PREREQUISITE, p, leading = { check(p) }) { unlink("/tasks/$id/prerequisite/${p.id}/remove?mode=$m") } }
+    (dependents - subtasks.toSet()).forEach { d -> row(Labels.DEPENDENT, d, leading = { check(d) }) { unlink("/tasks/$id/dependent/${d.id}/remove?mode=$m") } }
 
-    // Each "+" opens a popover: type a new task, or pick an existing one.
-    fun FlowContent.adder(label: String, url: String, existingName: String, placeholder: String, candidates: List<Task>) = details(classes = "pp adder") {
-        summary(classes = "add-link") { +label }
-        div(classes = "pop") {
-            form(classes = "inline") {
-                htmx(url)
-                textInput(name = "text") { this.placeholder = placeholder; attributes["autocomplete"] = "off" }
-            }
-            if (candidates.isNotEmpty()) form(classes = "inline") {
-                htmx(url)
-                select { name = existingName; candidates.forEach { option { value = it.id.toString(); +it.title } } }
-                button(type = ButtonType.submit) { +"Add" }
-            }
-        }
+    // One field adds any kind: type a new task (Enter), or pick a suggestion (↓, or a click). The
+    // kind switch says what to add; a checklist only links, a folder only takes subtasks.
+    val kinds = buildList {
+        if (!isChecklist) add("subtask" to "Subtask")
+        if (task.type != TaskType.FOLDER) { add("prerequisite" to "Needs"); add("dependent" to "Unlocks") }
     }
-    div(classes = "adders") {
-        if (!isChecklist) adder(Labels.ADD_SUBTASK, "/tasks/$id/subtasks?mode=$m", "child", "New subtask",
-            all.filter { it.id != id && it.type != TaskType.FOLDER && !it.isComplete && it.parentId != id && !wouldCreateCycle(id, it.id, byId) }.sortedBy { it.title.lowercase() })
-        if (task.type != TaskType.FOLDER) {
-            val otherEdges = edges.filter { it.taskId != id }
-            adder(Labels.ADD_PREREQUISITE, "/tasks/$id/prerequisite?mode=$m", "prerequisite", "New task this depends on",
-                all.filter { it.id != id && it.type.isLinkable && !it.isComplete && it !in prerequisites && !wouldCreateDependencyCycle(it.id, id, otherEdges) }.sortedBy { it.title.lowercase() })
-            adder(Labels.ADD_DEPENDENT, "/tasks/$id/dependent?mode=$m", "dependent", "New task that depends on this",
-                all.filter { it.id != id && it.type.isLinkable && !it.isComplete && it !in dependents && !wouldCreateDependencyCycle(id, it.id, edges) }.sortedBy { it.title.lowercase() })
+    if (kinds.isNotEmpty()) form(classes = "add-related") {
+        htmx("/tasks/$id/related?mode=$m")
+        attributes["autocomplete"] = "off"
+        div(classes = "add-field") {
+            textInput(name = "text") {
+                placeholder = "+ Add a subtask, or link a task…"
+                attributes["hx-get"] = "/tasks/$id/related/suggest"
+                // Not on "change": that fires when ↓ leaves the field, and the refresh would drop the suggestion just focused.
+                attributes["hx-trigger"] = "input changed delay:200ms, kindchange"
+                attributes["hx-target"] = "next .suggest"
+                attributes["hx-swap"] = "outerHTML"
+                attributes["hx-include"] = "closest form"
+                if (focusAddItem) autoFocus = true
+            }
+            div(classes = "kind-seg") {
+                val selected = kinds.firstOrNull { it.first == addKind }?.first ?: kinds.first().first
+                kinds.forEach { (value, label) ->
+                    label { radioInput(name = "kind") { this.value = value; checked = value == selected }; +label }
+                }
+            }
         }
+        div(classes = "suggest") {}
     }
 }

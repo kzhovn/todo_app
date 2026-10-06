@@ -533,7 +533,7 @@ class WebTest {
         val book = service.create(Task(title = "Book hotel", parentId = trip.id))
         service.addDependency(book.id, trip.id)
         val related = client.get("/tasks/${trip.id}").bodyAsText().substringAfter("id=\"related\"")
-        assertEquals(1, Regex("Book hotel").findAll(related).count())
+        assertEquals(1, Regex(">Book hotel<").findAll(related).count())
         assertTrue(related.contains(Labels.DEPENDENT_SUBTASK))
         client.post("/tasks/${trip.id}/dependent/${book.id}/remove")
         assertEquals(trip.id, service.get(book.id)!!.parentId)
@@ -733,12 +733,54 @@ class WebTest {
         service.create(Task(title = "Book flights", parentId = trip.id))
         val pack = service.create(Task(title = "Pack"))
         // The editors offer projects in both directions.
-        assertTrue(client.get("/tasks/${pack.id}").bodyAsText().substringAfter("id=\"related\"").contains(">Trip</option>"))
+        assertTrue(client.get("/tasks/${pack.id}/related/suggest?text=tri&kind=prerequisite").bodyAsText().contains("<span>Trip</span>"))
+        assertTrue(client.get("/tasks/${passport.id}/related/suggest?text=tri&kind=dependent").bodyAsText().contains("<span>Trip</span>"))
         client.submitForm("/tasks/${trip.id}/prerequisite", parameters { append("prerequisite", passport.id.toString()) })
         client.submitForm("/tasks/${trip.id}/dependent", parameters { append("dependent", pack.id.toString()) })
         assertEquals(setOf(passport.id), service.dependsOn(trip.id))
         assertEquals(setOf(trip.id), service.dependsOn(pack.id))
         assertEquals(listOf("Renew passport"), service.active(null).map { it.title })
+    }
+
+    @Test
+    fun `the editor's Related section - one add field, suggestions, move out, delete, reorder, the parent`() = web {
+        val personal = service.create(Task(title = "Personal", type = TaskType.FOLDER))
+        val passport = service.create(Task(title = "Renew passport", parentId = personal.id))
+        val photo = service.create(Task(title = "Take photo"))
+        // An existing task (a suggestion), new ones (one per pasted line), and a new prerequisite.
+        assertTrue(client.get("/tasks/${passport.id}/related/suggest?text=photo&kind=subtask").bodyAsText().contains("value=\"${photo.id}\""))
+        assertFalse(client.get("/tasks/${passport.id}/related/suggest?text=pers&kind=subtask").bodyAsText().contains("value=\"${personal.id}\"")) // no folders
+        client.submitForm("/tasks/${passport.id}/related", parameters { append("kind", "subtask"); append("existing", photo.id.toString()) })
+        client.submitForm("/tasks/${passport.id}/related", parameters { append("kind", "subtask"); append("text", "Fill in the form\nPost it -d fri") })
+        client.submitForm("/tasks/${passport.id}/related", parameters { append("kind", "prerequisite"); append("text", "Pay rent") })
+        fun subs() = service.tasks().filter { it.parentId == passport.id }.sortedWith(com.kzhovn.todoapp.data.TaskOrder).map { it.title }
+        assertEquals(listOf("Take photo", "Fill in the form", "Post it"), subs())
+        assertNotNull(service.tasks().single { it.title == "Post it" }.dueDate)
+        val rent = service.tasks().single { it.title == "Pay rent" }
+        assertEquals(setOf(rent.id), service.dependsOn(passport.id))
+        assertEquals(personal.id, rent.parentId)
+        // Prerequisites tick off from here too, but not unrelated tasks.
+        client.post("/tasks/${passport.id}/subtasks/${rent.id}/toggle")
+        assertTrue(service.get(rent.id)!!.isComplete)
+        val other = service.create(Task(title = "Unrelated"))
+        client.post("/tasks/${passport.id}/subtasks/${other.id}/toggle")
+        assertFalse(service.get(other.id)!!.isComplete)
+        // Reorder: Post it before Take photo.
+        val post = service.tasks().single { it.title == "Post it" }
+        client.submitForm("/tasks/${passport.id}/subtasks/${post.id}/move", parameters { append("anchor", photo.id.toString()); append("after", "0") })
+        assertEquals(listOf("Post it", "Take photo", "Fill in the form"), subs())
+        // Move out (to the folder), unlinking it too; delete.
+        service.addDependency(passport.id, photo.id)
+        client.post("/tasks/${passport.id}/subtasks/${photo.id}/moveout?unlink=1")
+        assertEquals(personal.id, service.get(photo.id)!!.parentId)
+        assertEquals(setOf(rent.id), service.dependsOn(passport.id))
+        client.post("/tasks/${passport.id}/subtasks/${post.id}/delete")
+        assertEquals(listOf("Fill in the form"), subs())
+        // A subtask's editor: the breadcrumb, and its parent with progress.
+        val form = service.tasks().single { it.title == "Fill in the form" }
+        val page = client.get("/tasks/${form.id}").bodyAsText()
+        assertTrue(page.substringAfter("class=\"crumbs\"").substringBefore("title-card").let { "Personal" in it && "Renew passport" in it })
+        assertTrue(page.contains("0 of 1"))
     }
 
     @Test

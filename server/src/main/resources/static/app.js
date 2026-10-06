@@ -547,4 +547,71 @@
     const toast = document.getElementById("toast");
     if (toast?.classList.contains("show")) hideSoon(toast);
   });
+  // --- The editor's Related section. A subtask is dragged by its handle, or moved with Alt+Up/Down,
+  // to just before/after another subtask of the same task.
+  let subDrag = null;
+  const moveSub = (row, anchor, after) => htmx.ajax("POST", `/tasks/${row.dataset.task}/subtasks/${row.dataset.sub}/move`,
+    { target: "#related", swap: "outerHTML", values: { anchor: anchor.dataset.sub, after: after ? "1" : "0" } });
+  document.addEventListener("dragstart", (e) => {
+    if (!e.target.matches?.(".drag-handle")) return;
+    subDrag = e.target.closest(".rel-row.sub");
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", subDrag.dataset.sub);
+    e.dataTransfer.setDragImage(subDrag, 12, 12);
+  });
+  document.addEventListener("dragover", (e) => {
+    const n = e.target.closest?.(".rel-row.sub");
+    if (!subDrag || !n || n === subDrag) return;
+    e.preventDefault();
+    document.querySelectorAll(".rel-row[data-drop]").forEach((r) => delete r.dataset.drop);
+    const r = n.getBoundingClientRect();
+    n.dataset.drop = e.clientY < r.top + r.height / 2 ? "before" : "after";
+  });
+  document.addEventListener("drop", (e) => {
+    const n = e.target.closest?.(".rel-row.sub");
+    if (!subDrag || !n?.dataset.drop) return;
+    e.preventDefault();
+    moveSub(subDrag, n, n.dataset.drop === "after");
+  });
+  document.addEventListener("dragend", () => { subDrag = null; document.querySelectorAll(".rel-row[data-drop]").forEach((r) => delete r.dataset.drop); });
+  document.addEventListener("keydown", (e) => {
+    const row = e.target.closest?.(".rel-row.sub");
+    if (!row || !e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    const subs = [...row.parentElement.querySelectorAll(".rel-row.sub")], next = subs[subs.indexOf(row) + (e.key === "ArrowDown" ? 1 : -1)];
+    e.preventDefault();
+    if (next) moveSub(row, next, e.key === "ArrowDown");
+  });
+
+  // The add field: ↓ goes into the suggestions (↑ ↓ between them, Enter picks one), Tab switches the
+  // kind, Esc clears. Pasting several lines offers a subtask each.
+  document.addEventListener("keydown", (e) => {
+    const form = e.target.closest?.(".add-related");
+    if (!form) return;
+    const input = form.querySelector("input[name=text]"), suggs = [...form.querySelectorAll(".sugg")];
+    if (e.target === input && e.key === "Tab" && !e.shiftKey) {
+      const kinds = [...form.querySelectorAll("input[name=kind]")], at = kinds.findIndex((k) => k.checked);
+      if (kinds.length < 2) return;
+      e.preventDefault();
+      kinds[(at + 1) % kinds.length].checked = true;
+      input.dispatchEvent(new Event("kindchange"));
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      const i = e.target === input ? -1 : suggs.indexOf(e.target);
+      const to = e.key === "ArrowDown" ? suggs[i + 1] : i <= 0 ? input : suggs[i - 1];
+      if (to) { e.preventDefault(); to.focus(); }
+    } else if (e.key === "Escape") {
+      input.value = "";
+      form.querySelector(".suggest").replaceChildren();
+    }
+  });
+  document.addEventListener("change", (e) => {
+    if (e.target.matches?.(".add-related input[name=kind]")) e.target.form.querySelector("input[name=text]").dispatchEvent(new Event("kindchange"));
+  });
+  document.addEventListener("paste", (e) => {
+    const form = e.target.closest?.(".add-related");
+    const lines = (e.clipboardData?.getData("text") ?? "").split(/\r?\n/).filter((l) => l.trim());
+    if (!form || lines.length < 2 || form.querySelector("input[name=kind]:checked")?.value !== "subtask") return;
+    if (!confirm(`Add ${lines.length} subtasks?`)) return;
+    e.preventDefault();
+    htmx.ajax("POST", form.getAttribute("hx-post"), { target: "#related", swap: "outerHTML", values: { kind: "subtask", text: lines.join("\n") } });
+  });
 })();

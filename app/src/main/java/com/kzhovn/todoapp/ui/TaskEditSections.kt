@@ -22,6 +22,20 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.selection.selectable
 import android.app.Activity
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.zIndex
+import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.ancestors
+import com.kzhovn.todoapp.data.moveOutFolderId
+import com.kzhovn.todoapp.data.subtaskProgress
+import kotlin.math.roundToInt
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -100,6 +114,7 @@ import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerOverdue
+import com.kzhovn.todoapp.ui.theme.LedgerGood
 import com.kzhovn.todoapp.ui.theme.folderColors
 
 // The task editor's sections, top to bottom; the state and data work live in TaskEditViewModel.
@@ -409,24 +424,61 @@ internal fun RelatedSection(vm: TaskEditViewModel, openTask: (Long) -> Unit, onA
     val task = vm.task
     val isChecklist = task.type == TaskType.CHECKLIST
     SectionLabel(Labels.RELATED)
+    // The parent task (folders are in the breadcrumb), with how far along its subtasks are.
+    vm.allById[task.parentId]?.takeIf { it.type != TaskType.FOLDER }?.let { parent ->
+        val (done, total) = subtaskProgress(parent.id, vm.allTasks)
+        RelatedRow(Labels.PARENT, parent.title, done = parent.isComplete, onOpen = { openTask(parent.id) }, progress = if (total > 0) done.toFloat() / total else null) {
+            Text("$done of $total", fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.padding(start = 8.dp, end = 12.dp))
+        }
+    }
     val subtasks = remember(vm.allTasks, vm.taskId, isChecklist) { vm.allTasks.filter { it.parentId == vm.taskId && !vm.isNew && !isChecklist }.sortedWith(TaskOrder) }
     val isFolder = task.type == TaskType.FOLDER
     val dependentIds = if (isFolder || vm.isNew) emptySet() else vm.dependencyEdges.filter { it.dependsOnTaskId == vm.taskId }.map { it.taskId }.toSet()
     val prerequisiteIds = if (isFolder) emptySet() else vm.dependencyIds
-    subtasks.forEach { sub ->
+    var deleting by remember { mutableStateOf<Task?>(null) }
+    // Press and hold a subtask, then drag it to a new place.
+    var dragId by remember { mutableStateOf<Long?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    val haptics = LocalHapticFeedback.current
+    subtasks.forEachIndexed { index, sub ->
         val kind = when (sub.id) { in prerequisiteIds -> Labels.PREREQUISITE_SUBTASK; in dependentIds -> Labels.DEPENDENT_SUBTASK; else -> Labels.SUBTASK }
-        RelatedRow(kind, sub.title, done = sub.isComplete, onOpen = { openTask(sub.id) }, leading = {
-            if (sub.type == TaskType.TASK) {
-                TaskCheckbox(
-                    checked = sub.isComplete, due = sub.dueDate?.takeUnless { sub.isComplete }?.let { dueStatus(it, System.currentTimeMillis()) },
-                    size = 18.dp, touchSize = 34.dp, onCheckedChange = { vm.toggleComplete(sub.id) }
+        var rowHeight by remember(sub.id) { mutableIntStateOf(1) }
+        val dragging = dragId == sub.id
+        val dragModifier = Modifier
+            .onSizeChanged { rowHeight = it.height }
+            .zIndex(if (dragging) 1f else 0f)
+            .graphicsLayer {
+                translationY = if (dragging) dragOffset else 0f
+                shadowElevation = if (dragging) 8.dp.toPx() else 0f
+                shape = RoundedCornerShape(6.dp)
+            }
+            .background(if (dragging) LedgerSearchBackground else Color.Transparent, RoundedCornerShape(6.dp))
+            .pointerInput(sub.id, subtasks) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); dragId = sub.id; dragOffset = 0f },
+                    onDrag = { change, amount -> change.consume(); dragOffset += amount.y },
+                    onDragEnd = {
+                        // ponytail: steps by the dragged row's own height, so among rows of very different heights the drop is approximate.
+                        val target = (index + (dragOffset / rowHeight).roundToInt()).coerceIn(0, subtasks.lastIndex)
+                        if (target != index) vm.moveSubtask(sub.id, subtasks[target].id, after = target > index)
+                        dragId = null
+                    },
+                    onDragCancel = { dragId = null }
                 )
-            } else Spacer(Modifier.width(34.dp))
-        }) {
-            // Removing unlinks the dependency; the subtask stays.
-            if (sub.id in prerequisiteIds) RemoveButton { vm.dependencyIds = vm.dependencyIds - sub.id }
-            else if (sub.id in dependentIds) RemoveButton { vm.removeDependent(sub.id) }
+            }
+        RelatedRow(kind, sub.title, done = sub.isComplete, onOpen = { openTask(sub.id) }, modifier = dragModifier, leading = { RelatedCheck(vm, sub) }) {
+            SubtaskRemoveMenu(vm, sub, isPrerequisite = sub.id in prerequisiteIds, isDependent = sub.id in dependentIds, onDelete = { deleting = sub })
         }
+    }
+    deleting?.let { sub ->
+        val below = vm.allTasks.count { t -> ancestors(t, vm.allById).any { it.id == sub.id } }
+        ConfirmDialog(
+            title = "Delete “${sub.title}”?",
+            body = if (below > 0) "This will also delete $below subtask${if (below == 1) "" else "s"}." else null,
+            confirmLabel = "Delete",
+            onConfirm = { deleting = null; vm.deleteItem(sub) },
+            onDismiss = { deleting = null }
+        )
     }
     val subtaskIds = subtasks.map { it.id }.toSet()
     if (!isChecklist) vm.pendingSubtasks.forEachIndexed { index, title ->
@@ -437,7 +489,7 @@ internal fun RelatedSection(vm: TaskEditViewModel, openTask: (Long) -> Unit, onA
     }
     if (task.type != TaskType.FOLDER) {
         (vm.dependencyIds - subtaskIds).mapNotNull(vm.allById::get).sortedBy { it.title.lowercase() }.forEach { prereq ->
-            RelatedRow(Labels.PREREQUISITE, prereq.title, done = prereq.isComplete, onOpen = { openTask(prereq.id) }) {
+            RelatedRow(Labels.PREREQUISITE, prereq.title, done = prereq.isComplete, onOpen = { openTask(prereq.id) }, leading = { RelatedCheck(vm, prereq) }) {
                 RemoveButton { vm.dependencyIds = vm.dependencyIds - prereq.id }
             }
         }
@@ -445,7 +497,7 @@ internal fun RelatedSection(vm: TaskEditViewModel, openTask: (Long) -> Unit, onA
             RelatedRow(Labels.DEPENDENT, dependent.title, onOpen = { openTask(dependent.id) }) { RemoveButton { vm.pendingDependentIds = vm.pendingDependentIds - dependent.id } }
         }
         (dependentIds - subtaskIds).mapNotNull(vm.allById::get).forEach { dependent ->
-            RelatedRow(Labels.DEPENDENT, dependent.title, done = dependent.isComplete, onOpen = { openTask(dependent.id) }) {
+            RelatedRow(Labels.DEPENDENT, dependent.title, done = dependent.isComplete, onOpen = { openTask(dependent.id) }, leading = { RelatedCheck(vm, dependent) }) {
                 RemoveButton { vm.removeDependent(dependent.id) }
             }
         }
@@ -535,18 +587,72 @@ private fun SectionLabel(text: String) {
 // (in front of the title, as every checkbox is; other rows keep its space so titles line up), its
 // title (tap opens it), and a trailing ✕ where it can be removed.
 @Composable
-private fun RelatedRow(kind: String, title: String, done: Boolean = false, onOpen: (() -> Unit)?, leading: @Composable () -> Unit = { Spacer(Modifier.width(34.dp)) }, trailing: @Composable () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp)) {
+private fun RelatedRow(
+    kind: String, title: String, done: Boolean = false, onOpen: (() -> Unit)?, modifier: Modifier = Modifier, progress: Float? = null,
+    leading: @Composable () -> Unit = { Spacer(Modifier.width(34.dp)) }, trailing: @Composable () -> Unit
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier.fillMaxWidth().heightIn(min = 36.dp)) {
         Text(kind, fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.width(84.dp))
         leading()
-        Text(
-            title,
-            fontSize = 14.sp,
-            textDecoration = if (done) TextDecoration.LineThrough else null,
-            color = if (done) LedgerMuted else LedgerInk,
-            modifier = Modifier.weight(1f).then(if (onOpen != null) Modifier.clickable(onClick = onOpen) else Modifier).padding(vertical = 6.dp)
-        )
+        Column(Modifier.weight(1f).then(if (onOpen != null) Modifier.clickable(onClick = onOpen) else Modifier).padding(vertical = 6.dp)) {
+            Text(
+                title,
+                fontSize = 14.sp,
+                textDecoration = if (done) TextDecoration.LineThrough else null,
+                color = if (done) LedgerMuted else LedgerInk
+            )
+            progress?.let {
+                Box(Modifier.padding(top = 4.dp).fillMaxWidth(0.8f).height(4.dp).background(LedgerBorder, RoundedCornerShape(2.dp))) {
+                    Box(Modifier.fillMaxWidth(it).height(4.dp).background(LedgerGood, RoundedCornerShape(2.dp)))
+                }
+            }
+        }
         trailing()
+    }
+}
+
+// A related task's checkbox (projects and checklists keep the space, so titles line up).
+@Composable
+private fun RelatedCheck(vm: TaskEditViewModel, t: Task) {
+    if (t.type == TaskType.TASK) TaskCheckbox(
+        checked = t.isComplete, due = t.dueDate?.takeUnless { t.isComplete }?.let { dueStatus(it, System.currentTimeMillis()) },
+        size = 18.dp, touchSize = 34.dp, onCheckedChange = { vm.toggleComplete(t.id) }
+    ) else Spacer(Modifier.width(34.dp))
+}
+
+// A subtask's ✕: move it out to this task's folder, stop it being a prerequisite or dependent (it stays
+// a subtask), both, or delete it.
+@Composable
+private fun SubtaskRemoveMenu(vm: TaskEditViewModel, sub: Task, isPrerequisite: Boolean, isDependent: Boolean, onDelete: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    fun unlink() = if (isPrerequisite) vm.dependencyIds = vm.dependencyIds - sub.id else vm.removeDependent(sub.id)
+    Box {
+        RemoveButton { open = true }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = LedgerSearchBackground) {
+            @Composable
+            fun item(text: String, color: Color = LedgerInk, action: () -> Unit) =
+                DropdownMenuItem(text = { Text(text, color = color) }, onClick = { open = false; action() })
+            item(Labels.moveOutTo(moveOutFolderId(vm.task, vm.allById)?.let { vm.allById[it]?.title })) { vm.moveOut(sub.id) }
+            if (isPrerequisite) item(Labels.NOT_PREREQUISITE) { unlink() }
+            if (isDependent) item(Labels.NOT_DEPENDENT) { unlink() }
+            if (isPrerequisite || isDependent) item(Labels.MOVE_OUT_AND_UNLINK) { unlink(); vm.moveOut(sub.id) }
+            HorizontalDivider()
+            item(Labels.DELETE_TASK, LedgerOverdue, onDelete)
+        }
+    }
+}
+
+// Where this task lives, outermost first; each step opens that folder or task.
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun Breadcrumb(vm: TaskEditViewModel, openTask: (Long) -> Unit) {
+    val path = ancestors(vm.task, vm.allById)
+    if (path.isEmpty()) return
+    FlowRow(Modifier.padding(start = 2.dp, bottom = 4.dp)) {
+        path.forEach { step ->
+            Text(step.title, color = LedgerAccent, fontSize = 12.sp, modifier = Modifier.clickable { openTask(step.id) }.padding(vertical = 4.dp))
+            Text("  ›  ", color = LedgerMuted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
+        }
     }
 }
 

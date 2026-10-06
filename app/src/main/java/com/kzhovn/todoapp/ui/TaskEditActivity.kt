@@ -171,6 +171,7 @@ class TaskEditActivity : ComponentActivity() {
                 .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }
                 .verticalScroll(rememberScrollState()).padding(16.dp)
         ) {
+            if (!vm.isNew) Breadcrumb(vm, openTask)
             TitleBox(
                 vm, pinned,
                 onTogglePin = {

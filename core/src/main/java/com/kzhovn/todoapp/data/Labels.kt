@@ -47,6 +47,13 @@ object Labels {
     // A subtask that's also a prerequisite or dependent gets one row, not two.
     const val PREREQUISITE_SUBTASK = "Prerequisite subtask"
     const val DEPENDENT_SUBTASK = "Dependent subtask"
+    const val PARENT = "Parent"
+    // A subtask's ✕ menu.
+    fun moveOutTo(folder: String?) = if (folder == null) "Move out (no folder)" else "Move out to $folder"
+    const val NOT_PREREQUISITE = "Not a prerequisite"
+    const val NOT_DEPENDENT = "Not a dependent"
+    const val MOVE_OUT_AND_UNLINK = "Both"
+    const val DELETE_TASK = "Delete task…"
     const val ADD_SUBTASK = "+ Subtask"
     const val ADD_PREREQUISITE = "+ Prerequisite"
     const val ADD_DEPENDENT = "+ Dependent task"

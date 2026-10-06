@@ -17,6 +17,7 @@ import com.kzhovn.todoapp.recurrence.RecurrenceSelection
 import com.kzhovn.todoapp.recurrence.recurrenceSelectionFromTask
 import com.kzhovn.todoapp.recurrence.toTaskFields
 import com.kzhovn.todoapp.repository.ContextRepository
+import com.kzhovn.todoapp.data.moveOutFolderId
 import com.kzhovn.todoapp.repository.InheritedField
 import com.kzhovn.todoapp.repository.TaskRepository
 import com.kzhovn.todoapp.repository.changedInheritedFields
@@ -196,6 +197,11 @@ class TaskEditViewModel(
     }
 
     fun removeDependent(dependentId: Long) = act { repository.removeDependency(dependentId, taskId) }
+
+    // A subtask's "move out": straight to the folder this task is in.
+    fun moveOut(subtaskId: Long) = act { repository.reparent(subtaskId, moveOutFolderId(task, allById)) }
+
+    fun moveSubtask(id: Long, anchorId: Long, after: Boolean) = act { repository.moveNextTo(id, anchorId, after) }
 
     fun createFolder(name: String) = act { task = task.copy(parentId = repository.createTask(Task(type = TaskType.FOLDER, title = name))) }
 
