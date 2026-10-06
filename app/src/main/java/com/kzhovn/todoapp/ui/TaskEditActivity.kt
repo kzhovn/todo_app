@@ -166,12 +166,15 @@ class TaskEditActivity : ComponentActivity() {
         // A tap on empty space leaves the text field being edited (Compose keeps focus otherwise), which
         // also folds an open note back into its preview.
         val focusManager = LocalFocusManager.current
+        val showBreadcrumb = !vm.isNew && vm.allById[vm.task.parentId] != null
         Column(
             Modifier.fillMaxSize().background(LedgerBackground)
                 .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }
-                .verticalScroll(rememberScrollState()).padding(16.dp)
+                .verticalScroll(rememberScrollState())
+                // The breadcrumb brings its own small gap above the title, so the top starts tighter.
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = if (showBreadcrumb) 4.dp else 16.dp)
         ) {
-            if (!vm.isNew) Breadcrumb(vm, openTask)
+            if (showBreadcrumb) Breadcrumb(vm, openTask)
             TitleBox(
                 vm, pinned,
                 onTogglePin = {

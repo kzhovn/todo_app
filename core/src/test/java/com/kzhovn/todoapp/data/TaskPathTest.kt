@@ -20,6 +20,4 @@ class TaskPathTest {
         assertEquals(1L, moveOutFolderId(admin, byId))
         assertEquals(null, moveOutFolderId(personal, byId))
     }
-
-    @Test fun progressCountsDoneSubtasks() = assertEquals(1 to 2, subtaskProgress(3, all))
 }

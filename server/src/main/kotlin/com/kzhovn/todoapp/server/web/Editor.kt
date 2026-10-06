@@ -24,7 +24,6 @@ import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.data.ancestors
 import com.kzhovn.todoapp.data.moveOutFolderId
-import com.kzhovn.todoapp.data.subtaskProgress
 import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
 import com.kzhovn.todoapp.recurrence.RecurrenceSelection
@@ -372,6 +371,10 @@ private suspend fun io.ktor.server.application.ApplicationCall.respondSubtasks(s
     respondText(createHTML().div { relatedSection(service, id, mode(), focusAddItem, kind) }, ContentType.Text.Html)
 
 private val KIND_NOUNS = mapOf("subtask" to "subtask", "prerequisite" to "prerequisite", "dependent" to "dependent task")
+
+// A prerequisite's (amber) or dependent's (green) tinted tag.
+private fun FlowContent.kindTag(kind: String, text: String = kind) =
+    span(classes = "kind-tag ${if (kind == Labels.DEPENDENT) "dependent" else "prerequisite"}") { +text }
 
 // What the add field may link as `kind`: no folders, nothing done, nothing already linked, and no loops.
 private fun relatedCandidates(service: TaskService, task: Task, kind: String, all: List<Task>): List<Task> {
@@ -844,7 +847,7 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
     fun kotlinx.html.HTMLTag.htmx(url: String) = hx("post", url, "#related")
     // A subtask's checkbox goes in front of its title, as every checkbox does; other rows keep its space.
     fun FlowContent.row(kind: String, t: Task, leading: FlowContent.() -> Unit = { span(classes = "check-space") {} }, trailing: FlowContent.() -> Unit) = div(classes = "rel-row") {
-        span(classes = "rel-kind") { +kind }
+        span(classes = "rel-kind") { kindTag(kind) }
         leading()
         a(href = "/tasks/${t.id}?mode=$m", classes = if (t.isComplete) "done" else null) { +t.title }
         trailing()
@@ -881,19 +884,6 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
     }
     div(classes = "field-label section") { +Labels.RELATED }
     val edges = service.dependencyEdges()
-    // The parent task (folders are in the breadcrumb), with how far along its subtasks are.
-    byId[task.parentId]?.takeIf { it.type != TaskType.FOLDER }?.let { parent ->
-        val (done, total) = subtaskProgress(parent.id, all)
-        div(classes = "rel-row parent-row") {
-            span(classes = "rel-kind") { +Labels.PARENT }
-            span(classes = "check-space") {}
-            div(classes = "parent-title") {
-                a(href = "/tasks/${parent.id}?mode=$m", classes = if (parent.isComplete) "done" else null) { +parent.title }
-                if (total > 0) div(classes = "progress") { span { attributes["style"] = "width:${done * 100 / total}%" } }
-            }
-            span(classes = "progress-count") { +"$done of $total" }
-        }
-    }
     // A folder can't be completed, so it neither depends on tasks nor has any depending on it.
     val prerequisites = if (task.type == TaskType.FOLDER) emptyList() else service.dependsOn(id).mapNotNull(byId::get).sortedBy { it.title.lowercase() }
     val dependents = if (task.type == TaskType.FOLDER) emptyList() else edges.filter { it.dependsOnTaskId == id }.mapNotNull { byId[it.taskId] }
@@ -905,16 +895,19 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
         attributes["aria-label"] = if (t.isComplete) "Mark not done" else "Complete"
         if (t.isComplete) icon(Icon.CHECK, "")
     } else span(classes = "check-space") {}
-    subtasks.forEach { sub ->
-        val kind = when (sub) { in prerequisites -> Labels.PREREQUISITE_SUBTASK; in dependents -> Labels.DEPENDENT_SUBTASK; else -> Labels.SUBTASK }
+    // Subtasks first, together on a faint tile; one that's also a prerequisite or dependent says so after its title.
+    if (subtasks.isNotEmpty()) div(classes = "sub-tile") { subtasks.forEach { sub ->
+        val note = when (sub) { in prerequisites -> Labels.PREREQUISITE; in dependents -> Labels.DEPENDENT; else -> null }
         // Dragged by its handle (app.js), or moved with Alt+Up/Down.
         div(classes = "rel-row sub") {
             attributes["data-sub"] = sub.id.toString()
             attributes["data-task"] = id.toString()
             span(classes = "drag-handle") { attributes["draggable"] = "true"; attributes["title"] = "Drag to reorder"; +"⠿" }
-            span(classes = "rel-kind") { +kind }
             check(sub)
-            a(href = "/tasks/${sub.id}?mode=$m", classes = if (sub.isComplete) "done" else null) { +sub.title }
+            a(href = "/tasks/${sub.id}?mode=$m", classes = if (sub.isComplete) "done" else null) {
+                +sub.title
+                note?.let { kindTag(it, it.lowercase()) }
+            }
             // ✕: move it out, unlink it (it stays a subtask), both, or delete it.
             details(classes = "pp unlink-menu") {
                 summary(classes = "unlink") { attributes["aria-label"] = "Remove"; +"✕" }
@@ -931,7 +924,7 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
                 }
             }
         }
-    }
+    } }
     (prerequisites - subtasks.toSet()).forEach { p -> row(Labels.PREREQUISITE, p, leading = { check(p) }) { unlink("/tasks/$id/prerequisite/${p.id}/remove?mode=$m") } }
     (dependents - subtasks.toSet()).forEach { d -> row(Labels.DEPENDENT, d, leading = { check(d) }) { unlink("/tasks/$id/dependent/${d.id}/remove?mode=$m") } }
 
@@ -946,7 +939,8 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
         attributes["autocomplete"] = "off"
         div(classes = "add-field") {
             textInput(name = "text") {
-                placeholder = "+ Add a subtask, or link a task…"
+                placeholder = "+"
+                attributes["aria-label"] = "Add a subtask, or link a task"
                 attributes["hx-get"] = "/tasks/$id/related/suggest"
                 // Not on "change": that fires when ↓ leaves the field, and the refresh would drop the suggestion just focused.
                 attributes["hx-trigger"] = "input changed delay:200ms, kindchange"

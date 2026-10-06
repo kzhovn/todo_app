@@ -534,7 +534,7 @@ class WebTest {
         service.addDependency(book.id, trip.id)
         val related = client.get("/tasks/${trip.id}").bodyAsText().substringAfter("id=\"related\"")
         assertEquals(1, Regex(">Book hotel<").findAll(related).count())
-        assertTrue(related.contains(Labels.DEPENDENT_SUBTASK))
+        assertTrue(related.contains(">${Labels.DEPENDENT.lowercase()}<")) // the subtask says so after its title
         client.post("/tasks/${trip.id}/dependent/${book.id}/remove")
         assertEquals(trip.id, service.get(book.id)!!.parentId)
         assertEquals(emptySet<Long>(), service.dependsOn(book.id))
@@ -776,11 +776,10 @@ class WebTest {
         assertEquals(setOf(rent.id), service.dependsOn(passport.id))
         client.post("/tasks/${passport.id}/subtasks/${post.id}/delete")
         assertEquals(listOf("Fill in the form"), subs())
-        // A subtask's editor: the breadcrumb, and its parent with progress.
+        // A subtask's editor: the breadcrumb.
         val form = service.tasks().single { it.title == "Fill in the form" }
         val page = client.get("/tasks/${form.id}").bodyAsText()
         assertTrue(page.substringAfter("class=\"crumbs\"").substringBefore("title-card").let { "Personal" in it && "Renew passport" in it })
-        assertTrue(page.contains("0 of 1"))
     }
 
     @Test

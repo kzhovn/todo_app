@@ -9,6 +9,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
@@ -56,6 +58,7 @@ class RelatedSectionTest {
         db.taskDao().insert(Task(id = 6, title = "Post it", parentId = 3))
         db.taskDao().insert(Task(id = 7, title = "Pay rent", parentId = 1))
         repository.addDependency(3, 7)
+        repository.addDependency(3, 5) // a subtask that's also a prerequisite
         TaskEditViewModel(repository, ContextRepository(db.taskContextDao()), taskId = taskId).also { it.load(null, null); it.refresh() }
     }
 
@@ -90,10 +93,10 @@ class RelatedSectionTest {
     }
 
     @Test
-    fun aSubtaskShowsItsParentWithProgress() {
-        show(open(taskId = 6))
-        compose.onNodeWithText("Parent").assertExists()
-        compose.onNodeWithText("1 of 3").assertExists()
+    fun aSubtaskTagsBeingAPrerequisite() {
+        show(open())
+        compose.onNodeWithText("Fill in the form").assertExists()
+        compose.onNodeWithText("prerequisite").assertExists() // the subtask says so after its title
     }
 
     @Test

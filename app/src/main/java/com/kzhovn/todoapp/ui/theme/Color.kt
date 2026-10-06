@@ -25,6 +25,11 @@ val LedgerDueTodayText = Color(0xFFA86F0C)
 val LedgerOverdue = Color(0xFF96412B)
 // Review: due dates kept.
 val LedgerGood = Color(0xFF3B8841)
+val LedgerGoodSoft = Color(0xFFD8E5D6)
+// Prerequisite tags (what a task waits on), and the faint tile behind an editor's subtasks.
+val LedgerUp = Color(0xFF93650C)
+val LedgerUpSoft = Color(0xFFEEDFB8)
+val LedgerChip = Color(0xFFE9E2D2)
 
 val LedgerCheckBorder = Color(0xFFB5A98C)
 

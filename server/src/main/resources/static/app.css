@@ -2,13 +2,13 @@
 :root {
   --bg: #F0EAE0; --panel: #F7F4EE; --ink: #2B2318; --muted: #8A7A5C; --border: #DED5C1; --tile: #EFE8DC;
   --accent: #2B4C7E; --accent-soft: #DFE6EF; --star: #C9A01E; --check: #B5A98C; --due-today: #C98A1A; --due-today-text: #A86F0C;
-  --today: #93650C; --today-bg: #EEDFB8; --overdue: #96412B; --good: #3B8841; --overdue-bg: #EEDACE; --chip: #E9E2D2;
+  --today: #93650C; --today-bg: #EEDFB8; --overdue: #96412B; --good: #3B8841; --good-bg: #D8E5D6; --overdue-bg: #EEDACE; --chip: #E9E2D2;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #1E1B16; --panel: #26221C; --ink: #ECE4D6; --muted: #A8997C; --border: #3A342A; --tile: #312C24;
     --accent: #8FB0E3; --accent-soft: #2A3445; --star: #D9B43A; --check: #6E6552; --due-today: #E0A33A; --due-today-text: #E6B45A;
-    --today: #E2B252; --today-bg: #3D331D; --overdue: #E08A71; --good: #6DBA6F; --overdue-bg: #3F2A22; --chip: #2E2922;
+    --today: #E2B252; --today-bg: #3D331D; --overdue: #E08A71; --good: #6DBA6F; --good-bg: #2A3A28; --overdue-bg: #3F2A22; --chip: #2E2922;
   }
 }
 * { box-sizing: border-box; }
@@ -399,16 +399,18 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .unlink { color: var(--muted); width: 28px; height: 28px; }
 .unlink:hover { color: var(--overdue); }
 .adders { display: flex; gap: 18px; margin-top: 8px; }
-/* The editor's breadcrumb, the Parent row, a subtask's ✕ menu and drag handle, and the one add field. */
+/* The editor's breadcrumb, the subtasks' tile, kind tags, a subtask's ✕ menu and drag handle, and the one add field. */
 .crumbs { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; color: var(--muted); margin: 0 0 6px 2px; }
 .crumbs a { color: var(--accent); text-decoration: none; }
 .crumbs a:hover { text-decoration: underline; }
-.parent-title { flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 6px 0; }
-.progress { height: 4px; width: 80%; border-radius: 2px; background: var(--border); }
-.progress span { display: block; height: 4px; border-radius: 2px; background: var(--good); }
-.progress-count { font-size: 11px; color: var(--muted); white-space: nowrap; margin-right: 8px; }
+.sub-tile { background: var(--tile); border-radius: 8px; padding: 0 10px; margin: 4px 0 6px; }
+.sub-tile .rel-row { border-bottom: 0; }
+.kind-tag { font-size: 11px; border-radius: 4px; padding: 1px 7px; white-space: nowrap; }
+.kind-tag.prerequisite { background: var(--today-bg); color: var(--today); }
+.kind-tag.dependent { background: var(--good-bg); color: var(--good); }
+.rel-row a .kind-tag { margin-left: 8px; display: inline-block; text-decoration: none; }
 .rel-row.sub { position: relative; }
-.drag-handle { position: absolute; left: -18px; width: 16px; text-align: center; color: var(--muted); cursor: grab; visibility: hidden; user-select: none; }
+.drag-handle { position: absolute; left: -26px; width: 16px; text-align: center; color: var(--muted); cursor: grab; visibility: hidden; user-select: none; }
 .rel-row.sub:hover .drag-handle { visibility: visible; }
 .rel-row[data-drop="before"] { box-shadow: inset 0 2px 0 var(--accent); }
 .rel-row[data-drop="after"] { box-shadow: inset 0 -2px 0 var(--accent); }
@@ -422,11 +424,10 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .add-field:focus-within { border-color: var(--accent); }
 .add-field input { flex: 1; min-width: 0; border: none; background: transparent; font: inherit; color: var(--ink); padding: 6px 0; }
 .add-field input:focus { outline: none; }
-.kind-seg { display: flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; font-size: 11px; flex-shrink: 0; }
-.kind-seg label { padding: 2px 8px; color: var(--muted); cursor: pointer; border-left: 1px solid var(--border); }
-.kind-seg label:first-child { border-left: 0; }
+.kind-seg { display: flex; gap: 4px; font-size: 11px; flex-shrink: 0; }
+.kind-seg label { padding: 2px 8px; color: var(--muted); cursor: pointer; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); }
 .kind-seg input { display: none; }
-.kind-seg label:has(input:checked) { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.kind-seg label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .suggest:empty { display: none; }
 .suggest { border: 1px solid var(--border); border-top: none; border-radius: 0 0 6px 6px; background: var(--panel); margin-top: -2px; }
 .sugg { display: flex; gap: 8px; width: 100%; text-align: left; padding: 6px 10px; font: inherit; font-size: 13px; background: none; border: 0; color: var(--ink); cursor: pointer; }
