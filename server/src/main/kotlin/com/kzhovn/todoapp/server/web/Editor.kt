@@ -373,8 +373,8 @@ private suspend fun io.ktor.server.application.ApplicationCall.respondSubtasks(s
 private val KIND_NOUNS = mapOf("subtask" to "subtask", "prerequisite" to "prerequisite", "dependent" to "dependent task")
 
 // A prerequisite's (amber) or dependent's (green) tinted tag.
-private fun FlowContent.kindTag(kind: String, text: String = kind) =
-    span(classes = "kind-tag ${if (kind == Labels.DEPENDENT) "dependent" else "prerequisite"}") { +text }
+private fun FlowContent.kindTag(kind: String) =
+    span(classes = "kind-tag ${if (kind == Labels.DEPENDENT) "dependent" else "prerequisite"}") { +kind }
 
 // What the add field may link as `kind`: no folders, nothing done, nothing already linked, and no loops.
 private fun relatedCandidates(service: TaskService, task: Task, kind: String, all: List<Task>): List<Task> {
@@ -847,9 +847,8 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
     fun kotlinx.html.HTMLTag.htmx(url: String) = hx("post", url, "#related")
     // A subtask's checkbox goes in front of its title, as every checkbox does; other rows keep its space.
     fun FlowContent.row(kind: String, t: Task, leading: FlowContent.() -> Unit = { span(classes = "check-space") {} }, trailing: FlowContent.() -> Unit) = div(classes = "rel-row") {
-        span(classes = "rel-kind") { kindTag(kind) }
         leading()
-        a(href = "/tasks/${t.id}?mode=$m", classes = if (t.isComplete) "done" else null) { +t.title }
+        a(href = "/tasks/${t.id}?mode=$m", classes = if (t.isComplete) "done" else null) { +t.title; kindTag(kind) }
         trailing()
     }
     fun FlowContent.unlink(url: String) = button(classes = "unlink") { htmx(url); attributes["aria-label"] = "Remove"; +"✕" }
@@ -895,7 +894,8 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
         attributes["aria-label"] = if (t.isComplete) "Mark not done" else "Complete"
         if (t.isComplete) icon(Icon.CHECK, "")
     } else span(classes = "check-space") {}
-    // Subtasks first, together on a faint tile; one that's also a prerequisite or dependent says so after its title.
+    // Subtasks first, together on a faint tile; then prerequisites and dependents, tagged after their titles
+    // (as a subtask that's also one is).
     if (subtasks.isNotEmpty()) div(classes = "sub-tile") { subtasks.forEach { sub ->
         val note = when (sub) { in prerequisites -> Labels.PREREQUISITE; in dependents -> Labels.DEPENDENT; else -> null }
         // Dragged by its handle (app.js), or moved with Alt+Up/Down.
@@ -906,7 +906,7 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
             check(sub)
             a(href = "/tasks/${sub.id}?mode=$m", classes = if (sub.isComplete) "done" else null) {
                 +sub.title
-                note?.let { kindTag(it, it.lowercase()) }
+                note?.let { kindTag(it) }
             }
             // ✕: move it out, unlink it (it stays a subtask), both, or delete it.
             details(classes = "pp unlink-menu") {

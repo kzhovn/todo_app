@@ -96,7 +96,7 @@ class RelatedSectionTest {
     fun aSubtaskTagsBeingAPrerequisite() {
         show(open())
         compose.onNodeWithText("Fill in the form").assertExists()
-        compose.onNodeWithText("prerequisite").assertExists() // the subtask says so after its title
+        compose.onAllNodesWithText("Prerequisite").assertCountEquals(2) // after the subtask, and after Pay rent
     }
 
     @Test

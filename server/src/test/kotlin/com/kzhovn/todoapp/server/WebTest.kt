@@ -534,7 +534,7 @@ class WebTest {
         service.addDependency(book.id, trip.id)
         val related = client.get("/tasks/${trip.id}").bodyAsText().substringAfter("id=\"related\"")
         assertEquals(1, Regex(">Book hotel<").findAll(related).count())
-        assertTrue(related.contains(">${Labels.DEPENDENT.lowercase()}<")) // the subtask says so after its title
+        assertTrue(related.contains(">${Labels.DEPENDENT}<")) // the subtask says so after its title
         client.post("/tasks/${trip.id}/dependent/${book.id}/remove")
         assertEquals(trip.id, service.get(book.id)!!.parentId)
         assertEquals(emptySet<Long>(), service.dependsOn(book.id))

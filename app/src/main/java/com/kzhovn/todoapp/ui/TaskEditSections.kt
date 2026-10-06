@@ -440,7 +440,7 @@ internal fun RelatedSection(vm: TaskEditViewModel, openTask: (Long) -> Unit, onA
     val hasSubtasks = subtasks.isNotEmpty() || (!isChecklist && vm.pendingSubtasks.isNotEmpty()) || vm.pendingChildIds.isNotEmpty()
     if (hasSubtasks) Column(Modifier.fillMaxWidth().padding(bottom = 4.dp).background(LedgerChip, RoundedCornerShape(8.dp)).padding(horizontal = 4.dp)) {
     subtasks.forEachIndexed { index, sub ->
-        // A subtask that's also a prerequisite or dependent says so after its title.
+        // A subtask that's also a prerequisite or dependent says so, as the rows below the tile do.
         val note = when (sub.id) { in prerequisiteIds -> RelatedKind.PREREQUISITE; in dependentIds -> RelatedKind.DEPENDENT; else -> null }
         var rowHeight by remember(sub.id) { mutableIntStateOf(1) }
         val dragging = dragId == sub.id
@@ -490,15 +490,15 @@ internal fun RelatedSection(vm: TaskEditViewModel, openTask: (Long) -> Unit, onA
     val subtaskIds = subtasks.map { it.id }.toSet()
     if (task.type != TaskType.FOLDER) {
         (vm.dependencyIds - subtaskIds).mapNotNull(vm.allById::get).sortedBy { it.title.lowercase() }.forEach { prereq ->
-            RelatedRow(prereq.title, done = prereq.isComplete, onOpen = { openTask(prereq.id) }, kind = RelatedKind.PREREQUISITE, leading = { RelatedCheck(vm, prereq) }) {
+            RelatedRow(prereq.title, done = prereq.isComplete, onOpen = { openTask(prereq.id) }, note = RelatedKind.PREREQUISITE, leading = { RelatedCheck(vm, prereq) }) {
                 RemoveButton { vm.dependencyIds = vm.dependencyIds - prereq.id }
             }
         }
         vm.pendingDependentIds.mapNotNull(vm.allById::get).forEach { dependent ->
-            RelatedRow(dependent.title, onOpen = { openTask(dependent.id) }, kind = RelatedKind.DEPENDENT) { RemoveButton { vm.pendingDependentIds = vm.pendingDependentIds - dependent.id } }
+            RelatedRow(dependent.title, onOpen = { openTask(dependent.id) }, note = RelatedKind.DEPENDENT) { RemoveButton { vm.pendingDependentIds = vm.pendingDependentIds - dependent.id } }
         }
         (dependentIds - subtaskIds).mapNotNull(vm.allById::get).forEach { dependent ->
-            RelatedRow(dependent.title, done = dependent.isComplete, onOpen = { openTask(dependent.id) }, kind = RelatedKind.DEPENDENT, leading = { RelatedCheck(vm, dependent) }) {
+            RelatedRow(dependent.title, done = dependent.isComplete, onOpen = { openTask(dependent.id) }, note = RelatedKind.DEPENDENT, leading = { RelatedCheck(vm, dependent) }) {
                 RemoveButton { vm.removeDependent(dependent.id) }
             }
         }
@@ -591,20 +591,18 @@ private enum class RelatedKind(val label: String, val ink: Color, val tint: Colo
 }
 
 @Composable
-private fun KindTag(kind: RelatedKind, modifier: Modifier = Modifier, text: String = kind.label) =
-    Text(text, fontSize = 10.sp, color = kind.ink, modifier = modifier.background(kind.tint, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp))
+private fun KindTag(kind: RelatedKind, modifier: Modifier = Modifier) =
+    Text(kind.label, fontSize = 10.sp, color = kind.ink, modifier = modifier.background(kind.tint, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 1.dp))
 
-// One related task: a prerequisite's or dependent's kind tag in front (`kind`), its checkbox (other
-// rows keep its space so titles line up), its title (tap opens it), a tag after it (`note`, a subtask
-// that's also a prerequisite or dependent), and a trailing ✕ where it can be removed.
+// One related task: its checkbox (other rows keep its space so titles line up), its title (tap opens
+// it), a Prerequisite or Dependent tag after it, and a trailing ✕ where it can be removed.
 @Composable
 private fun RelatedRow(
     title: String, done: Boolean = false, onOpen: (() -> Unit)?, modifier: Modifier = Modifier,
-    kind: RelatedKind? = null, note: RelatedKind? = null,
+    note: RelatedKind? = null,
     leading: @Composable () -> Unit = { Spacer(Modifier.width(34.dp)) }, trailing: @Composable () -> Unit
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier.fillMaxWidth().heightIn(min = 36.dp)) {
-        kind?.let { Box(Modifier.width(92.dp)) { KindTag(it) } }
         leading()
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -617,7 +615,7 @@ private fun RelatedRow(
                 color = if (done) LedgerMuted else LedgerInk,
                 modifier = Modifier.weight(1f, fill = false)
             )
-            note?.let { KindTag(it, Modifier.padding(start = 8.dp), it.label.lowercase()) }
+            note?.let { KindTag(it, Modifier.padding(start = 8.dp)) }
         }
         trailing()
     }
