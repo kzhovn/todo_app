@@ -10,6 +10,7 @@ import com.kzhovn.todoapp.data.newTaskPositions
 import com.kzhovn.todoapp.data.folderColorAssignments
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.resolvesBy
 import com.kzhovn.todoapp.data.TaskContextDao
 import com.kzhovn.todoapp.data.TaskDao
 import com.kzhovn.todoapp.data.TaskContextCrossRef
@@ -302,9 +303,11 @@ class TaskRepository(
         }
     }
 
-    // Deletes "Today only" tasks (and anything under them) once their day has rolled over.
-    // Bypasses deleteTask so it doesn't offer an undo for something the user didn't just do.
+    // Deletes "Today only" tasks (and anything under them) once their day has rolled over, and resolves
+    // waiting items whose date has come. Bypasses deleteTask so it doesn't offer an undo for something
+    // the user didn't just do.
     suspend fun purgeExpired(now: Long) {
+        taskDao.getAllOnce().filter { it.resolvesBy(now) }.forEach { markComplete(it.id, now) }
         taskDao.getAllOnce().filter { it.isExpired(now) }.forEach { task ->
             (taskDao.getDescendants(task.id) + task).forEach {
                 taskDao.deleteById(it.id)

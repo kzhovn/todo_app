@@ -32,6 +32,11 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.zIndex
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.CHECK_IN_CHOICES
+import com.kzhovn.todoapp.data.checkInEvery
+import com.kzhovn.todoapp.data.completed
+import com.kzhovn.todoapp.data.checkInText
+import com.kzhovn.todoapp.data.waitingFor
 import com.kzhovn.todoapp.data.ancestors
 import com.kzhovn.todoapp.data.moveOutFolderId
 import kotlin.math.roundToInt
@@ -159,7 +164,8 @@ internal fun TitleBox(vm: TaskEditViewModel, pinned: Boolean, onTogglePin: () ->
             }
         )
         // A starred task is never a maybe: turning either on turns the other off (Maybe is under Properties).
-        if (task.type != TaskType.FOLDER) {
+        // A waiting item isn't yours to do, so it has no star.
+        if (task.type != TaskType.FOLDER && task.type != TaskType.WAITING) {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.size(38.dp).clip(CircleShape).clickable { vm.task = task.copy(isStarred = !task.isStarred, isMaybe = task.isMaybe && task.isStarred) }
@@ -173,13 +179,55 @@ internal fun TitleBox(vm: TaskEditViewModel, pinned: Boolean, onTogglePin: () ->
 @Composable
 internal fun TypeRow(vm: TaskEditViewModel) {
     Spacer(Modifier.height(10.dp))
-    JoinedChoice(Labels.TYPES.map { it.second }, Labels.TYPES.indexOfFirst { it.first == vm.task.type }) { i -> vm.task = vm.task.copy(type = Labels.TYPES[i].first) }
+    JoinedChoice(Labels.TYPES.map { it.second }, Labels.TYPES.indexOfFirst { it.first == vm.task.type }) { i ->
+        val type = Labels.TYPES[i].first
+        // A waiting item has no star or priority (it never shows in Doing or Active).
+        vm.task = if (type == TaskType.WAITING) vm.task.copy(type = type, isStarred = false, isHighPriority = false, isMaybe = false) else vm.task.copy(type = type)
+    }
+}
+
+// A waiting item's timing: how often it comes up for a check-in, or the day it resolves itself (then
+// no check-ins).
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WaitingTiming(vm: TaskEditViewModel, activity: Activity) {
+    val task = vm.task
+    SectionLabel(Labels.WAITING)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        var showCheckIn by remember { mutableStateOf(false) }
+        Box {
+            PropertyChip(
+                label = Labels.CHECK_IN,
+                valueText = if (task.dueDate == null) CHECK_IN_CHOICES.firstOrNull { it.first == task.checkInEvery() }?.second ?: "Every ${task.checkInEvery()} days" else null,
+                icon = Icons.Filled.Repeat,
+                onClick = { if (task.dueDate == null) showCheckIn = true },
+                showLabelWhenSet = false
+            )
+            DropdownMenu(expanded = showCheckIn, onDismissRequest = { showCheckIn = false }, containerColor = LedgerSearchBackground) {
+                CHECK_IN_CHOICES.forEach { (days, label) ->
+                    DropdownMenuItem(text = { Text(label, color = LedgerInk) }, onClick = { showCheckIn = false; vm.task = vm.task.copy(checkInDays = days) })
+                }
+            }
+        }
+        PropertyChip(
+            label = Labels.RESOLVES_ON,
+            valueText = task.dueDate?.let { "Resolves ${formatChipDate(it)}" },
+            icon = Icons.Filled.Event,
+            onClick = { pickDate(activity, task.dueDate, title = Labels.RESOLVES_ON) { vm.task = vm.task.copy(dueDate = it) } },
+            onClear = { vm.task = vm.task.copy(dueDate = null) },
+            showLabelWhenSet = false
+        )
+    }
+    val now = System.currentTimeMillis()
+    val hint = task.dueDate?.let { "Resolves itself on ${formatChipDate(it)}." }
+        ?: if (vm.isNew) null else checkInText(task, now)
+    hint?.let { Text(it, fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.padding(top = 6.dp)) }
 }
 
 // High (!), normal or maybe (?). A maybe is hidden from Active and Doing and never starred.
 @Composable
 internal fun PrioritySection(vm: TaskEditViewModel) {
-    if (vm.task.type == TaskType.FOLDER) return
+    if (vm.task.type == TaskType.FOLDER || vm.task.type == TaskType.WAITING) return
     SectionLabel(Labels.PRIORITY)
     val task = vm.task
     JoinedChoice(Labels.PRIORITIES.map { it.third }, Labels.PRIORITIES.indexOfFirst { (high, maybe) -> task.isHighPriority == high && task.isMaybe == maybe }) { i ->
@@ -254,6 +302,7 @@ private fun QuickDateMenu(expanded: Boolean, label: String, choices: List<DateCh
 @Composable
 internal fun TimingSection(vm: TaskEditViewModel, activity: Activity, onRepeat: () -> Unit, onTimer: () -> Unit) {
     val task = vm.task
+    if (task.type == TaskType.WAITING) return WaitingTiming(vm, activity)
     SectionLabel(Labels.TIMING)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         // A long press offers quick choices: the snooze menu's for Start, today/tomorrow/next week for Due.
@@ -518,7 +567,7 @@ internal fun RelatedSection(vm: TaskEditViewModel, openTask: (Long) -> Unit, onA
 @Composable
 internal fun SubtaskOptions(vm: TaskEditViewModel) {
     val task = vm.task
-    if (task.type == TaskType.CHECKLIST) return
+    if (task.type == TaskType.CHECKLIST || task.type == TaskType.WAITING) return
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 8.dp)) {
         // Only the first incomplete child counts as active.
         TogglePill(Labels.SEQUENTIAL, Icons.Filled.FormatListNumbered, on = task.sequential) { vm.task = task.copy(sequential = !task.sequential) }
@@ -537,7 +586,13 @@ internal fun BottomBar(vm: TaskEditViewModel, onDelete: () -> Unit, onCompleteLi
         Spacer(Modifier.weight(1f))
         // Checking the last item completes nothing; a checklist is completed here, on purpose.
         if (vm.task.type == TaskType.CHECKLIST && !vm.isNew && !vm.task.isComplete) TextButton(onClick = onCompleteList) { Text(Labels.COMPLETE_LIST, color = LedgerAccent) }
-        Button(
+        // A waiting item is resolved here (Back still saves any edits).
+        if (vm.task.type == TaskType.WAITING && !vm.isNew && !vm.task.isComplete) Button(
+            onClick = { vm.task = vm.task.completed(System.currentTimeMillis()); onSave() },
+            enabled = vm.isLoaded && vm.task.title.isNotBlank(),
+            colors = ButtonDefaults.buttonColors(containerColor = LedgerGood, contentColor = LedgerAccentInk)
+        ) { Text(Labels.RESOLVED) }
+        else Button(
             onClick = onSave,
             enabled = vm.isLoaded && vm.task.title.isNotBlank(),
             colors = ButtonDefaults.buttonColors(containerColor = LedgerAccent, contentColor = LedgerAccentInk)
@@ -621,13 +676,14 @@ private fun RelatedRow(
     }
 }
 
-// A related task's checkbox (projects and checklists keep the space, so titles line up).
+// A related task's checkbox (a waiting item's hourglass; projects and checklists keep the space, so titles line up).
 @Composable
 private fun RelatedCheck(vm: TaskEditViewModel, t: Task) {
     if (t.type == TaskType.TASK) TaskCheckbox(
         checked = t.isComplete, due = t.dueDate?.takeUnless { t.isComplete }?.let { dueStatus(it, System.currentTimeMillis()) },
         size = 18.dp, touchSize = 34.dp, onCheckedChange = { vm.toggleComplete(t.id) }
-    ) else Spacer(Modifier.width(34.dp))
+    ) else if (t.type == TaskType.WAITING) WaitingMark(34.dp) // resolved from its own editor
+    else Spacer(Modifier.width(34.dp))
 }
 
 // A subtask's ✕: move it out to this task's folder, stop it being a prerequisite or dependent (it stays

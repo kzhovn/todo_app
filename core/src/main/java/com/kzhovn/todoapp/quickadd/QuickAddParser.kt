@@ -63,6 +63,8 @@ object QuickAddParser {
     private val remindAtRegex = Regex(
         "(?<!\\S)remind(?:\\s+me)?\\s+(?:(?:on|at)\\s+)?(?:(\\d+)\\s*(m|mins?|minutes?|h|hrs?|hours?|d|days?)|($DATE)(?:\\s+(?:at\\s+)?($TIME))?|($TIME))(?!\\S)", I
     )
+    // Only as the first word, with something after it ("wait" alone is a task called Wait).
+    private val waitRegex = Regex("^wait(?:ing)?\\s+(?=\\S)", I)
     private val pinRegex = Regex("(?<!\\S)-([pf])(?!\\S)", I)
     // "~30m", "~1h", "~1h30m", "~1.5h": a timed task, anywhere in the text.
     private val tildeRegex = Regex("(?<!\\S)~(?:(\\d+(?:\\.\\d+)?)h)?\\s?(?:(\\d+)m)?(?!\\S)", I)
@@ -129,6 +131,8 @@ object QuickAddParser {
         val flags = pinRegex.findAll(text).map { it.groupValues[1].lowercase() }.toSet()
         text = text.replace(pinRegex, "")
         text = text.replace(Regex("\\s+"), " ").trim()
+        // "wait …" first: a waiting item.
+        val waiting = waitRegex.find(text)?.also { text = text.removeRange(it.range) } != null
         // A "?", "*" or "!" ending the title itself (after the flags and phrases above are stripped) marks a
         // maybe, a star or high priority; one elsewhere, like "update(?) bug", is just part of the title.
         // A maybe is never starred nor high priority.
@@ -162,7 +166,7 @@ object QuickAddParser {
         if (recurrenceType == RecurrenceType.RRULE && startDate == null) startDate = firstOccurrence(recurrenceRule!!, now)
         val task = Task(
             title = text,
-            type = if (items != null) TaskType.CHECKLIST else TaskType.TASK,
+            type = if (items != null) TaskType.CHECKLIST else if (waiting) TaskType.WAITING else TaskType.TASK,
             startDate = startDate,
             dueDate = dueDate,
             isMaybe = isMaybe,

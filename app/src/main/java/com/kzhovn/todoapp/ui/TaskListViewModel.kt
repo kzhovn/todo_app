@@ -19,6 +19,8 @@ import com.kzhovn.todoapp.repository.ContextRepository
 import com.kzhovn.todoapp.repository.TaskRepository
 import com.kzhovn.todoapp.repository.dayOfWeekMask
 import com.kzhovn.todoapp.repository.filterDoing
+import com.kzhovn.todoapp.data.stillWaiting
+import com.kzhovn.todoapp.data.waitingToCheck
 import com.kzhovn.todoapp.repository.minuteOfDay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -74,6 +76,20 @@ class TaskListViewModel(
     private val _dueOutside = MutableStateFlow<List<Task>>(emptyList())
     val dueOutside: StateFlow<List<Task>> = _dueOutside
 
+    // Doing's quiet Waiting section: waiting items whose check-in has come round (see waitingToCheck).
+    private val _waiting = MutableStateFlow<List<Task>>(emptyList())
+    val waiting: StateFlow<List<Task>> = _waiting
+    // How many open tasks each of those blocks.
+    private val _waitingBlocks = MutableStateFlow<Map<Long, Int>>(emptyMap())
+    val waitingBlocks: StateFlow<Map<Long, Int>> = _waitingBlocks
+
+    fun stillWaiting(taskId: Long) {
+        viewModelScope.launch {
+            _allById.value[taskId]?.let { repository.updateTask(stillWaiting(it, clock())) }
+            reload()
+        }
+    }
+
     fun load(mode: TaskListMode) {
         shown = Shown.Tab(mode)
         reload()
@@ -105,6 +121,12 @@ class TaskListViewModel(
         val byId = _allById.value
         val folder = _mode.value?.id
         _dueOutside.value = emptyList()
+        _waiting.value = if (mode == TaskListMode.DOING) waitingToCheck(all, now).filter { inMode(it, folder, byId) } else emptyList()
+        if (_waiting.value.isNotEmpty()) {
+            val ids = _waiting.value.map { it.id }.toSet()
+            _waitingBlocks.value = repository.getAllDependencyEdges().filter { it.dependsOnTaskId in ids && byId[it.taskId]?.isComplete == false }
+                .groupingBy { it.dependsOnTaskId }.eachCount()
+        }
         _tasks.value = when (mode) {
             // The tree roots itself at the mode's folder (OutlinerScreen's rootId).
             TaskListMode.ALL -> all

@@ -100,6 +100,28 @@ class RelatedSectionTest {
     }
 
     @Test
+    fun renderWaiting() {
+        val dir = System.getenv("RENDER_DIR") ?: return
+        val made = System.currentTimeMillis() - 9L * 24 * 3600_000
+        val roommate = Task(id = made shl 11, title = "Roommate decides", type = TaskType.WAITING, parentId = 1)
+        runBlocking { open(); db.taskDao().insert(roommate); repository.addDependency(6, roommate.id) }
+        val vm = TaskEditViewModel(repository, ContextRepository(db.taskContextDao()), taskId = roommate.id).also { runBlocking { it.load(null, null); it.refresh() } }
+        compose.setContent {
+            LedgerTheme {
+                Column(Modifier.padding(16.dp)) {
+                    Breadcrumb(vm) {}; TitleBox(vm, false, {}, {}, {}); TypeRow(vm); TimingSection(vm, compose.activity, {}, {}); RelatedSection(vm, {}, {}, {}, {}); BottomBar(vm, {}, {}, {})
+                    com.kzhovn.todoapp.WaitingSection(listOf(roommate), mapOf(roommate.id to 1), {}, {}, {}, {})
+                }
+            }
+        }
+        compose.waitForIdle()
+        val root = compose.activity.window.decorView
+        val bitmap = Bitmap.createBitmap(root.width, root.height * 3 / 4, Bitmap.Config.ARGB_8888)
+        root.draw(android.graphics.Canvas(bitmap))
+        File(dir, "waiting.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    @Test
     fun render() = draw(open(), "related")
 
     @Test

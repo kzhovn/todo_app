@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.data.OutlinerPreferences
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.data.waitingFor
 import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerInk
@@ -297,8 +298,9 @@ private fun OutlinerRow(
                         )
                     }
                 }
-                TaskType.TASK, TaskType.PROJECT, TaskType.CHECKLIST -> {
+                TaskType.TASK, TaskType.PROJECT, TaskType.CHECKLIST, TaskType.WAITING -> {
                     if (task.type == TaskType.PROJECT) ProjectMark(36.dp)
+                    else if (task.type == TaskType.WAITING) WaitingMark(36.dp)
                     else if (task.type == TaskType.CHECKLIST) CountMark(itemCounts?.first ?: 0, itemCounts?.second ?: 0, touchSize = 36.dp) { onEdit(task.id) }
                     else TaskCheckbox(checked = task.isComplete, due = task.dueDate?.takeUnless { task.isComplete }?.let { dueStatus(it, System.currentTimeMillis()) }, size = 20.dp, touchSize = 36.dp, onCheckedChange = { onCheck(task.id) })
                     Spacer(Modifier.width(6.dp))
@@ -313,7 +315,13 @@ private fun OutlinerRow(
                     if (task.isHighPriority) PriorityMark()
                     if (!task.notes.isNullOrBlank()) NotesMark()
                     task.durationMinutes?.let { TimerButton(task, it) }
-                    if (task.isMaybe) {
+                    if (task.type == TaskType.WAITING) {
+                        // How long it's been waiting, or the day it resolves itself.
+                        val now = System.currentTimeMillis()
+                        (task.dueDate?.let { "resolves ${formatChipDate(it)}" } ?: waitingFor(task, now)?.let { "waiting $it" })?.let {
+                            Text(it, fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.padding(horizontal = 8.dp))
+                        }
+                    } else if (task.isMaybe) {
                         MaybeMark(36.dp)
                     } else {
                         IconButton(onClick = { onStar(task.id) }, modifier = Modifier.size(36.dp)) { StarIcon(task.isStarred) }

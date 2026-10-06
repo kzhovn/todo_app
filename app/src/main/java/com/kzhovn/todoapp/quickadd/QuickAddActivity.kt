@@ -85,7 +85,7 @@ class QuickAddActivity : ComponentActivity() {
         val created = mutableListOf<Long>()
         setContent {
             LedgerTheme {
-            var title by remember { mutableStateOf("") }
+            var title by remember { mutableStateOf(intent.getStringExtra(EXTRA_TEXT).orEmpty()) }
             var starred by remember { mutableStateOf(startStarred) }
             var startDate by remember { mutableStateOf<Long?>(null) }
             var dueDate by remember { mutableStateOf<Long?>(null) }
@@ -274,6 +274,8 @@ class QuickAddActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_PARENT_ID = "parent_id"
+        // Text to start with (a waiting item's "Follow up").
+        const val EXTRA_TEXT = "text"
         const val EXTRA_FOLDER_ID = "folder_id"
         const val EXTRA_DEPENDS_ON = "depends_on"
         const val EXTRA_STARRED = "starred"

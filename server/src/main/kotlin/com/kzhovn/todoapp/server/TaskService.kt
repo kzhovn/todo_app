@@ -28,6 +28,8 @@ import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.DEFAULT_ROLLOVER_HOUR
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.resolvesBy
+import com.kzhovn.todoapp.data.stillWaiting
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskOrder
@@ -73,8 +75,10 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     // Deletes "Today only" tasks whose day is over, so the phone drops them too even if it was
     // offline at rollover. Reads already hide them; this makes it permanent.
+    // Deletes "Today only" tasks past their day, and resolves waiting items whose date has come.
     fun purgeExpired() = store.transaction {
         val now = clock()
+        tasks().filter { it.resolvesBy(now) }.forEach { complete(it.id) }
         store.all(TASKS).filter { !it.isDeleted && it.toTask().isExpired(now) }.forEach { tombstone(it.id, now) }
     }
 
@@ -114,6 +118,15 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         )
         return urgentFirst(if (folderId == null) active else active.filter { it.id in subtreeIds(folderId) }, clock(), all.associateBy { it.id }, contexts)
     }
+
+    // Doing's quiet Waiting section: waiting items due a check-in (waitingToCheck), in the mode's folder.
+    fun waitingToCheck(folderId: Long? = modeFolderId()): List<Task> {
+        val all = tasks()
+        val byId = all.associateBy { it.id }
+        return com.kzhovn.todoapp.data.waitingToCheck(all, clock()).filter { inMode(it, folderId, byId) }
+    }
+
+    fun stillWaiting(id: Long) { get(id)?.takeIf { it.type == TaskType.WAITING }?.let { t -> update(id) { stillWaiting(t, clock()) } } }
 
     // Review's "Waiting now": Active with contexts ignored, so a task held back only by a context counts.
     // In the mode's folder, unless `everywhere`.

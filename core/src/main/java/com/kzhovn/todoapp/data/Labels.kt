@@ -19,6 +19,14 @@ object Labels {
     const val PROJECT = "Project"
     const val FOLDER = "Folder"
     const val CHECKLIST = "Checklist"
+    const val WAITING = "Waiting"
+    // A waiting item's section in the editor, and its actions.
+    const val CHECK_IN = "Check in"
+    const val RESOLVES_ON = "Resolves on"
+    const val STILL_WAITING = "Still waiting"
+    const val RESOLVED = "Resolved"
+    const val FOLLOW_UP = "Follow up"
+    fun followUp(title: String) = "Ask about: $title"
 
     const val START = "Start"
     const val DUE = "Due"
@@ -75,6 +83,7 @@ object Labels {
         "every 4 days after done" to "repeat after completion",
         "1 hour of …, ~30m" to "timed task",
         "ends with * · ? · !" to "starred · maybe · high priority",
+        "wait …" to "a waiting item (blocks, but isn't yours to do)",
         "-p · -f" to "pin it · focus on it",
         "remind start · remind 30m before" to "a reminder when it starts · before it's due",
         "remind fri 5pm · remind 30m" to "a reminder at a time · in 30 minutes",
@@ -111,7 +120,7 @@ object Labels {
     const val ADD_NEXT = "Add next"
     const val LATER = "Later"
 
-    val TYPES = listOf(TaskType.TASK to TASK, TaskType.PROJECT to PROJECT, TaskType.CHECKLIST to CHECKLIST, TaskType.FOLDER to FOLDER)
+    val TYPES = listOf(TaskType.TASK to TASK, TaskType.PROJECT to PROJECT, TaskType.CHECKLIST to CHECKLIST, TaskType.FOLDER to FOLDER, TaskType.WAITING to WAITING)
 
     // A checklist's items
     const val ITEMS = "Items"

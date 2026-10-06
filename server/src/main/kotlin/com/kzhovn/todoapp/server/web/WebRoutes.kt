@@ -89,6 +89,11 @@ fun Route.webRoutes(service: TaskService) {
     }
 
     // A task with open subtasks asks first, like the phone: complete them too, or move them out.
+    // A waiting item's "Still waiting": hidden until its next check-in.
+    post("/tasks/{id}/still-waiting") {
+        call.taskId()?.let(service::stillWaiting)
+        call.respondList(service, call.mode())
+    }
     post("/tasks/{id}/complete") {
         val id = call.taskId() ?: return@post
         val mode = call.mode()

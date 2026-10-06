@@ -783,6 +783,32 @@ class WebTest {
     }
 
     @Test
+    fun `waiting items - quick add, a quiet section under Doing when a check-in is due, still waiting, resolved, a date`() = web {
+        client.submitForm("/quickadd", parameters { append("text", "wait roommate decides") })
+        val roommate = service.tasks().single { it.title == "roommate decides" }
+        assertEquals(TaskType.WAITING, roommate.type)
+        val spare = service.create(Task(title = "Clear the spare room"))
+        service.addDependency(spare.id, roommate.id)
+        // Never in Active; it blocks its dependent; no section until a check-in is due.
+        assertEquals(emptyList<String>(), service.active(null).map { it.title })
+        assertFalse(client.get("/doing").bodyAsText().contains("waiting-section"))
+        service.update(roommate.id) { it.copy(startDate = service.now() - 1000) }
+        val doing = client.get("/doing").bodyAsText()
+        assertTrue(doing.contains("waiting-section") && doing.contains("blocks 1"))
+        // Still waiting hides it again (three days on, by default).
+        client.post("/tasks/${roommate.id}/still-waiting?mode=DOING")
+        assertFalse(client.get("/doing").bodyAsText().contains("waiting-section"))
+        assertTrue(service.get(roommate.id)!!.startDate!! > service.now() + 2 * 24 * 3600_000L)
+        // Resolved: its dependent comes into Active.
+        client.post("/tasks/${roommate.id}/complete?mode=DOING")
+        assertEquals(listOf("Clear the spare room"), service.active(null).map { it.title })
+        // A dated one resolves itself once its day comes.
+        val inspection = service.create(Task(title = "Landlord's inspection", type = TaskType.WAITING, dueDate = service.now() - 1000))
+        service.purgeExpired()
+        assertTrue(service.get(inspection.id)!!.isComplete)
+    }
+
+    @Test
     fun `the morning digest is turned off in Settings, and the newest setting wins across devices`() = web {
         assertTrue(service.digestOn())
         assertTrue(client.get("/settings").bodyAsText().contains("name=\"digest\" checked"))

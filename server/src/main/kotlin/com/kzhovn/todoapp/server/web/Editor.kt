@@ -23,6 +23,9 @@ import com.kzhovn.todoapp.data.hasTime
 import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.data.ancestors
+import com.kzhovn.todoapp.data.CHECK_IN_CHOICES
+import com.kzhovn.todoapp.data.checkInEvery
+import com.kzhovn.todoapp.data.checkInText
 import com.kzhovn.todoapp.data.moveOutFolderId
 import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
@@ -361,6 +364,7 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     }
     if (inherit == "update") service.clearInherited(overriding, changed)
     if (needsFirstStep) service.addTyped(firstStep, under = savedId)
+    if (params["resolve"] != null) service.complete(savedId)
     if (id == null && params["pin"] != null) service.pin(savedId)
     newSubtasks.forEach { service.addTyped(it, under = savedId) }
     createTyped(newDependent)?.let { service.addDependency(it, savedId) }
@@ -403,20 +407,24 @@ private fun parseForm(p: Parameters, base: EditState, recurrence: RecurrenceSele
     val (recurrenceType, recurrenceRule) =
         if (recurrence == recurrenceSelectionFromTask(base.task.recurrenceType, base.task.recurrenceRule)) base.task.recurrenceType to base.task.recurrenceRule
         else recurrence.toTaskFields()
+    val type = p["type"]?.let { runCatching { TaskType.valueOf(it) }.getOrNull() } ?: base.task.type
+    // A waiting item has no star or priority; its date is "Resolves on", and it has a check-in interval.
+    val waiting = type == TaskType.WAITING
     val task = base.task.copy(
         title = p["title"].orEmpty().trim(),
-        type = p["type"]?.let { runCatching { TaskType.valueOf(it) }.getOrNull() } ?: base.task.type,
-        isStarred = p["starred"] != null,
+        type = type,
+        isStarred = p["starred"] != null && !waiting,
         startDate = dateTime(p["startDate"], p["startTime"]),
-        dueDate = dateTime(p["dueDate"], p["dueTime"]),
+        dueDate = if (waiting) dateTime(p["resolvesDate"], p["resolvesTime"]) else dateTime(p["dueDate"], p["dueTime"]),
+        checkInDays = p["checkIn"]?.toIntOrNull() ?: base.task.checkInDays,
         reminderOffsetMinutes = p["reminder"]?.toIntOrNull(),
         remindAtStart = p["remindStart"] != null,
         remindAt = dateTime(p["remindAtDate"], p["remindAtTime"]),
         parentId = p["parent"]?.toLongOrNull(),
         recurrenceType = recurrenceType,
         recurrenceRule = recurrenceRule,
-        isMaybe = p["priority"] == "maybe",
-        isHighPriority = p["priority"] == "high",
+        isMaybe = p["priority"] == "maybe" && !waiting,
+        isHighPriority = p["priority"] == "high" && !waiting,
         durationMinutes = p["duration"]?.toIntOrNull()?.takeIf { it > 0 },
         expiresAt = if (p["today"] != null) base.task.expiresAt ?: nextRollover(service.now(), service.rolloverHour()) else null,
         sequential = p["sequential"] != null,
@@ -560,7 +568,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
                 pinControl(t, service.pinned()?.id == t.id)
             }
             textArea(classes = "title-input") { name = "title"; rows = "1"; placeholder = Labels.TITLE; required = true; +t.title }
-            label(classes = "flag-toggle star-toggle task-only") {
+            label(classes = "flag-toggle star-toggle task-only not-waiting") {
                 attributes["title"] = Labels.STAR
                 checkBoxInput(name = "starred") { checked = t.isStarred }
                 icon(Icon.STAR, "")
@@ -576,9 +584,26 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
             }
         }
 
+        // A waiting item's timing instead (CSS shows one or the other by the type picked): how often it comes
+        // up for a check-in, or the day it resolves itself.
+        div(classes = "field-label section waiting-only") { +Labels.WAITING }
+        div(classes = "pills waiting-only") {
+            popPill(Labels.CHECK_IN, Icon.REPEAT, CHECK_IN_CHOICES.firstOrNull { it.first == t.checkInEvery() }?.second, "select", "") {
+                select {
+                    name = "checkIn"
+                    CHECK_IN_CHOICES.forEach { (days, label) -> option { value = days.toString(); selected = t.checkInEvery() == days; +label } }
+                }
+            }
+            datePill(Labels.RESOLVES_ON, "resolves", Icon.CALENDAR, t.dueDate.takeIf { t.type == TaskType.WAITING }, "")
+        }
+        if (t.type == TaskType.WAITING && !isNew) p(classes = "hint waiting-only") {
+            val now = service.now()
+            +(t.dueDate?.let { "Resolves itself on ${pillDate(it)}." }
+                ?: checkInText(t, now))
+        }
         // Everything about when, as pills that open a small popover (app.js keeps their text current).
-        div(classes = "field-label section") { +Labels.TIMING }
-        div(classes = "pills when") {
+        div(classes = "field-label section not-waiting") { +Labels.TIMING }
+        div(classes = "pills when not-waiting") {
             // Quick choices under the fields: the snooze menu's for Start, days for Due (the phone's long press).
             val now = service.now()
             val day = { n: Long -> LocalDate.now().plusDays(n).toString() to "" }
@@ -707,8 +732,8 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
             a(href = "/contexts", classes = "pill manage") { +Labels.MANAGE_CONTEXTS }
         }
         // High (!), normal or maybe (?), picked like the type. A maybe is hidden from Active and Doing.
-        div(classes = "field-label section task-only") { +Labels.PRIORITY }
-        div(classes = "type-seg task-only") {
+        div(classes = "field-label section task-only not-waiting") { +Labels.PRIORITY }
+        div(classes = "type-seg task-only not-waiting") {
             Labels.PRIORITIES.forEach { (high, maybe, text) ->
                 label {
                     radioInput(name = "priority") { value = if (high) "high" else if (maybe) "maybe" else "normal"; checked = t.isHighPriority == high && t.isMaybe == maybe }
@@ -740,7 +765,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
     // Outside the form (so Related tasks can sit above them), tied to it by the form attribute.
     div(classes = "editor-foot") {
         // Subtask options (none for a checklist, via CSS).
-        div(classes = "subtask-options") {
+        div(classes = "subtask-options not-waiting") {
             div(classes = "pills") {
                 // Only the first incomplete child counts as active.
                 togglePill("sequential", t.sequential, Icon.LIST_NUMBERED, Labels.SEQUENTIAL, form = formId)
@@ -777,7 +802,11 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
             }
             span(classes = "hint") { id = "save-status" }
             a(href = v.list.path, classes = "cancel") { +"Cancel" }
-            button(type = ButtonType.submit, classes = "primary") { attributes["form"] = formId; +Labels.SAVE }
+            // A waiting item is resolved here (it saves itself as it's edited).
+            if (!isNew && t.type == TaskType.WAITING && !t.isComplete) button(type = ButtonType.submit, classes = "primary resolve") {
+                attributes["form"] = formId; name = "resolve"; value = "1"; +Labels.RESOLVED
+            }
+            else button(type = ButtonType.submit, classes = "primary") { attributes["form"] = formId; +Labels.SAVE }
         }
     }
 }
@@ -826,7 +855,7 @@ private fun FlowContent.datePill(label: String, prefix: String, icon: Icon, mill
     }
 
 // The phone's chip date: "Sep 25", or "Sep 25 3:00 PM" with a time. app.js formats the same way.
-private fun pillDate(millis: Long): String =
+internal fun pillDate(millis: Long): String =
     java.text.SimpleDateFormat("MMM d", java.util.Locale.US).format(java.util.Date(millis)) +
         if (hasTime(millis)) " " + java.text.SimpleDateFormat("h:mm a", java.util.Locale.US).format(java.util.Date(millis)) else ""
 
@@ -889,7 +918,8 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
     val subtasks = all.filter { it.parentId == id && !isChecklist }.sortedWith(TaskOrder)
     val outFolder = moveOutFolderId(task, byId)?.let { byId[it]?.title }
     // A task's checkbox goes in front of its title (projects and checklists keep the space).
-    fun FlowContent.check(t: Task) = if (t.type == TaskType.TASK) button(classes = if (t.isComplete) "check done" else "check") {
+    fun FlowContent.check(t: Task) = if (t.type == TaskType.WAITING) span(classes = "check-space waiting-mark") { icon(Icon.HOURGLASS, "") }
+    else if (t.type == TaskType.TASK) button(classes = if (t.isComplete) "check done" else "check") {
         htmx("/tasks/$id/subtasks/${t.id}/toggle?mode=$m")
         attributes["aria-label"] = if (t.isComplete) "Mark not done" else "Complete"
         if (t.isComplete) icon(Icon.CHECK, "")

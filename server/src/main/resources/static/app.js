@@ -606,6 +606,14 @@
   document.addEventListener("change", (e) => {
     if (e.target.matches?.(".add-related input[name=kind]")) e.target.form.querySelector("input[name=text]").dispatchEvent(new Event("kindchange"));
   });
+  // A waiting item's "Follow up": a task of your own to chase it, typed into quick add for you to finish.
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest?.("[data-follow-up]");
+    const box = b && document.getElementById("quickadd");
+    if (!box) return;
+    box.value = b.dataset.followUp;
+    box.focus();
+  });
   document.addEventListener("paste", (e) => {
     const form = e.target.closest?.(".add-related");
     const lines = (e.clipboardData?.getData("text") ?? "").split(/\r?\n/).filter((l) => l.trim());

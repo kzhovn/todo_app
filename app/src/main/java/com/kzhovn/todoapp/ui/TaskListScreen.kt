@@ -63,6 +63,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.HourglassEmpty
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
@@ -254,6 +255,7 @@ private fun TaskRow(
             Box(Modifier.width(4.dp).fillMaxHeight().background(barColor))
             when (task.type) {
                 TaskType.PROJECT -> ProjectMark(36.dp)
+                TaskType.WAITING -> WaitingMark(36.dp)
                 // A checklist is ticked off item by item, inside it; its row shows how far along it is.
                 TaskType.CHECKLIST -> CountMark(subtasks?.first ?: 0, subtasks?.second ?: 0, touchSize = 36.dp) { onEdit(task.id) }
                 else -> TaskCheckbox(checked = task.isComplete, due = status, touchSize = 36.dp, onCheckedChange = { onCheck(task.id) })
@@ -391,6 +393,15 @@ const val BACKBURNER_ALPHA = 0.45f
 fun ProjectMark(size: Dp = 40.dp) {
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         Icon(Icons.Filled.AccountTree, contentDescription = "Project", tint = LedgerAccent, modifier = Modifier.size(size * 0.5f))
+    }
+}
+
+// A waiting item's plain hourglass, in the checkbox's place: it's resolved from its editor or the
+// Waiting section, not ticked off.
+@Composable
+fun WaitingMark(size: Dp = 40.dp) {
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        Icon(Icons.Outlined.HourglassEmpty, contentDescription = Labels.WAITING, tint = LedgerMuted, modifier = Modifier.size(size * 0.5f))
     }
 }
 

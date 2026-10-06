@@ -6,8 +6,9 @@ import androidx.room.PrimaryKey
 import kotlinx.serialization.Serializable
 
 // A PROJECT is completed as a whole once its subtasks are done; it has no checkbox of its own and
-// never shows in Active/Doing (its subtasks do).
-enum class TaskType { TASK, FOLDER, PROJECT, CHECKLIST }
+// never shows in Active/Doing (its subtasks do). A WAITING item is something you're blocked on but
+// don't do yourself (someone getting back to you, a date): see Waiting.kt.
+enum class TaskType { TASK, FOLDER, PROJECT, CHECKLIST, WAITING }
 
 // Something you do and tick off: a task or a checklist. Not a folder, nor a project (which completes
 // by its steps). What lists, pickers and bulk edit deal in.
@@ -69,7 +70,9 @@ data class Task(
     // Reminders beyond reminderOffsetMinutes (before due): one when it starts, and one at any time.
     // See reminderTimes.
     @ColumnInfo(defaultValue = "0") val remindAtStart: Boolean = false,
-    val remindAt: Long? = null
+    val remindAt: Long? = null,
+    // Waiting items: days between check-ins (null: DEFAULT_CHECK_IN_DAYS). The next check-in is startDate.
+    val checkInDays: Int? = null
 ) {
     fun isExpired(now: Long): Boolean = expiresAt != null && expiresAt <= now
 

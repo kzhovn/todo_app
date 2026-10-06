@@ -178,6 +178,9 @@ label.pin-toggle { cursor: pointer; }
 .rep:not(:has([name=unit][value=MONTH]:checked)) .rep-month { display: none; }
 /* Folders have no due date, repeat, dependencies or maybe (the server clears them too). */
 .editor:has(input[name=type][value=FOLDER]:checked) .task-only { display: none; }
+/* A waiting item: its own timing (check-in, resolves on) instead of the task's; no star, priority or subtask options. */
+body:has(.editor input[name=type][value=WAITING]:checked) .not-waiting { display: none; }
+body:not(:has(.editor input[name=type][value=WAITING]:checked)) .waiting-only { display: none; }
 /* Like the phone, reminders are for tasks: a project completes when its steps do. */
 .editor:has(input[name=type][value=PROJECT]:checked) .reminder { display: none; }
 .actions { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
@@ -436,6 +439,22 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .add-link { color: var(--accent); cursor: pointer; font-size: 14px; }
 .new-subtasks, .new-dep { width: 100%; max-width: 520px; }
 .new-subtasks { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
+
+/* Doing's quiet Waiting section, and a waiting item's hourglass wherever it shows. */
+.waiting-mark { color: var(--muted); }
+.waiting-section { border-top: 1px solid var(--border); margin: 14px 12px 0; padding-top: 4px; }
+.waiting-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 4px 0 2px 4px; }
+.waiting-row { display: flex; align-items: center; gap: 10px; padding: 5px 4px; font-size: 14px; color: var(--muted); }
+.waiting-row .waiting-mark { display: flex; width: 18px; justify-content: center; }
+.waiting-row a { color: var(--ink); opacity: .8; text-decoration: none; }
+.waiting-row a:hover { text-decoration: underline; }
+.waiting-row .meta { margin-left: auto; font-size: 11px; white-space: nowrap; }
+.waiting-actions { display: none; gap: 6px; }
+.waiting-row:hover .waiting-actions, .waiting-row:focus-within .waiting-actions { display: flex; }
+.waiting-actions button { font: inherit; font-size: 11px; border: 1px solid var(--border); border-radius: 5px; padding: 2px 8px; color: var(--muted); background: var(--panel); cursor: pointer; }
+.waiting-actions .go { color: var(--good); border-color: var(--good); }
+.rel-row .waiting-mark { display: flex; align-items: center; justify-content: center; }
+.primary.resolve { background: var(--good); border-color: var(--good); }
 
 /* Checklists */
 .count { flex-shrink: 0; margin-left: 6px; min-width: 22px; text-align: center; font-size: 11px; font-weight: 500; color: var(--accent); border: 1px solid var(--border); border-radius: 999px; padding: 1px 6px; text-decoration: none; }

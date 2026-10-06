@@ -18,6 +18,7 @@ import kotlinx.html.HTMLTag
 import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.waitingFor
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.DueStatus
 import com.kzhovn.todoapp.data.dueStatus
@@ -90,6 +91,10 @@ class ListData(
     val modeFolder: Task? = service.modeFolder()
     // Doing in a mode: what's due today or overdue outside it, in one line under the list.
     val dueOutside: List<Task> = if (mode == ListMode.DOING && modeFolder != null) service.dueOutsideMode() else emptyList()
+    // Doing's quiet Waiting section: waiting items due a check-in, and how many open tasks each blocks.
+    val waiting: List<Task> = if (mode == ListMode.DOING) service.waitingToCheck() else emptyList()
+    val waitingBlocks: Map<Long, Int> = if (waiting.isEmpty()) emptyMap() else
+        service.dependencyEdges().filter { e -> waiting.any { it.id == e.dependsOnTaskId } && byId[e.taskId]?.isComplete == false }.groupingBy { it.dependsOnTaskId }.eachCount()
     private val contextIds = service.contextIdsByTask()
     private val folderColors = folderColorsHex(all)
     private val counts = subtaskCounts(all)
@@ -134,6 +139,7 @@ internal fun HTMLTag.hx(verb: String, url: String, target: String = "#list") {
 internal enum class Icon(val path: String) {
     FOLDER("M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"),
     PROJECT("M22 11V3h-7v3H9V3H2v8h7V8h2v10h4v3h7v-8h-7v3h-2V8h2v3z"), // AccountTree
+    HOURGLASS("M6 2v6h.01L6 8.01 10 12l-4 4 .01.01H6V22h12v-5.99h-.01L18 16l-4-4 4-3.99-.01-.01H18V2H6zm10 14.5V20H8v-3.5l4-4 4 4zm-4-5-4-4V4h8v3.5l-4 4z"), // HourglassEmpty (outlined)
     STAR("M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"),
     REPEAT("M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"),
     NOTES("M3 18h12v-2H3v2zM3 6v2h18V6H3zm0 7h18v-2H3v2z"), // Notes
@@ -405,6 +411,24 @@ fun DIV.listContents(data: ListData) {
         summary { +"${data.dueOutside.size} due today outside ${data.modeFolder!!.title} · "; span(classes = "show") { +"show" } }
         data.dueOutside.forEach { taskRow(data, it, depth = 0) }
     }
+    // Waiting items due a check-in, quietly under a hairline; gone entirely when there are none.
+    if (data.waiting.isNotEmpty()) div(classes = "waiting-section") {
+        div(classes = "waiting-label") { +Labels.WAITING }
+        val m = data.q
+        data.waiting.forEach { t ->
+            div(classes = "waiting-row") {
+                span(classes = "waiting-mark") { icon(Icon.HOURGLASS, "") }
+                a(href = "/tasks/${t.id}?mode=$m", classes = "edit") { openInPanel(); +t.title }
+                span(classes = "meta") { +listOfNotNull(waitingFor(t, data.now), data.waitingBlocks[t.id]?.let { "blocks $it" }).joinToString(" · ") }
+                span(classes = "waiting-actions") {
+                    button { hx("post", "/tasks/${t.id}/still-waiting?mode=$m"); +Labels.STILL_WAITING }
+                    button(classes = "go") { hx("post", "/tasks/${t.id}/complete?mode=$m"); +Labels.RESOLVED }
+                    // Fills the quick add box (app.js) with a task to chase it up.
+                    button { attributes["data-follow-up"] = Labels.followUp(t.title); +Labels.FOLLOW_UP }
+                }
+            }
+        }
+    }
 }
 
 // Enters folder mode on this folder (null: leaves it) on every device, then reloads the page into it.
@@ -475,6 +499,9 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
         val status = due?.let { dueStatus(it, data.now) }
         if (task.type == TaskType.PROJECT) {
             span(classes = "project") { attributes["title"] = "Project: completes when its steps are done"; icon(Icon.PROJECT, "") }
+        } else if (task.type == TaskType.WAITING) {
+            // Not ticked off: resolved from its editor or Doing's Waiting section.
+            span(classes = "project waiting-mark") { attributes["title"] = Labels.WAITING; icon(Icon.HOURGLASS, "") }
         } else if (task.type == TaskType.CHECKLIST) {
             // Ticked item by item, inside it; the row shows how far along it is and opens it.
             val (done, total) = data.subtaskCounts(task) ?: (0 to 0)
@@ -496,8 +523,10 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                 if (task.isHighPriority) span(classes = "priority-high") { attributes["title"] = "High priority"; +"!" }
                 // On the title's line, wrapping along with it.
                 due?.let { dueTail(it, status!!, data.now) }
-                // A start still to come (the All tree shows snoozed and future tasks).
-                task.startDate?.takeIf { it > data.now && !task.isComplete }?.let { span(classes = "tail") { +" · ${startText(it, data.now)}" } }
+                // A start still to come (the All tree shows snoozed and future tasks); a waiting item's own line.
+                if (task.type == TaskType.WAITING) {
+                    if (!task.isComplete) (task.dueDate?.let { "resolves ${pillDate(it)}" } ?: waitingFor(task, data.now)?.let { "waiting $it" })?.let { span(classes = "tail") { +" · $it" } }
+                } else task.startDate?.takeIf { it > data.now && !task.isComplete }?.let { span(classes = "tail") { +" · ${startText(it, data.now)}" } }
                 if (task.type != TaskType.CHECKLIST) data.subtaskCounts(task)?.let { (done, total) -> span(classes = "tail") { +" · $done/$total" } }
                 if (task.recurrenceType != null) span(classes = "badge") { attributes["title"] = "Recurring"; icon(Icon.REPEAT, "") }
                 if (!task.notes.isNullOrBlank()) span(classes = "has-notes") { attributes["title"] = "Has notes"; icon(Icon.NOTES, "") }
