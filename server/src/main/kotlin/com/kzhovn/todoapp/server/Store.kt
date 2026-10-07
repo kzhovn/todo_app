@@ -35,44 +35,29 @@ class Store(path: String) {
     @Volatile
     var onChange: ((before: SyncRow?, after: SyncRow) -> Unit)? = null
 
-    // Merged rows get fresh versions, so they come back in the response too — the client needs the
-    // merged result, not just what it sent.
-    // The newer setting wins; ties go to the incoming one, so a phone that never set it still counts
-    // until the web sets it.
-    fun setRolloverHour(hour: Int, setAt: Long) = transaction {
-        if (setAt >= rolloverSetAt()) {
-            setValue(ROLLOVER_HOUR_KEY, hour.toString())
-            setValue(ROLLOVER_SET_AT_KEY, setAt.toString())
+    // A synced setting (see SyncRequest): the newer one wins. 0 is "never set", so a device that hasn't
+    // set it changes nothing. The rollover hour lets a tie through too, so a phone that never set it
+    // still counts until the web sets it.
+    private fun setNewer(key: String, setAtKey: String, value: String?, setAt: Long, tieWins: Boolean = false) = transaction {
+        val current = getValue(setAtKey)?.toLongOrNull() ?: 0
+        if (setAt > current || (tieWins && setAt == current)) {
+            setValue(key, value)
+            setValue(setAtKey, setAt.toString())
         }
     }
 
+    fun setRolloverHour(hour: Int, setAt: Long) = setNewer(ROLLOVER_HOUR_KEY, ROLLOVER_SET_AT_KEY, hour.toString(), setAt, tieWins = true)
     private fun rolloverSetAt() = getValue(ROLLOVER_SET_AT_KEY)?.toLongOrNull() ?: 0
 
-    // Folder mode (null: none), newest wins. 0 is "never set", so a device that hasn't set it changes nothing.
-    fun setMode(folderId: Long?, setAt: Long) = transaction {
-        if (setAt > modeSetAt()) {
-            setValue(MODE_FOLDER_KEY, folderId?.toString())
-            setValue(MODE_SET_AT_KEY, setAt.toString())
-        }
-    }
-
+    // Folder mode (null: none).
+    fun setMode(folderId: Long?, setAt: Long) = setNewer(MODE_FOLDER_KEY, MODE_SET_AT_KEY, folderId?.toString(), setAt)
     fun modeFolderId(): Long? = getValue(MODE_FOLDER_KEY)?.toLongOrNull()
 
-    // Whether Discord posts the morning digest (on unless turned off), newest setting wins like the mode.
-    fun setDigestOn(on: Boolean, setAt: Long) = transaction {
-        if (setAt > digestSetAt()) {
-            setValue(DIGEST_ON_KEY, on.toString())
-            setValue(DIGEST_SET_AT_KEY, setAt.toString())
-        }
-    }
+    // Whether Discord posts the morning digest (on unless turned off).
+    fun setDigestOn(on: Boolean, setAt: Long) = setNewer(DIGEST_ON_KEY, DIGEST_SET_AT_KEY, on.toString(), setAt)
 
-    // The hour a date-only reminder goes off (see reminderTimes), newest setting wins like the digest's.
-    fun setReminderHour(hour: Int, setAt: Long) = transaction {
-        if (setAt > reminderHourSetAt()) {
-            setValue(REMINDER_HOUR_KEY, hour.toString())
-            setValue(REMINDER_HOUR_SET_AT_KEY, setAt.toString())
-        }
-    }
+    // The hour a date-only reminder goes off (see reminderTimes).
+    fun setReminderHour(hour: Int, setAt: Long) = setNewer(REMINDER_HOUR_KEY, REMINDER_HOUR_SET_AT_KEY, hour.toString(), setAt)
 
     fun reminderHour(): Int = getValue(REMINDER_HOUR_KEY)?.toIntOrNull() ?: DEFAULT_REMINDER_HOUR
     fun reminderHourSetAt() = getValue(REMINDER_HOUR_SET_AT_KEY)?.toLongOrNull() ?: 0
@@ -81,6 +66,8 @@ class Store(path: String) {
     fun digestSetAt() = getValue(DIGEST_SET_AT_KEY)?.toLongOrNull() ?: 0
     fun modeSetAt() = getValue(MODE_SET_AT_KEY)?.toLongOrNull() ?: 0
 
+    // Merged rows get fresh versions, so they come back in the response too — the client needs the
+    // merged result, not just what it sent.
     @Synchronized
     fun sync(request: SyncRequest): SyncResponse {
         val changed = mutableListOf<Pair<SyncRow?, SyncRow>>()
