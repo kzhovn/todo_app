@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.recurrence.recurrenceToSave
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -15,7 +16,6 @@ import com.kzhovn.todoapp.quickadd.QuickAddParser
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
 import com.kzhovn.todoapp.recurrence.RecurrenceSelection
 import com.kzhovn.todoapp.recurrence.recurrenceSelectionFromTask
-import com.kzhovn.todoapp.recurrence.toTaskFields
 import com.kzhovn.todoapp.repository.ContextRepository
 import com.kzhovn.todoapp.data.moveOutFolderId
 import com.kzhovn.todoapp.repository.InheritedField
@@ -130,7 +130,7 @@ class TaskEditViewModel(
         if (task.type == TaskType.FOLDER) {
             task.typeRule() to emptySet()
         } else {
-            val (recurrenceType, recurrenceRule) = if (recurrence == loadedRecurrence) task.recurrenceType to task.recurrenceRule else recurrence.toTaskFields()
+            val (recurrenceType, recurrenceRule) = recurrenceToSave(recurrence, task)
             task.copy(recurrenceType = recurrenceType, recurrenceRule = recurrenceRule) to dependencyIds
         }
 

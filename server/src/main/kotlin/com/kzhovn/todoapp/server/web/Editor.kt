@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.recurrence.recurrenceToSave
 import com.kzhovn.todoapp.server.quickAddChips
 import com.kzhovn.todoapp.quickadd.QuickAdd
 import com.kzhovn.todoapp.data.isDoable
@@ -391,10 +392,7 @@ private fun FlowContent.kindTag(kind: String) =
 private fun Parameters.ids(name: String) = getAll(name).orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
 
 private fun parseForm(p: Parameters, base: EditState, recurrence: RecurrenceSelection, service: TaskService): EditState {
-    // An imported rule the picker can't show is kept as long as the picker isn't touched.
-    val (recurrenceType, recurrenceRule) =
-        if (recurrence == recurrenceSelectionFromTask(base.task.recurrenceType, base.task.recurrenceRule)) base.task.recurrenceType to base.task.recurrenceRule
-        else recurrence.toTaskFields()
+    val (recurrenceType, recurrenceRule) = recurrenceToSave(recurrence, base.task)
     val type = p["type"]?.let { runCatching { TaskType.valueOf(it) }.getOrNull() } ?: base.task.type
     // A waiting item's date is "Resolves on" (Task.typeRule drops its star and priority on save).
     val waiting = type == TaskType.WAITING

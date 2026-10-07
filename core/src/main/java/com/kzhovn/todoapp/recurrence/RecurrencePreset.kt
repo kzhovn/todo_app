@@ -1,6 +1,7 @@
 package com.kzhovn.todoapp.recurrence
 
 import com.kzhovn.todoapp.data.RecurrenceType
+import com.kzhovn.todoapp.data.Task
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
@@ -129,3 +130,9 @@ val WEEKDAY_NAMES = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 val NTH_NAMES = listOf(1 to "first", 2 to "second", 3 to "third", 4 to "fourth", -1 to "last")
 
 fun ordinal(n: Int): String = "$n" + if (n % 100 in 11..13) "th" else when (n % 10) { 1 -> "st"; 2 -> "nd"; 3 -> "rd"; else -> "th" }
+
+// The repeat fields to save from the editor's picker. The picker only knows simple rules, so one it shows
+// approximately (an imported rule) is kept exactly as it was unless the picker was actually changed.
+fun recurrenceToSave(picked: RecurrenceSelection, saved: Task): Pair<RecurrenceType?, String?> =
+    if (picked == recurrenceSelectionFromTask(saved.recurrenceType, saved.recurrenceRule)) saved.recurrenceType to saved.recurrenceRule
+    else picked.toTaskFields()
