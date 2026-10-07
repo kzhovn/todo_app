@@ -77,7 +77,7 @@ class BulkEditActivity : ComponentActivity() {
                     }
                     Section(Labels.MAYBE_CHOICE) {
                         Choice(Labels.KEEP, edit.maybe == null) { edit = edit.copy(maybe = null) }
-                        Choice(Labels.MAYBE_YES, edit.maybe == true) { edit = edit.copy(maybe = true, starred = edit.starred.takeIf { it != true }) }
+                        Choice(Labels.MAYBE, edit.maybe == true) { edit = edit.copy(maybe = true, starred = edit.starred.takeIf { it != true }) }
                         Choice(Labels.NOT_MAYBE, edit.maybe == false) { edit = edit.copy(maybe = false) }
                     }
                     DateSection(Labels.START_DATE, edit.startDate) { edit = edit.copy(startDate = it) }

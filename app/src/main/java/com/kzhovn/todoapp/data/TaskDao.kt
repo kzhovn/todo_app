@@ -52,8 +52,6 @@ interface TaskDao {
     @Query("SELECT dependsOnTaskId FROM task_dependencies WHERE taskId = :taskId")
     suspend fun getDependencyIds(taskId: Long): List<Long>
 
-    @Query("SELECT * FROM tasks WHERE parentId = :parentId")
-    suspend fun getChildren(parentId: Long): List<Task>
 
     @Query("DELETE FROM task_dependencies WHERE taskId = :taskId AND dependsOnTaskId = :dependsOnTaskId")
     suspend fun removeDependency(taskId: Long, dependsOnTaskId: Long)

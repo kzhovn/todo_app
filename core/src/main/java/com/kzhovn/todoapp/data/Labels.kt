@@ -57,7 +57,6 @@ object Labels {
     const val KEEP = "Keep"
     const val UNSTAR = "Unstar"
     const val MAYBE_CHOICE = "Maybe (?)"
-    const val MAYBE_YES = "Maybe"
     const val NOT_MAYBE = "Not maybe"
     const val START_DATE = "Start date"
     const val DUE_DATE = "Due date"
