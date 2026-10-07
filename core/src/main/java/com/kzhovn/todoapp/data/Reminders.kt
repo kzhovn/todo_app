@@ -23,13 +23,13 @@ fun reminderTimes(task: Task, hour: Int): Map<ReminderKind, Long> {
 // The chip's and pill's text: "At start · 1h before due · Oct 6 3:00 PM"; null with none set.
 fun reminderSummary(task: Task, hour: Int): String? = buildList {
     if (task.remindAtStart && task.startDate != null) add("At start")
-    if (task.dueDate != null) task.reminderOffsetMinutes?.let { add(Labels.REMINDERS.firstOrNull { r -> r.first == it }?.second?.let(::shortBefore) ?: "${it}m before due") }
+    if (task.dueDate != null) task.reminderOffsetMinutes?.let { add(beforeDueText(it)) }
     task.remindAt?.let { add(reminderTimeText(if (hasTime(it)) it else atTime(it, hour, 0))) }
 }.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 
 fun reminderTimeText(ms: Long): String = SimpleDateFormat("MMM d", Locale.US).format(Date(ms)) + " " + timeText(ms)
 
-private fun shortBefore(label: String) = when (label) {
-    "At due time" -> "At due time"
-    else -> label.replace(" min", "m").replace(" hour", "h").replace(" day", "d").replace("before", "before due")
-}
+// A before-due reminder in short: "1h before due", "At due time" (the web's pill takes it from the option).
+fun beforeDueText(minutes: Int): String = Labels.REMINDERS.firstOrNull { it.first == minutes }?.second?.let { label ->
+    if (minutes == 0) label else label.replace(" min", "m").replace(" hour", "h").replace(" day", "d").replace("before", "before due")
+} ?: "${minutes}m before due"

@@ -4,6 +4,7 @@ import com.kzhovn.todoapp.server.quickAddChips
 import com.kzhovn.todoapp.quickadd.QuickAdd
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.reminderSummary
+import com.kzhovn.todoapp.data.beforeDueText
 import com.kzhovn.todoapp.repository.changedInheritedFields
 import com.kzhovn.todoapp.data.checklistItems
 import com.kzhovn.todoapp.recurrence.ordinal
@@ -603,7 +604,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
                 div(classes = "pop-label") { +"Before it's due" }
                 select {
                     name = "reminder"
-                    Labels.REMINDERS.forEach { (m, label) -> option { value = m?.toString().orEmpty(); selected = t.reminderOffsetMinutes == m; +label } }
+                    Labels.REMINDERS.forEach { (m, label) -> option { value = m?.toString().orEmpty(); selected = t.reminderOffsetMinutes == m; m?.let { attributes["data-short"] = beforeDueText(it) }; +label } }
                 }
                 div(classes = "pop-label") { +"At a time" }
                 val at = t.remindAt?.let(::localDateTime)
