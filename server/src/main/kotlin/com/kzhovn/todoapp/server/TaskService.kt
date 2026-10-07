@@ -31,6 +31,7 @@ import com.kzhovn.todoapp.data.canDependOn
 import com.kzhovn.todoapp.data.canMoveUnder
 import com.kzhovn.todoapp.repository.TaskChanges
 import com.kzhovn.todoapp.repository.planClearChecked
+import com.kzhovn.todoapp.repository.planAddItems
 import com.kzhovn.todoapp.repository.planComplete
 import com.kzhovn.todoapp.repository.planPromoteChildren
 import com.kzhovn.todoapp.repository.planPurgeExpired
@@ -241,7 +242,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     // See planQuickAddWrite (shared with the app). Returns the task (the checklist, for items).
     fun add(add: QuickAdd, defaultParent: Long?, star: Boolean = false): Task? = store.transaction {
-        val (change, id) = planQuickAddWrite(tasks(), add, defaultParent, clock(), star)
+        val (change, id) = planQuickAddWrite(tasks(), add, defaultParent, clock(), ::planQuickAdd, star)
         apply(change)
         id?.let(::get)
     }
@@ -413,9 +414,8 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     }
 
     // Checklists; mirror TaskRepository's addItems, clearChecked, uncheckAll and completeChecklist.
-    fun addItems(checklistId: Long, text: String) = addItems(checklistId, splitItems(text))
-
-    private fun addItems(checklistId: Long, items: List<String>) = store.transaction { items.forEach { create(Task(title = it, parentId = checklistId)) } }
+    // See planAddItems (shared with the app): each item is read with quick add's syntax.
+    fun addItems(checklistId: Long, text: String) = apply(planAddItems(tasks(), checklistId, splitItems(text), clock(), ::planQuickAdd))
 
     fun findChecklist(name: String): Task? = tasks().firstOrNull { it.type == TaskType.CHECKLIST && !it.isComplete && it.title.trim().equals(name.trim(), ignoreCase = true) }
 

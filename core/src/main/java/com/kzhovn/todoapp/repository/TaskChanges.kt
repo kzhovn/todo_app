@@ -95,15 +95,34 @@ fun planCreate(all: List<Task>, task: Task, contextIds: Set<Long> = emptySet(), 
     )
 }
 
+// A checklist item typed with quick add's syntax (`plan` is planQuickAdd): what applies to an item is kept
+// (dates, * ! ?, a timer, a repeat, a note, @contexts, today only); a folder, items of its own, pin or
+// focus, or another type are not.
+fun checklistItem(text: String, checklistId: Long, plan: (String) -> QuickAdd): Pair<Task, Set<Long>>? =
+    plan(text).let { add -> add.task?.takeIf { it.title.isNotBlank() }?.let { it.copy(type = TaskType.TASK, parentId = checklistId) to add.contextIds } }
+
+// Items into a checklist, each as checklistItem reads it, in order at its end.
+fun planAddItems(all: List<Task>, checklistId: Long, items: List<String>, now: Long, plan: (String) -> QuickAdd): TaskChanges {
+    var current = all
+    var total = TaskChanges()
+    for (text in items) {
+        val (item, contextIds) = checklistItem(text, checklistId, plan) ?: continue
+        val change = planCreate(current, item, contextIds, now)
+        current = change.applyTo(current)
+        total += change
+    }
+    return total
+}
+
 // Carries out a quick add (see planQuickAdd): the task with its contexts and items, pinned or focused if
 // asked, or the items into an existing checklist. Returns the changes and the task's id (the checklist's,
-// for items). `star`: added while looking at Doing, so it shows up there.
-fun planQuickAddWrite(all: List<Task>, add: QuickAdd, defaultParent: Long?, now: Long, star: Boolean = false): Pair<TaskChanges, Long?> {
+// for items). `star`: added while looking at Doing, so it shows up there. `plan` reads each item.
+fun planQuickAddWrite(all: List<Task>, add: QuickAdd, defaultParent: Long?, now: Long, plan: (String) -> QuickAdd, star: Boolean = false): Pair<TaskChanges, Long?> {
     if (add.isEmpty) return TaskChanges() to null
     var current = all
     var total = TaskChanges()
     fun step(change: TaskChanges) { current = change.applyTo(current); total += change }
-    fun items(parent: Long) = add.items.forEach { step(planCreate(current, Task(title = it, parentId = parent), now = now)) }
+    fun items(parent: Long) = step(planAddItems(current, parent, add.items, now, plan))
     add.intoChecklist?.let { id -> items(id); return total to id }
     val task = add.task ?: return TaskChanges() to null
     val created = planCreate(current, task.copy(parentId = task.parentId ?: defaultParent, isStarred = task.isStarred || (star && !task.isMaybe)), add.contextIds, now)

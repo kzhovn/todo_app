@@ -8,6 +8,7 @@ import com.kzhovn.todoapp.data.splitItems
 import com.kzhovn.todoapp.data.folderColorAssignments
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.DEFAULT_ROLLOVER_HOUR
 import com.kzhovn.todoapp.data.TaskContextDao
 import com.kzhovn.todoapp.data.TaskDao
 import com.kzhovn.todoapp.data.TaskContextCrossRef
@@ -25,7 +26,9 @@ import kotlinx.coroutines.flow.StateFlow
 class TaskRepository(
     private val taskDao: TaskDao,
     private val reminderScheduler: ReminderScheduler,
-    private val taskContextDao: TaskContextDao
+    private val taskContextDao: TaskContextDao,
+    // Settings' day rollover, for quick add's "today only" (d:) in checklist items.
+    private val rolloverHour: () -> Int = { DEFAULT_ROLLOVER_HOUR }
 ) {
 
     private val _lastDeleted = MutableStateFlow<List<Task>?>(null)
@@ -223,14 +226,24 @@ class TaskRepository(
         taskDao.getDescendants(taskId).count { it.type != TaskType.FOLDER && !it.isComplete }
 
     // Checklist items: "milk, eggs" adds two, in order, at the end of the list.
-    suspend fun addItems(checklistId: Long, text: String) = splitItems(text).forEach { createTask(Task(title = it, parentId = checklistId)) }
+    // See planAddItems (shared with the server): each item is read with quick add's syntax.
+    suspend fun addItems(checklistId: Long, text: String) {
+        val now = System.currentTimeMillis()
+        apply(planAddItems(taskDao.getAllOnce(), checklistId, splitItems(text), now, itemPlanner(now)), now)
+    }
+
+    private suspend fun itemPlanner(now: Long): (String) -> QuickAdd {
+        val all = taskDao.getAllOnce()
+        val contexts = taskContextDao.getAll()
+        return { planQuickAdd(it, all, contexts, now, rolloverHour()) }
+    }
 
     suspend fun planQuickAdd(text: String, rolloverHour: Int, now: Long): QuickAdd =
         planQuickAdd(text, taskDao.getAllOnce(), taskContextDao.getAll(), now, rolloverHour)
 
     // See planQuickAddWrite (shared with the server). Returns the task's id (the checklist's, for items).
     suspend fun quickAdd(add: QuickAdd, defaultParent: Long?, now: Long): Long? {
-        val (change, id) = planQuickAddWrite(taskDao.getAllOnce(), add, defaultParent, now)
+        val (change, id) = planQuickAddWrite(taskDao.getAllOnce(), add, defaultParent, now, itemPlanner(now))
         apply(change, now)
         return id
     }

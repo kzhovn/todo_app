@@ -59,7 +59,7 @@ class TodoApp : Application() {
         ReminderScheduler(this, getSystemService(ALARM_SERVICE) as AlarmManager)
     }
     val repository: TaskRepository by lazy {
-        TaskRepository(database.taskDao(), reminderScheduler, database.taskContextDao())
+        TaskRepository(database.taskDao(), reminderScheduler, database.taskContextDao(), rolloverHour = { AppSettings.rolloverHour(this) })
     }
     val contextRepository: ContextRepository by lazy { ContextRepository(database.taskContextDao()) }
     val syncClient: SyncClient by lazy { SyncClient(this, database, reminderScheduler) }

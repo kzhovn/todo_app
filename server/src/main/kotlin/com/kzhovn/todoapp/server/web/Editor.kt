@@ -370,7 +370,8 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     if (needsFirstStep) service.addTyped(firstStep, under = savedId)
     if (params["resolve"] != null) service.complete(savedId)
     if (id == null && params["pin"] != null) service.pin(savedId)
-    newSubtasks.forEach { service.addTyped(it, under = savedId) }
+    // A new checklist's lines are its items (see checklistItem); a task's, its subtasks.
+    newSubtasks.forEach { if (service.get(savedId)?.type == TaskType.CHECKLIST) service.addItems(savedId, it) else service.addTyped(it, under = savedId) }
     createTyped(newDependent)?.let { service.addDependency(it, savedId) }
     call.respondRedirect(call.listPath())
 }

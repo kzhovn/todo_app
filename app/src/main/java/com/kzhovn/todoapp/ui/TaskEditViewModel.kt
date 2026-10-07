@@ -144,7 +144,10 @@ class TaskEditViewModel(
             repository.setDependencies(savedId, dependencies)
             contextRepository.setTaskContexts(savedId, contexts)
             repository.clearInherited(clearOn, fields)
-            pendingSubtasks.forEach { repository.createTask(QuickAddParser.parse(it).copy(parentId = savedId)) }
+            // A new checklist's items go in as items (see checklistItem); a task's as subtasks.
+            pendingSubtasks.forEach {
+                if (toSave.type == TaskType.CHECKLIST) repository.addItems(savedId, it) else repository.createTask(QuickAddParser.parse(it).copy(parentId = savedId))
+            }
             pendingChildIds.forEach { repository.reparent(it, savedId) }
             pendingDependentIds.forEach { repository.addDependency(it, savedId) }
             task = toSave
