@@ -253,13 +253,7 @@ private fun TaskRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(Modifier.width(4.dp).fillMaxHeight().background(barColor))
-            when (task.type) {
-                TaskType.PROJECT -> ProjectMark(36.dp)
-                TaskType.WAITING -> WaitingMark(36.dp)
-                // A checklist is ticked off item by item, inside it; its row shows how far along it is.
-                TaskType.CHECKLIST -> CountMark(subtasks?.first ?: 0, subtasks?.second ?: 0, touchSize = 36.dp) { onEdit(task.id) }
-                else -> TaskCheckbox(checked = task.isComplete, due = status, touchSize = 36.dp, onCheckedChange = { onCheck(task.id) })
-            }
+            TaskMark(task, subtasks, status, onCheck = { onCheck(task.id) }, onOpen = { onEdit(task.id) })
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
                 Text(
                     // A subtask reads "Parent: subtask", with the parent dimmer; tapping the parent
@@ -394,6 +388,16 @@ fun ProjectMark(size: Dp = 40.dp) {
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         Icon(Icons.Filled.AccountTree, contentDescription = "Project", tint = LedgerAccent, modifier = Modifier.size(size * 0.5f))
     }
+}
+
+// What leads a task's row (the lists' and the All tree's), by type: a project's icon, a waiting item's
+// hourglass, a checklist's count (ticked item by item, inside it; tapping opens it), or a checkbox.
+@Composable
+fun TaskMark(task: Task, counts: Pair<Int, Int>?, due: DueStatus?, checkboxSize: Dp = 22.dp, onCheck: () -> Unit, onOpen: () -> Unit) = when (task.type) {
+    TaskType.PROJECT -> ProjectMark(36.dp)
+    TaskType.WAITING -> WaitingMark(36.dp)
+    TaskType.CHECKLIST -> CountMark(counts?.first ?: 0, counts?.second ?: 0, touchSize = 36.dp, onClick = onOpen)
+    else -> TaskCheckbox(checked = task.isComplete, due = due, size = checkboxSize, touchSize = 36.dp, onCheckedChange = onCheck)
 }
 
 // A waiting item's plain hourglass, in the checkbox's place: it's resolved from its editor or the

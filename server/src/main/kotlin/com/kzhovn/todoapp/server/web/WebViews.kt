@@ -11,6 +11,7 @@ import kotlinx.html.h2
 import kotlinx.html.img
 import kotlinx.html.A
 import kotlinx.html.ASIDE
+import kotlinx.html.BUTTON
 import kotlinx.html.ButtonType
 import com.kzhovn.todoapp.data.OutlinerNode
 import com.kzhovn.todoapp.data.buildOutlinerTree
@@ -127,6 +128,20 @@ class ListData(
 
 // The same colour families as the app (folderColorsArgb in :core), as CSS colours.
 internal fun folderColorsHex(tasks: Collection<Task>): Map<Long, String> = folderColorsArgb(tasks).mapValues { "#%06X".format(it.value and 0xFFFFFF) }
+
+// What leads a task's row, by type: a project's icon, a waiting item's hourglass (it's resolved from its
+// editor or Doing's Waiting section), a checklist's "3/8" (ticked item by item, inside it; opens it), or
+// a folder's icon (search only), or a task's checkbox, which `check` sets up (what ticking it does differs by list).
+internal fun FlowContent.taskMark(task: Task, counts: Pair<Int, Int>?, mode: String, check: BUTTON.() -> Unit) = when (task.type) {
+    TaskType.PROJECT -> span(classes = "project") { attributes["title"] = "Project: completes when its steps are done"; icon(Icon.PROJECT, "") }
+    TaskType.WAITING -> span(classes = "project waiting-mark") { attributes["title"] = Labels.WAITING; icon(Icon.HOURGLASS, "") }
+    TaskType.FOLDER -> span(classes = "project") { icon(Icon.FOLDER, "") } // search results only
+    TaskType.CHECKLIST -> {
+        val (done, total) = counts ?: (0 to 0)
+        a(href = "/tasks/${task.id}?mode=$mode", classes = "count") { attributes["title"] = Labels.CHECKLIST; +"$done/$total" }
+    }
+    else -> button(classes = "check") { check() }
+}
 
 // An htmx request whose response replaces `target` (the list, by default).
 internal fun HTMLTag.hx(verb: String, url: String, target: String = "#list") {
@@ -498,22 +513,11 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
         outlineNode?.invoke(this)
         val due = data.effectiveDue(task)?.takeUnless { task.isComplete }
         val status = due?.let { dueStatus(it, data.now) }
-        if (task.type == TaskType.PROJECT) {
-            span(classes = "project") { attributes["title"] = "Project: completes when its steps are done"; icon(Icon.PROJECT, "") }
-        } else if (task.type == TaskType.WAITING) {
-            // Not ticked off: resolved from its editor or Doing's Waiting section.
-            span(classes = "project waiting-mark") { attributes["title"] = Labels.WAITING; icon(Icon.HOURGLASS, "") }
-        } else if (task.type == TaskType.CHECKLIST) {
-            // Ticked item by item, inside it; the row shows how far along it is and opens it.
-            val (done, total) = data.subtaskCounts(task) ?: (0 to 0)
-            a(href = "/tasks/${task.id}?mode=$mode", classes = "count") { attributes["title"] = Labels.CHECKLIST; +"$done/$total" }
-        } else {
-            button(classes = "check") {
-                // Due today: an orange ring; overdue: rust. Each with a pale fill of its own colour.
-                when (status) { DueStatus.OVERDUE -> classes = classes + "overdue"; DueStatus.TODAY -> classes = classes + "today"; else -> {} }
-                hx("post", "/tasks/${task.id}/complete?mode=$mode")
-                attributes["aria-label"] = "Complete"
-            }
+        taskMark(task, data.subtaskCounts(task), mode) {
+            // Due today: an orange ring; overdue: rust. Each with a pale fill of its own colour.
+            when (status) { DueStatus.OVERDUE -> classes = classes + "overdue"; DueStatus.TODAY -> classes = classes + "today"; else -> {} }
+            hx("post", "/tasks/${task.id}/complete?mode=$mode")
+            attributes["aria-label"] = "Complete"
         }
         div(classes = "main") {
             div(classes = "title") {

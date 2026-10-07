@@ -299,10 +299,10 @@ private fun OutlinerRow(
                     }
                 }
                 TaskType.TASK, TaskType.PROJECT, TaskType.CHECKLIST, TaskType.WAITING -> {
-                    if (task.type == TaskType.PROJECT) ProjectMark(36.dp)
-                    else if (task.type == TaskType.WAITING) WaitingMark(36.dp)
-                    else if (task.type == TaskType.CHECKLIST) CountMark(itemCounts?.first ?: 0, itemCounts?.second ?: 0, touchSize = 36.dp) { onEdit(task.id) }
-                    else TaskCheckbox(checked = task.isComplete, due = task.dueDate?.takeUnless { task.isComplete }?.let { dueStatus(it, System.currentTimeMillis()) }, size = 20.dp, touchSize = 36.dp, onCheckedChange = { onCheck(task.id) })
+                    TaskMark(
+                        task, itemCounts, task.dueDate?.takeUnless { task.isComplete }?.let { dueStatus(it, System.currentTimeMillis()) }, checkboxSize = 20.dp,
+                        onCheck = { onCheck(task.id) }, onOpen = { onEdit(task.id) }
+                    )
                     Spacer(Modifier.width(6.dp))
                     Text(
                         task.title,

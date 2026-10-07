@@ -41,6 +41,7 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import kotlinx.html.BUTTON
 import kotlinx.html.ButtonType
 import kotlinx.html.DIV
 import kotlinx.html.FlowContent
@@ -231,17 +232,15 @@ private fun DIV.searchResults(service: TaskService, p: Parameters) {
         // One line, like a list row: its folder's colour bar, the title, then where it lives and when it's due.
         div(classes = "result") {
             task.parentId?.let { walkParentChain(it, byId) { id -> colors[id] } }?.let { style = "border-left-color: $it" }
-            if (task.type == TaskType.TASK) button(classes = if (task.isComplete) "check done" else "check") {
+            taskMark(task, counts[task.id], "ALL") {
+                if (task.isComplete) classes = classes + "done"
                 attributes["hx-post"] = "/search/toggle/${task.id}"
                 attributes["hx-include"] = "form.search"
                 attributes["hx-target"] = "#results"
                 attributes["hx-swap"] = "outerHTML"
                 attributes["aria-label"] = if (task.isComplete) "Mark not done" else "Complete"
                 if (task.isComplete) icon(Icon.CHECK, "")
-            } else if (task.type == TaskType.CHECKLIST) {
-                val (done, total) = counts[task.id] ?: (0 to 0)
-                a(href = "/tasks/${task.id}?mode=ALL", classes = "count") { attributes["title"] = Labels.CHECKLIST; +"$done/$total" }
-            } else span(classes = "project") { icon(Icon.PROJECT, "") }
+            }
             a(href = "/tasks/${task.id}?mode=ALL", classes = if (task.isComplete) "done" else null) { +task.title }
             if (!task.notes.isNullOrBlank()) span(classes = "has-notes") { attributes["title"] = "Has notes"; icon(Icon.NOTES, "") }
             div(classes = "meta") {
