@@ -49,6 +49,8 @@ import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.TaskContext
+import com.kzhovn.todoapp.data.contextProblem
+import com.kzhovn.todoapp.data.deleteContextQuestion
 import com.kzhovn.todoapp.ui.ConfirmDialog
 import com.kzhovn.todoapp.ui.DayOfWeekToggle
 import com.kzhovn.todoapp.ui.SelectablePill
@@ -249,9 +251,7 @@ class ContextsActivity : ComponentActivity() {
                                 resetForm()
                             }
                         },
-                        enabled = name.isNotBlank() &&
-                            (type == ContextType.PLACE && wifiSsid != null ||
-                                type == ContextType.TIME && windows.isNotEmpty()),
+                        enabled = contextProblem(TaskContext(name = name, type = type, wifiSsid = wifiSsid), windows) == null,
                         colors = ButtonDefaults.buttonColors(containerColor = LedgerAccent, contentColor = LedgerAccentInk)
                     ) {
                         Text(if (editingContextId == null) "Create" else "Save")
@@ -265,7 +265,7 @@ class ContextsActivity : ComponentActivity() {
             contextPendingDelete?.let { ctx ->
                 ConfirmDialog(
                     title = "Delete this context?",
-                    body = "\"${ctx.name}\" will be removed from every task using it. This can't be undone.",
+                    body = deleteContextQuestion(ctx.name),
                     confirmLabel = "Delete",
                     onConfirm = {
                         contextPendingDelete = null

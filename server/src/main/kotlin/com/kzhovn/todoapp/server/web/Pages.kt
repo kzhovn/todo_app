@@ -13,6 +13,9 @@ import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.contextProblem
+import com.kzhovn.todoapp.data.describeContext
+import com.kzhovn.todoapp.data.deleteContextQuestion
 import com.kzhovn.todoapp.data.folderTree
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.sectionsByTopFolder
@@ -143,12 +146,7 @@ fun Route.pageRoutes(service: TaskService) {
     post("/contexts") {
         val p = call.receiveParameters()
         val form = parseContextForm(p)
-        val error = when {
-            form.context.name.isBlank() -> "A name is required."
-            form.context.type == ContextType.PLACE && form.context.wifiSsid.isNullOrBlank() -> "A place needs its wifi network's name."
-            form.context.type == ContextType.TIME && form.windows.isEmpty() -> "A time context needs at least one window."
-            else -> null
-        }
+        val error = contextProblem(form.context, form.windows)
         if (error != null) return@post call.respondHtml { contextsPage(service, form.copy(error = error)) }
         service.saveContext(form.context, form.windows)
         call.respondRedirect("/contexts")
@@ -530,15 +528,6 @@ private fun parseContextForm(p: Parameters): ContextForm {
     return ContextForm(context, windows)
 }
 
-private fun describe(context: TaskContext, windows: List<ContextTimeWindow>): String = when (context.type) {
-    ContextType.PLACE -> "Wifi: ${context.wifiSsid}"
-    ContextType.TIME -> windows.joinToString(", ") { w ->
-        val days = if (w.daysMask == ContextTimeWindow.ALL_DAYS) "every day"
-        else Labels.WEEKDAYS.filter { (bit, _) -> w.daysMask and (1 shl bit) != 0 }.joinToString(" ") { it.second }
-        "${clockTime(w.windowStartMinute)}–${clockTime(w.windowEndMinute)} $days"
-    }
-}
-
 // The phone's settings that belong to every device: when the day rolls over.
 private fun HTML.settingsPage(service: TaskService) = shellPage(service, "Raspberry · Settings", "/settings") {
     div(classes = "contexts") {
@@ -577,11 +566,11 @@ private fun HTML.contextsPage(service: TaskService, form: ContextForm) = shellPa
         service.contexts().sortedBy { it.name.lowercase() }.forEach { c ->
             div(classes = "context-row") {
                 span(classes = "context-name") { +"@${c.name}" }
-                span(classes = "hint") { +describe(c, service.timeWindows(c.id)) }
+                span(classes = "hint") { +describeContext(c, service.timeWindows(c.id)) }
                 a(href = "/contexts?edit=${c.id}") { +"Edit" }
                 form(classes = "inline-delete") {
                     attributes["hx-post"] = "/contexts/${c.id}/delete"
-                    attributes["hx-confirm"] = "Delete @${c.name}? It will be removed from every task using it. This can't be undone."
+                    attributes["hx-confirm"] = "Delete @${c.name}? " + deleteContextQuestion(c.name)
                     button(type = ButtonType.submit, classes = "delete") { +"Delete" }
                 }
             }
