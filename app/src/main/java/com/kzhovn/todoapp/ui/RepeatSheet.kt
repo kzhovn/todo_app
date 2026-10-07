@@ -130,7 +130,7 @@ private fun Builder(s: RecurrenceSelection, anchor: Long, onChange: (RecurrenceS
 
     if (schedule) {
         Text("ENDS", fontSize = 11.sp, color = LedgerMuted, letterSpacing = 0.5.sp, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 2.dp))
-        val activity = LocalContext.current as Activity
+        val activity = LocalContext.current.findActivity()
         RadioRow(s.until == null && s.count == null, { onChange(s.copy(until = null, count = null)) }) { Text("Never", fontSize = 14.sp, color = LedgerInk) }
         RadioRow(s.until != null, { pickDate(activity, s.until, withTime = false) { onChange(s.copy(until = it, count = null)) } }) {
             Text("On", fontSize = 14.sp, color = LedgerInk)
@@ -232,3 +232,7 @@ internal fun CompactNumberField(value: Int, onValueChange: (Int) -> Unit) {
         modifier = Modifier.width(44.dp).border(1.dp, LedgerBorder, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 8.dp)
     )
 }
+
+// Inside a dialog the context is a wrapper around the Activity, not the Activity itself.
+private tailrec fun android.content.Context.findActivity(): Activity =
+    this as? Activity ?: (this as android.content.ContextWrapper).baseContext.findActivity()
