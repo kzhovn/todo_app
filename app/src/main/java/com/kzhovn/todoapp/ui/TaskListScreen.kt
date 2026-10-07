@@ -43,7 +43,6 @@ import androidx.compose.material.icons.filled.AccountTree
 import com.kzhovn.todoapp.notifications.PinnedTask
 import androidx.compose.ui.platform.LocalContext
 import com.kzhovn.todoapp.AppSettings
-import com.kzhovn.todoapp.data.nextRollover
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -97,6 +96,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.data.EffectiveTask
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.SnoozeChoice
 import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.data.startText
 import com.kzhovn.todoapp.data.waitingFor
@@ -355,13 +355,10 @@ private fun TaskRow(
 // A choice of times as equal tiles: the snooze menu's, and the task editor's Start and Due on long press.
 class DateChoice(val label: String, val icon: ImageVector, val at: (now: Long) -> Long)
 
-// Snoozing (or setting a start): in an hour, tomorrow at the day rollover (4am by default, not 24 hours
-// from now), or a week from now.
-fun snoozeChoices(rolloverHour: Int) = listOf(
-    DateChoice(Labels.SNOOZE_HOUR, Icons.Filled.Schedule) { it + HOUR_MILLIS },
-    DateChoice(Labels.SNOOZE_TOMORROW, Icons.Filled.Bedtime) { nextRollover(it, rolloverHour) },
-    DateChoice(Labels.SNOOZE_WEEK, Icons.Filled.DateRange) { it + WEEK_MILLIS }
-)
+// Snoozing (or setting a start): see SnoozeChoice (shared with the web).
+fun snoozeChoices(rolloverHour: Int) = SnoozeChoice.entries.map { c ->
+    DateChoice(c.label, when (c) { SnoozeChoice.HOUR -> Icons.Filled.Schedule; SnoozeChoice.TOMORROW -> Icons.Filled.Bedtime; SnoozeChoice.WEEK -> Icons.Filled.DateRange }) { c.at(it, rolloverHour) }
+}
 
 @Composable
 fun DateTiles(choices: List<DateChoice>, onPick: (Long) -> Unit) {
@@ -391,9 +388,6 @@ private fun MenuRow(label: String, icon: ImageVector, onClick: () -> Unit) {
         Text(label, fontSize = 13.sp, color = LedgerInk, modifier = Modifier.padding(start = 10.dp))
     }
 }
-
-private const val HOUR_MILLIS = 60 * 60 * 1000L
-private const val WEEK_MILLIS = 7 * 24 * HOUR_MILLIS
 
 const val BACKBURNER_ALPHA = 0.45f
 

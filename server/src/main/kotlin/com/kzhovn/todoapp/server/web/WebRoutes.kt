@@ -5,7 +5,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonObject
 import com.kzhovn.todoapp.data.Task
-import com.kzhovn.todoapp.data.nextRollover
+import com.kzhovn.todoapp.data.SnoozeChoice
 import com.kzhovn.todoapp.server.TaskService
 import io.ktor.http.ContentType
 import io.ktor.http.Cookie
@@ -26,7 +26,6 @@ import io.ktor.util.AttributeKey
 import kotlinx.html.div
 import kotlinx.html.stream.createHTML
 
-private const val HOUR_MS = 60 * 60 * 1000L
 
 // No login here: Caddy's basic_auth guards every web page, and Main only mounts these routes when the
 // server listens on loopback, i.e. is reachable solely through Caddy.
@@ -134,13 +133,8 @@ fun Route.webRoutes(service: TaskService) {
     post("/tasks/{id}/skip") { call.taskId()?.let(service::skip); call.respondList(service, call.mode()) }
     post("/tasks/{id}/star") { call.taskId()?.let(service::toggleStar); call.respondList(service, call.mode()) }
     post("/tasks/{id}/snooze") {
-        val now = service.now()
-        // "Tomorrow" starts at the day rollover (4am by default), not 24 hours from now.
-        val until = when (call.request.queryParameters["until"]) {
-            "tomorrow" -> nextRollover(now, service.rolloverHour())
-            "week" -> now + 7 * 24 * HOUR_MS
-            else -> now + HOUR_MS
-        }
+        val choice = SnoozeChoice.entries.firstOrNull { it.name.equals(call.request.queryParameters["until"], ignoreCase = true) } ?: SnoozeChoice.HOUR
+        val until = choice.at(service.now(), service.rolloverHour())
         call.taskId()?.let { service.snooze(it, until) }
         call.respondList(service, call.mode())
     }

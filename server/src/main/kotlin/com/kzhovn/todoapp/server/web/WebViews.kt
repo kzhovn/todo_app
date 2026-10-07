@@ -20,6 +20,7 @@ import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.waitingFor
+import com.kzhovn.todoapp.data.SnoozeChoice
 import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.DueStatus
@@ -556,14 +557,13 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
             div(classes = "menu") {
                 div(classes = "menu-label") { +Labels.SNOOZE }
                 div(classes = "tiles") {
-                    listOf(Triple(Labels.SNOOZE_HOUR, "hour", Icon.SCHEDULE), Triple(Labels.SNOOZE_TOMORROW, "tomorrow", Icon.BEDTIME), Triple(Labels.SNOOZE_WEEK, "week", Icon.DATE_RANGE))
-                        .forEach { (label, until, tileIcon) ->
-                            button(classes = "tile") {
-                                hx("post", "/tasks/${task.id}/snooze?until=$until&mode=$mode")
-                                icon(tileIcon, "")
-                                span { +label }
-                            }
+                    SnoozeChoice.entries.forEach { c ->
+                        button(classes = "tile") {
+                            hx("post", "/tasks/${task.id}/snooze?until=${c.name.lowercase()}&mode=$mode")
+                            icon(when (c) { SnoozeChoice.HOUR -> Icon.SCHEDULE; SnoozeChoice.TOMORROW -> Icon.BEDTIME; SnoozeChoice.WEEK -> Icon.DATE_RANGE }, "")
+                            span { +c.label }
                         }
+                    }
                 }
                 // Pinned on every device: the phone's notification and the desktop's top bar.
                 button(classes = "menu-row") {

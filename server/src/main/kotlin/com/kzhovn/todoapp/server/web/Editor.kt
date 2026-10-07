@@ -22,6 +22,8 @@ import com.kzhovn.todoapp.data.hasTime
 import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.data.ancestors
+import com.kzhovn.todoapp.data.DueChoice
+import com.kzhovn.todoapp.data.SnoozeChoice
 import com.kzhovn.todoapp.data.folderTree
 import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.LinkKind
@@ -590,13 +592,9 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
         div(classes = "pills when not-waiting") {
             // Quick choices under the fields: the snooze menu's for Start, days for Due (the phone's long press).
             val now = service.now()
-            val day = { n: Long -> LocalDate.now().plusDays(n).toString() to "" }
-            fun at(ms: Long) = localDateTime(ms).let { it.toLocalDate().toString() to it.toLocalTime().withSecond(0).withNano(0).toString() }
-            datePill(Labels.START, "start", Icon.CALENDAR, t.startDate, "", listOf(
-                Labels.SNOOZE_HOUR to at(now + 60 * 60 * 1000), Labels.SNOOZE_TOMORROW to at(nextRollover(now, service.rolloverHour())),
-                Labels.SNOOZE_WEEK to at(now + 7L * 24 * 60 * 60 * 1000)
-            ))
-            datePill(Labels.DUE, "due", Icon.FLAG, t.dueDate, "task-only", listOf("Today" to day(0), Labels.SNOOZE_TOMORROW to day(1), "Next week" to day(7)))
+            fun at(ms: Long) = localDateTime(ms).let { it.toLocalDate().toString() to if (hasTime(ms)) it.toLocalTime().withSecond(0).withNano(0).toString() else "" }
+            datePill(Labels.START, "start", Icon.CALENDAR, t.startDate, "", SnoozeChoice.entries.map { it.label to at(it.at(now, service.rolloverHour())) })
+            datePill(Labels.DUE, "due", Icon.FLAG, t.dueDate, "task-only", DueChoice.entries.map { it.label to at(it.at(now)) })
             // Set here, rung by the phone: it schedules the alarm when this syncs to it.
             // Set here, rung by the phone: when it starts, before it's due, and/or at a time of its own. A
             // date with no time rings at the reminder hour in Settings.

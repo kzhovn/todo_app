@@ -37,6 +37,7 @@ Dates: `today`, `mon`, `next fri`, `+3d`, `in 2 weeks`, `+2h`, `oct 12`, `next w
 `-- x ~30m` / `-- 30m of x` a timed task
 `-- x*` starred · `-- x!` high priority · `-- x?` a maybe (hidden from Active, never starred)
 `-- x -p` pin it · `-- x -f` focus on it
+`-- wait roommate decides` a waiting item: blocks its dependents, but isn't yours to do
 `-- call bank // ask about fees` everything after // (or after the first line) is the note
 `✅ fixed the sink` logs something already done (a completed task, for Review)
 Reply to a todo with a todo: the first depends on the new one.

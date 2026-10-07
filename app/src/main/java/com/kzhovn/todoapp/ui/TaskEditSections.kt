@@ -5,7 +5,6 @@ import com.kzhovn.todoapp.data.reminderTimes
 import com.kzhovn.todoapp.data.reminderSummary
 import com.kzhovn.todoapp.data.reminderTimeText
 import androidx.compose.material3.HorizontalDivider
-import com.kzhovn.todoapp.quickadd.startOfDay
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.DateRange
@@ -32,6 +31,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.zIndex
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.DueChoice
 import com.kzhovn.todoapp.data.CHECK_IN_CHOICES
 import com.kzhovn.todoapp.data.checkInEvery
 import com.kzhovn.todoapp.data.completed
@@ -274,14 +274,10 @@ private fun TogglePill(label: String, icon: ImageVector, on: Boolean, onToggle: 
     }
 }
 
-// Due dates are days: today, tomorrow, a week from today (no time).
-private val dueChoices = listOf(
-    DateChoice("Today", Icons.Filled.Today) { day(it, 0) },
-    DateChoice(Labels.SNOOZE_TOMORROW, Icons.Filled.Bedtime) { day(it, 1) },
-    DateChoice("Next week", Icons.Filled.DateRange) { day(it, 7) }
-)
-
-private fun day(now: Long, plusDays: Int) = java.util.Calendar.getInstance().apply { timeInMillis = now; add(java.util.Calendar.DAY_OF_YEAR, plusDays) }.startOfDay()
+// See DueChoice (shared with the web).
+private val dueChoices = DueChoice.entries.map { c ->
+    DateChoice(c.label, when (c) { DueChoice.TODAY -> Icons.Filled.Today; DueChoice.TOMORROW -> Icons.Filled.Bedtime; DueChoice.NEXT_WEEK -> Icons.Filled.DateRange }) { c.at(it) }
+}
 
 @Composable
 private fun QuickDateMenu(expanded: Boolean, label: String, choices: List<DateChoice>, onDismiss: () -> Unit, onPick: (Long) -> Unit) {
