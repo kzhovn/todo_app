@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.chipDate
 import androidx.compose.material.icons.filled.OpenInFull
 import com.kzhovn.todoapp.data.OutlinerNode
 import com.kzhovn.todoapp.data.buildOutlinerTree
@@ -318,7 +319,7 @@ private fun OutlinerRow(
                     if (task.type == TaskType.WAITING) {
                         // How long it's been waiting, or the day it resolves itself.
                         val now = System.currentTimeMillis()
-                        (task.dueDate?.let { "resolves ${formatChipDate(it)}" } ?: waitingFor(task, now)?.let { "waiting $it" })?.let {
+                        (task.dueDate?.let { "resolves ${chipDate(it)}" } ?: waitingFor(task, now)?.let { "waiting $it" })?.let {
                             Text(it, fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.padding(horizontal = 8.dp))
                         }
                     } else if (task.isMaybe) {

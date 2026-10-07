@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.data.Labels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -66,14 +67,14 @@ fun FilterPanel(
         )
         PropertyChip(
             label = Labels.DUE_AFTER,
-            valueText = filters.dueAfter?.let(::formatChipDate),
+            valueText = filters.dueAfter?.let(::chipDate),
             icon = Icons.Filled.Event,
             onClick = { pickDate(activity, filters.dueAfter, withTime = false) { onFiltersChange(filters.copy(dueAfter = it)) } },
             onClear = { onFiltersChange(filters.copy(dueAfter = null)) }
         )
         PropertyChip(
             label = Labels.DUE_BEFORE,
-            valueText = filters.dueBefore?.let(::formatChipDate),
+            valueText = filters.dueBefore?.let(::chipDate),
             icon = Icons.Filled.Flag,
             onClick = { pickDate(activity, filters.dueBefore, withTime = false) { onFiltersChange(filters.copy(dueBefore = it)) } },
             onClear = { onFiltersChange(filters.copy(dueBefore = null)) }

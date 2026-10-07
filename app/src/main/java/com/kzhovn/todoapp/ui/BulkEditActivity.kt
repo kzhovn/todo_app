@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.data.isLinkable
 import android.os.Bundle
 import android.widget.Toast
@@ -141,7 +142,7 @@ class BulkEditActivity : ComponentActivity() {
             Choice("Keep", change == null) { onChange(null) }
             Choice("Clear", change == DateChange(null)) { onChange(DateChange(null)) }
             val date = change?.date
-            Choice(date?.let(::formatChipDate) ?: "Set…", date != null) {
+            Choice(date?.let(::chipDate) ?: "Set…", date != null) {
                 pickDate(this@BulkEditActivity, date) { onChange(DateChange(it)) }
             }
         }

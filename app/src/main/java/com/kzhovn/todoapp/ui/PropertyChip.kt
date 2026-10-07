@@ -34,6 +34,8 @@ import com.kzhovn.todoapp.quickadd.startOfDay
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
+import com.kzhovn.todoapp.data.chipDate
+import com.kzhovn.todoapp.data.timeText
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -96,12 +98,8 @@ fun PropertyChip(
     }
 }
 
-fun formatChipDate(epochMillis: Long): String =
-    SimpleDateFormat("MMM d", Locale.US).format(Date(epochMillis)) + formatTimeSuffix(epochMillis)
-
 // " 5:00 PM" when the value has a time, "" for a date-only value.
-fun formatTimeSuffix(epochMillis: Long): String =
-    if (hasTime(epochMillis)) " " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(epochMillis)) else ""
+fun formatTimeSuffix(epochMillis: Long): String = if (hasTime(epochMillis)) " " + timeText(epochMillis) else ""
 
 // A date, then OK; a time only if asked for ("+ Time"), like MLO. A value that already has a time
 // keeps it on OK. "Today" jumps the calendar to today without closing.

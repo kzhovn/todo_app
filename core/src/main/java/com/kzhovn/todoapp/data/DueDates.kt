@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.data
 
+import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -20,7 +21,11 @@ fun dueText(due: Long, now: Long): String = "due " + dayText(due, now)
 
 // A date as the editor's chips and pills show it: "Oct 6", or "Oct 6 5:00 PM" with a time.
 fun chipDate(millis: Long): String =
-    SimpleDateFormat("MMM d", Locale.US).format(Date(millis)) + if (hasTime(millis)) " " + SimpleDateFormat("h:mm a", Locale.US).format(Date(millis)) else ""
+    SimpleDateFormat("MMM d", Locale.US).format(Date(millis)) + if (hasTime(millis)) " " + timeText(millis) else ""
+
+// A time in the device's own short format: "5:00 PM", or "17:00" where the region uses a 24-hour clock
+// (the phone's settings; the server's for the web). Every time the apps show goes through this.
+fun timeText(millis: Long): String = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(millis)).replace('\u202F', ' ')
 
 // "starts Fri": a start date still to come, in the same words.
 fun startText(start: Long, now: Long): String = "starts " + dayText(start, now)
@@ -29,7 +34,7 @@ private fun dayText(due: Long, now: Long): String {
     val days = dayIndex(due) - dayIndex(now)
     val date = Date(due)
     return when {
-        days == 0L -> if (hasTime(due)) SimpleDateFormat("h:mm a", Locale.US).format(date) else "today"
+        days == 0L -> if (hasTime(due)) timeText(due) else "today"
         days == 1L -> "tomorrow"
         days == -1L -> "yesterday"
         days in 2..6 -> SimpleDateFormat("EEE", Locale.US).format(date)

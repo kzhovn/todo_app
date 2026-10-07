@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.data.ReminderKind
 import com.kzhovn.todoapp.data.reminderTimes
 import com.kzhovn.todoapp.data.reminderSummary
@@ -207,7 +208,7 @@ private fun WaitingTiming(vm: TaskEditViewModel, activity: Activity) {
         }
         PropertyChip(
             label = Labels.RESOLVES_ON,
-            valueText = task.dueDate?.let { "Resolves ${formatChipDate(it)}" },
+            valueText = task.dueDate?.let { "Resolves ${chipDate(it)}" },
             icon = Icons.Filled.Event,
             onClick = { pickDate(activity, task.dueDate, title = Labels.RESOLVES_ON) { vm.task = vm.task.copy(dueDate = it) } },
             onClear = { vm.task = vm.task.copy(dueDate = null) },
@@ -215,7 +216,7 @@ private fun WaitingTiming(vm: TaskEditViewModel, activity: Activity) {
         )
     }
     val now = System.currentTimeMillis()
-    val hint = task.dueDate?.let { "Resolves itself on ${formatChipDate(it)}." }
+    val hint = task.dueDate?.let { "Resolves itself on ${chipDate(it)}." }
         ?: if (vm.isNew) null else checkInText(task, now)
     hint?.let { Text(it, fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.padding(top = 6.dp)) }
 }
@@ -302,7 +303,7 @@ internal fun TimingSection(vm: TaskEditViewModel, activity: Activity, onRepeat: 
         Box {
             PropertyChip(
                 label = Labels.START,
-                valueText = task.startDate?.let(::formatChipDate),
+                valueText = task.startDate?.let(::chipDate),
                 icon = Icons.Filled.Event,
                 onClick = { pickDate(activity, task.startDate, title = Labels.START) { vm.task = vm.task.copy(startDate = it) } },
                 onClear = { vm.task = vm.task.copy(startDate = null) },
@@ -318,7 +319,7 @@ internal fun TimingSection(vm: TaskEditViewModel, activity: Activity, onRepeat: 
             Box {
                 PropertyChip(
                     label = Labels.DUE,
-                    valueText = task.dueDate?.let(::formatChipDate),
+                    valueText = task.dueDate?.let(::chipDate),
                     icon = Icons.Filled.Flag,
                     onClick = { pickDate(activity, task.dueDate, title = Labels.DUE) { vm.task = vm.task.copy(dueDate = it) } },
                     onClear = { vm.task = vm.task.copy(dueDate = null) },

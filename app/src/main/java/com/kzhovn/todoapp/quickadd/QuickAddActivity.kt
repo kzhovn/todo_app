@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.quickadd
 
+import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.focus.FocusActivity
 import com.kzhovn.todoapp.data.splitItems
 import com.kzhovn.todoapp.data.TaskType
@@ -59,7 +60,6 @@ import com.kzhovn.todoapp.sync.SyncJson
 import com.kzhovn.todoapp.ui.FolderPickerDialog
 import com.kzhovn.todoapp.ui.PropertyChip
 import com.kzhovn.todoapp.ui.TaskEditActivity
-import com.kzhovn.todoapp.ui.formatChipDate
 import com.kzhovn.todoapp.ui.pickDate
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerBorder
@@ -180,7 +180,7 @@ class QuickAddActivity : ComponentActivity() {
                 Row(modifier = Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     PropertyChip(
                         label = "Start",
-                        valueText = startDate?.let(::formatChipDate),
+                        valueText = startDate?.let(::chipDate),
                         icon = Icons.Filled.Event,
                         onClick = { pickDate(this@QuickAddActivity, startDate, title = Labels.START) { startDate = it } },
                         showLabelWhenSet = false
@@ -188,7 +188,7 @@ class QuickAddActivity : ComponentActivity() {
                     Spacer(Modifier.width(8.dp))
                     PropertyChip(
                         label = "Due",
-                        valueText = dueDate?.let(::formatChipDate),
+                        valueText = dueDate?.let(::chipDate),
                         icon = Icons.Filled.Flag,
                         onClick = { pickDate(this@QuickAddActivity, dueDate, title = Labels.DUE) { dueDate = it } },
                         showLabelWhenSet = false

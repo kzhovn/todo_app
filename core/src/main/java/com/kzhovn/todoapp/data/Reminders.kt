@@ -27,7 +27,7 @@ fun reminderSummary(task: Task, hour: Int): String? = buildList {
     task.remindAt?.let { add(reminderTimeText(if (hasTime(it)) it else atTime(it, hour, 0))) }
 }.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 
-fun reminderTimeText(ms: Long): String = SimpleDateFormat("MMM d h:mm a", Locale.US).format(Date(ms))
+fun reminderTimeText(ms: Long): String = SimpleDateFormat("MMM d", Locale.US).format(Date(ms)) + " " + timeText(ms)
 
 private fun shortBefore(label: String) = when (label) {
     "At due time" -> "At due time"
