@@ -4,7 +4,6 @@ import com.kzhovn.todoapp.server.quickAddChips
 import com.kzhovn.todoapp.quickadd.QuickAdd
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.reminderSummary
-import com.kzhovn.todoapp.data.isLinkable
 import com.kzhovn.todoapp.repository.changedInheritedFields
 import com.kzhovn.todoapp.data.checklistItems
 import com.kzhovn.todoapp.recurrence.ordinal
@@ -24,11 +23,12 @@ import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.data.ancestors
+import com.kzhovn.todoapp.data.LinkKind
+import com.kzhovn.todoapp.data.linkCandidates
 import com.kzhovn.todoapp.data.CHECK_IN_CHOICES
 import com.kzhovn.todoapp.data.checkInEvery
 import com.kzhovn.todoapp.data.checkInText
 import com.kzhovn.todoapp.data.moveOutFolderId
-import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
 import com.kzhovn.todoapp.recurrence.RecurrenceSelection
 import com.kzhovn.todoapp.recurrence.RecurrenceUnit
@@ -248,7 +248,7 @@ fun Route.editorRoutes(service: TaskService) {
         val all = service.tasks()
         val byId = all.associateBy { it.id }
         val task = byId[id] ?: return@get
-        val matches = if (q.isEmpty()) emptyList() else relatedCandidates(service, task, kind, all).filter { it.title.contains(q, ignoreCase = true) }.take(8)
+        val matches = if (q.isEmpty()) emptyList() else linkCandidates(task, LINK_KINDS[kind] ?: LinkKind.SUBTASK, all, service.dependencyEdges()).filter { it.title.contains(q, ignoreCase = true) }.take(8)
         call.respondText(createHTML().div(classes = "suggest") {
             if (q.isNotEmpty()) button(type = ButtonType.submit, classes = "sugg new") { +"↵ New ${KIND_NOUNS[kind] ?: "subtask"} “$q”" }
             matches.forEach { t ->
@@ -375,31 +375,13 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
 private suspend fun io.ktor.server.application.ApplicationCall.respondSubtasks(service: TaskService, id: Long, focusAddItem: Boolean = false, kind: String = "subtask") =
     respondText(createHTML().div { relatedSection(service, id, mode(), focusAddItem, kind) }, ContentType.Text.Html)
 
+private val LINK_KINDS = mapOf("subtask" to LinkKind.SUBTASK, "prerequisite" to LinkKind.PREREQUISITE, "dependent" to LinkKind.DEPENDENT)
 private val KIND_NOUNS = mapOf("subtask" to "subtask", "prerequisite" to "prerequisite", "dependent" to "dependent task")
 
 // A prerequisite's (amber) or dependent's (green) tinted tag.
 private fun FlowContent.kindTag(kind: String) =
     span(classes = "kind-tag ${if (kind == Labels.DEPENDENT) "dependent" else "prerequisite"}") { +kind }
 
-// What the add field may link as `kind`: no folders, nothing done, nothing already linked, and no loops.
-private fun relatedCandidates(service: TaskService, task: Task, kind: String, all: List<Task>): List<Task> {
-    val id = task.id
-    val byId = all.associateBy { it.id }
-    val edges = service.dependencyEdges()
-    val open = all.filter { it.id != id && !it.isComplete }
-    return when (kind) {
-        "prerequisite" -> {
-            val linked = edges.filter { it.taskId == id }.map { it.dependsOnTaskId }.toSet()
-            val otherEdges = edges.filter { it.taskId != id }
-            open.filter { it.type.isLinkable && it.id !in linked && !wouldCreateDependencyCycle(it.id, id, otherEdges) }
-        }
-        "dependent" -> {
-            val linked = edges.filter { it.dependsOnTaskId == id }.map { it.taskId }.toSet()
-            open.filter { it.type.isLinkable && it.id !in linked && !wouldCreateDependencyCycle(id, it.id, edges) }
-        }
-        else -> open.filter { it.type != TaskType.FOLDER && it.parentId != id && !wouldCreateCycle(id, it.id, byId) }
-    }.sortedBy { it.title.lowercase() }
-}
 
 private fun Parameters.ids(name: String) = getAll(name).orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
 

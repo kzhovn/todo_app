@@ -4,7 +4,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
-import com.kzhovn.todoapp.data.isLinkable
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
@@ -45,10 +44,10 @@ import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.contexts.ContextsActivity
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.LinkKind
+import com.kzhovn.todoapp.data.linkCandidates
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.formatDuration
-import com.kzhovn.todoapp.data.wouldCreateCycle
-import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
 import com.kzhovn.todoapp.focus.FocusActivity
 import com.kzhovn.todoapp.notifications.PinnedTask
 import com.kzhovn.todoapp.quickadd.QuickAddActivity
@@ -244,10 +243,7 @@ class TaskEditActivity : ComponentActivity() {
                 val task = vm.task
                 // Existing tasks can be moved under this one (anything but its own ancestors), or a new one created.
                 val candidates = remember(vm.allTasks, task.id) {
-                    vm.allTasks.filter {
-                        it.id != task.id && it.type != TaskType.FOLDER && !it.isComplete && (task.id == 0L || it.parentId != task.id) && it.id !in vm.pendingChildIds &&
-                            !wouldCreateCycle(task.id, it.id, vm.allById)
-                    }
+                    linkCandidates(task, LinkKind.SUBTASK, vm.allTasks, vm.dependencyEdges).filter { it.id !in vm.pendingChildIds }
                 }
                 TaskPickerDialog(
                     title = "Add a subtask",
@@ -264,11 +260,7 @@ class TaskEditActivity : ComponentActivity() {
             EditorDialog.DependentPicker -> {
                 val task = vm.task
                 val candidates = remember(vm.allTasks, vm.dependencyEdges, task.id) {
-                    vm.allTasks.filter {
-                        it.id != task.id && it.type.isLinkable && !it.isComplete &&
-                            (task.id == 0L || vm.dependencyEdges.none { e -> e.taskId == it.id && e.dependsOnTaskId == task.id }) && it.id !in vm.pendingDependentIds &&
-                            !wouldCreateDependencyCycle(task.id, it.id, vm.dependencyEdges)
-                    }
+                    linkCandidates(task, LinkKind.DEPENDENT, vm.allTasks, vm.dependencyEdges).filter { it.id !in vm.pendingDependentIds }
                 }
                 TaskPickerDialog(
                     title = "Add a dependent task",
@@ -295,11 +287,9 @@ class TaskEditActivity : ComponentActivity() {
             // + Prerequisite: an existing task this one waits on, or a new one.
             EditorDialog.PrerequisitePicker -> {
                 val task = vm.task
+                // Not yet saved prerequisites are in dependencyIds, so the edges here are the other tasks'.
                 val candidates = remember(vm.allTasks, vm.dependencyEdges, task.id, vm.dependencyIds) {
-                    vm.allTasks.filter {
-                        it.id != task.id && it.type.isLinkable && !it.isComplete && it.id !in vm.dependencyIds &&
-                            !wouldCreateDependencyCycle(it.id, task.id, vm.dependencyEdges)
-                    }
+                    linkCandidates(task, LinkKind.PREREQUISITE, vm.allTasks, vm.dependencyEdges.filter { it.taskId != task.id }).filter { it.id !in vm.dependencyIds }
                 }
                 TaskPickerDialog(
                     title = "Add a prerequisite",

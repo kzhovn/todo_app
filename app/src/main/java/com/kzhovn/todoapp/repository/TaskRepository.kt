@@ -1,6 +1,5 @@
 package com.kzhovn.todoapp.repository
 
-import com.kzhovn.todoapp.data.completed
 import com.kzhovn.todoapp.data.CurrentTask
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.searchTasks
@@ -16,8 +15,8 @@ import com.kzhovn.todoapp.data.TaskContextCrossRef
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.newId
-import com.kzhovn.todoapp.data.wouldCreateCycle
-import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
+import com.kzhovn.todoapp.data.canDependOn
+import com.kzhovn.todoapp.data.canMoveUnder
 import com.kzhovn.todoapp.notifications.ReminderScheduler
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 import com.kzhovn.todoapp.quickadd.QuickAdd
@@ -81,7 +80,7 @@ class TaskRepository(
     // Refused if it would put the task inside itself, as on the server.
     suspend fun reparent(taskId: Long, newParentId: Long?) {
         val task = taskDao.getById(taskId) ?: return
-        if (newParentId != null && wouldCreateCycle(newParentId, taskId, taskDao.getAllOnce().associateBy { it.id })) return
+        if (newParentId != null && !canMoveUnder(taskId, newParentId, taskDao.getAllOnce().associateBy { it.id })) return
         taskDao.update(task.copy(parentId = newParentId, position = null))
     }
 
@@ -208,7 +207,7 @@ class TaskRepository(
 
     // Refused if it would make a loop, as on the server.
     suspend fun addDependency(taskId: Long, dependsOnTaskId: Long) {
-        if (dependsOnTaskId == taskId || wouldCreateDependencyCycle(dependsOnTaskId, taskId, taskDao.getAllDependencies())) return
+        if (!canDependOn(taskId, dependsOnTaskId, taskDao.getAllDependencies())) return
         taskDao.insertDependency(TaskDependency(taskId, dependsOnTaskId))
     }
 

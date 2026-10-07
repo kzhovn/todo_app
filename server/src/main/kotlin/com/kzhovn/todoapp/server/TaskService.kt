@@ -28,6 +28,8 @@ import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.DEFAULT_ROLLOVER_HOUR
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.canDependOn
+import com.kzhovn.todoapp.data.canMoveUnder
 import com.kzhovn.todoapp.repository.TaskChanges
 import com.kzhovn.todoapp.repository.planComplete
 import com.kzhovn.todoapp.repository.planCompleteChecklist
@@ -40,8 +42,6 @@ import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.newId
-import com.kzhovn.todoapp.data.wouldCreateCycle
-import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
 import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 import com.kzhovn.todoapp.data.folderColorAssignments
@@ -309,7 +309,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun edit(task: Task, contextIds: Set<Long>, dependsOn: Set<Long>) = store.transaction {
         val byId = tasks().associateBy { it.id }
         val current = byId[task.id] ?: return@transaction
-        val parentId = task.parentId.let { p -> if (p == null || (p in byId && !wouldCreateCycle(p, task.id, byId))) p else current.parentId }
+        val parentId = task.parentId.let { p -> if (p == null || (p in byId && canMoveUnder(task.id, p, byId))) p else current.parentId }
         val folder = task.type == TaskType.FOLDER
         // withRules drops what the type can't carry (Task.typeRule).
         val saved = task.copy(
@@ -320,7 +320,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         // A folder can't be completed, so it can't wait on anything.
         val edges = dependencyEdges().filter { it.taskId != task.id }
         val deps = if (folder) emptySet() else dependsOn.filterTo(mutableSetOf()) {
-            it != task.id && byId[it]?.type?.isLinkable == true && !wouldCreateDependencyCycle(it, task.id, edges)
+            byId[it]?.type?.isLinkable == true && canDependOn(task.id, it, edges)
         }
         val contexts = contexts().map { it.id }.toSet().let { known -> contextIds.filterTo(mutableSetOf()) { it in known } }
         store.write(TASKS, task.id, JsonObject(taskFields(saved, contexts, deps) - DELETED_AT), clock())
@@ -329,7 +329,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     // Moves a task under newParentId, at the end of its children, unless that would make a loop.
     fun reparent(id: Long, newParentId: Long) {
         val byId = tasks().associateBy { it.id }
-        if (newParentId !in byId || wouldCreateCycle(newParentId, id, byId)) return
+        if (newParentId !in byId || !canMoveUnder(id, newParentId, byId)) return
         update(id) { it.copy(parentId = newParentId, position = null) }
     }
 
@@ -392,7 +392,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         val rows = liveRows()
         val row = rows.firstOrNull { it.id == taskId } ?: return@transaction
         val edges = rows.flatMap { r -> r.dependsOn().map { TaskDependency(r.id, it) } }
-        if (dependsOnId == taskId || wouldCreateDependencyCycle(dependsOnId, taskId, edges)) return@transaction
+        if (!canDependOn(taskId, dependsOnId, edges)) return@transaction
         store.write(TASKS, taskId, JsonObject(taskFields(row.toTask(), row.contextIds(), row.dependsOn() + dependsOnId) - DELETED_AT), clock())
     }
 
