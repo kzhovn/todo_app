@@ -243,7 +243,6 @@ private fun TaskRow(
     metaLine: String? = null // search: where it lives and its contexts, as the web's results show
 ) {
     var showSnoozeMenu by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
     // Due styling tracks the *displayed* (effective/inherited) due date, not the task's own
     // possibly-null field, or an inherited due date would render in the neutral colour.
     val now = System.currentTimeMillis()
@@ -317,35 +316,42 @@ private fun TaskRow(
         // DropdownMenu is Popup-based (SubcomposeLayout internally) and can't answer the intrinsic
         // width queries an IntrinsicSize.Min row needs from its children, so it lives outside the Row
         // as a plain sibling.
-        DropdownMenu(
-            expanded = showSnoozeMenu,
-            onDismissRequest = { showSnoozeMenu = false },
-            shape = RoundedCornerShape(8.dp),
-            containerColor = LedgerSearchBackground,
-            border = BorderStroke(1.dp, LedgerBorder)
-        ) {
-            val context = LocalContext.current
-            fun snooze(until: (now: Long) -> Long) {
-                showSnoozeMenu = false
-                onSnooze(task.id, until(System.currentTimeMillis()))
+        TaskRowMenu(task, showSnoozeMenu, onDismiss = { showSnoozeMenu = false }, onSnooze = onSnooze)
+    }
+}
+
+// A row's long-press menu, the lists' and the All tree's: snooze, pin, focus, and skip for a repeat.
+@Composable
+internal fun TaskRowMenu(task: Task, expanded: Boolean, onDismiss: () -> Unit, onSnooze: (Long, Long) -> Unit) {
+    val scope = rememberCoroutineScope()
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(8.dp),
+        containerColor = LedgerSearchBackground,
+        border = BorderStroke(1.dp, LedgerBorder)
+    ) {
+        val context = LocalContext.current
+        fun snooze(until: (now: Long) -> Long) {
+            onDismiss()
+            onSnooze(task.id, until(System.currentTimeMillis()))
+        }
+        Column(Modifier.width(236.dp)) {
+            Text(Labels.SNOOZE, fontSize = 11.sp, color = LedgerMuted, letterSpacing = 0.4.sp, modifier = Modifier.padding(start = 14.dp, top = 4.dp, bottom = 6.dp))
+            // Three equal tiles lined up with the rows' icons below.
+            DateTiles(snoozeChoices(AppSettings.rolloverHour(context))) { until -> snooze { until } }
+            HorizontalDivider(color = LedgerBorder)
+            MenuRow(Labels.PIN, Icons.Filled.PushPin) { onDismiss(); scope.launch { PinnedTask.pin(context, task.id) } }
+            MenuRow("Focus", Icons.Filled.CenterFocusStrong) {
+                onDismiss()
+                context.startActivity(Intent(context, FocusActivity::class.java).putExtra(FocusActivity.EXTRA_TASK_ID, task.id))
             }
-            Column(Modifier.width(236.dp)) {
-                Text(Labels.SNOOZE, fontSize = 11.sp, color = LedgerMuted, letterSpacing = 0.4.sp, modifier = Modifier.padding(start = 14.dp, top = 4.dp, bottom = 6.dp))
-                // Three equal tiles lined up with the rows' icons below.
-                DateTiles(snoozeChoices(AppSettings.rolloverHour(context))) { until -> snooze { until } }
-                HorizontalDivider(color = LedgerBorder)
-                MenuRow(Labels.PIN, Icons.Filled.PushPin) { showSnoozeMenu = false; scope.launch { PinnedTask.pin(context, task.id) } }
-                MenuRow("Focus", Icons.Filled.CenterFocusStrong) {
-                    showSnoozeMenu = false
-                    context.startActivity(Intent(context, FocusActivity::class.java).putExtra(FocusActivity.EXTRA_TASK_ID, task.id))
-                }
-                // A repeat: on to its next time without doing this one. The list follows the change itself.
-                if (task.recurrenceType != null) MenuRow(Labels.SKIP, Icons.Filled.SkipNext) {
-                    showSnoozeMenu = false
-                    scope.launch {
-                        (context.applicationContext as com.kzhovn.todoapp.TodoApp).repository.skip(task.id, System.currentTimeMillis())
-                        PinnedTask.refresh(context)
-                    }
+            // A repeat: on to its next time without doing this one. The list follows the change itself.
+            if (task.recurrenceType != null) MenuRow(Labels.SKIP, Icons.Filled.SkipNext) {
+                onDismiss()
+                scope.launch {
+                    (context.applicationContext as com.kzhovn.todoapp.TodoApp).repository.skip(task.id, System.currentTimeMillis())
+                    PinnedTask.refresh(context)
                 }
             }
         }

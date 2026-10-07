@@ -355,6 +355,7 @@ class MainActivity : ComponentActivity() {
                             selectedIds = selectedIds,
                             onReparent = { taskId, newParentId -> viewModel.reparent(taskId, newParentId) },
                             onMove = { taskId, anchorId, after -> viewModel.move(taskId, anchorId, after) },
+                            onSnooze = { id, until -> viewModel.snooze(id, until) },
                             onAddSubtask = { parentId ->
                                 startActivity(
                                     Intent(this@MainActivity, QuickAddActivity::class.java)

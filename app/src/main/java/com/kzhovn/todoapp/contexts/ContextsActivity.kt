@@ -50,6 +50,7 @@ import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.contextProblem
+import com.kzhovn.todoapp.data.describeContext
 import com.kzhovn.todoapp.data.deleteContextQuestion
 import com.kzhovn.todoapp.ui.ConfirmDialog
 import com.kzhovn.todoapp.ui.DayOfWeekToggle
@@ -102,7 +103,12 @@ class ContextsActivity : ComponentActivity() {
             var contextPendingDelete by remember { mutableStateOf<TaskContext?>(null) }
             val scope = rememberCoroutineScope()
 
-            suspend fun refresh() { contexts = contextRepository.getAllContexts() }
+            // Each context's time windows, for its line in the list (describeContext, as on the web).
+            var windowsOf by remember { mutableStateOf<Map<Long, List<ContextTimeWindow>>>(emptyMap()) }
+            suspend fun refresh() {
+                contexts = contextRepository.getAllContexts()
+                windowsOf = contexts.associate { it.id to contextRepository.getTimeWindows(it.id) }
+            }
             LaunchedEffect(Unit) { refresh() }
 
             fun resetForm() {
@@ -145,7 +151,7 @@ class ContextsActivity : ComponentActivity() {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = if (ctx.type == ContextType.PLACE) "${ctx.name} — Wifi: ${ctx.wifiSsid}" else ctx.name,
+                                text = "${ctx.name} — ${describeContext(ctx, windowsOf[ctx.id].orEmpty())}",
                                 fontSize = 14.sp, color = LedgerInk,
                                 modifier = Modifier.weight(1f)
                             )

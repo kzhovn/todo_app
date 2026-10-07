@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.data.OutlinerPreferences
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.waitingFor
 import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
@@ -87,6 +88,7 @@ fun OutlinerScreen(
     onReparent: (Long, Long) -> Unit,
     onAddSubtask: (Long) -> Unit,
     onMove: (taskId: Long, anchorId: Long, after: Boolean) -> Unit = { _, _, _ -> },
+    onSnooze: (Long, Long) -> Unit = { _, _ -> },
     selectedIds: Set<Long> = emptySet(),
     // Folder mode: the tree starts inside this folder, and each other folder has a button to zoom into it.
     rootId: Long? = null,
@@ -137,7 +139,7 @@ fun OutlinerScreen(
         }
     }
 
-    val actions = OutlinerActions(::toggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, onZoom)
+    val actions = OutlinerActions(::toggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, onZoom, onSnooze)
     LazyColumn(state = listState, modifier = Modifier.onGloballyPositioned { listBounds = it.boundsInRoot() }) {
         renderNodes(tree, depth = 0, collapsed = collapsed, actions = actions, allById = allById, counts = counts, selectedIds = selectedIds)
     }
@@ -172,7 +174,8 @@ private data class OutlinerActions(
     val onAddSubtask: (Long) -> Unit,
     val onMove: (Long, Long, Boolean) -> Unit,
     val onDragAt: (Float?) -> Unit,
-    val onZoom: ((Long) -> Unit)?
+    val onZoom: ((Long) -> Unit)?,
+    val onSnooze: (Long, Long) -> Unit
 )
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -187,7 +190,8 @@ private fun OutlinerRow(
     itemCounts: Pair<Int, Int>?,
     selected: Boolean
 ) {
-    val (onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, onZoom) = actions
+    val (onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, onZoom, onSnooze) = actions
+    var menuOpen by remember { mutableStateOf(false) }
     val task = node.task
     val hasChildren = node.children.isNotEmpty()
     val indent = (8 + depth * 18).dp
@@ -255,11 +259,19 @@ private fun OutlinerRow(
                 }
                 .padding(start = indent, top = 1.dp, bottom = 1.dp, end = 8.dp)
                 .dragAndDropSource {
+                    // Press and hold, then move: drags the task. Press and hold without moving: its menu,
+                    // as on the lists' rows (not for folders and projects, which it doesn't fit).
+                    var moved = false
                     detectDragGesturesAfterLongPress(
-                        onDragStart = {
-                            startTransfer(DragAndDropTransferData(ClipData.newPlainText("task_id", task.id.toString())))
+                        onDragStart = { moved = false },
+                        onDrag = { _, _ ->
+                            if (!moved) {
+                                moved = true
+                                startTransfer(DragAndDropTransferData(ClipData.newPlainText("task_id", task.id.toString())))
+                            }
                         },
-                        onDrag = { _, _ -> }
+                        onDragEnd = { if (!moved && task.type.isDoable) menuOpen = true },
+                        onDragCancel = { if (!moved && task.type.isDoable) menuOpen = true }
                     )
                 }
                 .dragAndDropTarget(
@@ -330,6 +342,7 @@ private fun OutlinerRow(
                 }
             }
         }
+        TaskRowMenu(task, menuOpen, onDismiss = { menuOpen = false }, onSnooze = onSnooze)
     }
 }
 
