@@ -299,7 +299,7 @@ private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode)
         p(classes = "hint") { +(tasks.take(8).joinToString(", ") { it.title } + if (tasks.size > 8) " and ${tasks.size - 8} more" else "") }
         tasks.forEach { hiddenInput(name = "id") { value = it.id.toString() } }
         choice(Labels.STAR, "star", listOf("keep" to Labels.KEEP, "star" to Labels.STAR, "unstar" to Labels.UNSTAR))
-        choice(Labels.MAYBE_CHOICE, "maybe", listOf("keep" to Labels.KEEP, "yes" to Labels.MAYBE_YES, "no" to Labels.NOT_MAYBE))
+        choice(Labels.MAYBE_CHOICE, "maybe", listOf("keep" to Labels.KEEP, "yes" to Labels.MAYBE, "no" to Labels.NOT_MAYBE))
         dateChoice(Labels.START_DATE, "start")
         dateChoice(Labels.DUE_DATE, "due")
         field(Labels.FOLDER, "") {
