@@ -2,6 +2,7 @@ package com.kzhovn.todoapp.server
 
 import com.kzhovn.todoapp.data.RecurrenceType
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.quickadd.startOfDay
 import com.kzhovn.todoapp.sync.SyncJson
@@ -35,6 +36,12 @@ class ServerTest {
     private var now = 1_000_000L
     private val service = TaskService(store) { now }
     private val logic = BotLogic(service, store)
+
+    @Test
+    fun `help lists quick add's own syntax and fits in one Discord message`() {
+        assertTrue(Labels.QUICK_ADD_SYNTAX.all { (syntax, _) -> "`$syntax`" in HELP })
+        assertTrue(HELP.length <= 2000)
+    }
 
     @Test
     fun `sync endpoint rejects bad tokens and round-trips rows`() = testApplication {

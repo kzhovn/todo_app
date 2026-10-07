@@ -2,6 +2,7 @@ package com.kzhovn.todoapp.server
 
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.checklistItems
+import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.quickadd.QuickAdd
 import kotlinx.serialization.Serializable
@@ -20,25 +21,12 @@ private const val NUDGE_AFTER = 3 * DAY_MS
 private const val NUDGE_SLACK = 60L * 60 * 1000
 const val NOTHING = "🎉 Nothing here 🎉"
 
+// The syntax lines are quick add's own list (Labels.QUICK_ADD_SYNTAX), the one the phone's drawer and the
+// web's sidebar show, so they can't drift apart.
 val HELP = """
 **Adding**
-`-- call mom` a task (starred, in Personal)
-`--work: send report` into the folder Work (or a project)
-`--groceries: milk, eggs` items into the checklist Groceries
-`-- packing [passport, charger]` a new checklist
-`--d: shower` today only (gone at day rollover)
-`-- x -d fri` / `due fri 5pm` / `due 3pm` due date and time
-`-- x -s tomorrow` / `start mon 9am` start date
-Dates: `today`, `mon`, `next fri`, `+3d`, `in 2 weeks`, `+2h`, `oct 12`, `next week`, `weekend`
-`-- x every mon, thu` / `every 2 weeks` / `every 1st sat` repeats
-`-- x every 4 days after done` repeats after completion
-`-- x due fri 3pm remind 30m before` · `remind start` · `remind fri 5pm` reminders (on the phone)
-`-- x @home` a context
-`-- x ~30m` / `-- 30m of x` a timed task
-`-- x*` starred · `-- x!` high priority · `-- x?` a maybe (hidden from Active, never starred)
-`-- x -p` pin it · `-- x -f` focus on it
-`-- wait roommate decides` a waiting item: blocks its dependents, but isn't yours to do
-`-- call bank // ask about fees` everything after // (or after the first line) is the note
+Start a message with `--`, then the task: `-- call mom` (starred, in Personal). Any of:
+""".trimIndent() + "\n" + Labels.QUICK_ADD_SYNTAX.joinToString("\n") { (syntax, meaning) -> "`$syntax` $meaning" } + "\n" + """
 `✅ fixed the sink` logs something already done (a completed task, for Review)
 Reply to a todo with a todo: the first depends on the new one.
 
