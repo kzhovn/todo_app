@@ -1,6 +1,9 @@
 package com.kzhovn.todoapp.repository
 
+import com.kzhovn.todoapp.data.CurrentTask
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.newTaskPositions
+import com.kzhovn.todoapp.quickadd.QuickAdd
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.completed
 import com.kzhovn.todoapp.data.isUnder
@@ -79,4 +82,35 @@ private fun planEach(all: List<Task>, ids: List<Long>, step: (List<Task>, Long) 
         total += change
     }
     return total
+}
+
+// A new task, placed among its siblings as new tasks are (newTaskPositions: it may move a few of them),
+// with the write rules applied. A task with no id yet gets one.
+fun planCreate(all: List<Task>, task: Task, contextIds: Set<Long> = emptySet(), now: Long): TaskChanges {
+    val new = (if (task.id == 0L) task.copy(id = newId()) else task).withRules(now)
+    val positions = newTaskPositions(all, new)
+    return TaskChanges(
+        creates = listOf(new.copy(position = positions[new.id] ?: new.position) to contextIds),
+        updates = all.mapNotNull { t -> positions[t.id]?.let { t.copy(position = it) } }
+    )
+}
+
+// Carries out a quick add (see planQuickAdd): the task with its contexts and items, pinned or focused if
+// asked, or the items into an existing checklist. Returns the changes and the task's id (the checklist's,
+// for items). `star`: added while looking at Doing, so it shows up there.
+fun planQuickAddWrite(all: List<Task>, add: QuickAdd, defaultParent: Long?, now: Long, star: Boolean = false): Pair<TaskChanges, Long?> {
+    if (add.isEmpty) return TaskChanges() to null
+    var current = all
+    var total = TaskChanges()
+    fun step(change: TaskChanges) { current = change.applyTo(current); total += change }
+    fun items(parent: Long) = add.items.forEach { step(planCreate(current, Task(title = it, parentId = parent), now = now)) }
+    add.intoChecklist?.let { id -> items(id); return total to id }
+    val task = add.task ?: return TaskChanges() to null
+    val created = planCreate(current, task.copy(parentId = task.parentId ?: defaultParent, isStarred = task.isStarred || (star && !task.isMaybe)), add.contextIds, now)
+    step(created)
+    val id = created.creates.single().first.id
+    items(id)
+    if (add.focus) step(TaskChanges(updates = CurrentTask.focus(current, id, now)))
+    else if (add.pin) step(TaskChanges(updates = CurrentTask.pin(current, id, now)))
+    return total to id
 }

@@ -5,7 +5,6 @@ import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.searchTasks
 import com.kzhovn.todoapp.data.planMoveNextTo
 import com.kzhovn.todoapp.data.splitItems
-import com.kzhovn.todoapp.data.newTaskPositions
 import com.kzhovn.todoapp.data.folderColorAssignments
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
@@ -14,7 +13,6 @@ import com.kzhovn.todoapp.data.TaskDao
 import com.kzhovn.todoapp.data.TaskContextCrossRef
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
-import com.kzhovn.todoapp.data.newId
 import com.kzhovn.todoapp.data.canDependOn
 import com.kzhovn.todoapp.data.canMoveUnder
 import com.kzhovn.todoapp.notifications.ReminderScheduler
@@ -33,15 +31,12 @@ class TaskRepository(
     private val _lastDeleted = MutableStateFlow<List<Task>?>(null)
     val lastDeleted: StateFlow<List<Task>?> = _lastDeleted
 
+    // See planCreate (shared with the server).
     suspend fun createTask(task: Task): Long {
-        val created = (if (task.id == 0L) task.copy(id = newId()) else task).withRules(System.currentTimeMillis())
-        val all = taskDao.getAllOnce()
-        val positions = newTaskPositions(all, created)
-        val toInsert = created.copy(position = positions[created.id] ?: created.position)
-        taskDao.insert(toInsert)
-        all.forEach { t -> positions[t.id]?.let { taskDao.update(t.copy(position = it)) } }
-        reminderScheduler.schedule(toInsert)
-        return toInsert.id
+        val now = System.currentTimeMillis()
+        val change = planCreate(taskDao.getAllOnce(), task, now = now)
+        apply(change, now)
+        return change.creates.single().first.id
     }
 
     suspend fun countDescendants(taskId: Long): Int = taskDao.getDescendants(taskId).size
@@ -233,16 +228,10 @@ class TaskRepository(
     suspend fun planQuickAdd(text: String, rolloverHour: Int, now: Long): QuickAdd =
         planQuickAdd(text, taskDao.getAllOnce(), taskContextDao.getAll(), now, rolloverHour)
 
-    // Carries out a quick add (see planQuickAdd): the task with its contexts, items, pin or focus, or
-    // items into an existing checklist. Returns the task's id (the checklist's, for items).
+    // See planQuickAddWrite (shared with the server). Returns the task's id (the checklist's, for items).
     suspend fun quickAdd(add: QuickAdd, defaultParent: Long?, now: Long): Long? {
-        if (add.isEmpty) return null
-        add.intoChecklist?.let { id -> add.items.forEach { createTask(Task(title = it, parentId = id)) }; return id }
-        val task = add.task ?: return null
-        val id = createTask(task.copy(parentId = task.parentId ?: defaultParent))
-        add.contextIds.forEach { taskContextDao.assignContext(TaskContextCrossRef(id, it)) }
-        add.items.forEach { createTask(Task(title = it, parentId = id)) }
-        if (add.focus) focus(id, now) else if (add.pin) pin(id, now)
+        val (change, id) = planQuickAddWrite(taskDao.getAllOnce(), add, defaultParent, now)
+        apply(change, now)
         return id
     }
 

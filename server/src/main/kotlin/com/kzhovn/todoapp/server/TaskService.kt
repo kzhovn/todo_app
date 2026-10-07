@@ -22,7 +22,6 @@ import com.kzhovn.todoapp.data.planMoveNextTo
 import com.kzhovn.todoapp.data.splitItems
 import com.kzhovn.todoapp.data.isChecklistItem
 import com.kzhovn.todoapp.repository.urgentFirst
-import com.kzhovn.todoapp.data.newTaskPositions
 import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.DEFAULT_ROLLOVER_HOUR
@@ -32,6 +31,8 @@ import com.kzhovn.todoapp.data.canDependOn
 import com.kzhovn.todoapp.data.canMoveUnder
 import com.kzhovn.todoapp.repository.TaskChanges
 import com.kzhovn.todoapp.repository.planComplete
+import com.kzhovn.todoapp.repository.planCreate
+import com.kzhovn.todoapp.repository.planQuickAddWrite
 import com.kzhovn.todoapp.repository.planCompleteChecklist
 import com.kzhovn.todoapp.repository.planCompleteWithDescendants
 import com.kzhovn.todoapp.repository.planResolveWaiting
@@ -176,15 +177,11 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     fun findFolder(name: String): Task? = findFolder(tasks(), name)
 
-    // Placed like the app's createTask (see newTaskPositions).
+    // See planCreate (shared with the app). Always a new id.
     fun create(task: Task, contextIds: Set<Long> = emptySet()): Task = store.transaction {
-        val all = tasks()
-        val new = task.copy(id = newId()).withRules(clock())
-        val positions = newTaskPositions(all, new)
-        val created = new.copy(position = positions[new.id] ?: new.position)
-        store.write(TASKS, created.id, taskFields(created, contextIds, emptySet()), clock())
-        positions.forEach { (id, position) -> if (id != created.id) update(id) { it.copy(position = position) } }
-        created
+        val change = planCreate(tasks(), task.copy(id = 0), contextIds, clock())
+        apply(change)
+        change.creates.single().first
     }
 
     fun update(id: Long, change: (Task) -> Task) {
@@ -237,16 +234,11 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         ))
     }
 
-    // Carries out a quick add (see planQuickAdd): the task with its contexts, items, pin or focus, or
-    // items into an existing checklist. Returns the task (the checklist, for items).
+    // See planQuickAddWrite (shared with the app). Returns the task (the checklist, for items).
     fun add(add: QuickAdd, defaultParent: Long?, star: Boolean = false): Task? = store.transaction {
-        if (add.isEmpty) return@transaction null
-        add.intoChecklist?.let { id -> addItems(id, add.items); return@transaction get(id) }
-        val task = add.task ?: return@transaction null
-        val created = create(task.copy(parentId = task.parentId ?: defaultParent, isStarred = task.isStarred || (star && !task.isMaybe)), add.contextIds)
-        add.items.forEach { create(Task(title = it, parentId = created.id)) }
-        if (add.focus) focus(created.id) else if (add.pin) pin(created.id)
-        created
+        val (change, id) = planQuickAddWrite(tasks(), add, defaultParent, clock(), star)
+        apply(change)
+        id?.let(::get)
     }
 
     // Any "new task" box: quick add's whole syntax (a folder prefix, @contexts, [items], -p, notes...).

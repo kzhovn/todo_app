@@ -234,5 +234,5 @@ internal fun CompactNumberField(value: Int, onValueChange: (Int) -> Unit) {
 }
 
 // Inside a dialog the context is a wrapper around the Activity, not the Activity itself.
-private tailrec fun android.content.Context.findActivity(): Activity =
+internal tailrec fun android.content.Context.findActivity(): Activity =
     this as? Activity ?: (this as android.content.ContextWrapper).baseContext.findActivity()
