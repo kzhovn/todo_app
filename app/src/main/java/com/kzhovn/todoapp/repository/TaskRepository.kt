@@ -235,12 +235,10 @@ class TaskRepository(
         return id
     }
 
-    // Checked items are gone for good (after asking): a groceries list would otherwise fill up with them.
-    suspend fun clearChecked(checklistId: Long) =
-        taskDao.getAllOnce().filter { it.parentId == checklistId && it.isComplete }.forEach { taskDao.deleteById(it.id) }
+    // See planClearChecked and planUncheckAll (shared with the server).
+    suspend fun clearChecked(checklistId: Long) = apply(planClearChecked(taskDao.getAllOnce(), checklistId), System.currentTimeMillis())
 
-    suspend fun uncheckAll(checklistId: Long) =
-        taskDao.getAllOnce().filter { it.parentId == checklistId && it.isComplete }.forEach { taskDao.update(it.copy(isComplete = false, completedAt = null)) }
+    suspend fun uncheckAll(checklistId: Long) = apply(planUncheckAll(taskDao.getAllOnce(), checklistId), System.currentTimeMillis())
 
     // See planCompleteChecklist and planCompleteWithDescendants (shared with the server).
     suspend fun completeChecklist(checklistId: Long, moveUncheckedToNewList: Boolean, now: Long) =
@@ -266,24 +264,16 @@ class TaskRepository(
         }
     }
 
-    // Deletes "Today only" tasks (and anything under them) once their day has rolled over, and resolves
-    // waiting items whose date has come. Bypasses deleteTask so it doesn't offer an undo for something
-    // the user didn't just do.
+    // See planResolveWaiting and planPurgeExpired. Bypasses deleteTask so it doesn't offer an undo for
+    // something the user didn't just do.
     suspend fun purgeExpired(now: Long) {
         apply(planResolveWaiting(taskDao.getAllOnce(), getAllTaskContexts(), now), now)
-        taskDao.getAllOnce().filter { it.isExpired(now) }.forEach { task ->
-            (taskDao.getDescendants(task.id) + task).forEach {
-                taskDao.deleteById(it.id)
-                reminderScheduler.cancel(it)
-            }
-        }
+        apply(planPurgeExpired(taskDao.getAllOnce(), now), now)
     }
 
-    // Detaches this task's direct children (only direct — any grandchildren stay nested under
-    // their own now-top-level parent) so they survive as independent tasks. Like reparent, they land
-    // at the end of the top level (a stale position from the old list would misplace them).
+    // See planPromoteChildren (shared with the server).
     suspend fun promoteChildrenToTopLevel(taskId: Long) {
-        taskDao.getChildren(taskId).forEach { child -> taskDao.update(child.copy(parentId = null, position = null)) }
+        apply(planPromoteChildren(taskDao.getAllOnce(), taskId), System.currentTimeMillis())
     }
 }
 

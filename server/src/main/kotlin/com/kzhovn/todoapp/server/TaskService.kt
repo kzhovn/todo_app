@@ -30,7 +30,11 @@ import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.canDependOn
 import com.kzhovn.todoapp.data.canMoveUnder
 import com.kzhovn.todoapp.repository.TaskChanges
+import com.kzhovn.todoapp.repository.planClearChecked
 import com.kzhovn.todoapp.repository.planComplete
+import com.kzhovn.todoapp.repository.planPromoteChildren
+import com.kzhovn.todoapp.repository.planPurgeExpired
+import com.kzhovn.todoapp.repository.planUncheckAll
 import com.kzhovn.todoapp.repository.planCreate
 import com.kzhovn.todoapp.repository.planQuickAddWrite
 import com.kzhovn.todoapp.repository.planCompleteChecklist
@@ -85,7 +89,8 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun purgeExpired() = store.transaction {
         val now = clock()
         apply(planResolveWaiting(tasks(), contextIdsByTask(), now))
-        store.all(TASKS).filter { !it.isDeleted && it.toTask().isExpired(now) }.forEach { tombstone(it.id, now) }
+        // Expired tasks are hidden from tasks(), so this reads every live row.
+        apply(planPurgeExpired(store.all(TASKS).filterNot { it.isDeleted }.map { it.toTask() }, now))
     }
 
     fun deletedTask(id: Long): Task? = store.get(TASKS, id)?.takeIf { it.isDeleted }?.toTask()
@@ -414,20 +419,17 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     fun findChecklist(name: String): Task? = tasks().firstOrNull { it.type == TaskType.CHECKLIST && !it.isComplete && it.title.trim().equals(name.trim(), ignoreCase = true) }
 
-    fun clearChecked(checklistId: Long) = store.transaction { tasks().filter { it.parentId == checklistId && it.isComplete }.forEach { delete(it.id) } }
+    fun clearChecked(checklistId: Long) = apply(planClearChecked(tasks(), checklistId))
 
-    fun uncheckAll(checklistId: Long) = store.transaction { tasks().filter { it.parentId == checklistId && it.isComplete }.forEach { uncomplete(it.id) } }
+    fun uncheckAll(checklistId: Long) = apply(planUncheckAll(tasks(), checklistId))
 
     fun completeChecklist(checklistId: Long, moveUncheckedToNewList: Boolean) =
         apply(planCompleteChecklist(tasks(), contextIdsByTask(), checklistId, moveUncheckedToNewList, clock()))
 
     fun completeWithDescendants(id: Long) = apply(planCompleteWithDescendants(tasks(), contextIdsByTask(), id, clock()))
 
-    // Mirrors TaskRepository.promoteChildrenToTopLevel: only direct children move out, so they
-    // survive as independent tasks.
-    fun promoteChildren(id: Long) = store.transaction {
-        tasks().filter { it.parentId == id }.forEach { child -> update(child.id) { it.copy(parentId = null, position = null) } }
-    }
+    // See planPromoteChildren (shared with the app).
+    fun promoteChildren(id: Long) = apply(planPromoteChildren(tasks(), id))
 
     // Open projects whose steps are all done: time to complete them or add the next step.
     fun stalled(): List<Task> = stalledProjects(tasks())

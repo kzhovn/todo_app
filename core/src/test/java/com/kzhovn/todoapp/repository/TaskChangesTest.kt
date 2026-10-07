@@ -44,4 +44,19 @@ class TaskChangesTest {
         assertEquals(copy.id, after.single { it.id == 11L }.parentId)
         assertTrue(after.single { it.id == 10L }.isComplete)
     }
+
+    @Test fun anExpiredTodayOnlyTaskGoesWithItsSubtasks() {
+        val today = Task(id = 20, title = "Today", expiresAt = now - 1)
+        val sub = Task(id = 21, title = "Step", parentId = 20)
+        assertEquals(setOf(20L, 21L), planPurgeExpired(listOf(today, sub, sweep), now).deletes)
+    }
+
+    @Test fun uncheckingAllTakesBackARepeatingItemsNextOne() {
+        val list = Task(id = 10, title = "Weekly", type = TaskType.CHECKLIST)
+        val item = bins.copy(id = 11, parentId = 10)
+        val done = planComplete(listOf(list, item), emptyMap(), 11, now)
+        val after = done.applyTo(listOf(list, item))
+        val back = planUncheckAll(after, 10)
+        assertEquals(setOf(done.creates.single().first.id), back.deletes)
+    }
 }

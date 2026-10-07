@@ -114,3 +114,19 @@ fun planQuickAddWrite(all: List<Task>, add: QuickAdd, defaultParent: Long?, now:
     else if (add.pin) step(TaskChanges(updates = CurrentTask.pin(current, id, now)))
     return total to id
 }
+
+// "Today only" tasks past their day go, with everything under them (deleted, not kept as done).
+fun planPurgeExpired(all: List<Task>, now: Long): TaskChanges =
+    TaskChanges(deletes = all.filter { it.isExpired(now) }.flatMap { t -> descendants(t.id, all).map { it.id } + t.id }.toSet())
+
+// A checklist's checked items are gone for good (after asking): a groceries list would otherwise fill up.
+fun planClearChecked(all: List<Task>, checklistId: Long): TaskChanges =
+    TaskChanges(deletes = all.filter { it.parentId == checklistId && it.isComplete }.flatMap { t -> descendants(t.id, all).map { it.id } + t.id }.toSet())
+
+// Unchecks every item, each as reopening it would (a repeating item's untouched next one is taken back).
+fun planUncheckAll(all: List<Task>, checklistId: Long): TaskChanges =
+    planEach(all, all.filter { it.parentId == checklistId && it.isComplete }.map { it.id }) { current, id -> planUncomplete(current, id) }
+
+// Only the direct children move out, to the top level (at the end), so they survive as tasks of their own.
+fun planPromoteChildren(all: List<Task>, id: Long): TaskChanges =
+    TaskChanges(updates = all.filter { it.parentId == id }.map { it.copy(parentId = null, position = null) })
