@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.widget
 
+import com.kzhovn.todoapp.data.Labels
 import androidx.compose.ui.graphics.Color
 import com.kzhovn.todoapp.data.folderColorsArgb
 import com.kzhovn.todoapp.data.isUnder
@@ -192,7 +193,7 @@ class TodoWidget : GlanceAppWidget() {
                 }
                 if (rows.isEmpty()) {
                     Box(contentAlignment = Alignment.Center, modifier = GlanceModifier.fillMaxSize()) {
-                        Text("Nothing here", style = TextStyle(color = fixed(LedgerMuted), fontSize = 15.sp))
+                        Text(Labels.NOTHING_HERE, style = TextStyle(color = fixed(LedgerMuted), fontSize = 15.sp))
                     }
                 } else {
                     val expanded = currentState(WIDGET_EXPANDED_KEY).orEmpty()

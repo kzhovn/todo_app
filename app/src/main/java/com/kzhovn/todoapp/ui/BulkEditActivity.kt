@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.data.isLinkable
 import android.os.Bundle
@@ -67,40 +68,40 @@ class BulkEditActivity : ComponentActivity() {
                 val byId = remember(allTasks) { allTasks.associateBy { it.id } }
 
                 Column(Modifier.fillMaxSize().background(LedgerBackground).verticalScroll(rememberScrollState()).padding(16.dp)) {
-                    Text("Edit ${taskIds.size} tasks", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk)
+                    Text(Labels.editTasks(taskIds.size), fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk)
 
-                    Section("Star") {
-                        Choice("Keep", edit.starred == null) { edit = edit.copy(starred = null) }
-                        Choice("Star", edit.starred == true) { edit = edit.copy(starred = true, maybe = edit.maybe.takeIf { it != true }) }
-                        Choice("Unstar", edit.starred == false) { edit = edit.copy(starred = false) }
+                    Section(Labels.STAR) {
+                        Choice(Labels.KEEP, edit.starred == null) { edit = edit.copy(starred = null) }
+                        Choice(Labels.STAR, edit.starred == true) { edit = edit.copy(starred = true, maybe = edit.maybe.takeIf { it != true }) }
+                        Choice(Labels.UNSTAR, edit.starred == false) { edit = edit.copy(starred = false) }
                     }
-                    Section("Maybe (?)") {
-                        Choice("Keep", edit.maybe == null) { edit = edit.copy(maybe = null) }
-                        Choice("Maybe", edit.maybe == true) { edit = edit.copy(maybe = true, starred = edit.starred.takeIf { it != true }) }
-                        Choice("Not maybe", edit.maybe == false) { edit = edit.copy(maybe = false) }
+                    Section(Labels.MAYBE_CHOICE) {
+                        Choice(Labels.KEEP, edit.maybe == null) { edit = edit.copy(maybe = null) }
+                        Choice(Labels.MAYBE_YES, edit.maybe == true) { edit = edit.copy(maybe = true, starred = edit.starred.takeIf { it != true }) }
+                        Choice(Labels.NOT_MAYBE, edit.maybe == false) { edit = edit.copy(maybe = false) }
                     }
-                    DateSection("Start date", edit.startDate) { edit = edit.copy(startDate = it) }
-                    DateSection("Due date", edit.dueDate) { edit = edit.copy(dueDate = it) }
-                    Section("Folder") {
-                        Choice("Keep", edit.moveTo == null) { edit = edit.copy(moveTo = null) }
-                        Choice("Top level", edit.moveTo == FolderChange(null)) { edit = edit.copy(moveTo = FolderChange(null)) }
+                    DateSection(Labels.START_DATE, edit.startDate) { edit = edit.copy(startDate = it) }
+                    DateSection(Labels.DUE_DATE, edit.dueDate) { edit = edit.copy(dueDate = it) }
+                    Section(Labels.FOLDER) {
+                        Choice(Labels.KEEP, edit.moveTo == null) { edit = edit.copy(moveTo = null) }
+                        Choice(Labels.TOP_LEVEL, edit.moveTo == FolderChange(null)) { edit = edit.copy(moveTo = FolderChange(null)) }
                         val target = edit.moveTo?.folderId?.let { byId[it]?.title }
                         Choice(target ?: "Move to…", target != null) { showFolderPicker = true }
                     }
-                    Label("Add contexts")
+                    Label(Labels.ADD_CONTEXTS)
                     SearchableMultiSelectDropdown(
                         label = "Choose contexts", items = allContexts, selectedIds = edit.addContextIds,
                         idOf = { it.id }, labelOf = { it.name },
                         onToggle = { id -> edit = edit.copy(addContextIds = edit.addContextIds.toggle(id), removeContextIds = edit.removeContextIds - id) }
                     )
-                    Label("Remove contexts")
+                    Label(Labels.REMOVE_CONTEXTS)
                     SearchableMultiSelectDropdown(
                         label = "Choose contexts", items = allContexts, selectedIds = edit.removeContextIds,
                         idOf = { it.id }, labelOf = { it.name },
                         onToggle = { id -> edit = edit.copy(removeContextIds = edit.removeContextIds.toggle(id), addContextIds = edit.addContextIds - id) }
                     )
-                    Section("Depends on") {
-                        Choice("Nothing new", edit.dependsOnId == null) { edit = edit.copy(dependsOnId = null) }
+                    Section(Labels.DEPENDS_ON) {
+                        Choice(Labels.NOTHING_NEW, edit.dependsOnId == null) { edit = edit.copy(dependsOnId = null) }
                         val blocker = edit.dependsOnId?.let { byId[it]?.title }
                         Choice(blocker ?: "Choose task…", blocker != null) { showDependencyPicker = true }
                     }
@@ -112,7 +113,7 @@ class BulkEditActivity : ComponentActivity() {
                             Toast.makeText(this@BulkEditActivity, "Updated ${taskIds.size} tasks", Toast.LENGTH_SHORT).show()
                             finish()
                         }
-                    }) { Text("Apply to ${taskIds.size} tasks") }
+                    }) { Text(Labels.applyToTasks(taskIds.size)) }
                 }
 
                 if (showFolderPicker) {
@@ -139,8 +140,8 @@ class BulkEditActivity : ComponentActivity() {
     @Composable
     private fun DateSection(title: String, change: DateChange?, onChange: (DateChange?) -> Unit) {
         Section(title) {
-            Choice("Keep", change == null) { onChange(null) }
-            Choice("Clear", change == DateChange(null)) { onChange(DateChange(null)) }
+            Choice(Labels.KEEP, change == null) { onChange(null) }
+            Choice(Labels.CLEAR, change == DateChange(null)) { onChange(DateChange(null)) }
             val date = change?.date
             Choice(date?.let(::chipDate) ?: "Set…", date != null) {
                 pickDate(this@BulkEditActivity, date) { onChange(DateChange(it)) }

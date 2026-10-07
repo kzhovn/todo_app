@@ -380,7 +380,7 @@ private val KEYS = listOf(
 )
 
 private fun FlowContent.syntaxKey() = div(classes = "key") {
-    div(classes = "key-head") { +"Quick add" }
+    div(classes = "key-head") { +Labels.QUICK_ADD }
     Labels.QUICK_ADD_SYNTAX.forEach { (syntax, meaning) -> div { span(classes = "mono") { +syntax }; +" $meaning" } }
     div(classes = "key-head") { +"Keys (not while typing)" }
     KEYS.forEach { (keys, meaning) -> div { span(classes = "mono") { +keys }; +" $meaning" } }
@@ -397,10 +397,10 @@ fun DIV.listContents(data: ListData) {
     attributes["hx-swap"] = "outerHTML"
     data.stalled?.let { stalledPrompt(it, data.mode, data.q) }
     if (data.mode == ListMode.ALL) {
-        if (data.roots.isEmpty()) p(classes = "empty") { +"Nothing here" }
+        if (data.roots.isEmpty()) p(classes = "empty") { +Labels.NOTHING_HERE }
         tree(data, data.roots, parentId = null, depth = 0)
     } else if (data.tasks.isEmpty()) {
-        p(classes = "empty") { +"Nothing here" }
+        p(classes = "empty") { +Labels.NOTHING_HERE }
     } else if (data.mode == ListMode.ACTIVE) {
         // Foldable sections by top-level folder, like the phone's Active.
         sectionsByTopFolder(data.tasks, data.byId).forEach { (folder, tasks) ->
@@ -536,7 +536,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                 } else task.startDate?.takeIf { it > data.now && !task.isComplete }?.let { span(classes = "tail") { +" · ${startText(it, data.now)}" } }
                 if (task.type != TaskType.CHECKLIST) data.subtaskCounts(task)?.let { (done, total) -> span(classes = "tail") { +" · $done/$total" } }
                 if (task.recurrenceType != null) span(classes = "badge") { attributes["title"] = "Recurring"; icon(Icon.REPEAT, "") }
-                if (!task.notes.isNullOrBlank()) span(classes = "has-notes") { attributes["title"] = "Has notes"; icon(Icon.NOTES, "") }
+                if (!task.notes.isNullOrBlank()) span(classes = "has-notes") { attributes["title"] = Labels.HAS_NOTES; icon(Icon.NOTES, "") }
             }
         }
         // A timed task's play button, "▶ 1h"; app.js runs the countdown (one at a time, per browser)
@@ -546,7 +546,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                 attributes["data-task-id"] = task.id.toString()
                 attributes["data-minutes"] = minutes.toString()
                 attributes["data-title"] = task.title
-                attributes["aria-label"] = "Start timer"
+                attributes["aria-label"] = Labels.START_TIMER
                 icon(Icon.PLAY, "play-icon")
                 icon(Icon.PAUSE, "pause-icon")
                 span(classes = "play-time") { +formatDuration(minutes) }

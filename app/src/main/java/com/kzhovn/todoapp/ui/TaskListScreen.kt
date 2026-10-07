@@ -222,7 +222,7 @@ internal fun PriorityMark() = Text(" !", fontSize = 15.sp, fontWeight = FontWeig
 @Composable
 internal fun NotesMark() {
     Spacer(Modifier.width(4.dp))
-    Icon(Icons.AutoMirrored.Filled.Notes, contentDescription = "Has notes", tint = LedgerMuted, modifier = Modifier.size(15.dp))
+    Icon(Icons.AutoMirrored.Filled.Notes, contentDescription = Labels.HAS_NOTES, tint = LedgerMuted, modifier = Modifier.size(15.dp))
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -460,7 +460,7 @@ fun TimerButton(task: Task, minutes: Int) {
     ) {
         Icon(
             if (running) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-            contentDescription = if (running) "Pause timer" else "Start timer",
+            contentDescription = if (running) "Pause timer" else Labels.START_TIMER,
             tint = LedgerAccent,
             modifier = Modifier.size(16.dp)
         )

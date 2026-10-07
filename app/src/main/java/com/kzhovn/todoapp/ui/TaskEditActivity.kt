@@ -230,13 +230,12 @@ class TaskEditActivity : ComponentActivity() {
             )
             is EditorDialog.UpdateSubtasks -> {
                 val (overriding, fields) = d.question
-                val one = overriding.size == 1
                 AlertDialog(
                     onDismissRequest = close,
-                    title = { Text("Update subtasks too?") },
-                    text = { Text("${overriding.size} subtask${if (one) " has its" else "s have their"} own ${fields.joinToString(" and ") { it.label }}. Clear ${if (one) "it" else "them"} so ${if (one) "it follows" else "they follow"} this task?") },
-                    confirmButton = { Button(onClick = { close(); save(overriding, fields) }) { Text("Update subtasks") } },
-                    dismissButton = { Button(onClick = { close(); save() }) { Text("Only this task") } }
+                    title = { Text(Labels.UPDATE_SUBTASKS_TOO) },
+                    text = { Text(Labels.subtasksOverride(overriding.size, fields.joinToString(" and ") { it.label })) },
+                    confirmButton = { Button(onClick = { close(); save(overriding, fields) }) { Text(Labels.UPDATE_SUBTASKS) } },
+                    dismissButton = { Button(onClick = { close(); save() }) { Text(Labels.ONLY_THIS_TASK) } }
                 )
             }
             EditorDialog.SubtaskPicker -> {

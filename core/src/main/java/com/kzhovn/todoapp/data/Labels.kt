@@ -9,6 +9,72 @@ import com.kzhovn.todoapp.recurrence.RecurrenceUnit
 
 // The editor's user-facing names, shared by the phone app and the web app so they always match.
 object Labels {
+    // Review (the phone's and the web's)
+    const val REVIEW = "Review"
+    const val SEE_ALL_FOLDERS = "See all folders"
+    fun justFolder(title: String) = "Just $title"
+    const val BACK_TO_TODAY = "Back to today"
+    const val TIME_TO_DONE = "Time to done"
+    fun timeToDoneCaption(count: Int) = "from start or creation · $count tasks, repeats left out"
+    const val MEDIAN_BY_FOLDER = "Median by folder"
+    const val TOOK_LONGEST = "Took longest"
+    const val WAITING_NOW = "Waiting now"
+    const val WAITING_NOW_CAPTION = "Active tasks, plus those only held back by a context, by how long they've waited"
+    const val WAITED_LONGEST = "Waited longest"
+    const val DUE_DATES = "Due dates"
+    const val LATEST = "Latest"
+    fun doneIn(window: String) = "Done $window"
+    const val BY_MONTH = "By month"
+    fun nothingDoneIn(window: String) = "Nothing completed in $window."
+    fun late(ms: Long) = "${com.kzhovn.todoapp.repository.shortAge(ms, "under a day")} late"
+
+    // Focus mode
+    const val FOCUS_ON = "Focus on"
+    const val FOCUS_NEXT_OR_FINISH = "Focus on the next task, or finish?"
+    const val IM_DONE = "I'm done"
+    const val LEAVE_FOCUS = "Leave focus"
+
+    // Contexts
+    const val NEW_CONTEXT = "New context"
+    const val PLACE_CONTEXT = "Place (wifi)"
+    const val TIME_CONTEXT = "Time window"
+
+    // Repeat
+    const val DONT_REPEAT = "Don't repeat"
+    const val ON_A_SCHEDULE = "On a schedule"
+    const val AFTER_COMPLETION_SUFFIX = "after completion"
+
+    const val HAS_NOTES = "Has notes"
+    const val NOTHING_HERE = "Nothing here"
+    const val QUICK_ADD = "Quick add"
+    const val START_TIMER = "Start timer"
+    const val TIMES_UP = "Time's up"
+    const val DIGEST_CAPTION = "Doing, posted each morning. Off, the bot still nudges about tasks stuck in Doing."
+
+    // Bulk edit (the phone's and the web's): every choice starts at Keep.
+    fun editTasks(count: Int) = "Edit $count task${if (count == 1) "" else "s"}"
+    fun applyToTasks(count: Int) = "Apply to $count task${if (count == 1) "" else "s"}"
+    const val KEEP = "Keep"
+    const val UNSTAR = "Unstar"
+    const val MAYBE_CHOICE = "Maybe (?)"
+    const val MAYBE_YES = "Maybe"
+    const val NOT_MAYBE = "Not maybe"
+    const val START_DATE = "Start date"
+    const val DUE_DATE = "Due date"
+    const val CLEAR = "Clear"
+    const val TOP_LEVEL = "Top level"
+    const val ADD_CONTEXTS = "Add contexts"
+    const val REMOVE_CONTEXTS = "Remove contexts"
+    const val DEPENDS_ON = "Depends on"
+    const val NOTHING_NEW = "Nothing new"
+
+    // Saving a change subtasks override: the editor's question (the phone's dialog, the web's banner).
+    const val UPDATE_SUBTASKS_TOO = "Update subtasks too?"
+    fun subtasksOverride(count: Int, fields: String) = if (count == 1) "1 subtask has its own $fields. Clear it so it follows this task?"
+        else "$count subtasks have their own $fields. Clear them so they follow this task?"
+    const val UPDATE_SUBTASKS = "Update subtasks"
+    const val ONLY_THIS_TASK = "Only this task"
+
     const val TITLE = "Title"
     const val STAR = "Star"
     const val MAYBE = "Maybe"

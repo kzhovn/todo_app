@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.contexts
 
+import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.clockTime
 import androidx.core.content.ContextCompat
 import androidx.compose.material3.TextButton
@@ -158,16 +159,16 @@ class ContextsActivity : ComponentActivity() {
                 HorizontalDivider(color = LedgerBorder)
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    if (editingContextId == null) "New context" else "Edit context",
+                    if (editingContextId == null) Labels.NEW_CONTEXT else "Edit context",
                     fontWeight = FontWeight.Bold, fontSize = 14.sp, color = LedgerInk
                 )
                 Spacer(Modifier.height(4.dp))
                 OutlinedTextField(value = name, onValueChange = { name = it }, placeholder = { Text("Name") }, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
                 Row {
-                    SelectablePill(label = "Place (wifi)", selected = type == ContextType.PLACE, onClick = { type = ContextType.PLACE })
+                    SelectablePill(label = Labels.PLACE_CONTEXT, selected = type == ContextType.PLACE, onClick = { type = ContextType.PLACE })
                     Spacer(Modifier.width(12.dp))
-                    SelectablePill(label = "Time window", selected = type == ContextType.TIME, onClick = { type = ContextType.TIME })
+                    SelectablePill(label = Labels.TIME_CONTEXT, selected = type == ContextType.TIME, onClick = { type = ContextType.TIME })
                 }
                 Spacer(Modifier.height(8.dp))
                 if (type == ContextType.PLACE) {

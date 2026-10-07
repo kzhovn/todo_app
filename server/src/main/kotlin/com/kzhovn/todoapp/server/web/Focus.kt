@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.inMode
@@ -48,7 +49,7 @@ import kotlinx.html.textInput
 // lock. Leaving ends it everywhere and unpins.
 fun Route.focusRoutes(service: TaskService) {
     // With no session, the "Focus on" picker; with one, shellPage shows the session instead.
-    get("/focus") { call.respondHtml { shellPage(service, "Raspberry · Focus", "/focus") { div(classes = "focus-pick") { h2 { +"Focus on" }; focusPicker(service, finished = null) } } } }
+    get("/focus") { call.respondHtml { shellPage(service, "Raspberry · Focus", "/focus") { div(classes = "focus-pick") { h2 { +Labels.FOCUS_ON }; focusPicker(service, finished = null) } } } }
     // The focus screen's own refresh: its task changed, done, or moved on elsewhere. Once the session
     // is over (left anywhere), back to the lists.
     get("/focus/body") {
@@ -113,9 +114,9 @@ fun DIV.focusBody(service: TaskService, session: Task) {
     attributes["hx-swap"] = "outerHTML"
     if (session.isComplete) {
         h1(classes = "focus-title") { +"Done!" }
-        p(classes = "focus-sub") { +"Focus on the next task, or finish?" }
+        p(classes = "focus-sub") { +Labels.FOCUS_NEXT_OR_FINISH }
         div(classes = "focus-pick") { focusPicker(service, finished = session) }
-        button(classes = "leave") { hx("post", "/focus/leave", "this"); +"I'm done" }
+        button(classes = "leave") { hx("post", "/focus/leave", "this"); +Labels.IM_DONE }
         return
     }
     val all = service.tasks()
@@ -158,7 +159,7 @@ fun DIV.focusBody(service: TaskService, session: Task) {
             attributes["hx-swap"] = "none"
             textInput(name = "text") { id = "quickadd"; placeholder = "Add a task for later… (n)"; attributes["autocomplete"] = "off" }
         }
-        button(classes = "leave") { hx("post", "/focus/leave", "this"); +"Leave focus" }
+        button(classes = "leave") { hx("post", "/focus/leave", "this"); +Labels.LEAVE_FOCUS }
     }
 }
 

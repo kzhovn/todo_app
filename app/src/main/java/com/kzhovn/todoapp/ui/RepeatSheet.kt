@@ -75,7 +75,7 @@ fun RepeatSheet(current: RecurrenceSelection, anchor: Long, onDone: (RecurrenceS
             val building = custom
             if (building == null) {
                 Title(Labels.REPEAT)
-                PresetRow("Don't repeat", null, current.preset == RecurrencePreset.NONE) { onDone(RecurrenceSelection(RecurrencePreset.NONE)) }
+                PresetRow(Labels.DONT_REPEAT, null, current.preset == RecurrencePreset.NONE) { onDone(RecurrenceSelection(RecurrencePreset.NONE)) }
                 presets.forEach { (label, selection) -> PresetRow(label, null, current == selection) { onDone(selection) } }
                 HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(vertical = 4.dp))
                 val isAfter = current.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS
@@ -101,7 +101,7 @@ fun RepeatSheet(current: RecurrenceSelection, anchor: Long, onDone: (RecurrenceS
 private fun Builder(s: RecurrenceSelection, anchor: Long, onChange: (RecurrenceSelection) -> Unit) {
     val schedule = s.preset == RecurrencePreset.CALENDAR
     Title(if (schedule) "Custom repeat" else Labels.AFTER_COMPLETION)
-    Segmented(listOf("On a schedule" to true, Labels.AFTER_COMPLETION to false), schedule) { toSchedule ->
+    Segmented(listOf(Labels.ON_A_SCHEDULE to true, Labels.AFTER_COMPLETION to false), schedule) { toSchedule ->
         onChange(s.copy(preset = if (toSchedule) RecurrencePreset.CALENDAR else RecurrencePreset.AFTER_COMPLETION_N_DAYS))
     }
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
@@ -113,7 +113,7 @@ private fun Builder(s: RecurrenceSelection, anchor: Long, onChange: (RecurrenceS
             SelectablePill(if (s.n == 1) name else "${name}s", s.unit == unit) { onChange(s.copy(unit = unit)) }
         }
     }
-    if (!schedule) Text("after completion", fontSize = 13.sp, color = LedgerMuted, modifier = Modifier.padding(horizontal = 16.dp))
+    if (!schedule) Text(Labels.AFTER_COMPLETION_SUFFIX, fontSize = 13.sp, color = LedgerMuted, modifier = Modifier.padding(horizontal = 16.dp))
 
     if (schedule && s.unit == RecurrenceUnit.WEEK) Box(Modifier.padding(horizontal = 16.dp)) { DayOfWeekToggle(s.weekdaysMask) { onChange(s.copy(weekdaysMask = it)) } }
     if (schedule && s.unit == RecurrenceUnit.MONTH) {

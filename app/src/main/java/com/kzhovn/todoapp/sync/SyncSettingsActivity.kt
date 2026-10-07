@@ -90,7 +90,7 @@ class SyncSettingsActivity : ComponentActivity() {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("Morning digest in Discord", color = LedgerInk, fontSize = 15.sp)
-                            Text("Doing, posted each morning. Off, the bot still nudges about tasks stuck in Doing.", color = LedgerMuted, fontSize = 12.sp)
+                            Text(Labels.DIGEST_CAPTION, color = LedgerMuted, fontSize = 12.sp)
                         }
                         Switch(checked = digestOn, onCheckedChange = {
                             digestOn = it

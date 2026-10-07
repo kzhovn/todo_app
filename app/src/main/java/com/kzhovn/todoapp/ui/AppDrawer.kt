@@ -133,7 +133,7 @@ private fun QuickAddKey() {
         "✅ ❌ ⭐" to "complete / delete / star",
     )
     Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
-        Text("Quick add", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerMuted)
+        Text(Labels.QUICK_ADD, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerMuted)
         Labels.QUICK_ADD_SYNTAX.forEach { (syntax, meaning) -> KeyRow(syntax, meaning) }
         Spacer(Modifier.height(8.dp))
         Text("Discord (.help for more)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerMuted)

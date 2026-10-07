@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.notifications
 
+import com.kzhovn.todoapp.data.Labels
 import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -105,7 +106,7 @@ object TaskTimer {
         )
         val notification = NotificationCompat.Builder(context, DONE_CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Time's up: ${s.title}")
+            .setContentTitle("${Labels.TIMES_UP}: ${s.title}")
             .setContentText("Is it done?")
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)

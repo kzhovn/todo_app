@@ -220,7 +220,7 @@ class FocusActivity : ComponentActivity() {
                             // Capture a stray thought without leaving. A dialog here, not QuickAddActivity: that runs
                             // in its own task, which a pinned screen won't open.
                             IconButton(onClick = { adding = true }) { Icon(Icons.Filled.Add, contentDescription = "Add a task", tint = LedgerAccent) }
-                            TextButton(onClick = { leaving = FocusPhrase.random() }) { Text("Leave focus", color = LedgerMuted) }
+                            TextButton(onClick = { leaving = FocusPhrase.random() }) { Text(Labels.LEAVE_FOCUS, color = LedgerMuted) }
                         }
                     }
                 }
@@ -228,7 +228,7 @@ class FocusActivity : ComponentActivity() {
                 // Hidden while a new task is being typed; cancelling that brings it back.
                 if (!adding) candidates?.let { list ->
                     TaskPickerDialog(
-                        title = "Focus on",
+                        title = Labels.FOCUS_ON,
                         tasks = list,
                         searchAll = { query ->
                             val byId = allTasks.associateBy { it.id }
@@ -247,9 +247,9 @@ class FocusActivity : ComponentActivity() {
                     AlertDialog(
                         onDismissRequest = {},
                         title = { Text("Done!") },
-                        text = { Text("Focus on the next task, or finish?") },
+                        text = { Text(Labels.FOCUS_NEXT_OR_FINISH) },
                         confirmButton = { Button(onClick = { scope.launch { candidates = pickable(finished = session) } }) { Text("Next task") } },
-                        dismissButton = { TextButton(onClick = { end() }) { Text("I'm done") } }
+                        dismissButton = { TextButton(onClick = { end() }) { Text(Labels.IM_DONE) } }
                     )
                 }
 

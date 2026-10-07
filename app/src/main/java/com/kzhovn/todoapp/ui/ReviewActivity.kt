@@ -163,11 +163,11 @@ internal fun ReviewScreen(
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize().background(LedgerBackground).padding(horizontal = 16.dp)) {
         item(key = "top") {
             Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 16.dp)) {
-                Text("Review", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk)
+                Text(Labels.REVIEW, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk)
                 if (modeTitle != null && !everywhere) Text(modeTitle, fontSize = 13.sp, color = LedgerMuted, modifier = Modifier.padding(start = 8.dp, bottom = 3.dp))
                 Spacer(Modifier.weight(1f))
                 modeTitle?.let {
-                    Text(if (everywhere) "Just $it" else "See all folders", fontSize = 13.sp, color = LedgerAccent, modifier = Modifier.clickable { onEverywhere(!everywhere) }.padding(4.dp))
+                    Text(if (everywhere) Labels.justFolder(it) else Labels.SEE_ALL_FOLDERS, fontSize = 13.sp, color = LedgerAccent, modifier = Modifier.clickable { onEverywhere(!everywhere) }.padding(4.dp))
                 }
             }
             // The zoom levels, then the window with its arrows.
@@ -187,7 +187,7 @@ internal fun ReviewScreen(
                 Text(page.windowLabel, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = LedgerInk, modifier = Modifier.padding(horizontal = 8.dp))
                 page.next?.let { StepButton("›") { go(page.zoom, it) } }
                 if (page.end != page.today && page.zoom != Zoom.ALL) {
-                    Text("Back to today", fontSize = 13.sp, color = LedgerAccent, modifier = Modifier.clickable { go(page.zoom, null) }.padding(8.dp))
+                    Text(Labels.BACK_TO_TODAY, fontSize = 13.sp, color = LedgerAccent, modifier = Modifier.clickable { go(page.zoom, null) }.padding(8.dp))
                 }
             }
 
@@ -213,9 +213,9 @@ internal fun ReviewScreen(
             HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(top = 10.dp, bottom = 6.dp))
 
             if (page.timeToDone.isNotEmpty()) {
-                SectionTitle("Time to done", "from start or creation · ${page.timeToDone.size} tasks, repeats left out")
+                SectionTitle(Labels.TIME_TO_DONE, Labels.timeToDoneCaption(page.timeToDone.size))
                 HBars(bucketCounts(page.timeToDone, DONE_BUCKETS), LedgerAccent)
-                SmallLabel("Median by folder")
+                SmallLabel(Labels.MEDIAN_BY_FOLDER)
                 medianByTopFolder(page.timeToDone, byId).forEach { (folder, median) ->
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
                         Box(Modifier.size(8.dp).clip(CircleShape).background(colorOf(folder)))
@@ -223,30 +223,30 @@ internal fun ReviewScreen(
                         Text(shortAge(median), fontSize = 12.sp, color = LedgerMuted)
                     }
                 }
-                SmallLabel("Took longest")
+                SmallLabel(Labels.TOOK_LONGEST)
                 page.timeToDone.sortedByDescending { it.ms }.take(3).forEach { TaskLine(it.task, shortAge(it.ms)) }
             }
             if (page.waiting.isNotEmpty()) {
-                SectionTitle("Waiting now", "Active tasks, plus those only held back by a context, by how long they've waited")
+                SectionTitle(Labels.WAITING_NOW, Labels.WAITING_NOW_CAPTION)
                 HBars(bucketCounts(page.waiting, WAITING_BUCKETS), LedgerOverdue)
-                SmallLabel("Waited longest")
+                SmallLabel(Labels.WAITED_LONGEST)
                 page.waiting.take(3).forEach { TaskLine(it.task, shortAge(it.ms), done = false) }
             }
             if (page.dueOutcomes.isNotEmpty()) {
                 val late = page.dueOutcomes.filter { it.ms > 0 }.sortedByDescending { it.ms }
-                SectionTitle("Due dates", null)
+                SectionTitle(Labels.DUE_DATES, null)
                 Row(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     val onTime = page.dueOutcomes.size - late.size
                     if (onTime > 0) Box(Modifier.weight(onTime.toFloat()).fillMaxSize().background(LedgerGood))
                     if (late.isNotEmpty()) Box(Modifier.weight(late.size.toFloat()).fillMaxSize().background(LedgerOverdue))
                 }
                 if (late.isNotEmpty()) {
-                    SmallLabel("Latest")
-                    late.take(3).forEach { TaskLine(it.task, "${shortAge(it.ms, "under a day")} late") }
+                    SmallLabel(Labels.LATEST)
+                    late.take(3).forEach { TaskLine(it.task, Labels.late(it.ms)) }
                 }
             }
-            SectionTitle(if (dayList) "Done ${page.windowLabel}" else "By month", null)
-            if (page.done.isEmpty()) Text("Nothing completed in ${page.windowLabel}.", fontSize = 13.sp, color = LedgerMuted)
+            SectionTitle(if (dayList) Labels.doneIn(page.windowLabel) else Labels.BY_MONTH, null)
+            if (page.done.isEmpty()) Text(Labels.nothingDoneIn(page.windowLabel), fontSize = 13.sp, color = LedgerMuted)
         }
         // Week and Month: every completion, day by day (the chart's table view). Year and All: a row per month.
         items(days, key = { it.first.toEpochDay() }) { day ->

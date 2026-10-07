@@ -533,10 +533,9 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
         v.error?.let { p(classes = "error") { +it } }
         v.ask?.let { (count, fields) ->
             div(classes = "ask") {
-                val what = fields.joinToString(" and ") { it.label }
-                p { +"$count subtask${if (count == 1) " has its" else "s have their"} own $what. Clear ${if (count == 1) "it" else "them"} so ${if (count == 1) "it follows" else "they follow"} this task?" }
-                button(type = ButtonType.submit, classes = "primary") { name = "inherit"; value = "update"; +"Update subtasks" }
-                button(type = ButtonType.submit) { name = "inherit"; value = "only"; +"Only this task" }
+                p { +Labels.subtasksOverride(count, fields.joinToString(" and ") { it.label }) }
+                button(type = ButtonType.submit, classes = "primary") { name = "inherit"; value = "update"; +Labels.UPDATE_SUBTASKS }
+                button(type = ButtonType.submit) { name = "inherit"; value = "only"; +Labels.ONLY_THIS_TASK }
             }
         }
 
@@ -621,7 +620,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
             popPill(Labels.REPEAT, Icon.REPEAT, Labels.repeat(r) ?: t.recurrenceType?.let { "Custom" }, "repeat", "repeat task-only") {
                 div(classes = if (building) "rep building" else "rep") {
                     div(classes = "rep-presets") {
-                        (listOf("Don't repeat" to RecurrenceSelection(RecurrencePreset.NONE)) + presets).forEach { (label, preset) ->
+                        (listOf(Labels.DONT_REPEAT to RecurrenceSelection(RecurrencePreset.NONE)) + presets).forEach { (label, preset) ->
                             button(type = ButtonType.button, classes = if (preset == r) "rep-preset on" else "rep-preset") { attributes["data-set"] = presetFields(preset); +label }
                         }
                         button(type = ButtonType.button, classes = "rep-preset rep-open") {
@@ -636,7 +635,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
                     div(classes = "rep-builder") {
                         div(classes = "seg") {
                             label(classes = "rep-none") { radioInput(name = "repeat") { value = RecurrencePreset.NONE.name; checked = r.preset == RecurrencePreset.NONE } }
-                            label { radioInput(name = "repeat") { value = RecurrencePreset.CALENDAR.name; checked = r.preset == RecurrencePreset.CALENDAR }; +"On a schedule" }
+                            label { radioInput(name = "repeat") { value = RecurrencePreset.CALENDAR.name; checked = r.preset == RecurrencePreset.CALENDAR }; +Labels.ON_A_SCHEDULE }
                             label { radioInput(name = "repeat") { value = RecurrencePreset.AFTER_COMPLETION_N_DAYS.name; checked = r.preset == RecurrencePreset.AFTER_COMPLETION_N_DAYS }; +Labels.AFTER_COMPLETION }
                         }
                         div(classes = "rep-line") {
@@ -645,7 +644,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
                             listOf(RecurrenceUnit.DAY to "days", RecurrenceUnit.WEEK to "weeks", RecurrenceUnit.MONTH to "months").forEach { (unit, name) ->
                                 label(classes = "pill") { radioInput(name = "unit") { value = unit.name; checked = r.unit == unit }; +name }
                             }
-                            span(classes = "rep-after") { +"after completion" }
+                            span(classes = "rep-after") { +Labels.AFTER_COMPLETION_SUFFIX }
                         }
                         div(classes = "rep-wd") {
                             Labels.WEEKDAYS.forEach { (bit, label) ->

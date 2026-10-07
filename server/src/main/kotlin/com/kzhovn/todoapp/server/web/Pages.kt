@@ -243,7 +243,7 @@ private fun DIV.searchResults(service: TaskService, p: Parameters) {
                 if (task.isComplete) icon(Icon.CHECK, "")
             }
             a(href = "/tasks/${task.id}?mode=ALL", classes = if (task.isComplete) "done" else null) { +task.title }
-            if (!task.notes.isNullOrBlank()) span(classes = "has-notes") { attributes["title"] = "Has notes"; icon(Icon.NOTES, "") }
+            if (!task.notes.isNullOrBlank()) span(classes = "has-notes") { attributes["title"] = Labels.HAS_NOTES; icon(Icon.NOTES, "") }
             div(classes = "meta") {
                 resolveEffective(task, byId, contextIds).effectiveDueDate?.takeUnless { task.isComplete }?.let { span(classes = "due " + dueStatus(it, now).name.lowercase()) { +dueText(it, now) } }
                 byId[task.parentId]?.let { span { +(if (it.type == TaskType.FOLDER) it.title else "↳ ${it.title}") } }
@@ -289,7 +289,7 @@ private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode)
     fun FlowContent.dateChoice(label: String, prefix: String) = field(label, "") {
         dateInput(name = "${prefix}Date")
         timeInput(name = "${prefix}Time")
-        label(classes = "pill") { checkBoxInput(name = "${prefix}Clear"); +"Clear" }
+        label(classes = "pill") { checkBoxInput(name = "${prefix}Clear"); +Labels.CLEAR }
         span(classes = "hint") { +"Leave empty to keep each task's own." }
     }
     fun FlowContent.contextPills(label: String, name: String) = field(label, "") {
@@ -297,36 +297,36 @@ private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode)
     }
 
     form(action = "/bulk?mode=${mode.name}", method = FormMethod.post, classes = "editor bulk") {
-        h1 { +"Edit ${tasks.size} task${if (tasks.size == 1) "" else "s"}" }
+        h1 { +Labels.editTasks(tasks.size) }
         p(classes = "hint") { +(tasks.take(8).joinToString(", ") { it.title } + if (tasks.size > 8) " and ${tasks.size - 8} more" else "") }
         tasks.forEach { hiddenInput(name = "id") { value = it.id.toString() } }
-        choice("Star", "star", listOf("keep" to "Keep", "star" to "Star", "unstar" to "Unstar"))
-        choice("Maybe (?)", "maybe", listOf("keep" to "Keep", "yes" to "Maybe", "no" to "Not maybe"))
-        dateChoice("Start date", "start")
-        dateChoice("Due date", "due")
-        field("Folder", "") {
+        choice(Labels.STAR, "star", listOf("keep" to Labels.KEEP, "star" to Labels.STAR, "unstar" to Labels.UNSTAR))
+        choice(Labels.MAYBE_CHOICE, "maybe", listOf("keep" to Labels.KEEP, "yes" to Labels.MAYBE_YES, "no" to Labels.NOT_MAYBE))
+        dateChoice(Labels.START_DATE, "start")
+        dateChoice(Labels.DUE_DATE, "due")
+        field(Labels.FOLDER, "") {
             select {
                 name = "folder"
-                option { value = "keep"; +"Keep" }
-                option { value = "top"; +"Top level" }
+                option { value = "keep"; +Labels.KEEP }
+                option { value = "top"; +Labels.TOP_LEVEL }
                 folderTree(all.filter { it.type == TaskType.FOLDER }).forEach { (f, depth) -> option { value = f.id.toString(); +(INDENT.repeat(depth) + f.title) } }
             }
         }
         if (contexts.isNotEmpty()) {
-            contextPills("Add contexts", "addCtx")
-            contextPills("Remove contexts", "removeCtx")
+            contextPills(Labels.ADD_CONTEXTS, "addCtx")
+            contextPills(Labels.REMOVE_CONTEXTS, "removeCtx")
         }
-        field("Depends on", "") {
+        field(Labels.DEPENDS_ON, "") {
             select {
                 name = "dependsOn"
-                option { value = ""; +"Nothing new" }
+                option { value = ""; +Labels.NOTHING_NEW }
                 all.filter { it.type.isLinkable && !it.isComplete && it.id !in ids }.sortedBy { it.title.lowercase() }
                     .forEach { option { value = it.id.toString(); +it.title } }
             }
         }
         div(classes = "actions") {
             a(href = mode.path, classes = "cancel") { +"Cancel" }
-            button(type = ButtonType.submit, classes = "primary") { +"Apply to ${tasks.size} task${if (tasks.size == 1) "" else "s"}" }
+            button(type = ButtonType.submit, classes = "primary") { +Labels.applyToTasks(tasks.size) }
         }
     }
 }
@@ -372,14 +372,14 @@ private fun HTML.reviewPage(service: TaskService, zoom: Zoom, end: LocalDate?, e
 
     div(classes = "review") {
         h1 {
-            +"Review"
+            +Labels.REVIEW
             mode?.let { span(classes = "mode-name") { +it.title } }
         }
         // Folder mode: this is the mode's; the whole list is a click away (and back).
         service.modeFolder()?.let { m ->
             p(classes = "hint") {
-                if (everywhere) a(href = url(zoom, page.end, all = false)) { +"Just ${m.title}" }
-                else a(href = url(zoom, page.end, all = true)) { +"See all folders" }
+                if (everywhere) a(href = url(zoom, page.end, all = false)) { +Labels.justFolder(m.title) }
+                else a(href = url(zoom, page.end, all = true)) { +Labels.SEE_ALL_FOLDERS }
             }
         }
         div(classes = "review-controls") {
@@ -397,7 +397,7 @@ private fun HTML.reviewPage(service: TaskService, zoom: Zoom, end: LocalDate?, e
                 span { +page.windowLabel }
                 page.next?.let { a(href = url(zoom, it)) { attributes["data-key"] = "ArrowRight"; attributes["aria-label"] = "Later"; +"›" } }
             }
-            if (page.end != page.today && zoom != Zoom.ALL) a(href = url(zoom, page.today), classes = "today-link") { +"Back to today" }
+            if (page.end != page.today && zoom != Zoom.ALL) a(href = url(zoom, page.today), classes = "today-link") { +Labels.BACK_TO_TODAY }
         }
 
         reviewChart(page, byId, colorOf) { bar -> page.zoomIn(bar)?.let { (z, e) -> url(z, e) } ?: "#d-${bar.first}" }
@@ -408,11 +408,11 @@ private fun HTML.reviewPage(service: TaskService, zoom: Zoom, end: LocalDate?, e
         }
 
         if (page.timeToDone.isNotEmpty()) {
-            section("Time to done", "from start or creation · ${page.timeToDone.size} tasks, repeats left out")
+            section(Labels.TIME_TO_DONE, Labels.timeToDoneCaption(page.timeToDone.size))
             div(classes = "twocol") {
                 div { hbars(bucketCounts(page.timeToDone, DONE_BUCKETS), "var(--accent)") }
                 div {
-                    div(classes = "folder-name") { +"Median by folder" }
+                    div(classes = "folder-name") { +Labels.MEDIAN_BY_FOLDER }
                     medianByTopFolder(page.timeToDone, byId).forEach { (folder, median) ->
                         div(classes = "median-row") {
                             span(classes = "swatch") { style = "background: ${colorOf(folder)}" }
@@ -420,24 +420,24 @@ private fun HTML.reviewPage(service: TaskService, zoom: Zoom, end: LocalDate?, e
                             span(classes = "age") { +shortAge(median) }
                         }
                     }
-                    div(classes = "folder-name") { +"Took longest" }
+                    div(classes = "folder-name") { +Labels.TOOK_LONGEST }
                     page.timeToDone.sortedByDescending { it.ms }.take(5).forEach { taskRow(it.task, shortAge(it.ms)) }
                 }
             }
         }
         if (page.waiting.isNotEmpty()) {
-            section("Waiting now", "Active tasks, plus those only held back by a context, by how long they've waited")
+            section(Labels.WAITING_NOW, Labels.WAITING_NOW_CAPTION)
             div(classes = "twocol") {
                 div { hbars(bucketCounts(page.waiting, WAITING_BUCKETS), "var(--overdue)") }
                 div {
-                    div(classes = "folder-name") { +"Waited longest" }
+                    div(classes = "folder-name") { +Labels.WAITED_LONGEST }
                     page.waiting.take(5).forEach { taskRow(it.task, shortAge(it.ms), done = false) }
                 }
             }
         }
         if (page.dueOutcomes.isNotEmpty()) {
             val late = page.dueOutcomes.filter { it.ms > 0 }.sortedByDescending { it.ms }
-            section("Due dates")
+            section(Labels.DUE_DATES)
             div(classes = "due-bar") {
                 attributes["role"] = "img"
                 attributes["aria-label"] = "${page.dueOutcomes.size - late.size} on time, ${late.size} late"
@@ -445,14 +445,14 @@ private fun HTML.reviewPage(service: TaskService, zoom: Zoom, end: LocalDate?, e
                 div(classes = "late") { style = "flex: ${late.size}" }
             }
             if (late.isNotEmpty()) {
-                div(classes = "folder-name") { +"Latest" }
-                late.take(5).forEach { taskRow(it.task, "${shortAge(it.ms, "under a day")} late") }
+                div(classes = "folder-name") { +Labels.LATEST }
+                late.take(5).forEach { taskRow(it.task, Labels.late(it.ms)) }
             }
         }
 
         if (zoom == Zoom.WEEK || zoom == Zoom.MONTH) {
             // The chart's table view, too: every completion, day by day, each with its time to done.
-            section("Done ${page.windowLabel}")
+            section(Labels.doneIn(page.windowLabel))
             page.bars.reversed().filter { it.tasks.isNotEmpty() }.forEach { day ->
                 h2 { id = "d-${day.first}"; +"${page.barLabel(day)} · ${day.tasks.size}" }
                 sectionsByTopFolder(day.tasks, byId).forEach { (folder, tasks) ->
@@ -461,7 +461,7 @@ private fun HTML.reviewPage(service: TaskService, zoom: Zoom, end: LocalDate?, e
                 }
             }
         } else {
-            section("By month")
+            section(Labels.BY_MONTH)
             page.months.forEach { (month, tasks) ->
                 a(href = url(Zoom.MONTH, page.monthEnd(month)), classes = "month-row") {
                     span(classes = "month-name") { +month.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.US)) }
@@ -472,7 +472,7 @@ private fun HTML.reviewPage(service: TaskService, zoom: Zoom, end: LocalDate?, e
                 }
             }
         }
-        if (page.done.isEmpty()) p(classes = "empty") { +"Nothing completed in ${page.windowLabel}." }
+        if (page.done.isEmpty()) p(classes = "empty") { +Labels.nothingDoneIn(page.windowLabel) }
     }
 }
 
@@ -564,7 +564,7 @@ private fun HTML.settingsPage(service: TaskService) = shellPage(service, "Raspbe
                 checkBoxInput(name = "digest") { checked = service.digestOn() }
                 +" Morning digest in Discord"
             }
-            p(classes = "hint") { +"Doing, posted each morning. Off, the bot still nudges about tasks stuck in Doing." }
+            p(classes = "hint") { +Labels.DIGEST_CAPTION }
             noScript { button(type = ButtonType.submit) { +Labels.SAVE } }
         }
     }
@@ -589,13 +589,13 @@ private fun HTML.contextsPage(service: TaskService, form: ContextForm) = shellPa
 
         val c = form.context
         form(action = "/contexts", method = FormMethod.post, classes = "editor context-form") {
-            h2 { +(if (c.id == 0L) "New context" else "Edit @${c.name}") }
+            h2 { +(if (c.id == 0L) Labels.NEW_CONTEXT else "Edit @${c.name}") }
             form.error?.let { p(classes = "error") { +it } }
             if (c.id != 0L) hiddenInput(name = "id") { value = c.id.toString() }
             textInput(name = "name", classes = "title-input") { value = c.name; placeholder = "Name"; required = true }
             div(classes = "pills") {
-                label(classes = "pill") { radioInput(name = "type") { value = ContextType.PLACE.name; checked = c.type == ContextType.PLACE }; +"Place (wifi)" }
-                label(classes = "pill") { radioInput(name = "type") { value = ContextType.TIME.name; checked = c.type == ContextType.TIME }; +"Time window" }
+                label(classes = "pill") { radioInput(name = "type") { value = ContextType.PLACE.name; checked = c.type == ContextType.PLACE }; +Labels.PLACE_CONTEXT }
+                label(classes = "pill") { radioInput(name = "type") { value = ContextType.TIME.name; checked = c.type == ContextType.TIME }; +Labels.TIME_CONTEXT }
             }
             div(classes = "field place-only") {
                 span(classes = "field-label") { +"Wifi network name (SSID)" }

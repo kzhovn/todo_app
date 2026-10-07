@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.notifications
 
+import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.countdown
 import com.kzhovn.todoapp.focus.FocusActivity
 import android.app.NotificationChannel
@@ -129,7 +130,7 @@ object PinnedTask {
             .setContentIntent(if (focusing) session else open)
         if (task.isComplete) {
             // A focus session whose task is done: every device asks what's next.
-            return manager.notify(NOTIFICATION_ID, builder.setContentTitle("Done: ${task.title}").setContentText("Focus on the next task, or finish?").build())
+            return manager.notify(NOTIFICATION_ID, builder.setContentTitle("Done: ${task.title}").setContentText(Labels.FOCUS_NEXT_OR_FINISH).build())
         }
         builder.setContentTitle(task.title)
         val label = if (focusing) "Focusing" else "Now"
@@ -153,7 +154,7 @@ object PinnedTask {
             !focusing -> builder.addAction(0, "Focus", focus)
         }
         // Leaving focus unpins too, so both are this one action.
-        builder.addAction(0, if (focusing) "Leave focus" else "Unpin", action(ACTION_UNPIN, 2))
+        builder.addAction(0, if (focusing) Labels.LEAVE_FOCUS else "Unpin", action(ACTION_UNPIN, 2))
         val notification = builder.build()
         manager.notify(NOTIFICATION_ID, notification)
     }

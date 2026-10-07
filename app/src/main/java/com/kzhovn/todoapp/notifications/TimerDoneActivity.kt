@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.notifications
 
+import com.kzhovn.todoapp.data.Labels
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -61,7 +62,7 @@ class TimerDoneActivity : ComponentActivity() {
                 var askMore by remember { mutableStateOf(false) }
                 var custom by remember { mutableStateOf("") }
                 Column(Modifier.background(LedgerBackground).padding(20.dp)) {
-                    Text("Time's up", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = LedgerInk)
+                    Text(Labels.TIMES_UP, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = LedgerInk)
                     Text(title, fontSize = 15.sp, color = LedgerInk, modifier = Modifier.padding(top = 4.dp))
                     Spacer(Modifier.height(16.dp))
                     if (!askMore) {
