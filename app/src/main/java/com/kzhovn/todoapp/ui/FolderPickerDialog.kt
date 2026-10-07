@@ -34,9 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
-import com.kzhovn.todoapp.data.TaskOrder
+import com.kzhovn.todoapp.data.folderTree
 import com.kzhovn.todoapp.data.TaskType
-import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerBorder
@@ -61,15 +60,8 @@ fun FolderPickerDialog(
     title: String = "Choose a folder",
     noFolderLabel: String = Labels.NO_FOLDER
 ) {
-    val visible = if (excludeDescendantsOf != null) folders.filter { !wouldCreateCycle(it.id, excludeDescendantsOf, allById) } else folders
     val colors = remember(folders) { folderColors(folders) }
-    val rows = remember(visible) {
-        val ids = visible.map { it.id }.toSet()
-        val byParent = visible.groupBy { it.parentId?.takeIf { p -> p in ids } }
-        fun walk(parent: Long?, depth: Int): List<Pair<Task, Int>> =
-            byParent[parent].orEmpty().sortedWith(TaskOrder).flatMap { listOf(it to depth) + walk(it.id, depth + 1) }
-        walk(null, 0)
-    }
+    val rows = remember(folders, excludeDescendantsOf) { folderTree(folders, excludeDescendantsOf, allById.ifEmpty { folders.associateBy { it.id } }) }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {},

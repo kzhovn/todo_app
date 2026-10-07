@@ -25,14 +25,13 @@ const PARENT_CHARS = 22; // like the widget: a long parent can't crowd out the t
 const hex = (argb) => (argb == null ? null : `#${(argb & 0xffffff).toString(16).padStart(6, '0')}`);
 const cut = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 const clock = (date) => date.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'});
-// A timer's time left, "18:42" or "1:05:00", and a task's length, "45m" / "1h 30m", as on the phone.
+// A timer's time left, "18:42" or "1:05:00", as on the phone (a task's length comes worded by the server).
 const countdown = (ms) => {
     const s = Math.max(0, Math.ceil(ms / 1000)), mm = String(Math.floor(s / 60) % 60).padStart(2, '0'), ss = String(s % 60).padStart(2, '0');
     return s >= 3600 ? `${Math.floor(s / 3600)}:${mm}:${ss}` : `${Math.floor(s / 60)}:${ss}`;
 };
 // Quick add's Start and Due chips: quick add's own words, sent as typed.
 const DAY_LABELS = {today: 'Today', tomorrow: 'Tomorrow', 'next week': 'Next week', weekend: 'Weekend'};
-const duration = (m) => (m < 60 ? `${m}m` : m % 60 === 0 ? `${m / 60}h` : `${Math.floor(m / 60)}h ${m % 60}m`);
 
 // The app's own Material icons (icons/, made by tools/tray_icons.py from the web's), so the top bar
 // looks like the phone and web rather than the desktop theme.
@@ -456,7 +455,7 @@ class Indicator extends PanelMenu.Button {
         const box = new St.BoxLayout({style_class: 'rb-timer', y_align: Clutter.ActorAlign.CENTER});
         const left = this._timeLeft();
         if (left == null) {
-            if (pinned.durationMinutes) box.add_child(this._button({label: `▶ ${duration(pinned.durationMinutes)}`, style_class: 'rb-dur'}, () => this._post(`/api/tasks/${pinned.id}/timer`)));
+            if (pinned.durationMinutes) box.add_child(this._button({label: `▶ ${pinned.durationText}`, style_class: 'rb-dur'}, () => this._post(`/api/tasks/${pinned.id}/timer`)));
             return box;
         }
         this._countdownLabel = new St.Label({style_class: 'rb-countdown', text: this._countdownText(), y_align: Clutter.ActorAlign.CENTER});
@@ -527,7 +526,7 @@ class Indicator extends PanelMenu.Button {
         box.add_child(title);
         // It has a note (opening the task shows it).
         if (row.hasNotes) box.add_child(new St.Icon({gicon: appIcon('notes-symbolic'), style_class: 'rb-notes-icon', y_align: Clutter.ActorAlign.CENTER}));
-        if (row.durationMinutes) box.add_child(this._button({label: `▶ ${duration(row.durationMinutes)}`, style_class: 'rb-dur'}, () => this._post(`/api/tasks/${row.id}/timer`)));
+        if (row.durationMinutes) box.add_child(this._button({label: `▶ ${row.durationText}`, style_class: 'rb-dur'}, () => this._post(`/api/tasks/${row.id}/timer`)));
         if (!row.isChecklist && row.subtasks) {
             const arrow = this._expanded.has(row.id) ? '▴' : '▾';
             box.add_child(this._button({label: `${row.subtasks.first}/${row.subtasks.second} ${arrow}`, style_class: 'rb-subtasks'}, toggle));

@@ -97,6 +97,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.data.EffectiveTask
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.chipDate
+import com.kzhovn.todoapp.data.startText
+import com.kzhovn.todoapp.data.waitingFor
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
@@ -140,7 +143,12 @@ fun TaskListScreen(
         // The bar shows the nearest folder ancestor's color, even for a subtask of a task.
         val barColor = task.parentId?.let { walkParentChain(it, allById) { id -> colors[id] } } ?: LedgerBorder
         val notesLine = viewModel.searchQuery?.let { notesMatch(task, it) }
-        val row = @Composable { TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, task.id in selectedIds, subtaskParentTitle(task, allById), onCheck, onStar, onEdit, onSnooze, notesLine) }
+        // Search results come from anywhere, so they say where: the folder, then the contexts.
+        val metaLine = viewModel.searchQuery?.let {
+            listOfNotNull(task.parentId?.let { p -> walkParentChain(p, allById) { id -> allById[id]?.takeIf { f -> f.type == TaskType.FOLDER }?.title } }) +
+                contextsByTaskId[task.id].orEmpty().mapNotNull { id -> allContexts[id]?.name?.let { "@$it" } }.sorted()
+        }?.joinToString(" · ")?.ifEmpty { null }
+        val row = @Composable { TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, task.id in selectedIds, subtaskParentTitle(task, allById), onCheck, onStar, onEdit, onSnooze, notesLine, metaLine) }
         // Swipe right to add a subtask (a checklist's are items), as in the All tree.
         SwipeToAddSubtask({ onAddSubtask(task.id) }, row)
         if (!last) HorizontalDivider(color = LedgerBorder)
@@ -231,7 +239,8 @@ private fun TaskRow(
     onStar: (Long) -> Unit,
     onEdit: (Long) -> Unit,
     onSnooze: (Long, Long) -> Unit,
-    notesLine: String? = null // search: the line of the notes it matched
+    notesLine: String? = null, // search: the line of the notes it matched
+    metaLine: String? = null // search: where it lives and its contexts, as the web's results show
 ) {
     var showSnoozeMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -270,9 +279,15 @@ private fun TaskRow(
                             val color = when (status) { DueStatus.OVERDUE -> LedgerOverdue; DueStatus.TODAY -> LedgerDueTodayText; else -> LedgerMuted }
                             withStyle(SpanStyle(color = color, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · ${dueText(due, now)}") }
                         }
+                        // A start still to come (search shows snoozed and future tasks), or a waiting item's own line, as on the web.
+                        val later = if (task.isComplete) null else if (task.type == TaskType.WAITING) {
+                            task.dueDate?.let { "resolves ${chipDate(it)}" } ?: waitingFor(task, now)?.let { "waiting $it" }
+                        } else task.startDate?.takeIf { it > now }?.let { startText(it, now) }
+                        if (later != null) withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · $later") }
                         if (subtasks != null && subtasks.second > 0 && task.type != TaskType.CHECKLIST) {
                             withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · ${subtasks.first}/${subtasks.second}") }
                         }
+                        if (metaLine != null) withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("\n$metaLine") }
                         if (notesLine != null) withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 13.sp)) { append("\n$notesLine") }
                     },
                     fontWeight = FontWeight.Medium,

@@ -8,12 +8,15 @@ import com.kzhovn.todoapp.repository.urgentFirst
 import com.kzhovn.todoapp.data.DueStatus
 import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.formatDuration
 import kotlinx.serialization.Serializable
 import com.kzhovn.todoapp.data.sectionsByTopFolder
 import com.kzhovn.todoapp.data.subtaskParentTitle
 import com.kzhovn.todoapp.data.walkParentChain
 
 // The widget's rows, shared by the phone's widget and the desktop tray (served as JSON by /api/tray).
+// Deliberately leaner than the app's and web's list rows, to save space and keep the widgets clean: no
+// high-priority "!", and due shows only as the checkbox ring's colour (no "due Fri" text).
 
 // A subtask or checklist item, shown under its row when the row is expanded.
 @Serializable
@@ -28,6 +31,7 @@ data class WidgetTaskRow(
     val parentId: Long? = null,
     val barColor: Int? = null, // the nearest folder's colour (ARGB), as the app's rows show it
     val durationMinutes: Int? = null, // a timed task: the row gets a play button with its length
+    val durationText: String? = null, // that length in words, "1h 30m" (formatDuration), so the top bar needn't word it
     val due: DueStatus? = null, // colours the checkbox ring
     val isChecklist: Boolean = false, // a count in the checkbox's place
     val hasNotes: Boolean = false, // the top bar marks it (the widget has no room)
@@ -60,6 +64,7 @@ object TodoWidgetPresenter {
                 it.isBackburner(now), parentTitle = subtaskParentTitle(it, allById), parentId = it.parentId,
                 barColor = it.parentId?.let { parent -> walkParentChain(parent, allById) { id -> folderColors[id] } },
                 durationMinutes = it.durationMinutes,
+                durationText = it.durationMinutes?.let(::formatDuration),
                 due = effectiveDue(it)?.takeUnless { _ -> it.isComplete }?.let { d -> dueStatus(d, now) },
                 isChecklist = it.type == TaskType.CHECKLIST,
                 hasNotes = !it.notes.isNullOrBlank(),

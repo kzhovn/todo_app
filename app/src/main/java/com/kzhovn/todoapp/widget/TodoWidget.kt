@@ -16,7 +16,6 @@ import com.kzhovn.todoapp.sync.SyncSettings
 import com.kzhovn.todoapp.R
 import androidx.glance.ImageProvider
 import androidx.glance.Image
-import com.kzhovn.todoapp.data.formatDuration
 import com.kzhovn.todoapp.data.DueStatus
 import com.kzhovn.todoapp.notifications.TaskTimer
 import android.appwidget.AppWidgetManager
@@ -278,13 +277,13 @@ private fun WidgetRow(row: WidgetTaskRow, expanded: Boolean) {
                 )
         )
         // "▶ 1h", like the app's timer pill.
-        row.durationMinutes?.let { minutes ->
+        row.durationText?.let { length ->
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = GlanceModifier.height(30.dp).padding(horizontal = 4.dp)
                     .clickable(actionRunCallback<StartTimerAction>(actionParametersOf(taskIdKey to row.id)))
             ) {
-                Text("▶ ${formatDuration(minutes)}", style = TextStyle(color = fixed(LedgerAccent), fontSize = 12.sp, fontWeight = FontWeight.Medium))
+                Text("▶ $length", style = TextStyle(color = fixed(LedgerAccent), fontSize = 12.sp, fontWeight = FontWeight.Medium))
             }
         }
         // A task's subtask count doubles as the toggle that shows them in place, like a checklist's.

@@ -672,15 +672,14 @@ private fun RelatedRow(
     }
 }
 
-// A related task's checkbox (a waiting item's hourglass; projects and checklists keep the space, so titles line up).
+// A related task's mark, as in the lists: a checkbox, a waiting item's hourglass, a project's icon or a
+// checklist's count.
 @Composable
-private fun RelatedCheck(vm: TaskEditViewModel, t: Task) {
-    if (t.type == TaskType.TASK) TaskCheckbox(
-        checked = t.isComplete, due = t.dueDate?.takeUnless { t.isComplete }?.let { dueStatus(it, System.currentTimeMillis()) },
-        size = 18.dp, touchSize = 34.dp, onCheckedChange = { vm.toggleComplete(t.id) }
-    ) else if (t.type == TaskType.WAITING) WaitingMark(34.dp) // resolved from its own editor
-    else Spacer(Modifier.width(34.dp))
-}
+private fun RelatedCheck(vm: TaskEditViewModel, t: Task) = TaskMark(
+    t, vm.allTasks.filter { it.parentId == t.id && it.type != TaskType.FOLDER }.let { subs -> subs.count { it.isComplete } to subs.size },
+    t.dueDate?.takeUnless { t.isComplete }?.let { dueStatus(it, System.currentTimeMillis()) }, checkboxSize = 18.dp,
+    onCheck = { vm.toggleComplete(t.id) }, onOpen = {}
+)
 
 // A subtask's ✕: move it out to this task's folder, stop it being a prerequisite or dependent (it stays
 // a subtask), both, or delete it.

@@ -52,3 +52,15 @@ fun linkCandidates(task: Task, kind: LinkKind, all: List<Task>, edges: List<Task
         }
     }.sortedBy { it.title.lowercase() }
 }
+
+// Folders (and whatever else is passed, e.g. checklists) as a tree in sibling order, each with its depth:
+// the folder pickers on the phone and the web. Leaves out `excluding` and everything below it (where a
+// task can't be moved: into itself).
+fun folderTree(items: List<Task>, excluding: Long? = null, allById: Map<Long, Task> = items.associateBy { it.id }): List<Pair<Task, Int>> {
+    val visible = if (excluding != null) items.filter { !wouldCreateCycle(it.id, excluding, allById) } else items
+    val ids = visible.map { it.id }.toSet()
+    val byParent = visible.groupBy { it.parentId?.takeIf { p -> p in ids } }
+    fun walk(parent: Long?, depth: Int): List<Pair<Task, Int>> =
+        byParent[parent].orEmpty().sortedWith(TaskOrder).flatMap { listOf(it to depth) + walk(it.id, depth + 1) }
+    return walk(null, 0)
+}

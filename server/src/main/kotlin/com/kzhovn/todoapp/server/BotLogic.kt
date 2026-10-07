@@ -2,7 +2,7 @@ package com.kzhovn.todoapp.server
 
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.checklistItems
-import com.kzhovn.todoapp.data.hasTime
+import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.quickadd.QuickAdd
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -10,9 +10,6 @@ import com.kzhovn.todoapp.sync.SyncJson
 import com.kzhovn.todoapp.sync.SyncRow
 import com.kzhovn.todoapp.sync.TASKS
 import com.kzhovn.todoapp.sync.toTask
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 const val DONE = "✅"
 const val DELETE = "❌"
@@ -319,9 +316,8 @@ class BotLogic(private val service: TaskService, private val store: Store) {
 
     private fun describe(task: Task): String {
         val title = task.title.take(120) + (if (task.isMaybe) " ?" else "") + (if (task.isHighPriority) " !" else "")
-        val due = service.effectiveDueDate(task)?.let {
-            " · due " + SimpleDateFormat(if (hasTime(it)) "EEE d MMM h:mm a" else "EEE d MMM", Locale.US).format(Date(it))
-        }.orEmpty()
+        // In the same words as every other list ("due today", "due Fri", "due Oct 12").
+        val due = service.effectiveDueDate(task)?.let { " · " + dueText(it, service.now()) }.orEmpty()
         return title + due
     }
 

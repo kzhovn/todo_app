@@ -446,6 +446,7 @@
     switch (pp.dataset.kind) {
       case "date": return pillDate(pop.querySelector("input[type=date]").value, pop.querySelector("input[type=time]").value);
       case "select": { const s = pop.querySelector("select"); return s.value ? s.selectedOptions[0].textContent : null; }
+      case "tree": { const r = pop.querySelector("input:checked"); return r?.value ? r.dataset.label : null; }
       case "remind": {
         // The same short form as the server's reminderSummary.
         const parts = [];
@@ -465,11 +466,16 @@
     const value = pillValue(pp), summary = pp.querySelector("summary");
     summary.classList.toggle("set", !!value);
     summary.querySelector(".pp-text").textContent = value ?? pp.dataset.label;
-    const color = pp.querySelector(".pop select")?.selectedOptions[0]?.dataset.color;
+    const color = pp.querySelector(".pop select")?.selectedOptions[0]?.dataset.color ?? pp.querySelector(".folder-tree input:checked")?.dataset.color;
     if (color) pp.style.setProperty("--tint", color); else pp.style.removeProperty("--tint");
   }
   document.addEventListener("input", (e) => { const pp = e.target.closest(".pp[data-kind]"); if (pp) refreshPill(pp); });
-  document.addEventListener("change", (e) => { const pp = e.target.closest(".pp[data-kind]"); if (pp) refreshPill(pp); });
+  document.addEventListener("change", (e) => {
+    const pp = e.target.closest(".pp[data-kind]");
+    if (!pp) return;
+    refreshPill(pp);
+    if (e.target.closest(".folder-tree")) pp.open = false; // picking a folder is the whole job
+  });
   // A date pill's quick choice (in an hour, tomorrow...): fills the date and time, then closes.
   document.addEventListener("click", (e) => {
     const quick = e.target.closest(".date-quick [data-date]");

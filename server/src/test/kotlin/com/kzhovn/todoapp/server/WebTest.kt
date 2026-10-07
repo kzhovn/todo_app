@@ -298,7 +298,7 @@ class WebTest {
     @Test
     fun `new tasks, projects and folders are made in the full editor`() = web {
         val personal = service.create(Task(type = TaskType.FOLDER, title = "Personal"))
-        assertTrue(client.get("/tasks/new?type=TASK").bodyAsText().contains("<option value=\"${personal.id}\" selected"))
+        assertTrue(Regex("""name="parent" value="${personal.id}" checked""").containsMatchIn(client.get("/tasks/new?type=TASK").bodyAsText()))
 
         fun blank(type: TaskType) = taskFields(Task(title = "", type = type), emptySet(), emptySet()).toString()
         val noRedirects = createClient { followRedirects = false }

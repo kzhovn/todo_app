@@ -13,6 +13,7 @@ import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.folderTree
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.sectionsByTopFolder
 import com.kzhovn.todoapp.data.walkParentChain
@@ -191,8 +192,8 @@ private fun HTML.searchPage(service: TaskService, p: Parameters) = shellPage(ser
             select {
                 name = "folder"
                 option { value = ""; +"Any ${Labels.FOLDER.lowercase()}" }
-                service.folders().sortedBy { it.title.lowercase() }.forEach { f ->
-                    option { value = f.id.toString(); selected = p["folder"] == f.id.toString(); +f.title }
+                folderTree(service.folders()).forEach { (f, depth) ->
+                    option { value = f.id.toString(); selected = p["folder"] == f.id.toString(); +(INDENT.repeat(depth) + f.title) }
                 }
             }
             select {
@@ -308,8 +309,7 @@ private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode)
                 name = "folder"
                 option { value = "keep"; +"Keep" }
                 option { value = "top"; +"Top level" }
-                all.filter { it.type == TaskType.FOLDER }.map { it to folderPath(it, byId) }.sortedBy { it.second.lowercase() }
-                    .forEach { (f, path) -> option { value = f.id.toString(); +path } }
+                folderTree(all.filter { it.type == TaskType.FOLDER }).forEach { (f, depth) -> option { value = f.id.toString(); +(INDENT.repeat(depth) + f.title) } }
             }
         }
         if (contexts.isNotEmpty()) {
@@ -624,3 +624,6 @@ private fun HTML.contextsPage(service: TaskService, form: ContextForm) = shellPa
         }
     }
 }
+
+// A dropdown can't hold a real tree, so subfolders are indented under their parent, in the tree's order.
+private const val INDENT = "\u00A0\u00A0\u00A0"

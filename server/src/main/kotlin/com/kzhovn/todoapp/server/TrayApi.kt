@@ -1,6 +1,7 @@
 package com.kzhovn.todoapp.server
 
 import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.data.formatDuration
 import io.ktor.http.Parameters
 import com.kzhovn.todoapp.data.CurrentTask
 import com.kzhovn.todoapp.data.pinnedTask
@@ -65,7 +66,7 @@ internal fun Parameters.quickAddChips() = QuickAddChips(
 
 // The current task, with its timer (running until timerEndsAt, or paused with timerRemaining left).
 @Serializable
-data class PinnedRow(val id: Long, val title: String, val timerEndsAt: Long? = null, val timerRemaining: Long? = null, val durationMinutes: Int? = null)
+data class PinnedRow(val id: Long, val title: String, val timerEndsAt: Long? = null, val timerRemaining: Long? = null, val durationMinutes: Int? = null, val durationText: String? = null)
 
 // list: "doing", "active", "all", or anything else for none (the popup is closed: just the pin and counts).
 fun trayState(service: TaskService, list: String?): TrayState {
@@ -88,7 +89,7 @@ fun trayState(service: TaskService, list: String?): TrayState {
         "all" -> rows(allOpen, urgentOnTop = false)
         else -> emptyList()
     }
-    val pinned = pinnedTask(all)?.let { PinnedRow(it.id, it.title, it.timerEndsAt, it.timerRemaining, it.durationMinutes) }
+    val pinned = pinnedTask(all)?.let { PinnedRow(it.id, it.title, it.timerEndsAt, it.timerRemaining, it.durationMinutes, it.durationMinutes?.let(::formatDuration)) }
     val focus = CurrentTask.focusSession(all)?.let { FocusRow(it.id, it.title, it.isComplete, it.notes?.takeIf { n -> n.isNotBlank() }?.lines()?.take(4)?.joinToString("\n")?.take(300)) }
     val folders = if (list !in LISTS) emptyList() else all.filter { it.type == TaskType.FOLDER || (it.type == TaskType.CHECKLIST && !it.isComplete) }
         .sortedBy { it.title.lowercase() }.map { FolderRow(it.id, it.title, checklist = it.type == TaskType.CHECKLIST) }

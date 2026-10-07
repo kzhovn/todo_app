@@ -503,7 +503,7 @@ class ServerTest {
         assertEquals(listOf(emoji), chunk.emojis)
         val lines = chunk.content.lines()
         assertTrue("- call mom [↗](<https://discord.com/channels/@me/2/1>)" in lines)
-        assertTrue(lines.any { Regex("- Buy milk · due \\w{3} \\d+ \\w{3} $emoji").matches(it) })
+        assertTrue("- Buy milk · ${com.kzhovn.todoapp.data.dueText(app.dueDate!!, service.now())} $emoji" in lines)
         val timed = service.create(Task(title = "Dentist", dueDate = com.kzhovn.todoapp.data.atTime(now, 17, 0)))
         assertTrue(logic.listChunks(listOf(timed)).single().content.contains("5:00 PM"))
     }

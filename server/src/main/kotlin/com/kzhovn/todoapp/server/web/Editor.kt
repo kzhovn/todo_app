@@ -21,8 +21,9 @@ import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.hasTime
 import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.data.nextRollover
-import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.data.ancestors
+import com.kzhovn.todoapp.data.folderTree
+import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.LinkKind
 import com.kzhovn.todoapp.data.linkCandidates
 import com.kzhovn.todoapp.data.CHECK_IN_CHOICES
@@ -696,16 +697,23 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
             val parentLabel = byId[t.parentId]?.let { p -> if (p.type == TaskType.FOLDER) folderPath(p, byId) else "Subtask of “${p.title}”" }
             // A set folder shows in its own colour, like the app's chip; app.js follows the pick.
             val colors = folderColorsHex(all)
-            popPill(Labels.FOLDER, Icon.FOLDER, parentLabel, "select", "tinted", tint = t.parentId?.let(colors::get)) {
-                select {
-                    name = "parent"
-                    option { value = ""; selected = t.parentId == null; +Labels.NO_FOLDER }
+            // A tree like the phone's folder picker: each folder in its colour, subfolders indented.
+            popPill(Labels.FOLDER, Icon.FOLDER, parentLabel, "tree", "tinted", tint = t.parentId?.let(colors::get)) {
+                div(classes = "folder-tree") {
+                    fun FlowContent.treeRow(value: String, title: String, depth: Int, picked: Boolean, label: String? = null, color: String? = null) =
+                        label(classes = "tree-row") {
+                            attributes["style"] = "padding-left: ${8 + depth * 18}px; --tint: ${color ?: "var(--muted)"}"
+                            radioInput(name = "parent") { this.value = value; checked = picked; label?.let { attributes["data-label"] = it }; color?.let { attributes["data-color"] = it } }
+                            icon(Icon.FOLDER, "")
+                            span { +title }
+                        }
+                    treeRow("", Labels.NO_FOLDER, 0, t.parentId == null)
                     byId[t.parentId]?.takeIf { it.type != TaskType.FOLDER }?.let { parent ->
-                        option { value = parent.id.toString(); selected = true; +"Subtask of “${parent.title}”" }
+                        treeRow(parent.id.toString(), "Subtask of “${parent.title}”", 0, true, label = "Subtask of “${parent.title}”")
                     }
-                    all.filter { it.type == TaskType.FOLDER && !wouldCreateCycle(it.id, t.id, byId) }
-                        .map { it to folderPath(it, byId) }.sortedBy { it.second.lowercase() }
-                        .forEach { (f, path) -> option { value = f.id.toString(); selected = f.id == t.parentId; colors[f.id]?.let { attributes["data-color"] = it }; +path } }
+                    folderTree(all.filter { it.type == TaskType.FOLDER }, excluding = t.id.takeIf { it != 0L }, allById = byId).forEach { (f, depth) ->
+                        treeRow(f.id.toString(), f.title, depth, f.id == t.parentId, label = folderPath(f, byId), color = colors[f.id])
+                    }
                 }
             }
             // Folders keep contexts too: their tasks inherit them.
@@ -896,13 +904,14 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
     val dependents = if (task.type == TaskType.FOLDER) emptyList() else edges.filter { it.dependsOnTaskId == id }.mapNotNull { byId[it.taskId] }
     val subtasks = all.filter { it.parentId == id && !isChecklist }.sortedWith(TaskOrder)
     val outFolder = moveOutFolderId(task, byId)?.let { byId[it]?.title }
-    // A task's checkbox goes in front of its title (projects and checklists keep the space).
-    fun FlowContent.check(t: Task) = if (t.type == TaskType.WAITING) span(classes = "check-space waiting-mark") { icon(Icon.HOURGLASS, "") }
-    else if (t.type == TaskType.TASK) button(classes = if (t.isComplete) "check done" else "check") {
+    // Its mark goes in front of its title, as in the lists (taskMark); ticking it toggles it here.
+    val counts = subtaskCounts(all)
+    fun FlowContent.check(t: Task) = taskMark(t, counts[t.id], m) {
+        if (t.isComplete) classes = classes + "done"
         htmx("/tasks/$id/subtasks/${t.id}/toggle?mode=$m")
         attributes["aria-label"] = if (t.isComplete) "Mark not done" else "Complete"
         if (t.isComplete) icon(Icon.CHECK, "")
-    } else span(classes = "check-space") {}
+    }
     // Subtasks first, together on a faint tile; then prerequisites and dependents, tagged after their titles
     // (as a subtask that's also one is).
     if (subtasks.isNotEmpty()) div(classes = "sub-tile") { subtasks.forEach { sub ->
