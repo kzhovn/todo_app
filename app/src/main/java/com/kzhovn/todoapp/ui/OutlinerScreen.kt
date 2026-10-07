@@ -242,7 +242,7 @@ private fun OutlinerRow(
                 .fillMaxWidth()
                 .onGloballyPositioned { rowBounds = it.boundsInRoot() }
                 .background(if (dropZone == DropZone.INTO || selected) LedgerAccentSoft else LedgerBackground)
-                .alpha(if (task.isBackburner(System.currentTimeMillis())) BACKBURNER_ALPHA else 1f)
+                .alpha(System.currentTimeMillis().let { now -> if (task.isBackburner(now)) BACKBURNER_ALPHA else if (task.startsLater(now)) LATER_ALPHA else 1f })
                 .drawWithContent {
                     drawContent()
                     val line = 3.dp.toPx()

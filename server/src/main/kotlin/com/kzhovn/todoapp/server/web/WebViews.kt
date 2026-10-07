@@ -509,6 +509,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
         if (task.id == data.selected) classes = classes + "current"
         attributes["data-type"] = task.type.name
         if (task.isBackburner(data.now)) classes = classes + "dim"
+        else if (data.mode == ListMode.ALL && task.startsLater(data.now)) classes = classes + "later"
         if (task.isComplete) classes = classes + "done"
         style = "padding-left: ${depth * 18}px; border-left-color: ${data.folderColor(task) ?: "var(--border)"}"
         outlineNode?.invoke(this)

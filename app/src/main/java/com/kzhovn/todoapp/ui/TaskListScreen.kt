@@ -390,6 +390,8 @@ private fun MenuRow(label: String, icon: ImageVector, onClick: () -> Unit) {
 }
 
 const val BACKBURNER_ALPHA = 0.45f
+// A start still to come, in the All tree: dimmed a little, less than the back burner.
+const val LATER_ALPHA = 0.65f
 
 // Shown in the checkbox's place: a project is completed as a whole, not ticked off directly.
 @Composable

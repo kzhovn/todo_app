@@ -76,6 +76,10 @@ data class Task(
 ) {
     fun isExpired(now: Long): Boolean = expiresAt != null && expiresAt <= now
 
+    // Snoozed or not started yet: the All tree shows it slightly dimmed. (A waiting item's start is its
+    // next check-in, not a start.)
+    fun startsLater(now: Long): Boolean = !isComplete && type != TaskType.WAITING && startDate != null && startDate > now
+
     // The one place the maybe exclusions are enforced (a maybe is never starred, nor high priority);
     // every write path runs tasks through it.
     fun starRule(): Task = if (isMaybe && (isStarred || isHighPriority)) copy(isStarred = false, isHighPriority = false) else this

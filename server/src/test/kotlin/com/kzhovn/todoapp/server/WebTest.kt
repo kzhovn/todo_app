@@ -809,6 +809,17 @@ class WebTest {
     }
 
     @Test
+    fun `the All tree dims a task whose start is still to come`() = web {
+        val later = service.create(Task(title = "Later", startDate = service.now() + 86_400_000L))
+        val now = service.create(Task(title = "Now"))
+        val page = client.get("/all").bodyAsText()
+        fun rowOf(id: Long) = Regex("""<div[^>]*class="([^"]*)"[^>]*data-id="$id"|data-id="$id"[^>]*class="([^"]*)"""").find(page)?.groupValues?.drop(1)?.joinToString(" ").orEmpty()
+        assertTrue(page.contains("later"))
+        assertTrue("later" !in rowOf(now.id))
+        assertTrue(later.startsLater(service.now()))
+    }
+
+    @Test
     fun `the morning digest is turned off in Settings, and the newest setting wins across devices`() = web {
         assertTrue(service.digestOn())
         assertTrue(client.get("/settings").bodyAsText().contains("name=\"digest\" checked"))

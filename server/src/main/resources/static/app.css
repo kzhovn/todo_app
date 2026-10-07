@@ -64,6 +64,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .folder-icon { width: 14px; height: 14px; color: var(--muted); }
 .row { display: flex; align-items: center; gap: 6px; min-height: 40px; padding-right: 4px; border-left: 4px solid var(--border); border-bottom: 1px solid var(--border); }
 .row.dim { opacity: .45; }
+/* A start still to come, in the All tree: dimmed a little, less than the back burner. */
+.row.later { opacity: .65; }
 .check { width: 22px; height: 22px; margin-left: 6px; border-radius: 50%; border: 1.5px solid var(--check); flex-shrink: 0; }
 .check:hover { background: var(--accent-soft); }
 .check.overdue { border: 2px solid var(--overdue); background: color-mix(in srgb, var(--overdue) 18%, transparent); }
