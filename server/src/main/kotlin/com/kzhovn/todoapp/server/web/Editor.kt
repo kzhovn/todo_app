@@ -193,23 +193,6 @@ fun Route.editorRoutes(service: TaskService) {
         call.respondList(service, call.mode(), extra = createHTML().div { id = "toast"; attributes["hx-swap-oob"] = "true" })
     }
 
-    // A new subtask (text), or an existing task moved under this one (child).
-    post("/tasks/{id}/subtasks") {
-        val id = call.taskId() ?: return@post
-        val params = call.receiveParameters()
-        params["child"]?.toLongOrNull()?.let { service.reparent(it, id) }
-        if (service.get(id) != null) service.addTyped(params["text"].orEmpty(), under = id)
-        call.respondSubtasks(service, id)
-    }
-    // An existing task (prerequisite), or a new one (text), that this one depends on. A new one goes in
-    // this task's folder, like a new dependent.
-    post("/tasks/{id}/prerequisite") {
-        val id = call.taskId() ?: return@post
-        val params = call.receiveParameters()
-        params["prerequisite"]?.toLongOrNull()?.let { service.addDependency(id, it) }
-        service.get(id)?.let { task -> service.addTyped(params["text"].orEmpty(), folder = service.folderIdOf(task))?.let { service.addDependency(id, it.id) } }
-        call.respondSubtasks(service, id)
-    }
     post("/tasks/{id}/prerequisite/{other}/remove") {
         val id = call.taskId() ?: return@post
         call.parameters["other"]?.toLongOrNull()?.let { service.removeDependency(id, it) }
@@ -218,15 +201,6 @@ fun Route.editorRoutes(service: TaskService) {
     post("/tasks/{id}/dependent/{other}/remove") {
         val id = call.taskId() ?: return@post
         call.parameters["other"]?.toLongOrNull()?.let { service.removeDependency(it, id) }
-        call.respondSubtasks(service, id)
-    }
-    // An existing task, or (text) a new one, that depends on this one. A new one goes in this task's
-    // folder, like the phone's, since dependent work usually belongs together.
-    post("/tasks/{id}/dependent") {
-        val id = call.taskId() ?: return@post
-        val params = call.receiveParameters()
-        params["dependent"]?.toLongOrNull()?.let { service.addDependency(it, id) }
-        service.get(id)?.let { task -> service.addTyped(params["text"].orEmpty(), folder = service.folderIdOf(task))?.let { service.addDependency(it.id, id) } }
         call.respondSubtasks(service, id)
     }
     // The one add field: `kind` picks subtask, prerequisite or dependent; `existing` (a suggestion) or

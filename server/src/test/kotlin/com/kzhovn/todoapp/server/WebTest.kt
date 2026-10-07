@@ -353,7 +353,7 @@ class WebTest {
     fun `a new dependent task lands in the task's folder and waits for it`() = web {
         val folder = service.create(Task(type = TaskType.FOLDER, title = "Home"))
         val paint = service.create(Task(title = "Buy paint", parentId = folder.id))
-        client.submitForm("/tasks/${paint.id}/dependent", parameters { append("text", "Paint the wall") })
+        client.submitForm("/tasks/${paint.id}/related", parameters { append("kind", "dependent"); append("text", "Paint the wall") })
         val wall = service.tasks().single { it.title == "Paint the wall" }
         assertEquals(folder.id, wall.parentId)
         assertEquals(setOf(paint.id), service.dependsOn(wall.id))
@@ -507,8 +507,8 @@ class WebTest {
         val folder = service.create(Task(type = TaskType.FOLDER, title = "Work"))
         val report = service.create(Task(title = "Write report", parentId = folder.id))
         val vpn = service.create(Task(title = "Get VPN access"))
-        client.submitForm("/tasks/${report.id}/prerequisite", parameters { append("prerequisite", vpn.id.toString()) })
-        client.submitForm("/tasks/${report.id}/prerequisite", parameters { append("text", "Collect numbers") })
+        client.submitForm("/tasks/${report.id}/related", parameters { append("kind", "prerequisite"); append("existing", vpn.id.toString()) })
+        client.submitForm("/tasks/${report.id}/related", parameters { append("kind", "prerequisite"); append("text", "Collect numbers") })
         val numbers = service.tasks().single { it.title == "Collect numbers" }
         assertEquals(folder.id, numbers.parentId)
         assertEquals(setOf(vpn.id, numbers.id), service.dependsOn(report.id))
@@ -722,7 +722,7 @@ class WebTest {
         val step = service.tasks().single { it.title == "book movers" }
         assertEquals(project.id to "ask about Sundays", step.parentId to step.notes)
         assertEquals(setOf(home.id), service.contextIdsByTask()[step.id])
-        client.submitForm("/tasks/${project.id}/subtasks", parameters { append("text", "pack books -d tomorrow") })
+        client.submitForm("/tasks/${project.id}/related", parameters { append("kind", "subtask"); append("text", "pack books -d tomorrow") })
         assertNotNull(service.tasks().single { it.title == "pack books" }.dueDate)
     }
 
@@ -735,8 +735,8 @@ class WebTest {
         // The editors offer projects in both directions.
         assertTrue(client.get("/tasks/${pack.id}/related/suggest?text=tri&kind=prerequisite").bodyAsText().contains("<span>Trip</span>"))
         assertTrue(client.get("/tasks/${passport.id}/related/suggest?text=tri&kind=dependent").bodyAsText().contains("<span>Trip</span>"))
-        client.submitForm("/tasks/${trip.id}/prerequisite", parameters { append("prerequisite", passport.id.toString()) })
-        client.submitForm("/tasks/${trip.id}/dependent", parameters { append("dependent", pack.id.toString()) })
+        client.submitForm("/tasks/${trip.id}/related", parameters { append("kind", "prerequisite"); append("existing", passport.id.toString()) })
+        client.submitForm("/tasks/${trip.id}/related", parameters { append("kind", "dependent"); append("existing", pack.id.toString()) })
         assertEquals(setOf(passport.id), service.dependsOn(trip.id))
         assertEquals(setOf(trip.id), service.dependsOn(pack.id))
         assertEquals(listOf("Renew passport"), service.active(null).map { it.title })
