@@ -820,6 +820,17 @@ class WebTest {
     }
 
     @Test
+    fun `checklist items take quick add's syntax, from the editor and from quick add`() = web {
+        val list = service.create(Task(title = "Groceries", type = TaskType.CHECKLIST))
+        client.submitForm("/tasks/${list.id}/items", parameters { append("text", "milk due tomorrow !, eggs") })
+        val milk = service.tasks().single { it.title == "milk" }
+        assertTrue(milk.parentId == list.id && milk.dueDate != null && milk.isHighPriority)
+        assertEquals(list.id, service.tasks().single { it.title == "eggs" }.parentId)
+        client.submitForm("/quickadd", parameters { append("text", "groceries: bread*") })
+        assertTrue(service.tasks().single { it.title == "bread" }.let { it.parentId == list.id && it.isStarred })
+    }
+
+    @Test
     fun `the morning digest is turned off in Settings, and the newest setting wins across devices`() = web {
         assertTrue(service.digestOn())
         assertTrue(client.get("/settings").bodyAsText().contains("name=\"digest\" checked"))

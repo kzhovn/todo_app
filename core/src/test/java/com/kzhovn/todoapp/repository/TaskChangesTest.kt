@@ -59,4 +59,15 @@ class TaskChangesTest {
         val back = planUncheckAll(after, 10)
         assertEquals(setOf(done.creates.single().first.id), back.deletes)
     }
+
+    @Test fun aChecklistItemTakesQuickAddsSyntaxButStaysAnItem() {
+        val plan = { text: String -> com.kzhovn.todoapp.quickadd.planQuickAdd(text, emptyList(), emptyList(), now, 4) }
+        val (milk, _) = checklistItem("milk due tomorrow !", 10, plan)!!
+        assertEquals("milk" to 10L, milk.title to milk.parentId)
+        assertTrue(milk.dueDate != null && milk.isHighPriority)
+        val (packing, _) = checklistItem("packing [passport, charger] -p", 10, plan)!!
+        assertEquals(TaskType.TASK, packing.type)
+        assertEquals(null, packing.pinnedAt)
+        assertEquals(TaskType.TASK, checklistItem("wait for the bus", 10, plan)!!.first.type)
+    }
 }
