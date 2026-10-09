@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FEATURE Mockups</title>
+<style>
+/* The app's own palette (the phone's Ledger colours, the web's app.css tokens), light and dark. */
+:root {
+  --bg: #F0EAE0; --panel: #F7F4EE; --ink: #2B2318; --muted: #8A7A5C; --border: #DED5C1; --tile: #EFE8DC; --chip: #E9E2D2;
+  --accent: #2B4C7E; --accent-soft: #DFE6EF; --green: #3B8841; --green-soft: #D8E5D6; --up: #93650C; --up-soft: #EEDFB8;
+  --check: #B5A98C; --overdue: #96412B; --star: #C9A01E;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1E1B16; --panel: #26221C; --ink: #ECE4D6; --muted: #A8997C; --border: #3A342A; --tile: #312C24; --chip: #2E2922;
+    --accent: #8FB0E3; --accent-soft: #2A3445; --green: #6DBA6F; --green-soft: #2A3A28; --up: #E0B45A; --up-soft: #3A3020;
+    --check: #6A604E; --overdue: #E08A71; --star: #E0C060;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 24px 16px 64px; }
+.page { max-width: 1180px; margin: 0 auto; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.note { color: var(--muted); font-size: 14px; margin: 0 0 18px; max-width: 820px; }
+h2.part { font-size: 17px; margin: 36px 0 4px; border-top: 1px solid var(--border); padding-top: 22px; }
+.pick { display: inline-block; background: var(--green-soft); color: var(--green); font-size: 11px; font-weight: 700; border-radius: 4px; padding: 1px 6px; margin-left: 6px; vertical-align: 2px; }
+.row { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+.frame { width: 350px; max-width: 100%; }
+.frame.wide { width: 520px; }
+.frame h3 { font-size: 14px; margin: 0 0 4px; }
+.frame .cap { font-size: 12px; color: var(--muted); margin: 0 0 10px; min-height: 34px; }
+/* A phone screen and a web panel. */
+.phone { border: 1px solid var(--border); border-radius: 24px; background: var(--bg); padding: 14px 14px 18px; position: relative; }
+.web { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); padding: 14px 18px; position: relative; }
+.tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 8px; font-size: 13px; }
+.tabs span { flex: 1; text-align: center; padding: 6px 0; color: var(--muted); }
+.tabs span.on { color: var(--accent); border-bottom: 2px solid var(--accent); font-weight: 600; }
+/* A task row: checkbox, title, a muted tail on the right. */
+.task { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid var(--border); font-size: 14px; }
+.cb { width: 18px; height: 18px; border: 1.5px solid var(--check); border-radius: 50%; flex: none; }
+.task .meta { margin-left: auto; font-size: 11px; color: var(--muted); white-space: nowrap; }
+/* The editor: title box, section labels, chips (set ones tinted), a joined pick-one bar. */
+.ttl { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--panel); font-size: 16px; margin-bottom: 10px; }
+.web .ttl { background: var(--bg); }
+.label { font-weight: 700; font-size: 12px; margin: 14px 0 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 5px; font-size: 12px; color: var(--muted); }
+.chip.set { background: var(--accent-soft); color: var(--accent); }
+.chip.green { background: var(--green-soft); color: var(--green); }
+.seg { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; font-size: 12px; margin-bottom: 8px; }
+.seg span { flex: 1; text-align: center; padding: 5px 0; color: var(--muted); border-left: 1px solid var(--border); }
+.seg span:first-child { border-left: 0; }
+.seg span.on { background: var(--accent); color: #fff; }
+.menu { position: absolute; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px #0003; padding: 6px 0; font-size: 14px; width: 240px; z-index: 2; }
+.menu .opt { padding: 8px 14px; }
+.q li { margin-bottom: 8px; }
+.q .r { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>FEATURE</h1>
+<p class="note">What this is for, in a sentence or two, and what the options differ on.</p>
+
+<h2 class="part">A · First option <span class="pick">PICK</span></h2>
+<p class="note">How it works and what it costs.</p>
+<div class="row">
+  <div class="frame">
+    <h3>Phone</h3>
+    <p class="cap">What to notice.</p>
+    <div class="phone">
+      <div class="tabs"><span class="on">Doing 3</span><span>Active 14</span><span>All</span></div>
+      <div class="task"><span class="cb"></span>Pay rent<span class="meta">due today</span></div>
+    </div>
+  </div>
+  <div class="frame wide">
+    <h3>Web</h3>
+    <p class="cap">What to notice.</p>
+    <div class="web">
+      <div class="task"><span class="cb"></span>Pay rent<span class="meta">due today</span></div>
+    </div>
+  </div>
+</div>
+
+<h2 class="part">Questions</h2>
+<ol class="q">
+  <li><b>A decision to make?</b> <span class="r">Proposed: …</span></li>
+</ol>
+</div>
+</body>
+</html>

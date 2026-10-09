@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web-preview",
+      "runtimeExecutable": "tools/web_preview.sh",
+      "runtimeArgs": [],
+      "port": 8099
+    }
+  ]
+}
