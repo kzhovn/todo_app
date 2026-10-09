@@ -20,5 +20,8 @@ What its exit codes mean, and what to tell Kira:
   render in `RelatedSectionTest`).
 - **1**: push or install failed after retries; report the output.
 
+**If the app crashes** on the phone: `tools/phone_crash.sh` prints its newest crash (the exception and
+the lines from our code); `--all` for the whole crash log.
+
 If the change adds a task type or field, remind Kira to deploy the server first: an old server can't
 decode it, and the phone's next sync fails.
