@@ -96,6 +96,19 @@ class OutlinerNodeTest {
     }
 
     @Test
+    fun `hideCompleted omits a completed project and a completed checklist with its sections`() {
+        val tasks = listOf(
+            Task(id = 1, type = TaskType.PROJECT, title = "WSCL", isComplete = true),
+            Task(id = 2, title = "Step", parentId = 1, isComplete = true),
+            Task(id = 3, title = "Left open", parentId = 1),
+            Task(id = 4, type = TaskType.CHECKLIST, title = "Packing", isComplete = true),
+            Task(id = 5, type = TaskType.SECTION, title = "Clothes", parentId = 4),
+            Task(id = 6, title = "Socks", parentId = 5, isComplete = true)
+        )
+        assertEquals(listOf("Left open"), buildOutlinerTree(tasks, hideCompleted = true).map { it.task.title })
+    }
+
+    @Test
     fun `hideCompleted defaults to false, keeping existing behavior`() {
         val tasks = listOf(Task(id = 1, title = "Done", isComplete = true))
         val tree = buildOutlinerTree(tasks)

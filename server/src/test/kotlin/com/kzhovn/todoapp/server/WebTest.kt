@@ -87,8 +87,7 @@ class WebTest {
         val all = client.get("/list/all").bodyAsText()
         assertFalse(all.contains(">Old milestone<"))
         assertTrue(all.contains(">Next step<")) // its open subtask moves up
-        assertTrue(all.contains(">Packing<")) // a completed checklist stays, struck through
-        assertTrue(all.substring(all.lastIndexOf("class=\"row", all.indexOf(">Packing<"))).startsWith("class=\"row done"))
+        assertFalse(all.contains(">Packing<"))
     }
 
     @Test

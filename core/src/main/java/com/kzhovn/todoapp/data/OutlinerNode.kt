@@ -18,7 +18,9 @@ fun buildOutlinerTree(tasks: List<Task>, hideCompleted: Boolean = false): List<O
             .sortedWith(TaskOrder)
             .flatMap { task ->
                 val children = build(task.id)
-                if (hideCompleted && task.type == TaskType.TASK && task.isComplete) {
+                if (hideCompleted && task.type == TaskType.CHECKLIST && task.isComplete) {
+                    emptyList() // its items and sections only live inside it
+                } else if (hideCompleted && (task.type == TaskType.TASK || task.type == TaskType.PROJECT) && task.isComplete) {
                     // Splice this task's still-visible children in at the same level instead of
                     // dropping them along with their now-hidden completed parent.
                     children
