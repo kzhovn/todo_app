@@ -415,7 +415,8 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .kind-tag.dependent { background: var(--good-bg); color: var(--good); }
 .rel-row a .kind-tag { margin-left: 8px; display: inline-block; text-decoration: none; }
 .rel-row.sub { position: relative; }
-.drag-handle { position: absolute; left: -26px; width: 16px; text-align: center; color: var(--muted); cursor: grab; visibility: hidden; user-select: none; }
+/* The right padding bridges the gap to the row, so moving onto the handle keeps the row hovered. */
+.drag-handle { position: absolute; left: -26px; width: 26px; padding-right: 10px; text-align: center; color: var(--muted); cursor: grab; visibility: hidden; user-select: none; }
 .rel-row.sub:hover .drag-handle { visibility: visible; }
 .rel-row[data-drop="before"] { box-shadow: inset 0 2px 0 var(--accent); }
 .rel-row[data-drop="after"] { box-shadow: inset 0 -2px 0 var(--accent); }
