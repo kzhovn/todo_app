@@ -1,8 +1,11 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.data.DueDates
+import com.kzhovn.todoapp.data.DAY_MS
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.checklistItems
 import com.kzhovn.todoapp.data.Labels
+import com.kzhovn.todoapp.data.CompleteQuestion
 import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.quickadd.QuickAdd
 import kotlinx.serialization.Serializable
@@ -15,11 +18,10 @@ import com.kzhovn.todoapp.sync.toTask
 const val DONE = "✅"
 const val DELETE = "❌"
 const val STAR = "⭐"
-const val MOVE_OUT = "🔽" // on a nudge: unstar the task (no variation selector, so reactions match)
-private const val DAY_MS = 24L * 60 * 60 * 1000
+const val MOVE_OUT = "🔽" // on a nudge: unstar the task; on a subtasks question: move them out (no variation selector, so reactions match)
 private const val NUDGE_AFTER = 3 * DAY_MS
 private const val NUDGE_SLACK = 60L * 60 * 1000
-const val NOTHING = "🎉 Nothing here 🎉"
+val NOTHING = "🎉 ${Labels.NOTHING_HERE} 🎉"
 
 // The syntax lines are quick add's own list (Labels.QUICK_ADD_SYNTAX), the one the phone's drawer and the
 // web's sidebar show, so they can't drift apart.
@@ -37,7 +39,7 @@ Editing the message updates the task; deleting it deletes the task.
 **Lists**
 `.doing` / `.list` Doing · `.active` Active · `.rand` one random active task
 `.list work` open tasks in a folder (or a checklist's items); `.doing work` / `.active work` filter by folder
-Tap an item's emoji to complete it (un-tap to undo).
+Tap an item's emoji to complete it (un-tap to undo). One with open subtasks asks first: ✅ completes them too, 🔽 moves them out.
 
 **Nudges**
 With the morning digest, anything in Doing for 3+ days gets a message (again every 3 days):
@@ -67,7 +69,8 @@ data class MessageLink(
     val taskId: Long? = null,
     val text: String? = null,
     val lines: List<ListLine> = emptyList(),
-    val nudgeFor: Long? = null // a "stuck in Doing" nudge about this task
+    val nudgeFor: Long? = null, // a "stuck in Doing" nudge about this task
+    val askFor: Long? = null // the question about this task's open subtasks (askText)
 )
 
 data class ListChunk(val content: String, val emojis: List<String>, val lines: List<ListLine>)
@@ -79,6 +82,8 @@ sealed interface ReactionOutcome {
     data object None : ReactionOutcome
     data class EditList(val content: String) : ReactionOutcome
     data object DeleteIfBotMessage : ReactionOutcome
+    // Reply to the reacted message with `text`, record it (recordAsk) and react ✅ and 🔽 on it.
+    data class Ask(val taskId: Long, val text: String) : ReactionOutcome
 }
 
 class BotLogic(private val service: TaskService, private val store: Store) {
@@ -187,17 +192,38 @@ class BotLogic(private val service: TaskService, private val store: Store) {
 
     fun recordNudge(messageId: Long, taskId: Long) = saveLink(messageId, MessageLink(nudgeFor = taskId))
 
+    // ✅ on a task with open subtasks asks first, as the apps do: a reply, answered by reacting to it.
+    fun askText(task: Task, question: CompleteQuestion) =
+        "“${task.title}”: ${question.text} React $DONE: ${question.completeAll.lowercase()}, or $MOVE_OUT: ${question.moveOut.lowercase()} (remove your $DONE to leave it open)."
+
+    fun recordAsk(messageId: Long, taskId: Long) = saveLink(messageId, MessageLink(askFor = taskId))
+
+    // Completes it, or asks first when it has open subtasks.
+    private fun completeOrAsk(taskId: Long): ReactionOutcome? {
+        val task = service.get(taskId)?.takeUnless { it.isComplete } ?: return null
+        service.completeQuestion(taskId)?.let { return ReactionOutcome.Ask(taskId, askText(task, it)) }
+        service.complete(taskId)
+        return null
+    }
+
     fun onReaction(messageId: Long, emoji: String, added: Boolean): ReactionOutcome = fromDiscord {
         val link = link(messageId)
         link?.nudgeFor?.let { stuck ->
             if (emoji == MOVE_OUT) service.setStarred(stuck, !added) // un-reacting puts it back
             return ReactionOutcome.None
         }
+        link?.askFor?.let { asked ->
+            when {
+                !added -> if (emoji == DONE || emoji == MOVE_OUT) service.uncomplete(asked)
+                emoji == DONE -> service.completeChoosing(asked, moveOut = false)
+                emoji == MOVE_OUT -> service.completeChoosing(asked, moveOut = true)
+            }
+            return ReactionOutcome.None
+        }
         val sourceTask = link?.taskId
         if (sourceTask != null) {
             when (emoji) {
-                // No room for the subtask question here: ✅ completes everything under it, like the widget.
-                DONE -> if (added) service.completeWithDescendants(sourceTask) else service.uncomplete(sourceTask)
+                DONE -> if (added) completeOrAsk(sourceTask)?.let { return it } else service.uncomplete(sourceTask)
                 DELETE -> if (added) service.delete(sourceTask) else service.restore(sourceTask)
                 STAR -> service.setStarred(sourceTask, added)
             }
@@ -205,7 +231,7 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         }
         val line = link?.lines?.firstOrNull { it.emoji == emoji }
         if (line != null) {
-            if (added) service.completeWithDescendants(line.taskId) else service.uncomplete(line.taskId)
+            if (added) completeOrAsk(line.taskId)?.let { return it } else service.uncomplete(line.taskId)
             // The task's newest list is refreshed through listToRefresh; an older one reacted on isn't.
             return if (newestList(line.taskId)?.second == messageId) ReactionOutcome.None else ReactionOutcome.EditList(render(link.lines))
         }
@@ -218,8 +244,9 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         val emojis = assignEmoji(tasks.filter { store.getValue("src:${it.id}") == null })
         val chunks = mutableListOf<MutableList<ListLine>>()
         var chars = 0
+        val dues = service.dueDates()
         for (task in tasks) {
-            val line = ListLine(emojis[task.id], task.id, describe(task))
+            val line = ListLine(emojis[task.id], task.id, describe(task, dues))
             // Sized as if struck, so striking lines later can't push an edit past the limit.
             val size = renderLine(line, done = true).length + 1
             val current = chunks.lastOrNull()
@@ -292,9 +319,9 @@ class BotLogic(private val service: TaskService, private val store: Store) {
 
     // Struck lines are ones whose task is now done or gone; rendering from live state keeps an old
     // list message correct however many times its reactions are toggled.
-    private fun render(lines: List<ListLine>): String = lines.joinToString("\n") { line ->
-        val task = service.get(line.taskId)
-        renderLine(line, done = task == null || task.isComplete)
+    private fun render(lines: List<ListLine>): String {
+        val byId = service.tasks().associateBy { it.id }
+        return lines.joinToString("\n") { line -> renderLine(line, done = byId[line.taskId]?.isComplete != false) }
     }
 
     // A masked link keeps lines short; `<>` around the URL suppresses its embed.
@@ -303,10 +330,10 @@ class BotLogic(private val service: TaskService, private val store: Store) {
         return "- " + (if (done) "~~${line.text}~~" else line.text) + tail?.let { " $it" }.orEmpty()
     }
 
-    private fun describe(task: Task): String {
+    private fun describe(task: Task, dues: DueDates): String {
         val title = task.title.take(120) + (if (task.isMaybe) " ?" else "") + (if (task.isHighPriority) " !" else "")
         // In the same words as every other list ("due today", "due Fri", "due Oct 12").
-        val due = service.effectiveDueDate(task)?.let { " · " + dueText(it, service.now()) }.orEmpty()
+        val due = dues.of(task)?.let { " · " + dueText(it, service.now()) }.orEmpty()
         return title + due
     }
 

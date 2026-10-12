@@ -76,15 +76,17 @@ class ServerTest {
         assertEquals(TrayCounts(doing = 1, active = 1, all = 2), doing.counts)
         val all = tray(client.get("/api/tray?list=all") { header("Authorization", auth) }.bodyAsText())
         assertEquals(listOf("Call mom", "Find number"), all.rows.map { it.title }) // All has the waiting parent too
+        assertEquals(listOf("It has 1 active subtask.", null), all.rows.map { it.subtaskQuestion?.text }) // ticking it asks first
         // The popup closed: only the pin and the counts.
         assertTrue(tray(client.get("/api/tray?list=none") { header("Authorization", auth) }.bodyAsText()).rows.isEmpty())
 
+        val asks = all.rows.first().subtaskQuestion
         val pinned = tray(client.post("/api/tasks/${call.id}/pin?list=doing") { header("Authorization", auth) }.bodyAsText())
-        assertEquals(PinnedRow(call.id, "Call mom"), pinned.pinned)
+        assertEquals(PinnedRow(call.id, "Call mom", subtaskQuestion = asks), pinned.pinned)
         val focused = tray(client.post("/api/tasks/${call.id}/focus?list=doing") { header("Authorization", auth) }.bodyAsText())
-        assertEquals(FocusRow(call.id, "Call mom", done = false), focused.focus)
-        // The checkbox completes the subtasks too, like the widget's.
-        val done = tray(client.post("/api/tasks/${call.id}/complete?list=doing") { header("Authorization", auth) }.bodyAsText())
+        assertEquals(FocusRow(call.id, "Call mom", done = false, subtaskQuestion = asks), focused.focus)
+        // The popup's answer to that question: complete them too.
+        val done = tray(client.post("/api/tasks/${call.id}/complete?list=doing&subtasks=complete") { header("Authorization", auth) }.bodyAsText())
         assertTrue(service.get(step.id)!!.isComplete)
         assertNull(done.pinned)
         assertTrue(done.rows.isEmpty())
@@ -417,13 +419,19 @@ class ServerTest {
     }
 
     @Test
-    fun `completing from Discord completes everything under the task`() {
+    fun `completing from Discord asks about open subtasks, answered by reacting to the reply`() {
         logic.onAdd(1L, "u", "-- pack")
         val id = service.tasks().single().id
         val sub = service.create(Task(title = "socks", parentId = id))
-        logic.onReaction(1L, DONE, added = true)
+        val ask = logic.onReaction(1L, DONE, added = true) as ReactionOutcome.Ask
+        assertEquals(id, ask.taskId)
+        assertTrue(ask.text.contains("1 active subtask"))
+        assertFalse(service.get(id)!!.isComplete)
+        logic.recordAsk(2L, id)
+        logic.onReaction(2L, MOVE_OUT, added = true)
         assertTrue(service.get(id)!!.isComplete)
-        assertTrue(service.get(sub.id)!!.isComplete)
+        assertFalse(service.get(sub.id)!!.isComplete) // moved out, still open
+        assertEquals(null, service.get(sub.id)!!.parentId)
     }
 
     @Test

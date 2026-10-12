@@ -3,8 +3,10 @@ package com.kzhovn.todoapp.server
 import com.kzhovn.todoapp.sync.SyncRequest
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.checklistItems
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.sync.taskFields
+import com.kzhovn.todoapp.server.web.dateTime
 import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -75,6 +77,63 @@ class WebTest {
         val doing = client.get("/doing").bodyAsText()
         assertTrue(doing.contains("href=\"/tasks/${project.id}?mode=DOING\" class=\"parent\""))
         assertTrue(doing.contains(">Wool coat: </a>"))
+    }
+
+    @Test
+    fun `a checklist's sections show in its editor, take items, and an item drags into one`() = web {
+        service.quickAdd("packing [passport; clothes: socks]", fromDoing = false)
+        val list = service.tasks().single { it.type == TaskType.CHECKLIST }
+        val clothes = service.tasks().single { it.type == TaskType.SECTION }
+        val passport = service.tasks().single { it.title == "passport" }
+        val editor = client.get("/tasks/${list.id}").bodyAsText()
+        assertTrue(editor.contains(">clothes<") && editor.contains("+ Add to clothes"))
+        client.submitForm("/tasks/${list.id}/items?in=${clothes.id}", parameters { append("text", "shirt") })
+        assertEquals(clothes.id, service.tasks().single { it.title == "shirt" }.parentId)
+        client.submitForm("/tasks/${list.id}/subtasks/${passport.id}/move", parameters { append("anchor", "${clothes.id}"); append("after", "1") })
+        assertEquals(clothes.id, service.get(passport.id)!!.parentId)
+        assertEquals(listOf("passport", "socks", "shirt"), checklistItems(list.id, service.tasks()).map { it.title })
+    }
+
+    @Test
+    fun `a template stays out of the lists, makes lists, and takes back what's chosen`() = web {
+        service.quickAdd("packing [passport, socks]", fromDoing = false)
+        val packing = service.tasks().single { it.type == TaskType.CHECKLIST }
+        client.post("/tasks/${packing.id}/save-template")
+        val template = service.templates().single()
+        assertTrue(service.tasks().none { it.isTemplate }) // not in any list
+        assertFalse(client.get("/all").bodyAsText().contains("/tasks/${template.id}?"))
+        assertTrue(client.get("/templates").bodyAsText().contains(">packing<"))
+
+        client.post("/templates/${template.id}/use")
+        val list = service.tasks().single { it.fromTemplateId == template.id }
+        service.addItems(list.id, "rain jacket")
+        val review = client.get("/tasks/${list.id}/update-template").bodyAsText()
+        assertTrue(review.contains("rain jacket") && review.contains("added"))
+        val jacket = service.tasks().single { it.title == "rain jacket" }
+        client.submitForm("/tasks/${list.id}/update-template", parameters { append("chosen", "add-${jacket.id}") })
+        assertEquals(setOf("passport", "socks", "rain jacket"), checklistItems(template.id, service.everything()).map { it.title }.toSet())
+        assertTrue(client.get("/tasks/${list.id}/update-template").bodyAsText().contains(Labels.TEMPLATE_UNCHANGED))
+    }
+
+    @Test
+    fun `use in quick add makes a list from the template`() = web {
+        service.quickAdd("packing [passport]", fromDoing = false)
+        service.saveAsTemplate(service.tasks().single { it.type == TaskType.CHECKLIST }.id)
+        val made = service.quickAdd("use packing: Lisbon", fromDoing = false)!!
+        assertEquals("packing: Lisbon", made.title)
+        assertEquals(listOf("passport"), checklistItems(made.id, service.tasks()).map { it.title })
+    }
+
+    @Test
+    fun `ticking a subtask with open subtasks in the editor asks first`() = web {
+        val parent = service.create(Task(title = "Trip"))
+        val sub = service.create(Task(title = "Buy canisters", parentId = parent.id))
+        val step = service.create(Task(title = "Check size", parentId = sub.id))
+        val asked = client.post("/tasks/${parent.id}/subtasks/${sub.id}/toggle").bodyAsText()
+        assertTrue(asked.contains("1 active subtask"))
+        assertFalse(service.get(sub.id)!!.isComplete)
+        client.post("/tasks/${parent.id}/subtasks/${sub.id}/toggle?subtasks=complete")
+        assertTrue(service.get(sub.id)!!.isComplete && service.get(step.id)!!.isComplete)
     }
 
     @Test
@@ -269,7 +328,7 @@ class WebTest {
 
         client.post("/tasks/${trip.id}/complete?mode=ALL&subtasks=promote")
         assertTrue(service.get(trip.id)!!.isComplete)
-        assertEquals(null, service.get(hotel.id)!!.parentId) // moved out to the top level, like the phone
+        assertEquals(folder.id, service.get(hotel.id)!!.parentId) // moved out to the folder the task is in, like the phone
         assertFalse(service.get(hotel.id)!!.isComplete)
 
         val pack = service.create(Task(title = "Pack"))
@@ -905,5 +964,33 @@ class WebTest {
         client.post("/timer/stop")
         assertNull(service.pinned())
         assertTrue(client.get("/timer").bodyAsText().contains("\"timer\":null"))
+    }
+
+    @Test
+    fun `a waiting item's check-in interval saves from the editor`() = web {
+        val waiting = service.create(Task(title = "Landlord to reply", type = TaskType.WAITING))
+        client.submitForm("/tasks/${waiting.id}/autosave", parameters {
+            append("base", taskFields(waiting, emptySet(), emptySet()).toString())
+            append("title", "Landlord to reply"); append("type", "WAITING"); append("checkInN", "2"); append("checkInUnit", "7"); append("checkInDate", "2030-05-04")
+        })
+        val saved = service.get(waiting.id)!!
+        assertEquals(14, saved.checkInDays)
+        assertEquals(dateTime("2030-05-04", null), saved.startDate)
+    }
+
+    @Test
+    fun `clear checked offers an undo that brings the items back`() = web {
+        val list = service.create(Task(title = "Groceries", type = TaskType.CHECKLIST))
+        service.addItems(list.id, "milk, eggs")
+        val milk = service.tasks().single { it.title == "milk" }
+        service.complete(milk.id)
+
+        val response = client.post("/tasks/${list.id}/items/clear?mode=ALL").bodyAsText()
+        assertNull(service.get(milk.id))
+        val undo = Regex("/tasks/${list.id}/items/restore\\?at=(\\d+)").find(response)!!
+        client.post(undo.value + "&mode=ALL")
+
+        assertTrue(service.get(milk.id)!!.isComplete)
+        assertNotNull(service.tasks().single { it.title == "eggs" })
     }
 }

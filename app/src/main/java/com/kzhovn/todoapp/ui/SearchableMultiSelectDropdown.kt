@@ -76,7 +76,7 @@ fun <T> SearchableMultiSelectDropdown(
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = { Text("Search") },
+                    placeholder = { Text(Labels.SEARCH) },
                     singleLine = true,
                     modifier = Modifier.padding(horizontal = 8.dp).width(240.dp)
                 )

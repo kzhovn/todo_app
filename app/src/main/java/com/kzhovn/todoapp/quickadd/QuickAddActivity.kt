@@ -2,12 +2,9 @@ package com.kzhovn.todoapp.quickadd
 
 import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.focus.FocusActivity
-import com.kzhovn.todoapp.data.splitItems
 import com.kzhovn.todoapp.data.TaskType
-import com.kzhovn.todoapp.data.findFolder
-import com.kzhovn.todoapp.data.DEFAULT_FOLDER
+import com.kzhovn.todoapp.data.defaultFolder
 import com.kzhovn.todoapp.ui.theme.folderColors
-import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.AppSettings
 import androidx.compose.material.icons.filled.AcUnit
@@ -95,15 +92,15 @@ class QuickAddActivity : ComponentActivity() {
             var todayOnly by remember { mutableStateOf(false) }
             var dependsOnTitle by remember { mutableStateOf<String?>(null) }
             val focus = remember { FocusRequester() }
+            val folderColorsOf = remember(folders) { folderColors(folders.filter { it.type == TaskType.FOLDER }) }
 
             LaunchedEffect(Unit) {
                 // Checklists too: picking one makes the text its new items ("milk, eggs").
-                folders = repository.getAllTasks().filter { it.type == TaskType.FOLDER || (it.type == TaskType.CHECKLIST && !it.isComplete) }
+                folders = quickAddTargets(repository.getAllTasks())
                 // With no folder asked for, new tasks land in folder mode's folder, or Personal (if it exists),
                 // as Discord adds do.
                 folder = if (initialFolderId != null) folders.firstOrNull { it.id == initialFolderId }
-                else AppSettings.modeFolderId(this@QuickAddActivity)?.let { id -> folders.firstOrNull { it.id == id && it.type == TaskType.FOLDER } }
-                    ?: findFolder(folders, DEFAULT_FOLDER)
+                else defaultFolder(folders, AppSettings.modeFolderId(this@QuickAddActivity))
                 dependsOnTitle = dependsOnId?.let { repository.getTask(it)?.title }
                 focus.requestFocus()
             }
@@ -114,20 +111,10 @@ class QuickAddActivity : ComponentActivity() {
                 val text = title; val star = starred; val start = startDate; val due = dueDate; val today = todayOnly; val chip = folder
                 val now = System.currentTimeMillis()
                 val rollover = AppSettings.rolloverHour(this@QuickAddActivity)
-                if (fixedParentId == null && chip?.type == TaskType.CHECKLIST) return QuickAdd(task = null, items = splitItems(text), intoChecklist = chip.id)
-                val add = repository.planQuickAdd(text, rollover, now)
-                val task = add.task ?: return add
-                return add.copy(task = task.copy(
-                    isStarred = star || task.isStarred,
-                    // Chip values are an explicit, later user action, so they override whatever
-                    // the shorthand parser found in the title text.
-                    startDate = start ?: task.startDate,
-                    dueDate = due ?: task.dueDate,
-                    // Adding a subtask fixes the parent to the task it was launched from. Otherwise a
-                    // folder named in the text ("work: …") beats the chip, which starts on Personal.
-                    parentId = fixedParentId ?: task.parentId ?: chip?.id,
-                    expiresAt = if (today) nextRollover(now, rollover) else task.expiresAt
-                ))
+                if (fixedParentId == null) chipItems(text, chip)?.let { return it }
+                val add = repository.planQuickAdd(text, rollover, now).withChips(star, start, due, today, chip, now, rollover)
+                // Adding a subtask fixes the parent to the task it was launched from.
+                return if (fixedParentId == null) add else add.copy(task = add.task?.copy(parentId = fixedParentId))
             }
 
             // keepOpen: "hold to add another" saves and clears the form for the next task. The
@@ -167,7 +154,7 @@ class QuickAddActivity : ComponentActivity() {
                     TextField(
                         value = title,
                         onValueChange = { title = it },
-                        placeholder = { Text("Title") },
+                        placeholder = { Text(Labels.TITLE) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { create(keepOpen = false) }),
@@ -179,7 +166,7 @@ class QuickAddActivity : ComponentActivity() {
                 }
                 Row(modifier = Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     PropertyChip(
-                        label = "Start",
+                        label = Labels.START,
                         valueText = startDate?.let(::chipDate),
                         icon = Icons.Filled.Event,
                         onClick = { pickDate(this@QuickAddActivity, startDate, title = Labels.START) { startDate = it } },
@@ -187,7 +174,7 @@ class QuickAddActivity : ComponentActivity() {
                     )
                     Spacer(Modifier.width(8.dp))
                     PropertyChip(
-                        label = "Due",
+                        label = Labels.DUE,
                         valueText = dueDate?.let(::chipDate),
                         icon = Icons.Filled.Flag,
                         onClick = { pickDate(this@QuickAddActivity, dueDate, title = Labels.DUE) { dueDate = it } },
@@ -209,7 +196,7 @@ class QuickAddActivity : ComponentActivity() {
                             icon = Icons.Filled.Folder,
                             onClick = { showFolderPicker = true },
                             showLabelWhenSet = false,
-                            tint = folder?.let { folderColors(folders.filter { f -> f.type == TaskType.FOLDER })[it.id] } ?: LedgerAccent
+                            tint = folder?.let { folderColorsOf[it.id] } ?: LedgerAccent
                         )
                     }
                 }

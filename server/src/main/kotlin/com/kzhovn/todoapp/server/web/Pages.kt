@@ -3,13 +3,13 @@ package com.kzhovn.todoapp.server.web
 import com.kzhovn.todoapp.data.notesMatch
 import kotlinx.html.noScript
 import com.kzhovn.todoapp.data.clockTime
-import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.isLinkable
 import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.SearchFilters
+import com.kzhovn.todoapp.data.subtaskParentTitle
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
@@ -19,7 +19,7 @@ import com.kzhovn.todoapp.data.deleteContextQuestion
 import com.kzhovn.todoapp.data.folderTree
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.sectionsByTopFolder
-import com.kzhovn.todoapp.data.walkParentChain
+import com.kzhovn.todoapp.data.nearestFolder
 import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.repository.BulkEdit
@@ -220,6 +220,7 @@ private fun DIV.searchResults(service: TaskService, p: Parameters) {
     val results = service.search(p["q"].orEmpty(), filters)
     val all = service.tasks()
     val byId = all.associateBy { it.id }
+    val dues = service.dueDates()
     val counts = subtaskCounts(all)
     val contextNames = service.contexts().associate { it.id to it.name }
     val contextIds = service.contextIdsByTask()
@@ -230,7 +231,7 @@ private fun DIV.searchResults(service: TaskService, p: Parameters) {
     results.take(MAX_RESULTS).forEach { task ->
         // One line, like a list row: its folder's colour bar, the title, then where it lives and when it's due.
         div(classes = "result") {
-            task.parentId?.let { walkParentChain(it, byId) { id -> colors[id] } }?.let { style = "border-left-color: $it" }
+            nearestFolder(task, byId)?.let { colors[it.id] }?.let { style = "border-left-color: $it" }
             taskMark(task, counts[task.id], "ALL") {
                 if (task.isComplete) classes = classes + "done"
                 attributes["hx-post"] = "/search/toggle/${task.id}"
@@ -243,8 +244,10 @@ private fun DIV.searchResults(service: TaskService, p: Parameters) {
             a(href = "/tasks/${task.id}?mode=ALL", classes = if (task.isComplete) "done" else null) { +task.title }
             if (!task.notes.isNullOrBlank()) span(classes = "has-notes") { attributes["title"] = Labels.HAS_NOTES; icon(Icon.NOTES, "") }
             div(classes = "meta") {
-                resolveEffective(task, byId, contextIds).effectiveDueDate?.takeUnless { task.isComplete }?.let { span(classes = "due " + dueStatus(it, now).name.lowercase()) { +dueText(it, now) } }
-                byId[task.parentId]?.let { span { +(if (it.type == TaskType.FOLDER) it.title else "↳ ${it.title}") } }
+                dues.of(task)?.takeUnless { task.isComplete }?.let { span(classes = "due " + dueStatus(it.at, now).name.lowercase() + if (it.forTask != null) " for" else "") { +dueText(it, now) } }
+                // As on the phone: the folder it's in (however deep), and the task it's a subtask of.
+                nearestFolder(task, byId)?.let { span { +it.title } }
+                subtaskParentTitle(task, byId)?.let { span { +"↳ $it" } }
                 contextIds[task.id].orEmpty().mapNotNull(contextNames::get).forEach { span { +"@$it" } }
                 if (task.isStarred) span(classes = "starred") { +"★" }
             }
@@ -323,7 +326,7 @@ private fun HTML.bulkPage(service: TaskService, ids: List<Long>, mode: ListMode)
             }
         }
         div(classes = "actions") {
-            a(href = mode.path, classes = "cancel") { +"Cancel" }
+            a(href = mode.path, classes = "cancel") { +Labels.CANCEL }
             button(type = ButtonType.submit, classes = "primary") { +Labels.applyToTasks(tasks.size) }
         }
     }
@@ -344,13 +347,13 @@ private fun HTML.reviewPage(service: TaskService, zoom: Zoom, end: LocalDate?, e
     // Grouped and coloured by top-level folder, like the phone's Review.
     val colorOf = { folder: Task? -> folder?.let { colors[it.id] } ?: "var(--muted)" }
     val mode = service.modeFolder()?.takeUnless { everywhere }
-    val waiting = if (everywhere) service.waiting(everywhere = true) else service.waiting()
+    val waiting = service.waiting(everywhere)
     val page = review(all, waiting, service.now(), service.rolloverHour(), zoom, end, modeFolderId = mode?.id)
     fun url(z: Zoom, e: LocalDate, all: Boolean = everywhere) = reviewUrl(z, e, page.today, all)
     val ages = page.timeToDone.associate { it.task.id to it.ms }
     // The tick takes the task's own folder shade, as its row's colour bar does.
     fun FlowContent.taskRow(task: Task, right: String?, done: Boolean = true) = div(classes = "done-row") {
-        val tick = task.parentId?.let { walkParentChain(it, byId) { id -> colors[id] } } ?: "var(--muted)"
+        val tick = nearestFolder(task, byId)?.let { colors[it.id] } ?: "var(--muted)"
         span(classes = "tick") { style = "color: ${if (done) tick else "var(--muted)"}"; +(if (done) "✓" else "○") }
         a(href = "/tasks/${task.id}?mode=ALL") { +task.title }
         right?.let { span(classes = "age") { +it } }
@@ -531,13 +534,15 @@ private fun parseContextForm(p: Parameters): ContextForm {
 // The phone's settings that belong to every device: when the day rolls over.
 private fun HTML.settingsPage(service: TaskService) = shellPage(service, "Raspberry · Settings", "/settings") {
     div(classes = "contexts") {
-        h1 { +"Settings" }
+        h1 { +Labels.SETTINGS }
+        val rolloverHour = service.rolloverHour()
+        val reminderHour = service.reminderHour()
         form(action = "/settings", method = FormMethod.post, classes = "settings") {
             label {
                 +"Day rolls over at "
                 select {
                     name = "rolloverHour"
-                    (0..23).forEach { h -> option { value = "$h"; selected = h == service.rolloverHour(); +"%02d:00".format(h) } }
+                    (0..23).forEach { h -> option { value = "$h"; selected = h == rolloverHour; +"%02d:00".format(h) } }
                 }
             }
             p(classes = "hint") { +"“${Labels.TODAY_ONLY}” tasks are deleted at this time, and a snooze to tomorrow wakes then. The phone uses it too." }
@@ -545,7 +550,7 @@ private fun HTML.settingsPage(service: TaskService) = shellPage(service, "Raspbe
                 +"Reminders on a date with no time go off at "
                 select {
                     name = "reminderHour"
-                    (0..23).forEach { h -> option { value = "$h"; selected = h == service.reminderHour(); +"%02d:00".format(h) } }
+                    (0..23).forEach { h -> option { value = "$h"; selected = h == reminderHour; +"%02d:00".format(h) } }
                 }
             }
             p(classes = "hint") { +"For a reminder when a task starts, before it's due, or on a day you pick, when that date has no time. Rung on the phone." }
@@ -571,7 +576,7 @@ private fun HTML.contextsPage(service: TaskService, form: ContextForm) = shellPa
                 form(classes = "inline-delete") {
                     attributes["hx-post"] = "/contexts/${c.id}/delete"
                     attributes["hx-confirm"] = "Delete @${c.name}? " + deleteContextQuestion(c.name)
-                    button(type = ButtonType.submit, classes = "delete") { +"Delete" }
+                    button(type = ButtonType.submit, classes = "delete") { +Labels.DELETE }
                 }
             }
         }
@@ -607,8 +612,8 @@ private fun HTML.contextsPage(service: TaskService, form: ContextForm) = shellPa
                 }
             }
             div(classes = "actions") {
-                if (c.id != 0L) a(href = "/contexts", classes = "cancel") { +"Cancel" }
-                button(type = ButtonType.submit, classes = "primary") { +(if (c.id == 0L) "Create" else "Save") }
+                if (c.id != 0L) a(href = "/contexts", classes = "cancel") { +Labels.CANCEL }
+                button(type = ButtonType.submit, classes = "primary") { +(if (c.id == 0L) Labels.CREATE else Labels.SAVE) }
             }
         }
     }

@@ -143,4 +143,38 @@ class TaskEditViewModelTest {
         assertEquals(setOf(savedId), repository.getDependencyIds(waiting))
         assertEquals(listOf(home), contexts.getContextsForTask(savedId).map { it.id })
     }
+
+    @Test
+    fun `a save keeps what changed elsewhere while the editor was open`() = runTest {
+        val home = contexts.createContext(TaskContext(name = "Home", type = ContextType.PLACE))
+        val id = repository.createTask(Task(title = "Call mom"))
+        val editor = editorFor(id)
+        // Meanwhile, from the widget and another screen: completed, timer started, a context added.
+        repository.updateTask(repository.getTask(id)!!.copy(isComplete = true, completedAt = 1L, timerEndsAt = 2L))
+        contexts.setTaskContexts(id, setOf(home))
+
+        editor.task = editor.task.copy(title = "Call mom back")
+        editor.saveEdits { _, _ -> }
+        advanceUntilIdle()
+
+        val saved = repository.getTask(id)!!
+        assertEquals("Call mom back", saved.title)
+        assertTrue(saved.isComplete)
+        assertEquals(2L, saved.timerEndsAt)
+        assertEquals(listOf(home), contexts.getContextsForTask(id).map { it.id })
+    }
+
+    @Test
+    fun `a new task's pending subtasks are read with quick add's syntax`() = runTest {
+        val home = contexts.createContext(TaskContext(name = "Home", type = ContextType.PLACE))
+        val editor = editorFor(0)
+        editor.task = editor.task.copy(title = "Paint fence")
+        editor.pendingSubtasks = listOf("buy paint @home")
+        var savedId = 0L
+        editor.saveEdits { id, _ -> savedId = id }
+        advanceUntilIdle()
+        val sub = repository.getAllTasks().single { it.parentId == savedId }
+        assertEquals("buy paint", sub.title)
+        assertEquals(listOf(home), contexts.getContextsForTask(sub.id).map { it.id })
+    }
 }

@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.widget
 
+import com.kzhovn.todoapp.data.Labels
 import android.appwidget.AppWidgetManager
 import android.content.Intent
 import android.os.Bundle
@@ -77,7 +78,7 @@ class WidgetConfigActivity : ComponentActivity() {
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-                    Text("Folder", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = LedgerInk)
+                    Text(Labels.FOLDER, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = LedgerInk)
                     Column(Modifier.padding(vertical = 8.dp)) {
                         SelectablePill("Any folder", selected = folderId == null, fontSize = 15.sp) { folderId = null }
                         folders.forEach { folder ->
@@ -96,7 +97,7 @@ class WidgetConfigActivity : ComponentActivity() {
                             setResult(RESULT_OK, result)
                             finish()
                         }
-                    }) { Text("Save") }
+                    }) { Text(Labels.SAVE) }
                 }
             }
         }

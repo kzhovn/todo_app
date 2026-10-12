@@ -7,7 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
-import com.kzhovn.todoapp.MainActivity
+import com.kzhovn.todoapp.ui.TaskEditActivity
 import com.kzhovn.todoapp.R
 
 class ReminderReceiver : BroadcastReceiver() {
@@ -20,12 +20,13 @@ class ReminderReceiver : BroadcastReceiver() {
                 NotificationChannel(CHANNEL_ID, "Task Reminders", NotificationManager.IMPORTANCE_HIGH)
             )
         }
-        // Same Uri-identity approach as ReminderScheduler.pendingIntentFor: the content Intent's
-        // data carries the full Long id, so the request code can be a constant.
+        // Opens the task. The data Uri (taskDeepLinkUri) keeps each task's intent distinct, so the request
+        // code can be a constant.
         val contentIntent = PendingIntent.getActivity(
             context, 0,
-            Intent(context, MainActivity::class.java).apply {
+            Intent(context, TaskEditActivity::class.java).apply {
                 data = taskDeepLinkUri(taskId)
+                putExtra(TaskEditActivity.EXTRA_TASK_ID, taskId)
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -35,9 +36,7 @@ class ReminderReceiver : BroadcastReceiver() {
             .setAutoCancel(true)
             .setContentIntent(contentIntent)
             .build()
-        // The (tag, id) pair is the actual notification identity — using the full Long id as the
-        // tag (rather than truncating it into the Int id) means two tasks can never collide here
-        // either.
+        // The full Long id as the tag (the Int id would truncate it), so two tasks never collide.
         manager.notify(taskId.toString(), 0, notification)
     }
 

@@ -1,5 +1,21 @@
 package com.kzhovn.todoapp.ui
 
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.unit.Dp
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.ChevronRight
+import com.kzhovn.todoapp.data.checklistGroups
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import com.kzhovn.todoapp.data.OutlinerPreferences
+import androidx.compose.ui.platform.LocalContext
+import com.kzhovn.todoapp.data.DueDates
+import com.kzhovn.todoapp.data.isDoable
+import com.kzhovn.todoapp.data.dueText
+import androidx.compose.ui.text.font.FontStyle
+import com.kzhovn.todoapp.data.resolvesText
 import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.data.ReminderKind
 import com.kzhovn.todoapp.data.reminderTimes
@@ -33,12 +49,13 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.zIndex
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.DueChoice
-import com.kzhovn.todoapp.data.CHECK_IN_CHOICES
 import com.kzhovn.todoapp.data.checkInEvery
 import com.kzhovn.todoapp.data.completed
 import com.kzhovn.todoapp.data.checkInText
-import com.kzhovn.todoapp.data.waitingFor
+import com.kzhovn.todoapp.data.nextCheckIn
+import com.kzhovn.todoapp.data.withCheckInEvery
 import com.kzhovn.todoapp.data.ancestors
+import com.kzhovn.todoapp.data.isUnder
 import com.kzhovn.todoapp.data.moveOutFolderId
 import kotlin.math.roundToInt
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -73,6 +90,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.AccountTree
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PushPin
@@ -141,8 +160,8 @@ internal fun TitleBox(vm: TaskEditViewModel, pinned: Boolean, onTogglePin: () ->
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 2.dp)
     ) {
-        if (task.type == TaskType.TASK && !task.isComplete) {
-            // Tap pins; press and hold opens focus mode on this task (once it's saved).
+        if (task.type.isDoable && !task.isComplete && !task.isTemplate) {
+            // Tap pins; press and hold opens focus mode on this task or checklist (once it's saved).
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.size(36.dp).clip(CircleShape).combinedClickable(onClick = onTogglePin, onLongClick = onFocus)
@@ -169,7 +188,7 @@ internal fun TitleBox(vm: TaskEditViewModel, pinned: Boolean, onTogglePin: () ->
         if (task.type != TaskType.FOLDER && task.type != TaskType.WAITING) {
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.size(38.dp).clip(CircleShape).clickable { vm.task = task.copy(isStarred = !task.isStarred, isMaybe = task.isMaybe && task.isStarred) }
+                modifier = Modifier.size(38.dp).clip(CircleShape).clickable { vm.task = task.toggledStar() }
             ) { StarIcon(task.isStarred) }
         }
     }
@@ -192,19 +211,21 @@ private fun WaitingTiming(vm: TaskEditViewModel, activity: Activity) {
     SectionLabel(Labels.WAITING)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         var showCheckIn by remember { mutableStateOf(false) }
-        Box {
-            PropertyChip(
-                label = Labels.CHECK_IN,
-                valueText = if (task.dueDate == null) CHECK_IN_CHOICES.firstOrNull { it.first == task.checkInEvery() }?.second ?: "Every ${task.checkInEvery()} days" else null,
-                icon = Icons.Filled.Repeat,
-                onClick = { if (task.dueDate == null) showCheckIn = true },
-                showLabelWhenSet = false
+        PropertyChip(
+            label = Labels.CHECK_IN,
+            valueText = if (task.dueDate == null) Labels.checkIn(task.checkInEvery()) else null,
+            icon = Icons.Filled.Repeat,
+            onClick = { if (task.dueDate == null) showCheckIn = true },
+            showLabelWhenSet = false
+        )
+        if (showCheckIn) {
+            val now = System.currentTimeMillis()
+            CheckInSheet(
+                task.checkInEvery(), nextCheckIn(task, now), now,
+                onEvery = { vm.task = vm.task.withCheckInEvery(it, now) },
+                onNext = { vm.task = vm.task.copy(startDate = it) },
+                onDismiss = { showCheckIn = false }
             )
-            DropdownMenu(expanded = showCheckIn, onDismissRequest = { showCheckIn = false }, containerColor = LedgerSearchBackground) {
-                CHECK_IN_CHOICES.forEach { (days, label) ->
-                    DropdownMenuItem(text = { Text(label, color = LedgerInk) }, onClick = { showCheckIn = false; vm.task = vm.task.copy(checkInDays = days) })
-                }
-            }
         }
         PropertyChip(
             label = Labels.RESOLVES_ON,
@@ -216,7 +237,7 @@ private fun WaitingTiming(vm: TaskEditViewModel, activity: Activity) {
         )
     }
     val now = System.currentTimeMillis()
-    val hint = task.dueDate?.let { "Resolves itself on ${chipDate(it)}." }
+    val hint = resolvesText(task)
         ?: if (vm.isNew) null else checkInText(task, now)
     hint?.let { Text(it, fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.padding(top = 6.dp)) }
 }
@@ -280,6 +301,22 @@ private val dueChoices = DueChoice.entries.map { c ->
     DateChoice(c.label, when (c) { DueChoice.TODAY -> Icons.Filled.Today; DueChoice.TOMORROW -> Icons.Filled.Bedtime; DueChoice.NEXT_WEEK -> Icons.Filled.DateRange }) { c.at(it) }
 }
 
+// A date chip: a tap picks a date (and time), ✕ clears it, a long press offers `choices`.
+@Composable
+private fun DateChip(activity: Activity, label: String, icon: ImageVector, value: Long?, choices: List<DateChoice>, set: (Long?) -> Unit) {
+    var quick by remember { mutableStateOf(false) }
+    Box {
+        PropertyChip(
+            label = label, valueText = value?.let(::chipDate), icon = icon,
+            onClick = { pickDate(activity, value, title = label) { set(it) } },
+            onClear = { set(null) },
+            showLabelWhenSet = false,
+            onLongClick = { quick = true }
+        )
+        QuickDateMenu(quick, label, choices, onDismiss = { quick = false }) { set(it) }
+    }
+}
+
 @Composable
 private fun QuickDateMenu(expanded: Boolean, label: String, choices: List<DateChoice>, onDismiss: () -> Unit, onPick: (Long) -> Unit) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, containerColor = LedgerSearchBackground) {
@@ -299,36 +336,8 @@ internal fun TimingSection(vm: TaskEditViewModel, activity: Activity, onRepeat: 
     SectionLabel(Labels.TIMING)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         // A long press offers quick choices: the snooze menu's for Start, today/tomorrow/next week for Due.
-        var quickStart by remember { mutableStateOf(false) }
-        Box {
-            PropertyChip(
-                label = Labels.START,
-                valueText = task.startDate?.let(::chipDate),
-                icon = Icons.Filled.Event,
-                onClick = { pickDate(activity, task.startDate, title = Labels.START) { vm.task = vm.task.copy(startDate = it) } },
-                onClear = { vm.task = vm.task.copy(startDate = null) },
-                showLabelWhenSet = false,
-                onLongClick = { quickStart = true }
-            )
-            QuickDateMenu(quickStart, Labels.START, snoozeChoices(AppSettings.rolloverHour(activity)), onDismiss = { quickStart = false }) {
-                vm.task = vm.task.copy(startDate = it)
-            }
-        }
-        if (task.type != TaskType.FOLDER) {
-            var quickDue by remember { mutableStateOf(false) }
-            Box {
-                PropertyChip(
-                    label = Labels.DUE,
-                    valueText = task.dueDate?.let(::chipDate),
-                    icon = Icons.Filled.Flag,
-                    onClick = { pickDate(activity, task.dueDate, title = Labels.DUE) { vm.task = vm.task.copy(dueDate = it) } },
-                    onClear = { vm.task = vm.task.copy(dueDate = null) },
-                    showLabelWhenSet = false,
-                    onLongClick = { quickDue = true }
-                )
-                QuickDateMenu(quickDue, Labels.DUE, dueChoices, onDismiss = { quickDue = false }) { vm.task = vm.task.copy(dueDate = it) }
-            }
-        }
+        DateChip(activity, Labels.START, Icons.Filled.Event, task.startDate, snoozeChoices(AppSettings.rolloverHour(activity))) { vm.task = vm.task.copy(startDate = it) }
+        if (task.type != TaskType.FOLDER) DateChip(activity, Labels.DUE, Icons.Filled.Flag, task.dueDate, dueChoices) { vm.task = vm.task.copy(dueDate = it) }
         // Reminders: when it starts (if that's still to come), before it's due (with a due date), and/or at
         // a time of its own. A date with no time rings at the reminder hour in Settings.
         if (task.type == TaskType.TASK) {
@@ -404,6 +413,11 @@ internal fun TimingSection(vm: TaskEditViewModel, activity: Activity, onRepeat: 
             TogglePill(Labels.TODAY_ONLY, Icons.Filled.AcUnit, on = task.expiresAt != null, onToggle = toggleToday)
         }
     }
+    // Not set here, but shown as its due date: a task waiting on this one is due sooner.
+    val dueFor = remember(vm.allTasks, vm.dependencyEdges, task) {
+        if (vm.isNew || task.isComplete) null else DueDates(vm.allTasks.map { if (it.id == task.id) task else it }, vm.dependencyEdges).of(task)?.takeIf { it.forTask != null }
+    }
+    dueFor?.let { Text(Labels.dueFromWaiting(dueText(it.at, System.currentTimeMillis()), it.forTask!!.title), fontSize = 12.sp, color = LedgerMuted, fontStyle = FontStyle.Italic, modifier = Modifier.padding(top = 6.dp)) }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -416,10 +430,11 @@ internal fun PropertiesSection(vm: TaskEditViewModel, onPickFolder: () -> Unit, 
         PropertyChip(
             label = Labels.FOLDER,
             valueText = vm.allById[task.parentId]?.title,
-            icon = Icons.Filled.Folder,
+            // Under a project or checklist (or another task), its icon, not a folder's.
+            icon = when (vm.allById[task.parentId]?.type) { null, TaskType.FOLDER -> Icons.Filled.Folder; TaskType.CHECKLIST -> Icons.Filled.Checklist; else -> Icons.Filled.AccountTree },
             onClick = onPickFolder,
             showLabelWhenSet = false,
-            tint = task.parentId?.let { folderColors(vm.allTasks)[it] } ?: LedgerAccent
+            tint = task.parentId?.let { vm.folderColors[it] } ?: LedgerAccent
         )
         // Folders keep contexts too: their tasks inherit them (e.g. Work only in work hours).
         vm.allContexts.filter { it.id in vm.contextIds }.sortedBy { it.name.lowercase() }.forEach { ctx ->
@@ -447,19 +462,81 @@ internal fun PropertiesSection(vm: TaskEditViewModel, onPickFolder: () -> Unit, 
     }
 }
 
-// A checklist's items: a checkbox and a title each, open ones first; the add field stays for the next one.
+// A checklist's items: loose ones, then its sections (Clothes, Winter), each a compact heading with its own
+// items, count and fold (stored as the All tree's folds are, per device). Items are rows like the subtasks:
+// tap to open (and edit), press and hold to drag (across sections too, see planMoveItem), ✕ deletes (with
+// undo). A heading's + opens an add field for that section, under it; the list's own add field and
+// "+ Add section" come last.
 @Composable
-internal fun ItemsSection(vm: TaskEditViewModel, onClearChecked: () -> Unit) {
+internal fun ItemsSection(vm: TaskEditViewModel, openTask: (Long) -> Unit, onClearChecked: () -> Unit) {
     SectionLabel(Labels.ITEMS)
-    val items = remember(vm.allTasks, vm.taskId) { if (vm.isNew) emptyList() else checklistItems(vm.taskId, vm.allTasks) }
-    items.forEach { item -> ItemRow(item.title, item.isComplete, onCheck = { vm.toggleComplete(item.id) }) { vm.deleteItem(item) } }
-    vm.pendingSubtasks.forEachIndexed { index, title ->
-        ItemRow(title, false, onCheck = null) { vm.pendingSubtasks = vm.pendingSubtasks.filterIndexed { i, _ -> i != index } }
+    val context = LocalContext.current
+    val prefs = remember { OutlinerPreferences(context) }
+    val scope = rememberCoroutineScope()
+    var folded by remember { mutableStateOf(emptySet<Long>()) }
+    LaunchedEffect(Unit) { folded = prefs.collapsedIds() }
+    val groups = remember(vm.allTasks, vm.taskId) { if (vm.isNew) emptyList() else checklistGroups(vm.taskId, vm.allTasks) }
+    val rows = groups.flatMap { (section, items) -> listOfNotNull(section) + if (section != null && section.id in folded) emptyList() else items }
+    var addingTo by remember { mutableStateOf<Long?>(null) } // the section whose + is open
+    var naming by remember { mutableStateOf<Task?>(null) } // a section being renamed; a blank one: a new section
+    var name by remember { mutableStateOf("") }
+    ReorderableRows(rows, vm::moveSubtask, canDrag = { it.type != TaskType.SECTION }) { t, dragModifier ->
+        if (t.type == TaskType.SECTION) SectionHeading(
+            t, vm.subtaskCounts[t.id], isFolded = t.id in folded,
+            onFold = { val fold = t.id !in folded; folded = if (fold) folded + t.id else folded - t.id; scope.launch { prefs.setCollapsed(t.id, fold) } },
+            onAdd = { addingTo = if (addingTo == t.id) null else t.id; if (t.id in folded) { folded = folded - t.id; scope.launch { prefs.setCollapsed(t.id, false) } } },
+            onRename = { naming = t; name = t.title }, onCheckAll = { vm.checkAllIn(t.id) }, onUncheckAll = { vm.uncheckAllIn(t.id) }, onDelete = { vm.deleteItem(t) },
+            modifier = dragModifier
+        ) else RelatedRow(
+            t.title, done = t.isComplete, maybe = t.isMaybe, onOpen = { openTask(t.id) }, modifier = dragModifier,
+            leading = { if (t.parentId != vm.taskId) Spacer(Modifier.width(18.dp)); RelatedCheck(vm, t) }
+        ) { RemoveButton { vm.deleteItem(t) } }
+        if (t.id == addingTo) AddItemField(Labels.addTo(t.title), indent = 52.dp, autoFocus = true) { vm.addItemsTo(t.id, it) }
     }
-    AddItemField(vm::addItems)
-    if (items.any { it.isComplete }) Row {
-        AddLink(Labels.UNCHECK_ALL) { vm.uncheckAll() }
-        AddLink(Labels.CLEAR_CHECKED, onClearChecked)
+    PendingRows(vm)
+    // "+ Add item" and "+ Add section" side by side.
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        AddItemField("+ ${Labels.ADD_ITEM}", modifier = Modifier.weight(1f)) { vm.addItems(it) }
+        if (!vm.isNew) AddLink(Labels.ADD_SECTION) { naming = Task(title = "", type = TaskType.SECTION); name = "" }
+    }
+    Row {
+        if (groups.any { (_, items) -> items.any { it.isComplete } }) {
+            AddLink(Labels.UNCHECK_ALL) { vm.uncheckAll() }
+            AddLink(Labels.CLEAR_CHECKED, onClearChecked)
+        }
+    }
+    naming?.let { section ->
+        val isNew = section.id == 0L
+        TextInputDialog(
+            title = if (isNew) Labels.ADD_SECTION.removePrefix("+ ") else Labels.RENAME, placeholder = Labels.SECTION_NAME,
+            confirmLabel = Labels.SAVE, value = name, onValueChange = { name = it },
+            onConfirm = { if (isNew) vm.addSection(name) else vm.renameSection(section, name); naming = null },
+            onDismiss = { naming = null }
+        )
+    }
+}
+
+// A section's compact heading: fold arrow, name, "2/5" (tap to fold), and + to add to it. Press and hold it for
+// rename, check all, uncheck all, delete.
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun SectionHeading(
+    section: Task, counts: Pair<Int, Int>?, isFolded: Boolean, onFold: () -> Unit, onAdd: () -> Unit,
+    onRename: () -> Unit, onCheckAll: () -> Unit, onUncheckAll: () -> Unit, onDelete: () -> Unit, modifier: Modifier
+) {
+    var menu by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier.fillMaxWidth().heightIn(min = 32.dp).combinedClickable(onClick = onFold, onLongClick = { menu = true })) {
+        Icon(if (isFolded) Icons.Filled.ChevronRight else Icons.Filled.ExpandMore, contentDescription = if (isFolded) "Expand" else "Collapse", tint = LedgerMuted, modifier = Modifier.size(28.dp).padding(6.dp))
+        Text(section.title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (isFolded) LedgerMuted else LedgerInk)
+        counts?.let { (done, total) -> Text("$done/$total", fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.padding(start = 6.dp)) }
+        Spacer(Modifier.weight(1f))
+        Box {
+            IconButton(onClick = onAdd, modifier = Modifier.size(32.dp)) { Icon(Icons.Filled.Add, contentDescription = Labels.addTo(section.title), tint = LedgerAccent, modifier = Modifier.size(18.dp)) }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = LedgerSearchBackground) {
+                listOf(Labels.RENAME to onRename, Labels.checkAllIn(section.title) to onCheckAll, Labels.uncheckAllIn(section.title) to onUncheckAll, Labels.DELETE_SECTION to onDelete)
+                    .forEach { (label, action) -> DropdownMenuItem(text = { Text(label) }, onClick = { menu = false; action() }) }
+            }
+        }
     }
 }
 
@@ -470,61 +547,40 @@ internal fun RelatedSection(vm: TaskEditViewModel, openTask: (Long) -> Unit, onA
     val isChecklist = task.type == TaskType.CHECKLIST
     SectionLabel(Labels.RELATED)
     val subtasks = remember(vm.allTasks, vm.taskId, isChecklist) { vm.allTasks.filter { it.parentId == vm.taskId && !vm.isNew && !isChecklist }.sortedWith(TaskOrder) }
+    val childrenByParent = remember(vm.allTasks) { vm.allTasks.groupBy { it.parentId }.mapValues { (_, kids) -> kids.sortedWith(TaskOrder) } }
     val isFolder = task.type == TaskType.FOLDER
     val dependentIds = if (isFolder || vm.isNew) emptySet() else vm.dependencyEdges.filter { it.dependsOnTaskId == vm.taskId }.map { it.taskId }.toSet()
     val prerequisiteIds = if (isFolder) emptySet() else vm.dependencyIds
     var deleting by remember { mutableStateOf<Task?>(null) }
-    // Press and hold a subtask, then drag it to a new place.
-    var dragId by remember { mutableStateOf<Long?>(null) }
-    var dragOffset by remember { mutableFloatStateOf(0f) }
-    val haptics = LocalHapticFeedback.current
     // Subtasks first, together on a faint tile; the prerequisites and dependents follow below it.
     val hasSubtasks = subtasks.isNotEmpty() || (!isChecklist && vm.pendingSubtasks.isNotEmpty()) || vm.pendingChildIds.isNotEmpty()
     if (hasSubtasks) Column(Modifier.fillMaxWidth().padding(bottom = 4.dp).background(LedgerChip, RoundedCornerShape(8.dp)).padding(horizontal = 4.dp)) {
-    subtasks.forEachIndexed { index, sub ->
+    ReorderableRows(subtasks, vm::moveSubtask) { sub, dragModifier ->
         // A subtask that's also a prerequisite or dependent says so, as the rows below the tile do.
         val note = when (sub.id) { in prerequisiteIds -> RelatedKind.PREREQUISITE; in dependentIds -> RelatedKind.DEPENDENT; else -> null }
-        var rowHeight by remember(sub.id) { mutableIntStateOf(1) }
-        val dragging = dragId == sub.id
-        val dragModifier = Modifier
-            .onSizeChanged { rowHeight = it.height }
-            .zIndex(if (dragging) 1f else 0f)
-            .graphicsLayer {
-                translationY = if (dragging) dragOffset else 0f
-                shadowElevation = if (dragging) 8.dp.toPx() else 0f
-                shape = RoundedCornerShape(6.dp)
-            }
-            .background(if (dragging) LedgerSearchBackground else Color.Transparent, RoundedCornerShape(6.dp))
-            .pointerInput(sub.id, subtasks) {
-                detectDragGesturesAfterLongPress(
-                    onDragStart = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); dragId = sub.id; dragOffset = 0f },
-                    onDrag = { change, amount -> change.consume(); dragOffset += amount.y },
-                    onDragEnd = {
-                        // ponytail: steps by the dragged row's own height, so among rows of very different heights the drop is approximate.
-                        val target = (index + (dragOffset / rowHeight).roundToInt()).coerceIn(0, subtasks.lastIndex)
-                        if (target != index) vm.moveSubtask(sub.id, subtasks[target].id, after = target > index)
-                        dragId = null
-                    },
-                    onDragCancel = { dragId = null }
-                )
-            }
-        RelatedRow(sub.title, done = sub.isComplete, onOpen = { openTask(sub.id) }, modifier = dragModifier, note = note, leading = { RelatedCheck(vm, sub) }) {
+        RelatedRow(sub.title, done = sub.isComplete, maybe = sub.isMaybe, onOpen = { openTask(sub.id) }, modifier = dragModifier, note = note, leading = { RelatedCheck(vm, sub) }) {
             SubtaskRemoveMenu(vm, sub, isPrerequisite = sub.id in prerequisiteIds, isDependent = sub.id in dependentIds, onDelete = { deleting = sub })
         }
+        // One level further, indented; anything deeper is only the "1/3" count on the row it's under.
+        childrenByParent[sub.id].orEmpty().forEach { child ->
+            val count = vm.subtaskCounts[child.id]?.takeIf { child.type != TaskType.CHECKLIST }
+            RelatedRow(child.title, done = child.isComplete, maybe = child.isMaybe, onOpen = { openTask(child.id) }, count = count, leading = { Spacer(Modifier.width(22.dp)); RelatedCheck(vm, child) }) {}
+        }
     }
-    if (!isChecklist) vm.pendingSubtasks.forEachIndexed { index, title ->
-        RelatedRow(title, onOpen = null) { RemoveButton { vm.pendingSubtasks = vm.pendingSubtasks.filterIndexed { i, _ -> i != index } } }
-    }
+    if (!isChecklist) PendingRows(vm)
     vm.pendingChildIds.mapNotNull(vm.allById::get).forEach { child ->
         RelatedRow(child.title, onOpen = { openTask(child.id) }) { RemoveButton { vm.pendingChildIds = vm.pendingChildIds - child.id } }
     }
     }
+    vm.completeDecision?.let { (_, question) ->
+        CompleteSubtasksDialog(question, onCompleteAll = { vm.decideComplete(moveOut = false) }, onMoveOut = { vm.decideComplete(moveOut = true) }, onDismiss = { vm.completeDecision = null })
+    }
     deleting?.let { sub ->
-        val below = vm.allTasks.count { t -> ancestors(t, vm.allById).any { it.id == sub.id } }
+        val below = vm.allTasks.count { isUnder(it, sub.id, vm.allById) }
         ConfirmDialog(
             title = "Delete “${sub.title}”?",
             body = if (below > 0) "This will also delete $below subtask${if (below == 1) "" else "s"}." else null,
-            confirmLabel = "Delete",
+            confirmLabel = Labels.DELETE,
             onConfirm = { deleting = null; vm.deleteItem(sub) },
             onDismiss = { deleting = null }
         )
@@ -572,13 +628,15 @@ internal fun SubtaskOptions(vm: TaskEditViewModel) {
 }
 
 @Composable
-internal fun BottomBar(vm: TaskEditViewModel, onDelete: () -> Unit, onCompleteList: () -> Unit, onSave: () -> Unit) {
+internal fun BottomBar(vm: TaskEditViewModel, onDelete: () -> Unit, onSaveAsTemplate: () -> Unit, onCompleteList: () -> Unit, onSave: () -> Unit) {
     Spacer(Modifier.height(16.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = Labels.DELETE, tint = LedgerOverdue) }
+        // A copy kept as a template (see Templates.kt); this one carries on as it is.
+        if (!vm.isNew && !vm.task.isTemplate && vm.task.type != TaskType.SECTION) TextButton(onClick = onSaveAsTemplate) { Text(Labels.SAVE_AS_TEMPLATE, color = LedgerMuted, fontSize = 13.sp) }
         Spacer(Modifier.weight(1f))
-        // Checking the last item completes nothing; a checklist is completed here, on purpose.
-        if (vm.task.type == TaskType.CHECKLIST && !vm.isNew && !vm.task.isComplete) TextButton(onClick = onCompleteList) { Text(Labels.COMPLETE_LIST, color = LedgerAccent) }
+        // Checking the last item completes nothing; a checklist is completed here, on purpose (a template never is).
+        if (vm.task.type == TaskType.CHECKLIST && !vm.isNew && !vm.task.isComplete && !vm.task.isTemplate) TextButton(onClick = onCompleteList) { Text(Labels.COMPLETE_LIST, color = LedgerAccent) }
         // A waiting item is resolved here (Back still saves any edits).
         if (vm.task.type == TaskType.WAITING && !vm.isNew && !vm.task.isComplete) Button(
             onClick = { vm.task = vm.task.completed(System.currentTimeMillis()); onSave() },
@@ -593,25 +651,67 @@ internal fun BottomBar(vm: TaskEditViewModel, onDelete: () -> Unit, onCompleteLi
     }
 }
 
-// A checklist item: checkbox, title (struck through once checked), ✕. A pending one (the checklist
-// isn't saved yet) has no checkbox.
+// Press and hold a row, then drag it to a new place: the editor's subtasks and a checklist's items.
 @Composable
-private fun ItemRow(title: String, checked: Boolean, onCheck: (() -> Unit)?, onRemove: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp)) {
-        if (onCheck != null) TaskCheckbox(checked = checked, due = null, size = 18.dp, touchSize = 34.dp, onCheckedChange = onCheck)
-        else Spacer(Modifier.width(34.dp))
-        Text(
-            title, fontSize = 14.sp, color = if (checked) LedgerMuted else LedgerInk,
-            textDecoration = if (checked) TextDecoration.LineThrough else null, modifier = Modifier.weight(1f)
+private fun ReorderableRows(
+    rows: List<Task>, onMove: (id: Long, anchorId: Long, after: Boolean) -> Unit, canDrag: (Task) -> Boolean = { true }, row: @Composable (Task, Modifier) -> Unit
+) {
+    var dragId by remember { mutableStateOf<Long?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    val haptics = LocalHapticFeedback.current
+    rows.forEachIndexed { index, t ->
+        var rowHeight by remember(t.id) { mutableIntStateOf(1) }
+        val dragging = dragId == t.id
+        val dragModifier = Modifier
+            .onSizeChanged { rowHeight = it.height }
+            .zIndex(if (dragging) 1f else 0f)
+            .graphicsLayer {
+                translationY = if (dragging) dragOffset else 0f
+                shadowElevation = if (dragging) 8.dp.toPx() else 0f
+                shape = RoundedCornerShape(6.dp)
+            }
+            .background(if (dragging) LedgerSearchBackground else Color.Transparent, RoundedCornerShape(6.dp))
+            .pointerInput(t.id, rows) {
+                if (!canDrag(t)) return@pointerInput
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); dragId = t.id; dragOffset = 0f },
+                    onDrag = { change, amount -> change.consume(); dragOffset += amount.y },
+                    onDragEnd = {
+                        // ponytail: steps by the dragged row's own height, so among rows of very different heights the drop is approximate.
+                        val target = (index + (dragOffset / rowHeight).roundToInt()).coerceIn(0, rows.lastIndex)
+                        if (target != index) onMove(t.id, rows[target].id, target > index)
+                        dragId = null
+                    },
+                    onDragCancel = { dragId = null }
+                )
+            }
+        row(t, dragModifier)
+    }
+}
+
+// Subtasks or items typed into a task not saved yet: tap one to change it, ✕ drops it.
+@Composable
+private fun PendingRows(vm: TaskEditViewModel) {
+    var editing by remember { mutableStateOf<Int?>(null) }
+    var text by remember { mutableStateOf("") }
+    vm.pendingSubtasks.forEachIndexed { index, title ->
+        RelatedRow(title, onOpen = { editing = index; text = title }) { RemoveButton { vm.pendingSubtasks = vm.pendingSubtasks.filterIndexed { i, _ -> i != index } } }
+    }
+    editing?.let { index ->
+        TextInputDialog(
+            title = Labels.TITLE, placeholder = Labels.TITLE, confirmLabel = Labels.SAVE, value = text, onValueChange = { text = it },
+            onConfirm = { vm.pendingSubtasks = vm.pendingSubtasks.mapIndexed { i, t -> if (i == index) text.trim() else t }; editing = null },
+            onDismiss = { editing = null }
         )
-        RemoveButton(onRemove)
     }
 }
 
 // Stays focused after each add, for typing a list in one go; "milk, eggs" adds two.
 @Composable
-private fun AddItemField(onAdd: (String) -> Unit) {
+private fun AddItemField(placeholder: String, indent: Dp = 34.dp, modifier: Modifier = Modifier.fillMaxWidth(), autoFocus: Boolean = false, onAdd: (String) -> Unit) {
     var text by remember { mutableStateOf("") }
+    val focus = remember { FocusRequester() }
+    if (autoFocus) LaunchedEffect(Unit) { focus.requestFocus() }
     BasicTextField(
         value = text,
         onValueChange = { text = it },
@@ -619,9 +719,9 @@ private fun AddItemField(onAdd: (String) -> Unit) {
         textStyle = TextStyle(fontSize = 14.sp, color = LedgerInk),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) { onAdd(text); text = "" } }),
-        modifier = Modifier.fillMaxWidth().padding(start = 34.dp, top = 6.dp, bottom = 6.dp),
+        modifier = modifier.padding(start = indent, top = 6.dp, bottom = 6.dp).focusRequester(focus),
         decorationBox = { field ->
-            if (text.isEmpty()) Text("+ ${Labels.ADD_ITEM}", fontSize = 14.sp, color = LedgerMuted)
+            if (text.isEmpty()) Text(placeholder, fontSize = 14.sp, color = LedgerMuted)
             field()
         }
     )
@@ -647,7 +747,7 @@ private fun KindTag(kind: RelatedKind, modifier: Modifier = Modifier) =
 @Composable
 private fun RelatedRow(
     title: String, done: Boolean = false, onOpen: (() -> Unit)?, modifier: Modifier = Modifier,
-    note: RelatedKind? = null,
+    note: RelatedKind? = null, count: Pair<Int, Int>? = null, maybe: Boolean = false,
     leading: @Composable () -> Unit = { Spacer(Modifier.width(34.dp)) }, trailing: @Composable () -> Unit
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier.fillMaxWidth().heightIn(min = 36.dp)) {
@@ -660,10 +760,13 @@ private fun RelatedRow(
                 title,
                 fontSize = 14.sp,
                 textDecoration = if (done) TextDecoration.LineThrough else null,
-                color = if (done) LedgerMuted else LedgerInk,
+                color = if (done || maybe) LedgerMuted else LedgerInk,
                 modifier = Modifier.weight(1f, fill = false)
             )
+            // A maybe, as the lists mark one: "?" after it, and dimmed (done ones are struck through instead).
+            if (maybe && !done) Text("?", fontSize = 14.sp, color = LedgerMuted, modifier = Modifier.padding(start = 6.dp))
             note?.let { KindTag(it, Modifier.padding(start = 8.dp)) }
+            count?.let { (done, total) -> Text("$done/$total", fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.padding(start = 8.dp)) }
         }
         trailing()
     }
@@ -673,7 +776,7 @@ private fun RelatedRow(
 // checklist's count.
 @Composable
 private fun RelatedCheck(vm: TaskEditViewModel, t: Task) = TaskMark(
-    t, vm.allTasks.filter { it.parentId == t.id && it.type != TaskType.FOLDER }.let { subs -> subs.count { it.isComplete } to subs.size },
+    t, vm.subtaskCounts[t.id],
     t.dueDate?.takeUnless { t.isComplete }?.let { dueStatus(it, System.currentTimeMillis()) }, checkboxSize = 18.dp,
     onCheck = { vm.toggleComplete(t.id) }, onOpen = {}
 )

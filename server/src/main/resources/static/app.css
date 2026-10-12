@@ -77,6 +77,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .tail { font-weight: 400; font-size: 12px; color: var(--muted); }
 .tail.due.today { color: var(--due-today-text); }
 .tail.due.overdue { color: var(--overdue); }
+.due.for { font-style: italic; }
 .parent { color: var(--muted); font-weight: 400; text-decoration: none; }
 .parent:hover { text-decoration: underline; }
 .badge { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; margin-left: 4px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); vertical-align: -2px; }
@@ -108,8 +109,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .pin-toggle.on, .pin-toggle:has(input:checked) { color: var(--accent); }
 .pin-toggle input { display: none; }
 label.pin-toggle { cursor: pointer; }
-/* Only a task is pinned (as on the phone): the pin goes when the type is switched away from Task. */
-.editor:has(input[name=type]:not([value=TASK]):checked) .pin-toggle { display: none; }
+/* Only a task or checklist is pinned (as on the phone): the pin goes when the type is switched to another. */
+.editor:has(input[name=type]:not([value=TASK], [value=CHECKLIST]):checked) .pin-toggle { display: none; }
 
 #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 14px; border-radius: 8px; display: none; gap: 14px; align-items: center; }
 #toast.show { display: flex; }
@@ -158,6 +159,11 @@ label.pin-toggle { cursor: pointer; }
 .rep-preset:hover { background: var(--tile); }
 .rep-preset.on { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
 .rep-open { color: var(--muted); }
+.rep-preset { display: flex; }
+.rep-when { margin-left: auto; padding-left: 16px; font-size: 11px; color: var(--muted); }
+.rep-preset.on .rep-when { color: var(--accent); }
+.rep > .rep-line { padding: 6px 10px; }
+.rep-presets + .rep-line { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 10px; }
 .rep-builder { display: none; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); margin-top: 6px; padding-top: 10px; }
 .rep.building .rep-builder { display: flex; }
 .rep .seg { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
@@ -190,8 +196,9 @@ body:not(:has(.editor input[name=type][value=WAITING]:checked)) .waiting-only { 
 .actions .cancel { color: var(--muted); text-decoration: none; }
 button.primary { background: var(--accent); color: var(--panel); padding: 7px 16px; border-radius: 6px; font-weight: 600; }
 .ask button:not(.primary) { padding: 7px 12px; border: 1px solid var(--border); border-radius: 6px; }
-.check.done { background: var(--accent); border-color: var(--accent); color: var(--panel); }
-.check.done .icon { width: 12px; height: 12px; }
+.check.done, .project.done { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.project.done { border-radius: 50%; }
+.check.done .icon, .project.done .icon { width: 12px; height: 12px; }
 form.inline { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
 form.inline input[type=text] { flex: 1; min-width: 200px; }
 form.inline select { max-width: 320px; }
@@ -415,6 +422,9 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .kind-tag.dependent { background: var(--good-bg); color: var(--good); }
 .rel-row a .kind-tag { margin-left: 8px; display: inline-block; text-decoration: none; }
 .rel-row.sub { position: relative; }
+.rel-row.nested { padding-left: 28px; }
+.rel-row a.is-maybe { color: var(--muted); }
+.rel-row .maybe-mark { color: var(--muted); margin-left: 6px; }
 /* The right padding bridges the gap to the row, so moving onto the handle keeps the row hovered. */
 .drag-handle { position: absolute; left: -26px; width: 26px; padding-right: 10px; text-align: center; color: var(--muted); cursor: grab; visibility: hidden; user-select: none; }
 .rel-row.sub:hover .drag-handle { visibility: visible; }
@@ -439,6 +449,7 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .sugg { display: flex; gap: 8px; width: 100%; text-align: left; padding: 6px 10px; font: inherit; font-size: 13px; background: none; border: 0; color: var(--ink); cursor: pointer; }
 .sugg:hover, .sugg:focus { background: var(--accent-soft); outline: none; }
 .sugg .where { margin-left: auto; color: var(--muted); font-size: 11px; }
+.sugg-head { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 6px 10px 2px; }
 .add-link { color: var(--accent); cursor: pointer; font-size: 14px; }
 .new-subtasks, .new-dep { width: 100%; max-width: 520px; }
 .new-subtasks { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
@@ -496,6 +507,10 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .cand { display: block; width: 100%; padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; }
 .cand:hover { background: var(--accent-soft); }
 .cand .parent { color: var(--muted); }
+.cand .where { display: block; font-size: 12px; color: var(--muted); }
+.focus-chips { display: flex; gap: 6px; margin: 4px 0 8px; }
+.focus-chips .chip { font-size: 13px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+.focus-chips .chip.on { background: var(--accent); border-color: var(--accent); color: var(--panel); }
 .focus-new { margin-top: 12px; }
 .pop .pop-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 8px 0 3px; }
 .priority-high { color: var(--overdue); font-weight: 700; margin-left: 4px; }
@@ -564,4 +579,45 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .focus-notes a { color: var(--accent); }
 /* The editor's default button for Enter (see Editor.kt): there, but not seen. */
 .default-submit { position: absolute; width: 1px; height: 1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); }
-
+/* A checklist's sections: a heading row (fold, name, count, ⋯) over its indented items and add field. */
+.rel-row.section-head { gap: 6px; margin-top: 4px; min-height: 26px; font-size: 13px; }
+.rel-row.section-head .fold { width: 16px; color: var(--muted); font-size: 11px; }
+.rel-row.section-head .section-title { font-weight: 600; }
+.rel-row.section-head .tail { font-size: 11px; }
+.rel-row.section-head .section-add { margin-left: auto; color: var(--accent); font-size: 17px; line-height: 1; padding: 0 6px; }
+.rel-row.section-head .section-menu > summary { display: none; }
+.rel-row.section-head.folded .section-title { color: var(--muted); }
+.rel-row.in-section { padding-left: 24px; }
+.add-item.in-section { padding-left: 24px; }
+.section-menu .rename input { width: 100%; }
+.section-row { display: flex; align-items: center; gap: 6px; min-height: 30px; color: var(--muted); font-weight: 700; font-size: 13px; }
+.focus-section { display: block; width: 100%; text-align: left; font-weight: 700; color: var(--muted); padding: 10px 4px 2px; }
+/* Templates: the page, a template's banner in the editor, a list's "From template" line and its review. */
+.templates { max-width: 640px; }
+.templates-head { display: flex; align-items: center; justify-content: space-between; }
+.template-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.template-body { flex: 1; min-width: 0; }
+.template-title { color: var(--ink); text-decoration: none; font-size: 15px; }
+.template-title:hover { text-decoration: underline; }
+.template-banner { display: flex; align-items: center; gap: 10px; background: var(--today-bg); color: var(--due-today-text); border-radius: 8px; padding: 6px 6px 6px 12px; margin-bottom: 8px; font-size: 13px; }
+.template-banner span { flex: 1; }
+.from-template { font-size: 12px; color: var(--muted); margin: 0 0 6px 2px; }
+.from-template a { color: var(--accent); text-decoration: none; }
+.template-review { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 4px 0 10px; background: var(--panel); }
+.template-review:empty { display: none; }
+.review-line { display: flex; align-items: center; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.review-line label:first-child { flex: 1; }
+.review-line .once { font-size: 11px; color: var(--muted); }
+.review-tag { font-size: 11px; color: var(--due-today-text); }
+.review-tag.added { color: var(--good); }
+.review-tag.removed { color: var(--overdue); }
+.review-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.save-template { color: var(--muted); font-size: 13px; }
+.add-row { display: flex; gap: 12px; align-items: center; }
+.add-row .add-item:not(.add-section) { flex: 1; }
+/* A section's right-click menu: under its heading's right end, laid out like a subtask's ✕ menu. */
+.rel-row.section-head .section-menu { position: relative; align-self: stretch; }
+.section-menu .pop { right: 0; left: auto; flex-direction: column; align-items: stretch; gap: 2px; min-width: 210px; padding: 6px; }
+.section-menu .pop button { text-align: left; padding: 6px 8px; border-radius: 5px; }
+.section-menu .pop button:hover { background: var(--tile); }
+.section-menu .pop .danger { color: var(--overdue); }

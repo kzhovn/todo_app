@@ -12,7 +12,7 @@ enum class SnoozeChoice(val label: String) {
     fun at(now: Long, rolloverHour: Int): Long = when (this) {
         HOUR -> now + 60 * 60 * 1000L
         TOMORROW -> nextRollover(now, rolloverHour)
-        WEEK -> now + 7 * 24 * 60 * 60 * 1000L
+        WEEK -> now + 7 * DAY_MS
     }
 }
 

@@ -255,7 +255,7 @@
   // panel; the parent's name, buttons and links keep their own. (In selection mode the handler above
   // takes clicks first.)
   const closeMenus = (except) => {
-    document.querySelectorAll("details.more[open]").forEach((d) => { if (d !== except) d.open = false; });
+    document.querySelectorAll("details.more[open], details.section-menu[open]").forEach((d) => { if (d !== except) d.open = false; });
     document.querySelectorAll(".pin-control.open").forEach((p) => { if (p !== except) p.classList.remove("open"); });
   };
   const placeAt = (menu, e) => {
@@ -272,6 +272,14 @@
       placeAt(pin.querySelector(".pin-menu"), e);
       return;
     }
+    // A checklist section's heading: its menu (rename, check all...), in place.
+    const section = e.target.closest(".section-head")?.querySelector("details.section-menu");
+    if (section) {
+      e.preventDefault();
+      closeMenus(section);
+      section.open = true;
+      return;
+    }
     const more = e.target.closest(".row[data-task-id]")?.querySelector("details.more");
     if (!more || e.target.closest("input, textarea")) return;
     e.preventDefault();
@@ -280,7 +288,7 @@
     placeAt(more.querySelector(".menu"), e);
   });
   document.addEventListener("click", (e) => {
-    if (!e.target.closest("details.more") || e.target.closest(".pin-menu")) closeMenus();
+    if (!e.target.closest("details.more, details.section-menu") || e.target.closest(".pin-menu")) closeMenus();
     if (e.target.closest("a, button, input, textarea, label, details, select")) return;
     e.target.closest("#list .row[data-task-id]")?.querySelector(".title a.edit")?.click();
   });
@@ -319,6 +327,7 @@
   };
   const syncTimer = () => fetch("/timer").then(takeTimer).catch(() => {});
   // After an action, the list (or focus screen) catches up too: a task done, or a pin moved.
+  document.body.addEventListener("refresh", syncTimer);
   const timerPost = (path) => fetch(path, { method: "POST" }).then(takeTimer).then(() => htmx.trigger(document.body, "refresh")).catch(() => {});
 
   function renderTimer() {
@@ -398,7 +407,8 @@
       const minutes = +(e.target.dataset.minutes || document.querySelector("#timer .timer-custom")?.value || 0);
       if (minutes > 0) timerPost(`/timer/add?minutes=${minutes}`);
     }
-    if (action === "done") timerPost("/timer/done");
+    // Asks about open subtasks first (the reply is the question, in the toast); "refresh" follows either way.
+    if (action === "done") htmx.ajax("POST", "/timer/done", { target: "#toast", swap: "outerHTML" });
   });
 
   // Clear quick add after a successful add (here rather than in an inline hx-on handler, so the
@@ -441,6 +451,19 @@
     rep.closest(".pop").dispatchEvent(new Event("change", { bubbles: true }));
     if (!preset.classList.contains("rep-open")) preset.closest(".pp").open = false;
   });
+  // A waiting item's check-in interval, in days, and its pill text (as Labels.checkIn).
+  const checkInDays = (pop) => +pop.querySelector("[name=checkInN]").value * +(pop.querySelector("[name=checkInUnit]:checked")?.value ?? 1);
+  const checkInLabel = (d) => (d === 1 ? "Every day" : d === 7 ? "Weekly" : d % 7 === 0 ? `Every ${d / 7} weeks` : `Every ${d} days`);
+  // Typing an interval moves the next check-in to that far from today (as withCheckInEvery).
+  document.addEventListener("input", (e) => {
+    if (!e.target.matches("[name=checkInN], [name=checkInUnit]")) return;
+    const pop = e.target.closest(".pop"), days = checkInDays(pop);
+    pop.querySelectorAll(".rep-preset").forEach((b) => b.classList.toggle("on", +b.dataset.days === days));
+    if (days <= 0) return;
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    pop.querySelector("[name=checkInDate]").value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
   function pillValue(pp) {
     const pop = pp.querySelector(".pop");
     switch (pp.dataset.kind) {
@@ -459,6 +482,7 @@
       }
       case "timer": { const m = +pop.querySelector("[name=duration]").value; return m > 0 ? duration(m) : null; }
       case "repeat": return repeatText(pop);
+      case "checkin": { const days = checkInDays(pop); return days > 0 ? checkInLabel(days) : null; }
     }
     return null;
   }
@@ -608,6 +632,10 @@
       input.value = "";
       form.querySelector(".suggest").replaceChildren();
     }
+  });
+  // Focusing the field offers the nearest tasks; a click anywhere else puts them away.
+  document.addEventListener("pointerdown", (e) => {
+    document.querySelectorAll(".add-related").forEach((form) => { if (!form.contains(e.target)) form.querySelector(".suggest")?.replaceChildren(); });
   });
   document.addEventListener("change", (e) => {
     if (e.target.matches?.(".add-related input[name=kind]")) e.target.form.querySelector("input[name=text]").dispatchEvent(new Event("kindchange"));

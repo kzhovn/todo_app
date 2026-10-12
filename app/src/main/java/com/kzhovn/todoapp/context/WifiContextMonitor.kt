@@ -45,12 +45,13 @@ class WifiContextMonitor(
 
     // Off wifi, no place holds. On wifi, the network's name decides, unless Android hides it (no
     // location access right now, e.g. in the background): then nothing changes rather than guessing.
+    // Only a real change is written: every write marks the context for sync and redraws the widgets.
     internal fun refresh(onWifi: Boolean) {
         scope.launch {
             val ssid = wifiManager.connectionInfo?.ssid?.trim('"')?.takeUnless { it == WifiManager.UNKNOWN_SSID }
             val current = if (!onWifi) null else ssid ?: return@launch
             contextDao.getAll()
-                .filter { it.type == ContextType.PLACE }
+                .filter { it.type == ContextType.PLACE && it.isCurrentlySatisfied != (it.wifiSsid == current) }
                 .forEach { ctx -> contextDao.setSatisfied(ctx.id, ctx.wifiSsid == current) }
         }
     }

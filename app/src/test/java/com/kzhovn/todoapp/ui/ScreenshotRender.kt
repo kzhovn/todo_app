@@ -77,10 +77,32 @@ class ScreenshotRender {
     }
 
     @Test
+    fun checkInSheet() {
+        if (dir == null) return
+        val now = System.currentTimeMillis()
+        compose.setContent { LedgerTheme { CheckInSheet(10, now + 10 * 86_400_000L, now, onEvery = {}, onNext = {}, onDismiss = {}) } }
+        compose.waitForIdle()
+        // The sheet is a window of its own: the newest root view.
+        val global = Class.forName("android.view.WindowManagerGlobal").let { it.getMethod("getInstance").invoke(null) }
+        val views = global.javaClass.getDeclaredField("mViews").apply { isAccessible = true }.get(global) as List<*>
+        draw(views.last() as android.view.View, "check_in_sheet")
+    }
+
+    @Test
     fun focusPicker() {
         if (dir == null) return
-        val doing = listOf(Task(id = 1, title = "Send the invoice"), Task(id = 2, title = "Call the dentist"))
-        compose.setContent { LedgerTheme { TaskPickerDialog("Focus on", doing, onPick = {}, onCreateNew = {}, onDismiss = {}, searchAll = { emptyList() }) } }
+        val personal = Task(id = 10, title = "Personal", type = TaskType.FOLDER, colorIndex = 0)
+        val money = Task(id = 11, title = "Money", type = TaskType.FOLDER, colorIndex = 2)
+        val trip = Task(id = 12, title = "Trip", type = TaskType.PROJECT, parentId = 10)
+        val doing = listOf(
+            Task(id = 1, title = "charge flight, beads, vet(?) to card", parentId = 11, dueDate = System.currentTimeMillis() - 86_400_000),
+            Task(id = 2, title = "Buy gas canisters (check theprepared.com for the right ones)", parentId = 12, isStarred = true),
+            Task(id = 3, title = "Hem hiking pants", parentId = 10, dueDate = System.currentTimeMillis()),
+            Task(id = 4, title = "Invest HSA", parentId = 11)
+        )
+        val byId = (doing + listOf(personal, money, trip)).associateBy { it.id }
+        val lists = listOf("Doing" to doing.take(3), "Active" to doing, "All" to doing)
+        compose.setContent { LedgerTheme { TaskPickerDialog("Focus on", lists, byId, onPick = {}, onCreateNew = {}, onDismiss = {}, chips = true, searchAll = { emptyList() }) } }
         draw(org.robolectric.shadows.ShadowDialog.getLatestDialog().window!!.decorView, "focus_picker")
     }
 

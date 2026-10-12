@@ -15,7 +15,7 @@ private val TRACKED = listOf(
     Triple("contexts", CONTEXTS, "id"),
     Triple("context_time_windows", CONTEXTS, "contextId")
 )
-val TRACKED_TABLES: Array<String> = TRACKED.map { it.first }.distinct().toTypedArray()
+val TRACKED_TABLES: Array<String> = TRACKED.map { it.first }.toTypedArray()
 
 // Change tracking lives in SQLite triggers, so every write path (repositories, widget, wifi
 // monitor, future code) is captured without each remembering to mark rows dirty. The sync tables

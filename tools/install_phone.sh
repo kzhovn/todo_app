@@ -10,9 +10,17 @@ APK=app/build/outputs/apk/debug/app-debug.apk
 if [[ "${1:-}" == --build ]]; then ./gradlew -q :app:assembleDebug || exit 1; fi
 
 find_phone() { timeout 8 avahi-browse -rpt _adb-tls-connect._tcp 2>/dev/null | awk -F';' '/^=/ && $3 == "IPv4" { print $8 ":" $9; exit }'; }
+# The phone can take a minute to show up after wireless debugging is turned on (or after it changes networks),
+# so keep looking for up to 90s before giving up.
 connect() {
-    S=$(find_phone)
-    [[ -n "$S" ]] && "$ADB" connect "$S" >/dev/null && return 0
+    local until=$((SECONDS + 90))
+    while true; do
+        S=$(find_phone)
+        [[ -n "$S" ]] && "$ADB" connect "$S" >/dev/null && return 0
+        ((SECONDS >= until)) && break
+        [[ -z "${looking:-}" ]] && looking=1 && echo "Looking for the phone (up to 90s)..." >&2
+        sleep 5
+    done
     echo "The phone isn't advertising wireless debugging. Turn it on; if it says it's not paired, pair with"
     echo "  $ADB pair <ip>:<pairing port> <code>   (Wireless debugging > Pair device with pairing code)"
     exit 2

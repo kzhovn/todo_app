@@ -9,8 +9,6 @@ data class SearchFilters(
     val dueBefore: Long? = null
 )
 
-// Search, shared by the app and the server: title contains the query (any case, spaces around it
-// ignored), plus the filters. A folder filter takes everything under the folder, subfolders included.
 // The line of a task's notes a search matched, shown under its title in the results; null when the
 // title matched (it says enough) or nothing in the notes did.
 fun notesMatch(task: Task, query: String): String? {
@@ -24,12 +22,14 @@ fun notesMatch(task: Task, query: String): String? {
     return (if (start > 0) "…" else "") + line.substring(start, end) + (if (end < line.length) "…" else "")
 }
 
+// Search, shared by the app and the server: title (or notes) contains the query (any case, spaces
+// around it ignored), plus the filters. A folder filter takes everything under the folder, subfolders included.
 fun searchTasks(all: Collection<Task>, contextsByTaskId: Map<Long, Set<Long>>, query: String, filters: SearchFilters): List<Task> {
     val byId = all.associateBy { it.id }
     val folderId = filters.folderId
     fun inFolder(t: Task) = folderId == null || isUnder(t, folderId, byId)
     return all.filter { t ->
-        t.type != TaskType.FOLDER && (t.title.contains(query.trim(), ignoreCase = true) || notesMatch(t, query) != null) &&
+        !t.type.isContainer && (t.title.contains(query.trim(), ignoreCase = true) || notesMatch(t, query) != null) &&
             (filters.includeCompleted || !t.isComplete) &&
             inFolder(t) &&
             (!filters.starredOnly || t.isStarred) &&

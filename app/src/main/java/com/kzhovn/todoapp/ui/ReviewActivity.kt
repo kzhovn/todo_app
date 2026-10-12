@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.nearestFolder
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -63,15 +64,12 @@ import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.inMode
 import com.kzhovn.todoapp.data.modeFolder
 import com.kzhovn.todoapp.data.sectionsByTopFolder
-import com.kzhovn.todoapp.data.walkParentChain
 import com.kzhovn.todoapp.repository.DONE_BUCKETS
 import com.kzhovn.todoapp.repository.ReviewPage
 import com.kzhovn.todoapp.repository.WAITING_BUCKETS
 import com.kzhovn.todoapp.repository.Zoom
 import com.kzhovn.todoapp.repository.bucketCounts
-import com.kzhovn.todoapp.repository.dayOfWeekMask
 import com.kzhovn.todoapp.repository.medianByTopFolder
-import com.kzhovn.todoapp.repository.minuteOfDay
 import com.kzhovn.todoapp.repository.review
 import com.kzhovn.todoapp.repository.shortAge
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
@@ -108,7 +106,7 @@ class ReviewActivity : ComponentActivity() {
                     val tasks = app.repository.getAllTasks()
                     val now = System.currentTimeMillis()
                     // "Waiting now" is Active with contexts ignored: no task has any here.
-                    waiting = app.repository.getActiveTasksFrom(tasks, emptyMap(), now, minuteOfDay(now), dayOfWeekMask(now))
+                    waiting = app.repository.getActiveTasksFrom(tasks, emptyMap(), now)
                     all = tasks
                 }
                 val tasks = all
@@ -152,7 +150,7 @@ internal fun ReviewScreen(
     @Composable
     fun TaskLine(task: Task, right: String?, done: Boolean = true) {
         // The tick takes the task's own folder shade, as its row's colour bar does.
-        val tick = task.parentId?.let { walkParentChain(it, byId) { id -> colors[id] } } ?: LedgerMuted
+        val tick = nearestFolder(task, byId)?.let { colors[it.id] } ?: LedgerMuted
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(if (done) "✓ " else "○ ", fontSize = 14.sp, color = if (done) tick else LedgerMuted)
             Text(task.title, fontSize = 14.sp, color = LedgerInk, maxLines = 1, modifier = Modifier.weight(1f).clickable { openTask(task.id) }.padding(vertical = 3.dp))

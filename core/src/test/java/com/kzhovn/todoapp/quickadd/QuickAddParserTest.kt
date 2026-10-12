@@ -250,4 +250,11 @@ class QuickAddParserTest {
         assertEquals("Wed 2026-10-07 00:00", date(read("x -d in a week").task!!.dueDate))
         assertEquals("x", read("x due in two days").task!!.title)
     }
+
+    @Test
+    fun `a date that doesn't exist is dropped rather than rolled into the next month`() {
+        assertNull(QuickAddParser.parse("pay rent -d 2026-02-31").dueDate)
+        assertNull(QuickAddParser.parse("pay rent due feb 30").dueDate)
+        assertNotNull(QuickAddParser.parse("pay rent due feb 28").dueDate)
+    }
 }

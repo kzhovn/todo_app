@@ -1,6 +1,8 @@
 package com.kzhovn.todoapp.repository
 
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.Labels
+import com.kzhovn.todoapp.data.completeQuestion
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
 import com.kzhovn.todoapp.recurrence.RecurrenceSelection
@@ -32,6 +34,16 @@ class TaskChangesTest {
         val back = planUncomplete(after, 2)
         assertEquals(setOf(done.creates.single().first.id), back.deletes)
         assertEquals(false, back.applyTo(after).single { it.id == 2L }.isComplete)
+    }
+
+    @Test fun aChecklistAsksAboutItsUncheckedItemsAndMovesThemToANewListNotOut() {
+        val list = Task(id = 10, title = "Packing", type = TaskType.CHECKLIST)
+        val socks = Task(id = 11, title = "Socks", parentId = 10)
+        assertEquals(Labels.MOVE_TO_NEW_LIST, completeQuestion(list, 1)!!.moveOut)
+        assertEquals(Labels.MOVE_SUBTASKS_OUT, completeQuestion(chores, 2)!!.moveOut)
+        val after = planCompleteChoosing(listOf(list, socks), emptyMap(), 10, moveOut = true, now).applyTo(listOf(list, socks))
+        val copy = after.single { it.title == "Packing" && !it.isComplete }
+        assertEquals(copy.id, after.single { it.id == 11L }.parentId)
     }
 
     @Test fun completingAChecklistCanMoveItsUncheckedItemsToACopy() {
@@ -69,5 +81,14 @@ class TaskChangesTest {
         assertEquals(TaskType.TASK, packing.type)
         assertEquals(null, packing.pinnedAt)
         assertEquals(TaskType.TASK, checklistItem("wait for the bus", 10, plan)!!.first.type)
+    }
+
+    @Test fun movingSubtasksOutTakesThemToTheFolderTheTaskIsIn() {
+        val work = Task(id = 10, title = "Work", type = TaskType.FOLDER)
+        val report = Task(id = 11, title = "Report", parentId = 10)
+        val draft = Task(id = 12, title = "Draft", parentId = 11, position = 5)
+        val moved = planPromoteChildren(listOf(work, report, draft), 11).updates.single()
+        assertEquals(10L to null, moved.parentId to moved.position)
+        assertEquals(null, planPromoteChildren(listOf(chores, sweep), 1).updates.single().parentId) // no folder: top level
     }
 }

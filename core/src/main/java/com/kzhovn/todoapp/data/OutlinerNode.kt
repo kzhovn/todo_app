@@ -9,6 +9,13 @@ sealed class OutlinerNode {
     data class TaskNode(override val task: Task, override val children: List<OutlinerNode>) : OutlinerNode()
 }
 
+// The tree inside one folder (folder mode, a folder's view); null: the whole tree.
+fun buildOutlinerTree(tasks: List<Task>, hideCompleted: Boolean, rootId: Long?): List<OutlinerNode> {
+    val whole = buildOutlinerTree(tasks, hideCompleted)
+    fun find(nodes: List<OutlinerNode>): OutlinerNode? = nodes.firstNotNullOfOrNull { if (it.task.id == rootId) it else find(it.children) }
+    return if (rootId == null) whole else find(whole)?.children.orEmpty()
+}
+
 fun buildOutlinerTree(tasks: List<Task>, hideCompleted: Boolean = false): List<OutlinerNode> {
     val byParent: Map<Long?, List<Task>> = tasks.groupBy { it.parentId }
     val seen = mutableSetOf<Long>() // a duplicate id in the input would otherwise recurse forever; place each task at most once

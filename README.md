@@ -13,10 +13,12 @@ One task list, shared by an Android app, a web app, a GNOME top-bar extension, a
 and a Discord bot, all synced through a server you run yourself. It's single-user: one person's
 list, however many devices.
 
-**Three lists.** *Doing* is what to work on now: tasks you've starred, and ones due soon.
+**Three lists.** *Doing* is what to work on now: tasks you've starred, ones due soon, and chores that
+have gone stale (below). Overdue and due-today go first, then high priority (`!`).
 *Active* is everything you could do right now, and nothing that's waiting on something. *All* is the
 whole tree. A task stays out of Active until its start date comes, its prerequisites are done, its
-context holds (a wifi network for place contexts, a window of the day for time contexts) and, in a
+context holds (a wifi network for place contexts, a window of the day for time contexts, though
+not for anything due today or overdue) and, in a
 step-by-step project, the steps before it are done.
 
 **Quick add.** One line does most of it, the same on every device:
@@ -26,18 +28,36 @@ step-by-step project, the steps before it are done.
 timed tasks (`~30m`), stars (`*`) and maybes (`?`) all have a shorthand. The full cheat sheet is in
 the app's side menu and the web app's sidebar.
 
+**Chores.** A repeating task with no due date isn't a deadline, it just gets staler. It comes back into
+Active when it's been as long as it repeats every ("every 4 days": 4 days after it was last done), and
+moves up into Doing half an interval later, stalest first. It never turns overdue. "Skip this time" (in
+the row menu) moves a repeat on to its next time without counting it as done. A repeat that does have a
+due date behaves like any deadline.
+
 **Also:**
-- Tasks, projects (done step by step), checklists and folders, nested as deep as you like.
+- Tasks, projects, checklists and folders, nested as deep as you like. A project is done step by step
+  (one step at a time if it's sequential); when its last step is done it asks whether the project is
+  complete or what's next, and tapping its icon completes it.
+- Prerequisites: a task can wait on others (tasks, projects, checklists) and stays out of Active until
+  they're done. A task with open subtasks waits on them too, unless set to stay active.
+- Waiting items, for blockers that aren't yours to do (a reply, a decision, a date). Doing lists them
+  with "still waiting" and "follow up" buttons.
+- High priority (`!`) and maybe (`?`): maybes stay out of Doing and Active, and dim after a month.
+- Snooze from a row's menu: an hour, until tomorrow, or a week.
+- Folder mode: zoom every device into one folder ("Work mode"); anything due soon outside it still shows.
 - Plain-text notes on any task.
 - A pinned "current task" and a countdown timer, both shared by every device.
 - A focus mode that takes over every device (and pins the phone's screen).
 - Reminders, and "today only" tasks that disappear at the end of the day.
 - Review: what got done each day.
-- Search with filters.
+- Search with filters, and bulk edit of a selection.
+- Drag to reorder and to move tasks in the All tree.
 - Undo for completing and deleting.
 - An Android home-screen widget.
-- A Discord bot: `-- task` adds one, `.list` / `.doing` / `.active` list them, reactions complete
-  them, and a morning digest nudges tasks that have sat in Doing for days.
+- A Discord bot: `-- task` adds one, `✅ fixed the sink` logs something already done, `.list` /
+  `.doing` / `.active` list them, reactions complete them, and a morning digest (on or off in Settings)
+  nudges tasks that have sat in Doing for days.
+- The day's rollover hour (when "tomorrow" starts, for night owls) is a setting shared by every device.
 - Hands-free adds by voice: "Hey Google, add call mom due Friday to my tasks" (in the car too) comes
   in through Google Tasks.
 

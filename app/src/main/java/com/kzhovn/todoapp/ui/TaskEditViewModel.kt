@@ -1,5 +1,11 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.CompleteQuestion
+import com.kzhovn.todoapp.repository.TemplateChange
+
+import com.kzhovn.todoapp.ui.theme.folderColors
+import com.kzhovn.todoapp.data.subtaskCounts
+import com.kzhovn.todoapp.data.folderOf
 import com.kzhovn.todoapp.recurrence.recurrenceToSave
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -8,11 +14,11 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.mergeEdit
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.splitItems
-import com.kzhovn.todoapp.quickadd.QuickAddParser
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
 import com.kzhovn.todoapp.recurrence.RecurrenceSelection
 import com.kzhovn.todoapp.recurrence.recurrenceSelectionFromTask
@@ -28,11 +34,12 @@ class TaskEditViewModel(
     private val repository: TaskRepository,
     private val contextRepository: ContextRepository,
     val taskId: Long = 0L,
-    initialType: TaskType = TaskType.TASK
+    initialType: TaskType = TaskType.TASK,
+    asTemplate: Boolean = false // "+ New template"
 ) : ViewModel() {
     val isNew get() = taskId == 0L
 
-    var task by mutableStateOf(Task(id = taskId, title = "", type = initialType))
+    var task by mutableStateOf(Task(id = taskId, title = "", type = initialType, isTemplate = asTemplate))
     // For an existing task, Save stays disabled until it has loaded: a tap before that would commit
     // the empty placeholder, wiping the task's title and every other field.
     var isLoaded by mutableStateOf(isNew)
@@ -54,6 +61,8 @@ class TaskEditViewModel(
         private set
     val allById by derivedStateOf { allTasks.associateBy { it.id } }
     val folders by derivedStateOf { allTasks.filter { it.type == TaskType.FOLDER } }
+    val folderColors by derivedStateOf { folderColors(allTasks) }
+    val subtaskCounts by derivedStateOf { subtaskCounts(allTasks) }
 
     // As loaded (or last auto-saved), to tell what an edit changed. The picker only knows simple
     // repeat rules; an imported one shows approximately, so it's rewritten only if actually changed.
@@ -83,7 +92,9 @@ class TaskEditViewModel(
 
     // After returning from a screen opened from here (a new subtask, the contexts screen).
     suspend fun refresh() {
-        allTasks = repository.getAllTasks()
+        // A template's own tasks aren't in the lists' reads (see Templates.kt).
+        allTasks = if (task.isTemplate) repository.getEverything() else repository.getAllTasks()
+        template = if (task.isTemplate || isNew) null else task.fromTemplateId?.let { repository.getTask(it) }?.takeIf { it.isTemplate }
         dependencyEdges = repository.getAllDependencyEdges()
     }
 
@@ -118,10 +129,8 @@ class TaskEditViewModel(
         val before = original ?: return null
         val changed = changedInheritedFields(before, task, originalContextIds, contextIds)
         // Only subtasks that override a changed field need asking; the rest already follow it.
-        val overriding = if (changed.isEmpty()) emptyList() else repository.descendantsOverriding(taskId, changed)
-        if (overriding.isEmpty()) return null
-        // Named in the question: only the fields some subtask actually overrides.
-        return Question.UpdateSubtasks(overriding, changed.filterTo(mutableSetOf()) { repository.descendantsOverriding(taskId, setOf(it)).isNotEmpty() })
+        val (overriding, fields) = repository.overridingSubtasks(taskId, changed)
+        return if (overriding.isEmpty()) null else Question.UpdateSubtasks(overriding, fields)
     }
 
     // The task as it will be stored (see Task.typeRule). A folder can't be completed, so leaving it as
@@ -134,45 +143,69 @@ class TaskEditViewModel(
             task.copy(recurrenceType = recurrenceType, recurrenceRule = recurrenceRule) to dependencyIds
         }
 
-    // Saves the task with its contexts, dependencies and pending relations. clearOn/fields: subtasks to
-    // make follow this task again (see Question.UpdateSubtasks). Afterwards the saved state is the
-    // baseline for isDirty, since an auto-save keeps the editor open.
+    // Saves the task with its contexts, dependencies and pending relations, all in one transaction.
+    // Only what was edited is written (see write), sets included, so a change made meanwhile elsewhere
+    // isn't undone. clearOn/fields: subtasks to make follow this task again (see Question.UpdateSubtasks).
+    // Afterwards the stored task is the baseline for isDirty, since an auto-save keeps the editor open.
     fun saveEdits(clearOn: List<Task> = emptyList(), fields: Set<InheritedField> = emptySet(), onSaved: suspend (savedId: Long, saved: Task) -> Unit) {
         val (toSave, dependencies) = taskToSave()
         val contexts = contextIds
-        save(toSave) { savedId ->
-            repository.setDependencies(savedId, dependencies)
-            contextRepository.setTaskContexts(savedId, contexts)
-            repository.clearInherited(clearOn, fields)
-            // A new checklist's items go in as items (see checklistItem); a task's as subtasks.
-            pendingSubtasks.forEach {
-                if (toSave.type == TaskType.CHECKLIST) repository.addItems(savedId, it) else repository.createTask(QuickAddParser.parse(it).copy(parentId = savedId))
+        val dependenciesChanged = isNew || dependencies != originalDependencyIds
+        val contextsChanged = isNew || contexts != originalContextIds
+        viewModelScope.launch {
+            val (savedId, stored) = repository.atomically {
+                val (savedId, stored) = write(toSave)
+                if (stored != null) {
+                    if (dependenciesChanged) repository.setDependencies(savedId, dependencies)
+                    if (contextsChanged) contextRepository.setTaskContexts(savedId, contexts)
+                    repository.clearInherited(clearOn, fields)
+                    // A new checklist's items go in as items (see checklistItem); a task's as subtasks.
+                    pendingSubtasks.forEach { if (toSave.type == TaskType.CHECKLIST) repository.addItems(savedId, it) else repository.addSubtask(savedId, it) }
+                    pendingChildIds.forEach { repository.reparent(it, savedId) }
+                    pendingDependentIds.forEach { repository.addDependency(it, savedId) }
+                }
+                savedId to stored
             }
-            pendingChildIds.forEach { repository.reparent(it, savedId) }
-            pendingDependentIds.forEach { repository.addDependency(it, savedId) }
-            task = toSave
-            markSaved(toSave)
-            onSaved(savedId, toSave)
+            if (stored != null) {
+                task = stored
+                markSaved(stored)
+            }
+            onSaved(savedId, stored ?: toSave)
         }
     }
 
     fun save(task: Task, onSaved: suspend (Long) -> Unit) {
-        viewModelScope.launch {
-            val savedId = if (task.id == 0L) repository.createTask(task) else {
-                // Pinning isn't an editor field (it applies at once), so a save keeps whatever is stored.
-                repository.updateTask(task.copy(pinnedAt = repository.getTask(task.id)?.pinnedAt))
-                task.id
-            }
-            onSaved(savedId)
-        }
+        viewModelScope.launch { onSaved(write(task).first) }
+    }
+
+    // A new task is created. An existing one gets only the fields edited here (mergeEdit), so a completion,
+    // timer or sync that landed while the editor was open stays. Returns the id and what's stored now
+    // (null: deleted meanwhile, so nothing is written).
+    private suspend fun write(task: Task): Pair<Long, Task?> {
+        if (task.id == 0L) return repository.createTask(task).let { it to repository.getTask(it) }
+        val current = repository.getTask(task.id) ?: return task.id to null
+        repository.updateTask(mergeEdit(original ?: current, task, current))
+        return task.id to repository.getTask(task.id)
     }
 
     // New related tasks go in this task's folder, as related work usually belongs together.
-    fun folderId(of: Task = task): Long? = of.parentId?.takeIf { allById[it]?.type == TaskType.FOLDER }
+    fun folderId(): Long? = folderOf(task, allById)
 
     private fun act(block: suspend () -> Unit) = viewModelScope.launch { block(); refresh() }
 
-    fun toggleComplete(id: Long) = act { repository.toggleComplete(id, System.currentTimeMillis()) }
+    // Ticking one with open subtasks asks first (completeDecision: its id and how many), as the lists do.
+    var completeDecision by mutableStateOf<Pair<Long, CompleteQuestion>?>(null)
+
+    fun toggleComplete(id: Long) = act {
+        val question = repository.completeQuestion(id)
+        if (question != null) completeDecision = id to question else repository.toggleComplete(id, System.currentTimeMillis())
+    }
+
+    fun decideComplete(moveOut: Boolean) {
+        val id = completeDecision?.first ?: return
+        completeDecision = null
+        act { repository.completeChoosing(id, moveOut, System.currentTimeMillis()) }
+    }
 
     fun deleteItem(item: Task) = act { repository.deleteTask(item) }
 
@@ -182,6 +215,23 @@ class TaskEditViewModel(
     }
 
     fun uncheckAll() = act { repository.uncheckAll(taskId) }
+
+    // The template this list was made from (still there), for "From template Packing · Update template…".
+    var template by mutableStateOf<Task?>(null)
+        private set
+    var templateChanges by mutableStateOf<List<TemplateChange>?>(null) // the open review's lines
+
+    fun saveAsTemplate(onSaved: () -> Unit) = act { repository.saveAsTemplate(taskId); onSaved() }
+    fun useTemplate(onMade: (Long) -> Unit) = viewModelScope.launch { repository.useTemplate(taskId, System.currentTimeMillis())?.let(onMade) }
+    fun reviewTemplateChanges() = viewModelScope.launch { templateChanges = repository.templateChanges(taskId) }
+    fun updateTemplate(chosen: Set<String>, oneOff: Set<String>) { templateChanges = null; act { repository.updateTemplate(taskId, chosen, oneOff) } }
+
+    // A section's own: its items into it, rename, check all, uncheck all (deleting is deleteItem).
+    fun addItemsTo(sectionId: Long, text: String) = act { repository.addItems(sectionId, text) }
+    fun addSection(title: String) = act { if (title.isNotBlank()) repository.addSection(taskId, title) }
+    fun renameSection(section: Task, title: String) = act { if (title.isNotBlank()) repository.updateTask(section.copy(title = title.trim())) }
+    fun checkAllIn(sectionId: Long) = act { repository.checkAll(sectionId) }
+    fun uncheckAllIn(sectionId: Long) = act { repository.uncheckAll(sectionId) }
 
     fun clearChecked() = act { repository.clearChecked(taskId) }
 

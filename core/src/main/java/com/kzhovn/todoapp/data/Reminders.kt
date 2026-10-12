@@ -1,8 +1,5 @@
 package com.kzhovn.todoapp.data
 
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 // A task's reminders, each optional: when it starts, some time before it's due, and one at any time.
 enum class ReminderKind { START, DUE, AT }
@@ -27,7 +24,7 @@ fun reminderSummary(task: Task, hour: Int): String? = buildList {
     task.remindAt?.let { add(reminderTimeText(if (hasTime(it)) it else atTime(it, hour, 0))) }
 }.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 
-fun reminderTimeText(ms: Long): String = SimpleDateFormat("MMM d", Locale.US).format(Date(ms)) + " " + timeText(ms)
+fun reminderTimeText(ms: Long): String = monthDay(ms) + " " + timeText(ms)
 
 // A before-due reminder in short: "1h before due", "At due time" (the web's pill takes it from the option).
 fun beforeDueText(minutes: Int): String = Labels.REMINDERS.firstOrNull { it.first == minutes }?.second?.let { label ->

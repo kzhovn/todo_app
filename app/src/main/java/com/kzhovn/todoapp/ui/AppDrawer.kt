@@ -37,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
@@ -81,7 +82,7 @@ fun AppDrawer(
     val mode = modeFolder(AppSettings.modeFolderId(context), folders.associateBy { it.id })
     var pickingMode by remember { mutableStateOf(false) }
     if (pickingMode) FolderPickerDialog(
-        folders = folders, showNoFolderOption = true, title = "Mode", noFolderLabel = "All folders", selectedId = mode?.id,
+        folders = folders, showNoFolderOption = true, title = "Mode", noFolderLabel = Labels.ALL_FOLDERS, selectedId = mode?.id,
         onPick = { setFolderMode(context, it?.id); pickingMode = false }, onDismiss = { pickingMode = false }
     )
     ModalNavigationDrawer(
@@ -89,7 +90,7 @@ fun AppDrawer(
         drawerContent = {
             ModalDrawerSheet {
                 NavigationDrawerItem(
-                    label = { Text(mode?.let { "${it.title} mode" } ?: "All folders", fontWeight = if (mode != null) FontWeight.SemiBold else null) },
+                    label = { Text(mode?.let { "${it.title} mode" } ?: Labels.ALL_FOLDERS, fontWeight = if (mode != null) FontWeight.SemiBold else null) },
                     icon = { Icon(Icons.Filled.OpenInFull, contentDescription = null, tint = mode?.let { folderColors(folders)[it.id] } ?: LedgerMuted) },
                     badge = {
                         if (mode != null) Icon(
@@ -103,11 +104,12 @@ fun AppDrawer(
                     modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 4.dp)
                 )
                 HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
-                Item("Focus", Icons.Filled.CenterFocusStrong, false) { context.startActivity(Intent(context, FocusActivity::class.java)) }
-                Item("Review", Icons.Filled.BarChart, reviewSelected) {
+                Item(Labels.FOCUS, Icons.Filled.CenterFocusStrong, false) { context.startActivity(Intent(context, FocusActivity::class.java)) }
+                Item(Labels.REVIEW, Icons.Filled.BarChart, reviewSelected) {
                     if (!reviewSelected) context.startActivity(Intent(context, ReviewActivity::class.java))
                 }
-                Item("Settings", Icons.Filled.Sync, false) { context.startActivity(Intent(context, SyncSettingsActivity::class.java)) }
+                Item(Labels.TEMPLATES, Icons.Filled.ContentCopy, false) { context.startActivity(Intent(context, TemplatesActivity::class.java)) }
+                Item(Labels.SETTINGS, Icons.Filled.Sync, false) { context.startActivity(Intent(context, SyncSettingsActivity::class.java)) }
                 Item("Contexts", Icons.Filled.AlternateEmail, false) { context.startActivity(Intent(context, ContextsActivity::class.java)) }
                 Spacer(Modifier.weight(1f))
                 HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(horizontal = 24.dp))

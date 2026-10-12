@@ -1,12 +1,11 @@
 package com.kzhovn.todoapp.widget
 
+import kotlinx.coroutines.flow.debounce
 import com.kzhovn.todoapp.data.Labels
 import androidx.compose.ui.graphics.Color
-import com.kzhovn.todoapp.data.folderColorsArgb
 import com.kzhovn.todoapp.data.isUnder
 import com.kzhovn.todoapp.data.modeFolder
 import com.kzhovn.todoapp.AppSettings
-import com.kzhovn.todoapp.data.subtaskCounts
 import androidx.glance.appwidget.updateAll
 import androidx.glance.text.TextDecoration
 import androidx.glance.appwidget.state.updateAppWidgetState
@@ -31,6 +30,8 @@ import androidx.glance.GlanceModifier
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
 import androidx.glance.action.actionStartActivity
+import com.kzhovn.todoapp.ui.CompleteAskActivity
+import androidx.glance.action.Action
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
@@ -65,12 +66,9 @@ import kotlinx.coroutines.flow.map
 import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.MainActivity
 import com.kzhovn.todoapp.TodoApp
-import com.kzhovn.todoapp.data.Task
-import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.quickadd.QuickAddActivity
-import com.kzhovn.todoapp.repository.dayOfWeekMask
 import com.kzhovn.todoapp.repository.filterDoing
-import com.kzhovn.todoapp.repository.minuteOfDay
+import com.kzhovn.todoapp.data.DueDates
 import com.kzhovn.todoapp.ui.TaskEditActivity
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
@@ -81,7 +79,7 @@ import com.kzhovn.todoapp.ui.theme.LedgerMuted
 
 val taskIdKey = ActionParameters.Key<Long>("task_id")
 
-enum class WidgetMode(val label: String) { DOING("Doing"), ACTIVE("Active"), ALL("All") }
+enum class WidgetMode(val label: String) { DOING(Labels.DOING), ACTIVE(Labels.ACTIVE), ALL(Labels.ALL) }
 
 val WIDGET_MODE_KEY = stringPreferencesKey("mode")
 val WIDGET_FOLDER_KEY = longPreferencesKey("folder")
@@ -107,28 +105,27 @@ class TodoWidget : GlanceAppWidget() {
             repository.purgeExpired(now)
             val allTasks = repository.getAllTasks()
             val allById = allTasks.associateBy { it.id }
-            val contextsByTaskId = repository.getAllTaskContexts()
+            val edges = repository.getAllDependencyEdges()
             val listed = when (mode) {
                 WidgetMode.ALL -> TodoWidgetPresenter.allOpen(allTasks, allById)
                 else -> {
-                    val active = repository.getActiveTasksFrom(allTasks, contextsByTaskId, now, minuteOfDay(now), dayOfWeekMask(now))
-                    if (mode == WidgetMode.ACTIVE) active
-                    else filterDoing(active, now, allById, contextsByTaskId)
+                    val active = repository.getActiveTasksFrom(allTasks, repository.getAllTaskContexts(), now)
+                    if (mode == WidgetMode.ACTIVE) active else filterDoing(active, now, DueDates(allTasks, edges))
                 }
             }
             // A widget fixed to a folder keeps it; otherwise it follows folder mode.
             val shownFolder = folderId ?: modeFolder(AppSettings.modeFolderId(context), allById)?.id
             val tasks = listed.filter { shownFolder == null || isUnder(it, shownFolder, allById) }
             val folderName = shownFolder?.let { allById[it]?.title }
-            val effectiveDue = { t: Task -> resolveEffective(t, allById, contextsByTaskId).effectiveDueDate }
-            return TodoWidgetPresenter.toRows(tasks, subtaskCounts(allTasks), now, allById, folderColorsArgb(allTasks), effectiveDue, urgentOnTop = mode != WidgetMode.ALL) to
+            return TodoWidgetPresenter.rows(tasks, allTasks, edges, now, urgentOnTop = mode != WidgetMode.ALL) to
                 // How many it holds, beside its name: "ACTIVE 17 · Work".
                 "${mode.label.uppercase()} ${tasks.size}" + folderName?.let { " · $it" }.orEmpty()
         }
         val initial = load()
         // Reloaded whenever a task, context or dependency changes. A widget's session outlives a single
         // update(), which only recomposes it, so data loaded once would go stale.
-        val updates = (context.applicationContext as TodoApp).listInputChanges().map { load() }
+        // Debounced, as TodoApp's redraw is: a sync writes many rows in a burst.
+        val updates = (context.applicationContext as TodoApp).listInputChanges().debounce(300).map { load() }
 
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
         // The data Uri keeps each widget's PendingIntent distinct, so every widget opens its own settings.
@@ -231,7 +228,7 @@ private fun WidgetRow(row: WidgetTaskRow, expanded: Boolean) {
         } else Box(
             contentAlignment = Alignment.Center,
             modifier = GlanceModifier.size(width = 31.dp, height = 30.dp)
-                .clickable(actionRunCallback<ToggleCompleteAction>(actionParametersOf(taskIdKey to row.id)))
+                .clickable(completeAction(row.id, row.subtaskQuestion != null, ToggleCompleteAction::class.java))
         ) {
             // Due today: an orange ring with a pale orange fill; overdue: rust. Drawn as vectors, since a
             // text glyph can only take one colour.
@@ -320,10 +317,15 @@ private fun WidgetRow(row: WidgetTaskRow, expanded: Boolean) {
 private fun WidgetChildRow(parent: WidgetTaskRow, child: WidgetChild) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = GlanceModifier.fillMaxWidth()) {
         Box(GlanceModifier.width(4.dp).height(26.dp).background(fixed(parent.barColor?.let(::Color) ?: LedgerBorder))) {}
+        // A checklist section's heading: just its name, over its items.
+        if (child.isSection) {
+            Text(child.title, style = TextStyle(color = fixed(LedgerMuted), fontSize = 12.sp, fontWeight = FontWeight.Bold), maxLines = 1, modifier = GlanceModifier.padding(start = 16.dp))
+            return@Row
+        }
         Box(
             contentAlignment = Alignment.Center,
             modifier = GlanceModifier.padding(start = 14.dp).size(width = 28.dp, height = 26.dp)
-                .clickable(actionRunCallback<ToggleItemAction>(actionParametersOf(taskIdKey to child.id)))
+                .clickable(completeAction(child.id, child.subtaskQuestion != null, ToggleItemAction::class.java))
         ) {
             if (child.isComplete) Text("✓", style = TextStyle(color = fixed(LedgerMuted), fontSize = 16.sp))
             else Image(ImageProvider(R.drawable.widget_check), contentDescription = "Check", modifier = GlanceModifier.size(16.dp))
@@ -349,6 +351,12 @@ class ToggleExpandedAction : ActionCallback {
         TodoWidget().update(context, glanceId)
     }
 }
+
+// A checkbox: with open subtasks, the app's question (CompleteAskActivity; a widget can't show a dialog,
+// and a callback can't open one from the background); otherwise `toggle` at once.
+private fun completeAction(id: Long, ask: Boolean, toggle: Class<out ActionCallback>): Action =
+    if (ask) actionStartActivity<CompleteAskActivity>(actionParametersOf(taskIdKey to id))
+    else actionRunCallback(toggle, actionParametersOf(taskIdKey to id))
 
 // Ticks just this subtask/item (no cascade, and checking a checklist's last item completes nothing).
 class ToggleItemAction : ActionCallback {
@@ -378,8 +386,8 @@ class ToggleCompleteAction : ActionCallback {
         val repository = (context.applicationContext as TodoApp).repository
         val task = repository.getTask(taskId)
         val now = System.currentTimeMillis()
-        // A Glance widget can't show the in-app 3-way dialog for a task with active subtasks,
-        // so completing from the widget always cascades — the "complete subtasks too" choice.
+        // One with open subtasks opens the question instead (completeAction); this cascade only catches
+        // subtasks opened since the widget last drew.
         if (task != null && !task.isComplete) {
             repository.completeWithDescendants(taskId, now)
         } else {

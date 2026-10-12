@@ -5,12 +5,13 @@ import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.inMode
 import com.kzhovn.todoapp.data.checklistItems
+import com.kzhovn.todoapp.data.checklistGroups
 import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.data.formatDuration
 import com.kzhovn.todoapp.data.subtaskParentTitle
-import com.kzhovn.todoapp.repository.filterDoing
 import com.kzhovn.todoapp.repository.focusSearch
-import com.kzhovn.todoapp.repository.nextFocusTasks
+import com.kzhovn.todoapp.repository.focusLists
+import com.kzhovn.todoapp.data.nearestFolder
 import com.kzhovn.todoapp.server.TaskService
 import io.ktor.http.ContentType
 import io.ktor.server.application.ApplicationCall
@@ -54,12 +55,12 @@ fun Route.focusRoutes(service: TaskService) {
     // is over (left anywhere), back to the lists.
     get("/focus/body") {
         val session = service.focusSession() ?: return@get call.goTo("/doing")
-        call.respondText(createHTML().div { focusBody(service, session) }, ContentType.Text.Html)
+        call.respondText(createHTML().div { focusBody(service, session, call.collapsedIds()) }, ContentType.Text.Html)
     }
     get("/focus/search") {
         val q = call.request.queryParameters
         val finished = q["finished"]?.toLongOrNull()?.let(service::get)
-        call.respondText(createHTML().div { id = "focus-cands"; focusCandidates(service, finished, q["q"].orEmpty(), q["everywhere"] != null) }, ContentType.Text.Html)
+        call.respondText(createHTML().div { id = "focus-cands"; focusCandidates(service, finished, q["q"].orEmpty(), q["everywhere"] != null, q["list"]?.toIntOrNull()) }, ContentType.Text.Html)
     }
     post("/focus/start") {
         call.request.queryParameters["task"]?.toLongOrNull()?.let(service::focus)
@@ -71,16 +72,28 @@ fun Route.focusRoutes(service: TaskService) {
         call.goTo("/focus")
     }
     // Done: the session stays on the done task, so every device asks what's next.
+    // Open subtasks are asked about first (?subtasks= complete or promote), as everywhere else.
     post("/focus/done") {
-        service.focusSession()?.takeUnless { it.isComplete }?.let { service.completeWithDescendants(it.id) }
+        val choice = call.request.queryParameters["subtasks"]
+        val toast = service.focusSession()?.takeUnless { it.isComplete }?.let { t ->
+            val open = service.activeDescendantCount(t.id)
+            if (open > 0 && choice == null) createHTML().div { askSubtasksToast(t, open, "/focus/done", target = "#focus") }
+            else { service.completeOrDecide(t.id, choice); null }
+        } ?: createHTML().div { id = "toast"; attributes["hx-swap-oob"] = "true" } // an answered question goes
         val session = service.focusSession() ?: return@post call.goTo("/doing")
-        call.respondText(createHTML().div { focusBody(service, session) }, ContentType.Text.Html)
+        call.respondText(createHTML().div { focusBody(service, session, call.collapsedIds()) } + toast, ContentType.Text.Html)
     }
     // Ticking an item of the checklist in focus.
     post("/focus/item") {
         call.request.queryParameters["task"]?.toLongOrNull()?.let(service::get)?.let { if (it.isComplete) service.uncomplete(it.id) else service.complete(it.id) }
         val session = service.focusSession() ?: return@post call.goTo("/doing")
-        call.respondText(createHTML().div { focusBody(service, session) }, ContentType.Text.Html)
+        call.respondText(createHTML().div { focusBody(service, session, call.collapsedIds()) }, ContentType.Text.Html)
+    }
+    // Folding a section of the checklist in focus (with the editor's folds, per browser).
+    post("/focus/fold") {
+        call.request.queryParameters["section"]?.toLongOrNull()?.let { call.toggleCollapsed(it) }
+        val session = service.focusSession() ?: return@post call.goTo("/doing")
+        call.respondText(createHTML().div { focusBody(service, session, call.collapsedIds()) }, ContentType.Text.Html)
     }
     post("/focus/leave") {
         service.unpin()
@@ -99,13 +112,14 @@ private suspend fun ApplicationCall.goTo(path: String) {
 }
 
 // Every page, while a session runs: just the task, big, with its timer, Done, quick add and Leave.
-fun HTML.focusPage(service: TaskService, session: Task) = page("Raspberry · Focus") {
-    div(classes = "focus-shell") { div { focusBody(service, session) } }
+fun HTML.focusPage(service: TaskService, session: Task, folded: Set<Long> = emptySet()) = page("Raspberry · Focus") {
+    div(classes = "focus-shell") { div { focusBody(service, session, folded) } }
     div { id = "toast" }
     div { id = "timer"; attributes["hidden"] = "" }
 }
 
-fun DIV.focusBody(service: TaskService, session: Task) {
+// `folded`: the checklist's sections folded in this browser.
+fun DIV.focusBody(service: TaskService, session: Task, folded: Set<Long> = emptySet()) {
     id = "focus"
     classes = setOf("focus")
     // Follows the session from anywhere: a task done on the phone, the next one picked on the top bar.
@@ -113,7 +127,7 @@ fun DIV.focusBody(service: TaskService, session: Task) {
     attributes["hx-trigger"] = "every 20s, visibilitychange from:document, refresh from:body"
     attributes["hx-swap"] = "outerHTML"
     if (session.isComplete) {
-        h1(classes = "focus-title") { +"Done!" }
+        h1(classes = "focus-title") { +Labels.FOCUS_DONE }
         p(classes = "focus-sub") { +Labels.FOCUS_NEXT_OR_FINISH }
         div(classes = "focus-pick") { focusPicker(service, finished = session) }
         button(classes = "leave") { hx("post", "/focus/leave", "this"); +Labels.IM_DONE }
@@ -121,19 +135,29 @@ fun DIV.focusBody(service: TaskService, session: Task) {
     }
     val all = service.tasks()
     val byId = all.associateBy { it.id }
-    div(classes = "focus-label") { +"Focus" }
+    div(classes = "focus-label") { +Labels.FOCUS }
     subtaskParentTitle(session, byId)?.let { p(classes = "focus-sub") { +it } }
     h1(classes = "focus-title") { +session.title }
     service.effectiveDueDate(session)?.let { p(classes = "focus-sub") { +dueText(it, service.now()) } }
     // The note: what to ask, the number to call.
     session.notes?.takeIf { it.isNotBlank() }?.let { div(classes = "focus-notes") { linkified(it) } }
-    // A checklist: its items, big, to tick off one by one.
+    // A checklist: its items, big, to tick off one by one, under their sections (folded as in the editor).
     if (session.type == TaskType.CHECKLIST) div(classes = "focus-items") {
-        checklistItems(session.id, all).forEach { item ->
-            button(classes = if (item.isComplete) "focus-item done" else "focus-item") {
-                hx("post", "/focus/item?task=${item.id}", "#focus")
-                span(classes = if (item.isComplete) "check done" else "check") { if (item.isComplete) icon(Icon.CHECK, "") }
-                +item.title
+        checklistGroups(session.id, all).forEach { (section, items) ->
+            val isFolded = section != null && section.id in folded
+            section?.let { sec ->
+                button(classes = "focus-section") {
+                    hx("post", "/focus/fold?section=${sec.id}", "#focus")
+                    +"${if (isFolded) "▸" else "▾"} ${sec.title}"
+                    span(classes = "tail") { +" ${items.count { it.isComplete }}/${items.size}" }
+                }
+            }
+            if (!isFolded) items.forEach { item ->
+                button(classes = if (item.isComplete) "focus-item done" else "focus-item") {
+                    hx("post", "/focus/item?task=${item.id}", "#focus")
+                    span(classes = if (item.isComplete) "check done" else "check") { if (item.isComplete) icon(Icon.CHECK, "") }
+                    +item.title
+                }
             }
         }
     }
@@ -187,24 +211,36 @@ fun FlowContent.focusPicker(service: TaskService, finished: Task?) {
     }
 }
 
-// The picker's list: Doing (or Active) with no query, any matching open task with one (in the mode's
-// folder, unless `everywhere`).
-fun FlowContent.focusCandidates(service: TaskService, finished: Task?, query: String, everywhere: Boolean = false) {
+// The picker's list: with no query, Doing · Active · All as chips (`list` picks one; by default the first
+// that isn't empty), as on the phone; with one, any matching open task (in the mode's folder, unless `everywhere`).
+fun FlowContent.focusCandidates(service: TaskService, finished: Task?, query: String, everywhere: Boolean = false, list: Int? = null) {
     val all = service.tasks()
     val byId = all.associateBy { it.id }
     val candidates = if (query.isBlank()) {
         val active = service.active()
-        nextFocusTasks(active, filterDoing(active, service.now(), byId, service.contextIdsByTask()), finished, byId).take(30)
+        val mode = service.modeFolderId()
+        val lists = focusLists(active, service.doing(active), all.filter { inMode(it, mode, byId) }, finished, byId)
+        val chosen = list?.takeIf { it in lists.indices } ?: lists.indexOfFirst { it.second.isNotEmpty() }.coerceAtLeast(0)
+        div(classes = "focus-chips") {
+            lists.forEachIndexed { i, (label, tasks) ->
+                button(classes = if (i == chosen) "chip on" else "chip") {
+                    hx("get", "/focus/search?list=$i" + (finished?.let { "&finished=${it.id}" } ?: ""), "#focus-cands")
+                    +"$label ${tasks.size}"
+                }
+            }
+        }
+        lists[chosen].second.take(60)
     } else {
         val mode = if (everywhere) null else service.modeFolderId()
         focusSearch(all, query).filter { inMode(it, mode, byId) }.take(30)
     }
-    if (candidates.isEmpty()) p(classes = "empty") { +(if (query.isBlank()) "Nothing in Doing or Active" else "No open task matches") }
+    if (candidates.isEmpty()) p(classes = "empty") { +(if (query.isBlank()) "Nothing here" else "No open task matches") }
     candidates.forEach { t ->
         button(classes = "cand") {
             hx("post", "/focus/start?task=${t.id}", "this")
             subtaskParentTitle(t, byId)?.let { span(classes = "parent") { +"$it: " } }
             +t.title
+            nearestFolder(t, byId)?.let { span(classes = "where") { +it.title } }
         }
     }
 }

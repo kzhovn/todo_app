@@ -24,6 +24,17 @@ class WaitingTest {
         assertEquals(1, waitingToCheck(listOf(hidden), later + 7 * day).size)
     }
 
+    @Test fun aNewIntervalCountsFromNowSoAShorterOneComesSooner() {
+        val monthly = stillWaiting(roommate.copy(checkInDays = 30), made)
+        val sooner = monthly.withCheckInEvery(3, made + day)
+        assertEquals(made + 4 * day, nextCheckIn(sooner, made + day))
+        assertEquals(MAX_CHECK_IN_DAYS, roommate.withCheckInEvery(1000, made).checkInDays)
+    }
+
+    @Test fun checkInIntervalsReadAsWeeksWhenWhole() {
+        assertEquals(listOf("Every day", "Every 3 days", "Weekly", "Every 2 weeks", "Every 10 days"), listOf(1, 3, 7, 14, 10).map(Labels::checkIn))
+    }
+
     @Test fun aDatedOneNeverComesUpAndResolvesOnItsDay() {
         val inspection = roommate.copy(dueDate = made + 10 * day)
         assertEquals(emptyList<Task>(), waitingToCheck(listOf(inspection), made + 5 * day))

@@ -1,6 +1,10 @@
 package com.kzhovn.todoapp.ui
 
-import com.kzhovn.todoapp.data.chipDate
+import com.kzhovn.todoapp.repository.dimmedInTree
+
+import com.kzhovn.todoapp.data.waitingTail
+import androidx.compose.ui.graphics.Color
+import com.kzhovn.todoapp.data.Labels
 import androidx.compose.material.icons.filled.OpenInFull
 import com.kzhovn.todoapp.data.OutlinerNode
 import com.kzhovn.todoapp.data.buildOutlinerTree
@@ -71,7 +75,6 @@ import com.kzhovn.todoapp.data.OutlinerPreferences
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.isDoable
-import com.kzhovn.todoapp.data.waitingFor
 import com.kzhovn.todoapp.data.wouldCreateCycle
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerInk
@@ -92,7 +95,9 @@ fun OutlinerScreen(
     selectedIds: Set<Long> = emptySet(),
     // Folder mode: the tree starts inside this folder, and each other folder has a button to zoom into it.
     rootId: Long? = null,
-    onZoom: ((Long) -> Unit)? = null
+    onZoom: ((Long) -> Unit)? = null,
+    // What isn't held back other than by contexts (computeActiveIgnoringContexts): the rest is dimmed.
+    workable: Set<Long> = emptySet()
 ) {
     val context = LocalContext.current
     val prefs = remember { OutlinerPreferences(context) }
@@ -103,13 +108,10 @@ fun OutlinerScreen(
         collapsed = prefs.collapsedIds()
     }
 
-    val tree = remember(tasks, rootId) {
-        val whole = buildOutlinerTree(tasks, hideCompleted = true)
-        fun find(nodes: List<OutlinerNode>): OutlinerNode? = nodes.firstNotNullOfOrNull { if (it.task.id == rootId) it else find(it.children) }
-        if (rootId == null) whole else find(whole)?.children.orEmpty()
-    }
+    val tree = remember(tasks, rootId) { buildOutlinerTree(tasks, hideCompleted = true, rootId = rootId) }
     val allById = remember(tasks) { tasks.associateBy { it.id } }
     val counts = remember(tasks) { subtaskCounts(tasks) }
+    val colors = remember(tasks) { folderColors(tasks) }
 
     fun toggle(folderId: Long) {
         val nowCollapsed = folderId !in collapsed
@@ -141,7 +143,7 @@ fun OutlinerScreen(
 
     val actions = OutlinerActions(::toggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, onZoom, onSnooze)
     LazyColumn(state = listState, modifier = Modifier.onGloballyPositioned { listBounds = it.boundsInRoot() }) {
-        renderNodes(tree, depth = 0, collapsed = collapsed, actions = actions, allById = allById, counts = counts, selectedIds = selectedIds)
+        renderNodes(tree, depth = 0, collapsed = collapsed, actions = actions, allById = allById, counts = counts, colors = colors, selectedIds = selectedIds, workable = workable)
     }
 }
 
@@ -152,14 +154,16 @@ private fun LazyListScope.renderNodes(
     actions: OutlinerActions,
     allById: Map<Long, Task>,
     counts: Map<Long, Pair<Int, Int>>,
-    selectedIds: Set<Long>
+    colors: Map<Long, Color>,
+    selectedIds: Set<Long>,
+    workable: Set<Long>
 ) {
     nodes.forEach { node ->
         item(key = node.task.id) {
-            OutlinerRow(node, depth, isFolded(node.task, collapsed), actions, allById, counts[node.task.id], node.task.id in selectedIds)
+            OutlinerRow(node, depth, isFolded(node.task, collapsed), actions, allById, counts[node.task.id], colors[node.task.id], node.task.id in selectedIds, workable)
         }
         if (node.children.isNotEmpty() && !isFolded(node.task, collapsed)) {
-            renderNodes(node.children, depth + 1, collapsed, actions, allById, counts, selectedIds)
+            renderNodes(node.children, depth + 1, collapsed, actions, allById, counts, colors, selectedIds, workable)
         }
     }
 }
@@ -188,7 +192,9 @@ private fun OutlinerRow(
     allById: Map<Long, Task>,
     // (checked, all) items of a checklist; the tree itself only shows the open ones.
     itemCounts: Pair<Int, Int>?,
-    selected: Boolean
+    folderColor: Color?,
+    selected: Boolean,
+    workable: Set<Long>
 ) {
     val (onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, onZoom, onSnooze) = actions
     var menuOpen by remember { mutableStateOf(false) }
@@ -247,7 +253,7 @@ private fun OutlinerRow(
                 .fillMaxWidth()
                 .onGloballyPositioned { rowBounds = it.boundsInRoot() }
                 .background(if (dropZone == DropZone.INTO || selected) LedgerAccentSoft else LedgerBackground)
-                .alpha(System.currentTimeMillis().let { now -> if (task.isBackburner(now)) BACKBURNER_ALPHA else if (task.startsLater(now)) LATER_ALPHA else 1f })
+                .alpha(System.currentTimeMillis().let { now -> if (task.isBackburner(now)) BACKBURNER_ALPHA else if (dimmedInTree(task, workable, allById, now)) LATER_ALPHA else 1f })
                 .drawWithContent {
                     drawContent()
                     val line = 3.dp.toPx()
@@ -294,7 +300,7 @@ private fun OutlinerRow(
             Spacer(Modifier.width(4.dp))
             when (task.type) {
                 TaskType.FOLDER -> {
-                    Icon(Icons.Filled.Folder, contentDescription = null, tint = remember(allById) { folderColors(allById.values)[task.id] } ?: LedgerMuted, modifier = Modifier.width(14.dp))
+                    Icon(Icons.Filled.Folder, contentDescription = null, tint = folderColor ?: LedgerMuted, modifier = Modifier.width(14.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(
                         task.title,
@@ -311,6 +317,8 @@ private fun OutlinerRow(
                         )
                     }
                 }
+                // A checklist's section: a plain heading over its items (renamed in the checklist's editor).
+                TaskType.SECTION -> Text(task.title, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = LedgerMuted, modifier = Modifier.weight(1f).padding(vertical = 8.dp))
                 TaskType.TASK, TaskType.PROJECT, TaskType.CHECKLIST, TaskType.WAITING -> {
                     TaskMark(
                         task, itemCounts, task.dueDate?.takeUnless { task.isComplete }?.let { dueStatus(it, System.currentTimeMillis()) }, checkboxSize = 20.dp,
@@ -331,7 +339,7 @@ private fun OutlinerRow(
                     if (task.type == TaskType.WAITING) {
                         // How long it's been waiting, or the day it resolves itself.
                         val now = System.currentTimeMillis()
-                        (task.dueDate?.let { "resolves ${chipDate(it)}" } ?: waitingFor(task, now)?.let { "waiting $it" })?.let {
+                        waitingTail(task, now)?.let {
                             Text(it, fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.padding(horizontal = 8.dp))
                         }
                     } else if (task.isMaybe) {
@@ -369,7 +377,7 @@ fun SwipeToAddSubtask(onAdd: () -> Unit, content: @Composable () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(Icons.Filled.Add, contentDescription = null, tint = LedgerAccent)
-                Text("Subtask", color = LedgerAccent, fontSize = 14.sp)
+                Text(Labels.SUBTASK, color = LedgerAccent, fontSize = 14.sp)
             }
         }
     ) {

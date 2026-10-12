@@ -3,8 +3,13 @@ package com.kzhovn.todoapp.data
 // Would adding `candidateId` as a dependency of `editingTaskId` create a cycle? True when
 // editingTaskId is reachable from candidateId by following existing dependsOn edges — i.e.
 // candidateId already (transitively) depends on editingTaskId, so the new edge would close a loop.
-fun wouldCreateDependencyCycle(candidateId: Long, editingTaskId: Long, edges: List<TaskDependency>): Boolean {
-    val adjacency = edges.groupBy({ it.taskId }, { it.dependsOnTaskId })
+fun wouldCreateDependencyCycle(candidateId: Long, editingTaskId: Long, edges: List<TaskDependency>): Boolean =
+    wouldCreateDependencyCycle(candidateId, editingTaskId, dependsOnMap(edges))
+
+// Each task's prerequisites, for checking many candidates against one edge list.
+fun dependsOnMap(edges: List<TaskDependency>): Map<Long, List<Long>> = edges.groupBy({ it.taskId }, { it.dependsOnTaskId })
+
+fun wouldCreateDependencyCycle(candidateId: Long, editingTaskId: Long, adjacency: Map<Long, List<Long>>): Boolean {
     val visited = mutableSetOf<Long>()
     val stack = ArrayDeque<Long>().apply { add(candidateId) }
     while (stack.isNotEmpty()) {

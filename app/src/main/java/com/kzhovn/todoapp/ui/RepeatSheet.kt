@@ -41,7 +41,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kzhovn.todoapp.data.CHECK_IN_PRESETS
+import com.kzhovn.todoapp.data.DAY_MS
 import com.kzhovn.todoapp.data.Labels
+import com.kzhovn.todoapp.data.monthDay
 import com.kzhovn.todoapp.recurrence.NTH_NAMES
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
@@ -92,6 +95,36 @@ fun RepeatSheet(current: RecurrenceSelection, anchor: Long, onDone: (RecurrenceS
                     TextButton(onClick = { custom = null }) { Text("Back", color = LedgerMuted) }
                     TextButton(onClick = { onDone(building) }) { Text("Done", color = LedgerAccent, fontWeight = FontWeight.Medium) }
                 }
+            }
+        }
+    }
+}
+
+// A waiting item's check-in: one-tap intervals (closing the sheet), any number of days or weeks, and the
+// next check-in's date, which a new interval moves (withCheckInEvery) and the date picker overrides.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CheckInSheet(every: Int, next: Long, now: Long, onEvery: (Int) -> Unit, onNext: (Long) -> Unit, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = LedgerSearchBackground) {
+        Column(Modifier.padding(bottom = 16.dp)) {
+            Title(Labels.CHECK_IN)
+            CHECK_IN_PRESETS.forEach { days -> PresetRow(Labels.checkIn(days), monthDay(now + days * DAY_MS), days == every) { onEvery(days); onDismiss() } }
+            HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(vertical = 4.dp))
+            var unit by remember { mutableStateOf(if (every % 7 == 0) RecurrenceUnit.WEEK else RecurrenceUnit.DAY) }
+            val perUnit = if (unit == RecurrenceUnit.WEEK) 7 else 1
+            val n = every / perUnit
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                Text("Every", fontSize = 14.sp, color = LedgerInk, modifier = Modifier.padding(end = 8.dp))
+                CompactNumberField(n) { onEvery(it * perUnit) }
+                Spacer(Modifier.width(8.dp))
+                listOf(RecurrenceUnit.DAY, RecurrenceUnit.WEEK).forEach { u ->
+                    val name = Labels.unitName(u)
+                    SelectablePill(if (n == 1) name else "${name}s", unit == u) { unit = u; onEvery(n * if (u == RecurrenceUnit.WEEK) 7 else 1) }
+                }
+            }
+            val activity = LocalContext.current.findActivity()
+            PresetRow(Labels.NEXT_CHECK_IN, SimpleDateFormat("EEE, MMM d", Locale.US).format(Date(next)) + " ›", false) {
+                pickDate(activity, next, withTime = false, title = Labels.NEXT_CHECK_IN, onPicked = onNext)
             }
         }
     }

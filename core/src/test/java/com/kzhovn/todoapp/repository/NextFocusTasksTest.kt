@@ -37,4 +37,16 @@ class NextFocusTasksTest {
         assertEquals(listOf("Call list", "Call mom", "Call the bank?"), focusSearch(listOf(maybe, later, closed, folder, list, item), " call ").map { it.title })
         assertEquals(emptyList<Task>(), focusSearch(listOf(maybe), " "))
     }
+
+    @Test fun `the focus lists are Doing, Active and every open task, each led by the next step`() {
+        val project = Task(id = 1, title = "Project", sequential = true, type = com.kzhovn.todoapp.data.TaskType.PROJECT)
+        val done = Task(id = 2, title = "Step 1", parentId = 1, isComplete = true)
+        val step2 = Task(id = 3, title = "Step 2", parentId = 1)
+        val starred = Task(id = 4, title = "Starred", isStarred = true)
+        val later = Task(id = 5, title = "Later", startDate = Long.MAX_VALUE)
+        val all = listOf(project, done, step2, starred, later)
+        val lists = focusLists(listOf(step2, starred), listOf(starred), all, done, all.associateBy { it.id })
+        assertEquals(listOf("Doing" to listOf(step2, starred), "Active" to listOf(step2, starred)), lists.take(2))
+        assertEquals(setOf(step2, starred, later), lists[2].second.toSet()) // the project and the done step aren't offered
+    }
 }

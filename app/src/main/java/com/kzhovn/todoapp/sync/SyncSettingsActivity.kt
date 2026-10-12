@@ -51,7 +51,7 @@ class SyncSettingsActivity : ComponentActivity() {
                 val scope = rememberCoroutineScope()
 
                 Column(Modifier.fillMaxSize().background(LedgerBackground).padding(16.dp)) {
-                    Text("Settings", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk)
+                    Text(Labels.SETTINGS, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk)
                     Spacer(Modifier.height(12.dp))
                     var rolloverHour by remember { mutableStateOf(AppSettings.rolloverHour(app)) }
                     Text(

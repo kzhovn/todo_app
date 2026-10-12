@@ -6,6 +6,10 @@ package com.kzhovn.todoapp.data
 // The mode's folder, if it still exists: deleting the folder ends the mode.
 fun modeFolder(modeFolderId: Long?, byId: Map<Long, Task>): Task? = modeFolderId?.let(byId::get)?.takeIf { it.type == TaskType.FOLDER }
 
+// Where a new task goes when nothing says: the mode's folder, or Personal (if it exists).
+fun defaultFolder(tasks: Collection<Task>, modeFolderId: Long?): Task? =
+    modeFolder(modeFolderId, tasks.associateBy { it.id }) ?: findFolder(tasks, DEFAULT_FOLDER)
+
 fun inMode(task: Task, modeFolderId: Long?, byId: Map<Long, Task>): Boolean =
     modeFolderId == null || task.id == modeFolderId || isUnder(task, modeFolderId, byId)
 
@@ -13,3 +17,6 @@ fun inMode(task: Task, modeFolderId: Long?, byId: Map<Long, Task>): Boolean =
 fun dueOutsideMode(doing: List<Task>, modeFolderId: Long?, byId: Map<Long, Task>, now: Long, effectiveDue: (Task) -> Long?): List<Task> =
     if (modeFolderId == null) emptyList()
     else doing.filter { !inMode(it, modeFolderId, byId) && effectiveDue(it)?.let { due -> dueStatus(due, now) != DueStatus.LATER } == true }
+
+fun dueOutsideMode(doing: List<Task>, modeFolderId: Long?, byId: Map<Long, Task>, now: Long, dues: DueDates): List<Task> =
+    dueOutsideMode(doing, modeFolderId, byId, now, dues::at)

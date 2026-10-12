@@ -7,13 +7,6 @@ import androidx.glance.appwidget.updateAll
 import com.kzhovn.todoapp.widget.TodoWidget
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.SupervisorJob
-import com.kzhovn.todoapp.data.MIGRATION_9_10
-import com.kzhovn.todoapp.data.MIGRATION_10_11
-import com.kzhovn.todoapp.data.MIGRATION_11_12
-import com.kzhovn.todoapp.data.MIGRATION_12_13
-import com.kzhovn.todoapp.data.MIGRATION_13_14
-import com.kzhovn.todoapp.data.MIGRATION_14_15
-import com.kzhovn.todoapp.data.MIGRATION_15_16
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.callbackFlow
@@ -28,12 +21,8 @@ import android.app.AlarmManager
 import android.app.Application
 import androidx.room.InvalidationTracker
 import androidx.room.Room
-import com.kzhovn.todoapp.data.MIGRATION_3_4
-import com.kzhovn.todoapp.data.MIGRATION_4_5
-import com.kzhovn.todoapp.data.MIGRATION_5_6
-import com.kzhovn.todoapp.data.MIGRATION_6_7
-import com.kzhovn.todoapp.data.MIGRATION_7_8
-import com.kzhovn.todoapp.data.MIGRATION_8_9
+import androidx.room.withTransaction
+import com.kzhovn.todoapp.data.ALL_MIGRATIONS
 import com.kzhovn.todoapp.data.TodoDatabase
 import com.kzhovn.todoapp.notifications.PinnedTask
 import kotlinx.coroutines.CoroutineScope
@@ -51,7 +40,7 @@ import com.kzhovn.todoapp.sync.TRACKED_TABLES
 class TodoApp : Application() {
     val database: TodoDatabase by lazy {
         Room.databaseBuilder(this, TodoDatabase::class.java, "todo.db")
-            .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
+            .addMigrations(*ALL_MIGRATIONS)
             .addCallback(SyncTracking)
             .build()
     }
@@ -59,9 +48,10 @@ class TodoApp : Application() {
         ReminderScheduler(this, getSystemService(ALARM_SERVICE) as AlarmManager)
     }
     val repository: TaskRepository by lazy {
-        TaskRepository(database.taskDao(), reminderScheduler, database.taskContextDao(), rolloverHour = { AppSettings.rolloverHour(this) })
+        TaskRepository(database.taskDao(), reminderScheduler, database.taskContextDao(), rolloverHour = { AppSettings.rolloverHour(this) }, transaction = ::inTransaction)
     }
-    val contextRepository: ContextRepository by lazy { ContextRepository(database.taskContextDao()) }
+    val contextRepository: ContextRepository by lazy { ContextRepository(database.taskContextDao(), ::inTransaction) }
+    private suspend fun inTransaction(block: suspend () -> Unit) = database.withTransaction { block() }
     val syncClient: SyncClient by lazy { SyncClient(this, database, reminderScheduler) }
     private val wifiMonitor by lazy {
         WifiContextMonitor(getSystemService(ConnectivityManager::class.java), getSystemService(WifiManager::class.java), database.taskContextDao(), CoroutineScope(Dispatchers.IO))
@@ -78,7 +68,7 @@ class TodoApp : Application() {
     // Folder mode switching (here or synced from elsewhere) changes every list too.
     fun listInputChanges(): Flow<Unit> = merge(
         callbackFlow {
-            val observer = object : InvalidationTracker.Observer(arrayOf("tasks", "contexts", "context_time_windows", "task_contexts", "task_dependencies")) {
+            val observer = object : InvalidationTracker.Observer(TRACKED_TABLES) {
                 override fun onInvalidated(tables: Set<String>) { trySend(Unit) }
             }
             database.invalidationTracker.addObserver(observer)

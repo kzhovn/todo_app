@@ -127,7 +127,8 @@ class BulkEditActivity : ComponentActivity() {
                 if (showDependencyPicker) {
                     TaskPickerDialog(
                         title = "All selected tasks depend on…",
-                        tasks = allTasks.filter { it.type.isLinkable && !it.isComplete && it.id !in taskIds },
+                        lists = listOf("" to allTasks.filter { it.type.isLinkable && !it.isComplete && it.id !in taskIds }),
+                        allById = allTasks.associateBy { it.id },
                         onPick = { edit = edit.copy(dependsOnId = it.id); showDependencyPicker = false },
                         onCreateNew = null,
                         onDismiss = { showDependencyPicker = false }

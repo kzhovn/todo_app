@@ -10,7 +10,9 @@ phone's wireless-debugging port, refuses if a focus session is running, pushes t
 retrying if the phone drops off wifi, then prints `lastUpdateTime` to confirm.
 
 What its exit codes mean, and what to tell Kira:
-- **2, not reachable**: the phone isn't advertising wireless debugging. Ask her to turn it on (and keep
+- **2, not reachable**: the phone wasn't found for 90s (the script already waits that long, since it can take a
+  minute to show up after wireless debugging is turned on or the phone changes networks). Run it once more
+  before telling Kira it's unreachable; if it's still not found, the phone isn't advertising wireless debugging. Ask her to turn it on (and keep
   the Wireless debugging screen open). If `adb connect` fails while the port is open, the pairing was lost
   (the phone's "Paired devices" list is empty): ask for a pairing code and IP:port from
   "Pair device with pairing code", then `~/Android/Sdk/platform-tools/adb pair <ip>:<port> <code>`.

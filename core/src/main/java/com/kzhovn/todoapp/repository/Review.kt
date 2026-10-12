@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.repository
 
+import com.kzhovn.todoapp.data.DAY_MS
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.deadline
 import com.kzhovn.todoapp.data.inMode
@@ -21,8 +22,6 @@ data class ReviewBar(val first: LocalDate, val last: LocalDate, val tasks: List<
 
 // A task with a length of time: how long it waited, or how late it was done.
 data class Aged(val task: Task, val ms: Long)
-
-private const val DAY_MS = 24L * 60 * 60 * 1000
 
 val DONE_BUCKETS = listOf("Same day" to 1, "1–2 days" to 3, "3–6 days" to 7, "1–3 weeks" to 21, "3 wk–3 mo" to 90, "3+ months" to Int.MAX_VALUE)
 val WAITING_BUCKETS = listOf("Under a week" to 7, "1–3 weeks" to 21, "3 wk–3 mo" to 90, "3+ months" to Int.MAX_VALUE)
@@ -73,7 +72,6 @@ class ReviewPage(
     val bars: List<ReviewBar>,
     // Completed in the window, oldest first. A completed checklist counts once; its items don't count.
     val done: List<Task>,
-    val previousDone: List<Task>?, // the window before (null for All)
     val waiting: List<Aged>, // Active ignoring contexts, longest waiting first
     // Year and All list one row per calendar month, newest first.
     val months: List<Pair<YearMonth, List<Task>>>
@@ -83,7 +81,6 @@ class ReviewPage(
     // From start or creation to done. Repeating tasks are left out: an instance is made when the
     // previous one is done, so its time is only the repeat interval.
     val timeToDone: List<Aged> = ages(done)
-    val previousTimeToDone: List<Aged>? = previousDone?.let(::ages)
 
     private fun ages(tasks: List<Task>) = tasks.filter { it.recurrenceType == null }.mapNotNull { t ->
         readyAt(t)?.let { Aged(t, (t.completedAt!! - it).coerceAtLeast(0)) }
@@ -145,9 +142,9 @@ fun review(all: List<Task>, waiting: List<Task>, now: Long, rolloverHour: Int, z
     val today = appDay(now, rolloverHour)
     val last = minOf(end ?: today, today)
     val first = if (zoom == Zoom.ALL) completed.minOfOrNull { it.second } ?: today else last.minusDays(zoom.days - 1L)
-    fun between(from: LocalDate, to: LocalDate) = completed.filter { it.second in from..to }.sortedBy { it.first.completedAt }.map { it.first }
-    val done = between(first, last)
-    val byDay = completed.filter { it.second in first..last }.groupBy({ it.second }, { it.first })
+    val inWindow = completed.filter { it.second in first..last }.sortedBy { it.first.completedAt }
+    val done = inWindow.map { it.first }
+    val byDay = inWindow.groupBy({ it.second }, { it.first })
     fun bar(from: LocalDate, to: LocalDate) = ReviewBar(from, to, generateSequence(from) { it.plusDays(1) }.takeWhile { it <= to }.flatMap { byDay[it].orEmpty() }.toList())
     val bars = when (zoom) {
         Zoom.WEEK, Zoom.MONTH -> generateSequence(first) { it.plusDays(1) }.takeWhile { it <= last }.map { bar(it, it) }.toList()
@@ -155,9 +152,7 @@ fun review(all: List<Task>, waiting: List<Task>, now: Long, rolloverHour: Int, z
         Zoom.ALL -> generateSequence(YearMonth.from(first)) { it.plusMonths(1) }.takeWhile { it <= YearMonth.from(last) }
             .map { bar(maxOf(it.atDay(1), first), minOf(it.atEndOfMonth(), last)) }.toList()
     }
-    val previous = if (zoom == Zoom.ALL) null else between(first.minusDays(zoom.days.toLong()), first.minusDays(1))
     val aged = waiting.mapNotNull { t -> readyAt(t)?.let { Aged(t, (now - it).coerceAtLeast(0)) } }.sortedByDescending { it.ms }
-    val months = completed.filter { it.second in first..last }.sortedBy { it.first.completedAt }
-        .groupBy({ YearMonth.from(it.second) }, { it.first }).toList().sortedByDescending { it.first }
-    return ReviewPage(zoom, first, last, today, bars, done, previous, aged, months)
+    val months = inWindow.groupBy({ YearMonth.from(it.second) }, { it.first }).toList().sortedByDescending { it.first }
+    return ReviewPage(zoom, first, last, today, bars, done, aged, months)
 }

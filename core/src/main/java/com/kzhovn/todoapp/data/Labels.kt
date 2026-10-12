@@ -9,6 +9,16 @@ import com.kzhovn.todoapp.recurrence.RecurrenceUnit
 
 // The editor's user-facing names, shared by the phone app and the web app so they always match.
 object Labels {
+    // Shared buttons and pages
+    const val CANCEL = "Cancel"
+    const val CREATE = "Create"
+    const val UNDO = "Undo"
+    const val SEARCH = "Search"
+    const val SETTINGS = "Settings"
+    const val CONTEXTS = "Contexts"
+    const val ALL_FOLDERS = "All folders"
+    fun deleted(title: String, more: Int = 0) = "Deleted “$title”" + if (more > 0) " and $more more" else ""
+
     // Review (the phone's and the web's)
     const val REVIEW = "Review"
     const val SEE_ALL_FOLDERS = "See all folders"
@@ -29,6 +39,8 @@ object Labels {
     fun late(ms: Long) = "${com.kzhovn.todoapp.repository.shortAge(ms, "under a day")} late"
 
     // Focus mode
+    const val FOCUS = "Focus"
+    const val FOCUS_DONE = "Done!"
     const val FOCUS_ON = "Focus on"
     const val FOCUS_NEXT_OR_FINISH = "Focus on the next task, or finish?"
     const val IM_DONE = "I'm done"
@@ -87,6 +99,7 @@ object Labels {
     const val WAITING = "Waiting"
     // A waiting item's section in the editor, and its actions.
     const val CHECK_IN = "Check in"
+    const val NEXT_CHECK_IN = "Next check-in"
     const val RESOLVES_ON = "Resolves on"
     const val STILL_WAITING = "Still waiting"
     const val RESOLVED = "Resolved"
@@ -180,6 +193,15 @@ object Labels {
 
     // A project whose subtasks are all done
     fun allSubtasksDone(project: String) = "“$project”: all subtasks done"
+    // The task pickers' sections (nearbyFirst) and their search field.
+    const val BESIDE_THIS = "Beside this"
+    fun inFolder(folder: String) = "In $folder"
+    const val ADDED_RECENTLY = "Added recently"
+    const val EVERYTHING_ELSE = "Everything else"
+    const val SEARCH_ALL_TASKS = "Search all tasks"
+    // A due date a prerequisite takes from the task waiting on it ("due Fri, for “Trip”"), and the editor's line saying so.
+    fun dueFor(title: String) = ", for “${if (title.length > 30) title.take(29).trimEnd() + "…" else title}”"
+    fun dueFromWaiting(due: String, title: String) = "${due.replaceFirstChar { it.uppercase() }}: “$title” waits on this"
     const val IS_PROJECT_COMPLETE = "Is the project complete?"
     const val COMPLETE_PROJECT = "Complete project"
     const val ADD_NEXT = "Add next"
@@ -195,6 +217,37 @@ object Labels {
     const val COMPLETE_LIST = "Complete list"
     const val MOVE_TO_NEW_LIST = "Move them to a new list"
     const val COMPLETE_THEM_TOO = "Complete them too"
+    // Templates (see Templates.kt)
+    const val TEMPLATES = "Templates"
+    const val NEW_TEMPLATE = "+ New template"
+    const val USE = "Use"
+    const val FROM_TEMPLATE = "From template…"
+    const val SAVE_AS_TEMPLATE = "Save as template"
+    const val TEMPLATE_BANNER = "Template: not in your lists"
+    const val UPDATE_TEMPLATE = "Update template…"
+    const val UPDATE_TEMPLATE_HINT = "What's different in this list. Ticked ones go into the template."
+    const val TEMPLATE_UNCHANGED = "This list matches its template."
+    const val UPDATE_TEMPLATE_GO = "Update template"
+    const val JUST_THIS_TIME = "just this time"
+    const val NO_TEMPLATES = "No templates yet. Save one from a list's editor, or make one with + New template."
+    fun fromTemplate(title: String) = "From template $title"
+    fun updateTemplateTitle(title: String) = "Update “$title”"
+    fun savedAsTemplate(title: String) = "Saved “$title” as a template"
+    // "Checklist · 24 items · Personal": a template on the Templates screen and in the picker.
+    fun templateSummary(type: TaskType, count: Int, folder: String?) = listOfNotNull(
+        TYPES.firstOrNull { it.first == type }?.second ?: "Task",
+        count.takeIf { it > 0 }?.let { n -> "$n " + (if (type == TaskType.CHECKLIST) "item" else if (type == TaskType.PROJECT) "step" else if (type == TaskType.FOLDER) "task" else "subtask") + if (n == 1) "" else "s" },
+        folder
+    ).joinToString(" · ")
+
+    // A checklist's sections (Clothes, Winter)
+    const val ADD_SECTION = "+ Add section"
+    const val SECTION_NAME = "Section name"
+    const val RENAME = "Rename"
+    const val DELETE_SECTION = "Delete section"
+    fun addTo(section: String) = "+ Add to $section"
+    fun checkAllIn(section: String) = "Check all in $section"
+    fun uncheckAllIn(section: String) = "Uncheck all in $section"
     fun uncheckedItems(count: Int) = "$count item${if (count == 1) " isn't" else "s aren't"} checked."
     fun clearChecked(count: Int) = "Delete $count checked item${if (count == 1) "" else "s"}?"
 
@@ -229,10 +282,19 @@ object Labels {
                     "$every · ${NTH_NAMES.first { it.first == selection.monthlyNth }.second} ${WEEKDAY_NAMES[selection.monthlyWeekday]}"
                 else -> every
             }
-            val ends = selection.until?.let { " · until " + java.text.SimpleDateFormat("MMM d", java.util.Locale.US).format(java.util.Date(it)) }
+            val ends = selection.until?.let { " · until " + monthDay(it) }
                 ?: selection.count?.let { " · ${plural(it, "time")}" }.orEmpty()
             rule + ends
         }
+    }
+
+    // The Check in pill: "Every 3 days", "Weekly", "Every 2 weeks" (whole weeks read as weeks). app.js's
+    // checkInLabel says the same while the popover is open.
+    fun checkIn(days: Int): String = when {
+        days == 1 -> "Every day"
+        days == 7 -> "Weekly"
+        days % 7 == 0 -> "Every ${days / 7} weeks"
+        else -> "Every $days days"
     }
 
     fun unitName(unit: RecurrenceUnit) = when (unit) { RecurrenceUnit.DAY -> "day"; RecurrenceUnit.WEEK -> "week"; RecurrenceUnit.MONTH -> "month" }

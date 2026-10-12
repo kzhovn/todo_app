@@ -7,20 +7,25 @@ import kotlinx.serialization.Serializable
 
 // A PROJECT is completed as a whole once its subtasks are done; it has no checkbox of its own and
 // never shows in Active/Doing (its subtasks do). A WAITING item is something you're blocked on but
-// don't do yourself (someone getting back to you, a date): see Waiting.kt.
-enum class TaskType { TASK, FOLDER, PROJECT, CHECKLIST, WAITING }
+// don't do yourself (someone getting back to you, a date): see Waiting.kt. A SECTION groups a checklist's
+// items (Clothes, Winter in a packing list): a folder inside the checklist, see Checklist.kt.
+enum class TaskType { TASK, FOLDER, PROJECT, CHECKLIST, WAITING, SECTION }
 
 // Something you do and tick off: a task or a checklist. Not a folder, nor a project (which completes
 // by its steps). What lists, pickers and bulk edit deal in.
 val TaskType.isDoable: Boolean get() = this == TaskType.TASK || this == TaskType.CHECKLIST
 
 // What can be a prerequisite or wait on one: anything that gets done, projects included (a project is
-// done when it's completed, and one waiting on something holds back its steps). Not a folder.
-val TaskType.isLinkable: Boolean get() = this != TaskType.FOLDER
+// done when it's completed, and one waiting on something holds back its steps). Not a folder or section.
+val TaskType.isLinkable: Boolean get() = !isContainer
+
+// Holds tasks but is never done itself, nor dated: a folder, or a checklist's section. Counts, searches
+// and "open subtasks" skip them.
+val TaskType.isContainer: Boolean get() = this == TaskType.FOLDER || this == TaskType.SECTION
 
 enum class RecurrenceType { RRULE, AFTER_COMPLETION }
 
-const val BACKBURNER_AFTER = 30L * 24 * 60 * 60 * 1000
+const val BACKBURNER_AFTER = 30 * DAY_MS
 
 @Serializable
 @Entity(tableName = "tasks")
@@ -72,7 +77,13 @@ data class Task(
     @ColumnInfo(defaultValue = "0") val remindAtStart: Boolean = false,
     val remindAt: Long? = null,
     // Waiting items: days between check-ins (null: DEFAULT_CHECK_IN_DAYS). The next check-in is startDate.
-    val checkInDays: Int? = null
+    val checkInDays: Int? = null,
+    // Part of a template (the kept version of a packing list, say): set on it and everything under it, which
+    // keeps it out of every list (see Templates.kt).
+    @ColumnInfo(defaultValue = "0") val isTemplate: Boolean = false,
+    // In a list made from a template: the template task this one was copied from, so the two can be compared
+    // (templateChanges). 0: added to the list "just this time", never offered to the template.
+    val fromTemplateId: Long? = null
 ) {
     fun isExpired(now: Long): Boolean = expiresAt != null && expiresAt <= now
 
@@ -84,11 +95,20 @@ data class Task(
     // every write path runs tasks through it.
     fun starRule(): Task = if (isMaybe && (isStarred || isHighPriority)) copy(isStarred = false, isHighPriority = false) else this
 
-    // What a type can't carry. A folder can't be done, so it has no due date, repeat, reminder or timer
-    // (a due date would keep scheduling a reminder); a waiting item never shows in Doing or Active, so it
-    // has no star or priority.
+    // The star button, everywhere: starring a maybe makes it a normal, starred task.
+    fun toggledStar(): Task = copy(isStarred = !isStarred, isMaybe = isMaybe && isStarred)
+
+    // What a type can't carry. A folder can't be done, so it has no due date, repeat, reminders or timer;
+    // a waiting item never shows in Doing or Active, so it has no star or priority.
     fun typeRule(): Task = when (type) {
-        TaskType.FOLDER -> copy(dueDate = null, recurrenceType = null, recurrenceRule = null, reminderOffsetMinutes = null, durationMinutes = null)
+        TaskType.FOLDER -> copy(
+            dueDate = null, recurrenceType = null, recurrenceRule = null, reminderOffsetMinutes = null, remindAtStart = false, remindAt = null, durationMinutes = null
+        )
+        // Just a heading for items: nothing of a task's own.
+        TaskType.SECTION -> copy(
+            startDate = null, dueDate = null, recurrenceType = null, recurrenceRule = null, reminderOffsetMinutes = null, remindAtStart = false, remindAt = null,
+            durationMinutes = null, isStarred = false, isHighPriority = false, isMaybe = false, pinnedAt = null, expiresAt = null
+        )
         TaskType.WAITING -> copy(isStarred = false, isHighPriority = false, isMaybe = false)
         else -> this
     }

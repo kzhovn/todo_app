@@ -14,10 +14,13 @@ import com.kzhovn.todoapp.recurrence.toTaskFields
 import java.util.Calendar
 
 // Everything a quick add asks for. `task` is null when the text only adds items to an existing
-// checklist ("groceries: milk, eggs"); otherwise `items` are the new checklist's ("packing [a, b]").
+// checklist ("groceries: milk, eggs"); otherwise `items` are the new checklist's ("packing [a, b]"), and
+// `sections` its sections with theirs ("packing [passport; clothes: socks, shirt; winter: coat]").
 data class QuickAdd(
     val task: Task?,
     val items: List<String> = emptyList(),
+    val sections: List<Pair<String, List<String>>> = emptyList(),
+    val fromTemplate: Long? = null, // "use packing": a list from this template, `task` its title and dates
     val intoChecklist: Long? = null,
     val contextIds: Set<Long> = emptySet(),
     val pin: Boolean = false,
@@ -148,7 +151,8 @@ object QuickAddParser {
             ((m.groupValues[1].toDoubleOrNull() ?: 0.0) * 60 + (m.groupValues[2].toIntOrNull() ?: 0)).toInt().takeIf { it > 0 }
         }
 
-        val items = itemsRegex.matchEntire(text)?.let { m -> text = m.groupValues[1]; splitItems(m.groupValues[2]) }
+        val groups = itemsRegex.matchEntire(text)?.let { m -> text = m.groupValues[1]; itemGroups(m.groupValues[2]) }
+        val items = groups?.filter { it.first == null }?.flatMap { it.second }
         durationRegex.matchEntire(text)?.let { m ->
             val hours = when (val h = m.groupValues[1].lowercase()) {
                 "" -> 0.0
@@ -166,7 +170,7 @@ object QuickAddParser {
         if (recurrenceType == RecurrenceType.RRULE && startDate == null) startDate = firstOccurrence(recurrenceRule!!, now)
         val task = Task(
             title = text,
-            type = if (items != null) TaskType.CHECKLIST else if (waiting) TaskType.WAITING else TaskType.TASK,
+            type = if (groups != null) TaskType.CHECKLIST else if (waiting) TaskType.WAITING else TaskType.TASK,
             startDate = startDate,
             dueDate = dueDate,
             isMaybe = isMaybe,
@@ -180,8 +184,17 @@ object QuickAddParser {
             remindAtStart = remindStart && startDate != null,
             remindAt = remindAt
         )
-        return QuickAdd(task, items = items.orEmpty(), pin = "p" in flags, focus = "f" in flags)
+        val sections = groups.orEmpty().mapNotNull { (name, its) -> name?.let { it to its } }
+        return QuickAdd(task, items = items.orEmpty(), sections = sections, pin = "p" in flags, focus = "f" in flags)
     }
+
+    // "passport; clothes: socks, shirt; winter: coat": a ";" starts a group, and "name:" opening one makes it
+    // a section (null: loose items).
+    private fun itemGroups(text: String): List<Pair<String?, List<String>>> = text.split(';').map { group ->
+        sectionRegex.matchEntire(group.trim())?.let { m -> m.groupValues[1].trim() to splitItems(m.groupValues[2]) } ?: (null to splitItems(group))
+    }
+
+    private val sectionRegex = Regex("^([^,:]+):\\s*(.*)$", RegexOption.DOT_MATCHES_ALL)
 
     private fun unit(text: String) = when (text.lowercase().first()) { 'w' -> RecurrenceUnit.WEEK; 'm' -> RecurrenceUnit.MONTH; else -> RecurrenceUnit.DAY }
 
@@ -278,15 +291,22 @@ object QuickAddParser {
             monthDay != null -> {
                 val month = MONTHS.indexOf(monthDay.groupValues[1].ifEmpty { monthDay.groupValues[4] }.take(3)).takeIf { it >= 0 } ?: return null
                 val day = monthDay.groupValues[2].ifEmpty { monthDay.groupValues[3] }.toInt()
-                // The next such date: "oct 12" in November is next year's.
-                val date = Calendar.getInstance().apply { timeInMillis = now; set(Calendar.MONTH, month); set(Calendar.DAY_OF_MONTH, day) }.startOfDay()
-                if (date < cal.startOfDay()) Calendar.getInstance().apply { timeInMillis = date; add(Calendar.YEAR, 1) }.timeInMillis else date
+                // The next such date: "oct 12" in November is next year's. One that doesn't exist ("feb 30") is none.
+                val thisYear = cal.get(Calendar.YEAR)
+                strictDate(thisYear, month, day, now)?.takeIf { it >= cal.startOfDay() } ?: strictDate(thisYear + 1, month, day, now)
             }
             else -> runCatching {
                 val (year, month, day) = word.split("-").map { it.toInt() }
-                Calendar.getInstance().apply { set(year, month - 1, day) }.startOfDay()
+                strictDate(year, month - 1, day, now)
             }.getOrNull()
         }
+    }
+
+    // That day's start (month 0-based, as Calendar counts), or null if it doesn't exist: Calendar alone
+    // would roll Feb 30 into March.
+    private fun strictDate(year: Int, month: Int, day: Int, now: Long): Long? {
+        runCatching { java.time.LocalDate.of(year, month + 1, day) }.getOrNull() ?: return null
+        return Calendar.getInstance().apply { timeInMillis = now; set(year, month, day) }.startOfDay()
     }
 
     private val MONTHS = listOf("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")

@@ -115,4 +115,14 @@ class RecurrenceEngineTest {
         assert(!subCopy.isComplete)
         assertEquals(11 * day + (next.startDate!! - 10 * day), subCopy.startDate)
     }
+
+    @Test
+    fun `completing a schedule before its start moves on past the start, not onto it`() {
+        val start = 1_800_000_000_000L
+        val task = Task(id = 1, title = "Daily", startDate = start, recurrenceType = RecurrenceType.RRULE, recurrenceRule = "FREQ=DAILY")
+
+        val next = RecurrenceEngine.nextInstance(task, completedAt = start - TimeUnit.DAYS.toMillis(2))
+
+        assertEquals(start + TimeUnit.DAYS.toMillis(1), next?.startDate)
+    }
 }

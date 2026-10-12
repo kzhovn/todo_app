@@ -2,13 +2,15 @@ package com.kzhovn.todoapp.ui
 
 import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.dueOutsideMode
+import com.kzhovn.todoapp.data.DueDates
+import com.kzhovn.todoapp.data.CompleteQuestion
 import com.kzhovn.todoapp.data.inMode
 import com.kzhovn.todoapp.data.modeFolder
-import com.kzhovn.todoapp.data.resolveEffective
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.Job
 import com.kzhovn.todoapp.repository.urgentFirst
+import com.kzhovn.todoapp.repository.computeActiveIgnoringContexts
 import com.kzhovn.todoapp.data.stalledProjects
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -17,11 +19,9 @@ import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.repository.ContextRepository
 import com.kzhovn.todoapp.repository.TaskRepository
-import com.kzhovn.todoapp.repository.dayOfWeekMask
 import com.kzhovn.todoapp.repository.filterDoing
-import com.kzhovn.todoapp.data.stillWaiting
 import com.kzhovn.todoapp.data.waitingToCheck
-import com.kzhovn.todoapp.repository.minuteOfDay
+import com.kzhovn.todoapp.data.waitingBlocks
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -61,6 +61,10 @@ class TaskListViewModel(
 
     private val _allById = MutableStateFlow<Map<Long, Task>>(emptyMap())
     val allById: StateFlow<Map<Long, Task>> = _allById
+    private val _dues = MutableStateFlow(DueDates(emptyList(), emptyList()))
+    val dues: StateFlow<DueDates> = _dues
+    private val _workable = MutableStateFlow<Set<Long>>(emptySet())
+    val workable: StateFlow<Set<Long>> = _workable // see dimmedInTree
 
     private val _contextsByTaskId = MutableStateFlow<Map<Long, Set<Long>>>(emptyMap())
     val contextsByTaskId: StateFlow<Map<Long, Set<Long>>> = _contextsByTaskId
@@ -83,12 +87,11 @@ class TaskListViewModel(
     private val _waitingBlocks = MutableStateFlow<Map<Long, Int>>(emptyMap())
     val waitingBlocks: StateFlow<Map<Long, Int>> = _waitingBlocks
 
-    fun stillWaiting(taskId: Long) {
-        viewModelScope.launch {
-            _allById.value[taskId]?.let { repository.updateTask(stillWaiting(it, clock())) }
-            reload()
-        }
-    }
+    fun stillWaiting(taskId: Long) = act { repository.stillWaiting(taskId, clock()) }
+
+    // A change, then the list again. (Room's invalidation also reloads it; the explicit one keeps a list
+    // without that feed, as in the tests, current.)
+    private fun act(block: suspend () -> Unit) = viewModelScope.launch { block(); reload() }
 
     fun load(mode: TaskListMode) {
         shown = Shown.Tab(mode)
@@ -111,8 +114,7 @@ class TaskListViewModel(
         }
     }
 
-    private suspend fun active(all: List<Task>, now: Long) =
-        repository.getActiveTasksFrom(all, _contextsByTaskId.value, now, minuteOfDay(now), dayOfWeekMask(now))
+    private suspend fun active(all: List<Task>, now: Long) = repository.getActiveTasksFrom(all, _contextsByTaskId.value, now)
 
     private suspend fun loadTab(mode: TaskListMode) {
         val now = clock()
@@ -122,19 +124,15 @@ class TaskListViewModel(
         val folder = _mode.value?.id
         _dueOutside.value = emptyList()
         _waiting.value = if (mode == TaskListMode.DOING) waitingToCheck(all, now).filter { inMode(it, folder, byId) } else emptyList()
-        if (_waiting.value.isNotEmpty()) {
-            val ids = _waiting.value.map { it.id }.toSet()
-            _waitingBlocks.value = repository.getAllDependencyEdges().filter { it.dependsOnTaskId in ids && byId[it.taskId]?.isComplete == false }
-                .groupingBy { it.dependsOnTaskId }.eachCount()
-        }
+        if (_waiting.value.isNotEmpty()) _waitingBlocks.value = waitingBlocks(_waiting.value, repository.getAllDependencyEdges(), byId)
         _tasks.value = when (mode) {
             // The tree roots itself at the mode's folder (OutlinerScreen's rootId).
             TaskListMode.ALL -> all
             // Overdue and due today first, like Doing (each folder section keeps that order).
-            TaskListMode.ACTIVE -> urgentFirst(active(all, now).filter { inMode(it, folder, byId) }, now, byId, _contextsByTaskId.value)
+            TaskListMode.ACTIVE -> urgentFirst(active(all, now).filter { inMode(it, folder, byId) }, now, _dues.value)
             TaskListMode.DOING -> {
-                val doing = filterDoing(active(all, now), now, byId, _contextsByTaskId.value)
-                _dueOutside.value = dueOutsideMode(doing, folder, byId, now) { resolveEffective(it, byId, _contextsByTaskId.value).effectiveDueDate }
+                val doing = filterDoing(active(all, now), now, _dues.value)
+                _dueOutside.value = dueOutsideMode(doing, folder, byId, now, _dues.value)
                 doing.filter { inMode(it, folder, byId) }
             }
         }
@@ -144,19 +142,9 @@ class TaskListViewModel(
     private val _stalledProjects = MutableStateFlow<List<Task>>(emptyList())
     val stalledProjects: StateFlow<List<Task>> = _stalledProjects
 
-    fun completeProject(projectId: Long) {
-        viewModelScope.launch {
-            repository.markComplete(projectId, clock())
-            reload()
-        }
-    }
+    fun completeProject(projectId: Long) = act { repository.markComplete(projectId, clock()) }
 
-    fun move(taskId: Long, anchorId: Long, after: Boolean) {
-        viewModelScope.launch {
-            repository.moveNextTo(taskId, anchorId, after)
-            reload()
-        }
-    }
+    fun move(taskId: Long, anchorId: Long, after: Boolean) = act { repository.moveNextTo(taskId, anchorId, after) }
 
     private suspend fun refreshSubtaskCounts(): List<Task> {
         repository.ensureFolderColors()
@@ -164,64 +152,29 @@ class TaskListViewModel(
         _stalledProjects.value = stalledProjects(all)
         _subtaskCounts.value = subtaskCounts(all)
         _allById.value = all.associateBy { it.id }
+        val edges = repository.getAllDependencyEdges()
+        _dues.value = DueDates(all, edges)
+        _workable.value = computeActiveIgnoringContexts(all, edges, clock()).map { it.id }.toSet()
         _mode.value = modeFolder(modeFolderId(), _allById.value)
         _contextsByTaskId.value = repository.getAllTaskContexts()
         _allContexts.value = contextRepository.getAllContexts().associateBy { it.id }
         return all
     }
 
-    fun toggleStar(taskId: Long) {
+    fun toggleStar(taskId: Long) = act { repository.toggleStar(taskId) }
+
+    fun snooze(taskId: Long, until: Long) = act { repository.snooze(taskId, until, clock()) }
+
+    fun reparent(taskId: Long, newParentId: Long?) = act { repository.reparent(taskId, newParentId) }
+
+    // Open subtasks are asked about first (onNeedsDecision); otherwise it's ticked, or unticked, at once.
+    fun requestComplete(taskId: Long, onNeedsDecision: (Long, CompleteQuestion) -> Unit) {
         viewModelScope.launch {
-            repository.toggleStar(taskId)
-            reload()
+            val question = repository.completeQuestion(taskId)
+            if (question != null) onNeedsDecision(taskId, question) else act { repository.toggleComplete(taskId, clock()) }
         }
     }
 
-    fun snooze(taskId: Long, until: Long) {
-        viewModelScope.launch {
-            repository.snooze(taskId, until, clock())
-            reload()
-        }
-    }
-
-    fun reparent(taskId: Long, newParentId: Long?) {
-        viewModelScope.launch {
-            repository.reparent(taskId, newParentId)
-            reload()
-        }
-    }
-
-    fun requestComplete(taskId: Long, onNeedsDecision: (Long, Int) -> Unit) {
-        viewModelScope.launch {
-            val task = repository.getTask(taskId) ?: return@launch
-            if (task.isComplete) {
-                repository.toggleComplete(taskId, clock())
-                reload()
-                return@launch
-            }
-            val activeDescendants = repository.countActiveDescendants(taskId)
-            if (activeDescendants > 0) {
-                onNeedsDecision(taskId, activeDescendants)
-            } else {
-                repository.toggleComplete(taskId, clock())
-                reload()
-            }
-        }
-    }
-
-    fun completeWithSubtasks(taskId: Long) {
-        viewModelScope.launch {
-            repository.completeWithDescendants(taskId, clock())
-            reload()
-        }
-    }
-
-    fun completeAndPromoteSubtasks(taskId: Long) {
-        viewModelScope.launch {
-            repository.promoteChildrenToTopLevel(taskId)
-            repository.toggleComplete(taskId, clock())
-            reload()
-        }
-    }
-
+    // The answer to that question (planCompleteChoosing).
+    fun completeChoosing(taskId: Long, moveOut: Boolean) = act { repository.completeChoosing(taskId, moveOut, clock()) }
 }

@@ -91,4 +91,10 @@
 /* Notes: a mark on rows that have one; the start of it on the focus card. */
 .rb-notes-icon { icon-size: 13px; color: #8A7A5C; padding: 0 4px; }
 .rb-focus-notes { font-size: 12px; color: #2B2318; background-color: #F7F4EE; border: 1px solid #DED5C1; border-radius: 7px; padding: 6px 9px; max-width: 360px; }
-
+/* The open-subtasks question, at the top of the popup. */
+.rb-question { background-color: #2B2318; border-radius: 8px; margin: 0 2px 6px; padding: 10px 12px; spacing: 8px; }
+.rb-question-text { color: #F7F4EE; font-size: 13px; }
+.rb-question-actions { spacing: 6px; }
+.rb-question .rb-btn { color: #F7F4EE; border-color: #5A5040; }
+.rb-question .rb-btn-primary { color: #fff; border-color: #2B4C7E; }
+.rb-section { font-size: 11px; font-weight: bold; color: #8A7A5C; padding: 6px 0 2px 14px; }

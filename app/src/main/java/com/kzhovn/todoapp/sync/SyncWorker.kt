@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.sync
 
+import com.kzhovn.todoapp.data.timeText
 import android.content.Context
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -29,9 +30,9 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         private const val PERIODIC = "sync-periodic"
         private const val NOW = "sync-now"
         private const val KEY_PERIODIC = "periodic"
-        private const val PERIOD_MINUTES = 2L
+        private const val PERIOD_MINUTES = 5L
 
-        // PeriodicWorkRequest can't go below 15 minutes, so the 2-minute cadence is a self-renewing
+        // PeriodicWorkRequest can't go below 15 minutes, so the 5-minute cadence is a self-renewing
         // one-time chain. Doze still defers it while the phone is idle.
         fun ensurePeriodic(context: Context) = enqueue(context, PERIODIC, PERIOD_MINUTES, ExistingWorkPolicy.KEEP)
 
@@ -73,7 +74,7 @@ object SyncSettings {
     fun status(context: Context): String? = prefs(context).getString("status", null)
 
     fun recordResult(context: Context, outcome: kotlin.Result<Int>) {
-        val time = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date())
+        val time = timeText(System.currentTimeMillis())
         val text = outcome.fold({ "Last synced $time ($it changes received)" }, { "Sync failed at $time: ${it.message ?: it.javaClass.simpleName}" })
         prefs(context).edit().putString("status", text).apply()
     }

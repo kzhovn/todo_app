@@ -1,11 +1,11 @@
 package com.kzhovn.todoapp.repository
 
+import com.kzhovn.todoapp.data.DueDates
 import com.kzhovn.todoapp.data.Task
-import com.kzhovn.todoapp.data.resolveEffective
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-// filterDoing and resolveEffective are each well-covered in isolation elsewhere; this proves the
+// filterDoing and DueDates are each well-covered in isolation elsewhere; this proves the
 // two actually compose the way the app wires them together in TaskListViewModel/TodoWidget — a
 // subtask that inherits a due date from its parent shows up in Doing because of that inherited
 // value, not its own (null) dueDate.
@@ -18,9 +18,7 @@ class DoingFilterInheritanceTest {
         val child = Task(id = 2, title = "Child", parentId = 1, dueDate = null)
         val allById = mapOf(1L to parent, 2L to child)
 
-        val result = filterDoing(listOf(child), now) {
-            resolveEffective(it, allById, emptyMap()).effectiveDueDate
-        }
+        val result = filterDoing(listOf(child), now, DueDates(allById.values, emptyList()))
 
         assertEquals(listOf("Child"), result.map { it.title })
     }
@@ -32,9 +30,7 @@ class DoingFilterInheritanceTest {
         val child = Task(id = 2, title = "Child", parentId = 1, dueDate = null)
         val allById = mapOf(1L to parent, 2L to child)
 
-        val result = filterDoing(listOf(child), now) {
-            resolveEffective(it, allById, emptyMap()).effectiveDueDate
-        }
+        val result = filterDoing(listOf(child), now, DueDates(allById.values, emptyList()))
 
         assertEquals(emptyList<Task>(), result)
     }

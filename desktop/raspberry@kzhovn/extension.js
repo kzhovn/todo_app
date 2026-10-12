@@ -1,7 +1,7 @@
 // The Raspberry tray: the phone widget's Doing/Active/All lists in a top-bar popup, with the current
-// task (its pin, timer and any focus session, shared by every device) in the top bar. Rows come ready-made from the server's /api/tray (the widget's own rows), so
-// nothing here decides what's in Doing or how a row reads. See
-// docs/superpowers/specs/2026-09-27-desktop-tray-design.md.
+// task (its pin, timer and any focus session, shared by every device) in the top bar. Rows come
+// ready-made from the server's /api/tray (the widget's own rows), so nothing here decides what's in
+// Doing or how a row reads. See docs/superpowers/specs/2026-09-27-desktop-tray-design.md.
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
@@ -95,10 +95,10 @@ class Indicator extends PanelMenu.Button {
 
         const bar = new St.BoxLayout({style_class: 'panel-status-menu-box'});
         bar.add_child(new St.Icon({gicon: Gio.icon_new_for_string(`${extension.path}/raspberry.png`), style_class: 'rb-panel-icon'}));
-        // The pinned task's title; with nothing pinned, just the icon.
         // How many are in Doing: a small number beside the icon (none when Doing is empty).
         this._countLabel = new St.Label({style_class: 'rb-panel-count', y_align: Clutter.ActorAlign.CENTER, visible: false});
         bar.add_child(this._countLabel);
+        // The pinned task's title; with nothing pinned, just the icon.
         this._pinLabel = new St.Label({style_class: 'rb-panel-label', y_align: Clutter.ActorAlign.CENTER, visible: false});
         bar.add_child(this._pinLabel);
         this.add_child(bar);
@@ -115,6 +115,7 @@ class Indicator extends PanelMenu.Button {
                 this._refresh();
             } else {
                 this._countdownLabel = null;
+                this._asking = null; // a question left unanswered goes with the popup
                 this._popup.destroy_all_children();
             }
         });
@@ -224,6 +225,7 @@ class Indicator extends PanelMenu.Button {
             this._popup.add_child(new St.Label({style_class: 'rb-empty', text: `Put {"url": …, "token": …} in\n${CONFIG}`}));
             return;
         }
+        if (this._asking) this._popup.add_child(this._question());
         // A focus session, on every device: the popup is just it.
         if (this._state?.focus) {
             this._popup.add_child(this._focusView(this._state.focus, pinned));
@@ -425,7 +427,7 @@ class Indicator extends PanelMenu.Button {
     // the pin, which unpins it.
     _pinnedRow(pinned) {
         const row = new St.BoxLayout({style_class: 'rb-pinned'});
-        row.add_child(this._check(null, () => this._post(`/api/tasks/${pinned.id}/complete`)));
+        row.add_child(this._check(null, () => this._tick(pinned, `/api/tasks/${pinned.id}/complete`)));
         row.add_child(this._titleButton(pinned.title, () => this._open(`/tasks/${pinned.id}?mode=DOING`)));
         row.add_child(this._timerControls(pinned));
         // The pin: a click unpins; right-click opens its menu (focus, unpin) under the row.
@@ -491,7 +493,7 @@ class Indicator extends PanelMenu.Button {
                 timer.x_align = Clutter.ActorAlign.CENTER;
                 box.add_child(timer);
             }
-            actions.add_child(this._check(null, () => this._post('/api/focus/done')));
+            actions.add_child(this._check(null, () => this._tick(focus, '/api/focus/done')));
             actions.add_child(new St.Label({text: 'Done', style_class: 'rb-focus-sub', y_align: Clutter.ActorAlign.CENTER}));
             actions.add_child(new St.Widget({width: 18}));
             actions.add_child(this._button({label: 'Open', style_class: 'rb-btn'}, () => this._open('/focus')));
@@ -515,7 +517,7 @@ class Indicator extends PanelMenu.Button {
             const [done, total] = row.subtasks ? [row.subtasks.first, row.subtasks.second] : [0, 0];
             box.add_child(this._button({label: `${done}/${total}`, style_class: 'rb-count'}, toggle));
         } else {
-            box.add_child(this._check(row.due, () => this._post(`/api/tasks/${row.id}/complete`)));
+            box.add_child(this._check(row.due, () => this._tick(row, `/api/tasks/${row.id}/complete`)));
         }
         if (row.parentTitle) {
             box.add_child(this._button({label: `${cut(row.parentTitle, PARENT_CHARS)}:`, style_class: 'rb-parent'},
@@ -550,7 +552,12 @@ class Indicator extends PanelMenu.Button {
     _childRow(parent, child) {
         const box = new St.BoxLayout({style_class: 'rb-row rb-child', x_expand: true});
         box.add_child(new St.Widget({style_class: 'rb-bar', style: `background-color: ${hex(parent.barColor) ?? '#DED5C1'};`, y_expand: true}));
-        const check = this._check(null, () => this._post(`/api/tasks/${child.id}/toggle-item`));
+        // A checklist section's heading: just its name, over its items.
+        if (child.isSection) {
+            box.add_child(new St.Label({style_class: 'rb-section', text: child.title, y_align: Clutter.ActorAlign.CENTER}));
+            return box;
+        }
+        const check = this._check(null, () => this._tick(child, `/api/tasks/${child.id}/toggle-item`));
         check.add_style_class_name('rb-check-small');
         if (child.isComplete) {
             check.add_style_class_name('rb-check-done');
@@ -569,6 +576,35 @@ class Indicator extends PanelMenu.Button {
     _check(due, onClick) {
         const style = due === 'TODAY' ? 'rb-check rb-today' : due === 'OVERDUE' ? 'rb-check rb-overdue' : 'rb-check';
         return this._button({style_class: style, accessible_name: 'Complete'}, onClick);
+    }
+
+    // A checkbox: one with open subtasks (its subtaskQuestion, from the server) asks first, as the app does.
+    _tick(task, path) {
+        if (!task.subtaskQuestion) return this._post(path);
+        this._asking = {path, title: task.title, question: task.subtaskQuestion};
+        this._render();
+    }
+
+    // That question, at the top of the popup: complete them too, move them out (a checklist's unchecked
+    // items: to a new list), or cancel. Its wording comes from the server.
+    _question() {
+        const {path, title, question} = this._asking;
+        const {completeAll: all, moveOut, cancel} = question;
+        const box = new St.BoxLayout({style_class: 'rb-question', vertical: true});
+        const text = new St.Label({style_class: 'rb-question-text', text: `Complete “${cut(title, TOP_BAR_CHARS)}”? ${question.text}`});
+        text.clutter_text.line_wrap = true;
+        box.add_child(text);
+        const answer = choice => {
+            this._asking = null;
+            if (choice) this._post(`${path}?subtasks=${choice}`);
+            else this._render();
+        };
+        const buttons = new St.BoxLayout({style_class: 'rb-question-actions'});
+        buttons.add_child(this._button({label: all, style_class: 'rb-btn rb-btn-primary'}, () => answer('complete')));
+        buttons.add_child(this._button({label: moveOut, style_class: 'rb-btn'}, () => answer('promote')));
+        buttons.add_child(this._button({label: cancel, style_class: 'rb-btn'}, () => answer(null)));
+        box.add_child(buttons);
+        return box;
     }
 
     _titleButton(text, onClick) {

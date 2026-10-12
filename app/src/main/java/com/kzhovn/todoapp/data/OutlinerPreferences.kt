@@ -1,6 +1,7 @@
 package com.kzhovn.todoapp.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -10,29 +11,22 @@ private val Context.outlinerDataStore by preferencesDataStore(name = "outliner_p
 
 class OutlinerPreferences(private val context: Context) {
     private val collapsedKey = stringSetPreferencesKey("collapsed_folder_ids")
-
-    suspend fun setCollapsed(folderId: Long, collapsed: Boolean) {
-        context.outlinerDataStore.edit { prefs ->
-            val current = prefs[collapsedKey] ?: emptySet()
-            prefs[collapsedKey] = if (collapsed) current + folderId.toString() else current - folderId.toString()
-        }
-    }
-
     // Active's folded folder sections, kept apart from the All tree's folds (0 = the no-folder section).
     private val foldedSectionsKey = stringSetPreferencesKey("folded_active_sections")
 
-    suspend fun setSectionFolded(folderId: Long, folded: Boolean) {
+    suspend fun setCollapsed(folderId: Long, collapsed: Boolean) = set(collapsedKey, folderId, collapsed)
+    suspend fun collapsedIds(): Set<Long> = ids(collapsedKey)
+
+    suspend fun setSectionFolded(folderId: Long, folded: Boolean) = set(foldedSectionsKey, folderId, folded)
+    suspend fun foldedSectionIds(): Set<Long> = ids(foldedSectionsKey)
+
+    private suspend fun set(key: Preferences.Key<Set<String>>, id: Long, on: Boolean) {
         context.outlinerDataStore.edit { prefs ->
-            val current = prefs[foldedSectionsKey] ?: emptySet()
-            prefs[foldedSectionsKey] = if (folded) current + folderId.toString() else current - folderId.toString()
+            val current = prefs[key].orEmpty()
+            prefs[key] = if (on) current + id.toString() else current - id.toString()
         }
     }
 
-    suspend fun foldedSectionIds(): Set<Long> =
-        context.outlinerDataStore.data.first()[foldedSectionsKey]?.mapNotNull { it.toLongOrNull() }?.toSet() ?: emptySet()
-
-    suspend fun collapsedIds(): Set<Long> {
-        val prefs = context.outlinerDataStore.data.first()
-        return prefs[collapsedKey]?.mapNotNull { it.toLongOrNull() }?.toSet() ?: emptySet()
-    }
+    private suspend fun ids(key: Preferences.Key<Set<String>>): Set<Long> =
+        context.outlinerDataStore.data.first()[key]?.mapNotNull { it.toLongOrNull() }?.toSet().orEmpty()
 }

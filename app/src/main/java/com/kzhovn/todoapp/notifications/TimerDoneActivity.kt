@@ -29,17 +29,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.lifecycleScope
-import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.formatDuration
 import com.kzhovn.todoapp.ui.SelectablePill
+import com.kzhovn.todoapp.ui.CompleteAskActivity
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
-import kotlinx.coroutines.launch
 
 // "Time's up" for a timed task: is it done? Done completes it; Not yet asks how much more time and
 // runs the timer again for that long. Either answer reaches every device (the timer is on the task).
@@ -47,7 +45,6 @@ class TimerDoneActivity : ComponentActivity() {
     @OptIn(ExperimentalLayoutApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val app = application as TodoApp
         val taskId = intent.getLongExtra(EXTRA_TASK_ID, 0L)
         val title = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         TaskTimer.clearNotification(this)
@@ -71,12 +68,9 @@ class TimerDoneActivity : ComponentActivity() {
                         Row {
                             Button(
                                 onClick = {
-                                    lifecycleScope.launch {
-                                        // As the notification's Done: subtasks complete too.
-                                        app.repository.completeWithDescendants(taskId, System.currentTimeMillis())
-                                        PinnedTask.refresh(this@TimerDoneActivity)
-                                        finish()
-                                    }
+                                    // As the notification's Done: open subtasks are asked about first.
+                                    startActivity(CompleteAskActivity.intent(this@TimerDoneActivity, taskId))
+                                    finish()
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = LedgerAccent, contentColor = LedgerAccentInk)
                             ) { Text("Done") }

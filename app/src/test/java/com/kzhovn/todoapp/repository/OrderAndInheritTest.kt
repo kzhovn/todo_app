@@ -71,11 +71,12 @@ class OrderAndInheritTest {
         val grandchild = repository.createTask(Task(title = "own ctx", parentId = own))
         ContextRepository(db.taskContextDao()).setTaskContexts(grandchild, setOf(home))
 
-        val overridingDue = repository.descendantsOverriding(parent, setOf(InheritedField.DUE))
+        val (overridingDue, fields) = repository.overridingSubtasks(parent, setOf(InheritedField.DUE, InheritedField.ICON))
         assertEquals(listOf("own due"), overridingDue.map { it.title })
+        assertEquals(setOf(InheritedField.DUE), fields) // only what some subtask actually overrides
 
         repository.clearInherited(overridingDue, setOf(InheritedField.DUE))
         assertNull(repository.getTask(own)!!.dueDate)
-        assertEquals(listOf("own ctx"), repository.descendantsOverriding(parent, setOf(InheritedField.CONTEXTS)).map { it.title })
+        assertEquals(listOf("own ctx"), repository.overridingSubtasks(parent, setOf(InheritedField.CONTEXTS)).first.map { it.title })
     }
 }

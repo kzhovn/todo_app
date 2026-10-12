@@ -121,12 +121,12 @@ class TaskListViewModelTest {
     fun `requestComplete asks for a decision when active subtasks exist`() = runTest {
         val parentId = repository.createTask(Task(title = "Plan trip"))
         repository.createTask(Task(title = "Book flight", parentId = parentId))
-        var decision: Pair<Long, Int>? = null
+        var decision: Pair<Long, String>? = null
 
-        viewModel.requestComplete(parentId) { id, count -> decision = id to count }
+        viewModel.requestComplete(parentId) { id, question -> decision = id to question.text }
         advanceUntilIdle()
 
-        assertEquals(parentId to 1, decision)
+        assertEquals(parentId to "It has 1 active subtask.", decision)
         assertEquals(false, repository.getTask(parentId)!!.isComplete)
     }
 

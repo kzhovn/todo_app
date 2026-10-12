@@ -1,11 +1,31 @@
 package com.kzhovn.todoapp.server
 
-import com.kzhovn.todoapp.data.nextRollover
+import com.kzhovn.todoapp.data.isUnder
+import com.kzhovn.todoapp.widget.TodoWidgetPresenter
+import com.kzhovn.todoapp.quickadd.chipItems
+import com.kzhovn.todoapp.quickadd.withChips
+import com.kzhovn.todoapp.repository.clearInherited
+import com.kzhovn.todoapp.repository.openDescendants
+import com.kzhovn.todoapp.repository.planCompleteAndPromote
 import com.kzhovn.todoapp.quickadd.QuickAddParser
 import com.kzhovn.todoapp.data.completed
 import com.kzhovn.todoapp.data.CurrentTask
-import com.kzhovn.todoapp.data.DEFAULT_FOLDER
+import com.kzhovn.todoapp.data.defaultFolder
 import com.kzhovn.todoapp.data.dueOutsideMode
+import com.kzhovn.todoapp.data.DueDates
+import com.kzhovn.todoapp.repository.intoTemplates
+import com.kzhovn.todoapp.repository.TemplateChange
+import com.kzhovn.todoapp.repository.planSaveAsTemplate
+import com.kzhovn.todoapp.repository.planUpdateTemplate
+import com.kzhovn.todoapp.repository.planUseTemplate
+import com.kzhovn.todoapp.repository.templateChanges
+import com.kzhovn.todoapp.repository.templateRoots
+import com.kzhovn.todoapp.repository.templatesKeptFrom
+import com.kzhovn.todoapp.data.CompleteQuestion
+import com.kzhovn.todoapp.data.completeQuestion
+import com.kzhovn.todoapp.repository.planCompleteChoosing
+import com.kzhovn.todoapp.repository.planAddSection
+import com.kzhovn.todoapp.repository.planCheckAll
 import com.kzhovn.todoapp.data.inMode
 import com.kzhovn.todoapp.data.modeFolder
 import com.kzhovn.todoapp.quickadd.QuickAdd
@@ -17,11 +37,11 @@ import com.kzhovn.todoapp.data.searchTasks
 import com.kzhovn.todoapp.data.findFolder
 import com.kzhovn.todoapp.repository.blockerFor
 import com.kzhovn.todoapp.repository.applyTo
-import com.kzhovn.todoapp.repository.overridesInherited
 import com.kzhovn.todoapp.data.planMoveNextTo
+import com.kzhovn.todoapp.data.planMoveItem
 import com.kzhovn.todoapp.data.splitItems
-import com.kzhovn.todoapp.data.isChecklistItem
 import com.kzhovn.todoapp.repository.urgentFirst
+import com.kzhovn.todoapp.repository.computeActiveIgnoringContexts
 import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.DEFAULT_ROLLOVER_HOUR
@@ -29,6 +49,8 @@ import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.canDependOn
 import com.kzhovn.todoapp.data.canMoveUnder
+import com.kzhovn.todoapp.data.safeDependencies
+import com.kzhovn.todoapp.data.safeParent
 import com.kzhovn.todoapp.repository.TaskChanges
 import com.kzhovn.todoapp.repository.planClearChecked
 import com.kzhovn.todoapp.repository.planAddItems
@@ -48,7 +70,6 @@ import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.newId
-import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 import com.kzhovn.todoapp.data.folderColorAssignments
 import com.kzhovn.todoapp.data.stalledProjects
@@ -84,19 +105,33 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     fun get(id: Long): Task? = store.get(TASKS, id)?.takeUnless { it.isDeleted }?.toTask()?.takeUnless { it.isExpired(clock()) }
 
-    // Deletes "Today only" tasks whose day is over, so the phone drops them too even if it was
-    // offline at rollover. Reads already hide them; this makes it permanent.
-    // Deletes "Today only" tasks past their day, and resolves waiting items whose date has come.
+    // Resolves waiting items whose date has come, and deletes "Today only" tasks whose day is over (reads
+    // already hide them; this makes it permanent, so the phone drops them too even if it was offline).
     fun purgeExpired() = store.transaction {
         val now = clock()
         apply(planResolveWaiting(tasks(), contextIdsByTask(), now))
         // Expired tasks are hidden from tasks(), so this reads every live row.
-        apply(planPurgeExpired(store.all(TASKS).filterNot { it.isDeleted }.map { it.toTask() }, now))
+        apply(planPurgeExpired(decoded().tasks.values.toList(), now))
     }
 
     fun deletedTask(id: Long): Task? = store.get(TASKS, id)?.takeIf { it.isDeleted }?.toTask()
 
-    fun tasks(): List<Task> = clock().let { now -> decoded().let { d -> d.rows.mapNotNull { d.tasks[it.id]?.takeUnless { t -> t.isExpired(now) } } } }
+    // The tasks the lists, Discord and the top bar see: no templates (see Templates.kt), nothing expired.
+    fun tasks(): List<Task> = everything().filter { !it.isTemplate }
+
+    // What an editor shows around a task: a template's own tasks only exist in everything().
+    fun tasksAround(id: Long?): List<Task> = if (id?.let(::get)?.isTemplate == true) everything() else tasks()
+
+    // Templates (see Templates.kt in :core): the list of them, saving one, using one (returns the new list), and
+    // what a list made from one has changed, to send back.
+    fun templates(): List<Task> = templateRoots(everything())
+    fun saveAsTemplate(id: Long): Task? = planSaveAsTemplate(everything(), contextIdsByTask(), dependencyEdges(), id)?.let { (change, newId) -> apply(change); get(newId) }
+    fun useTemplate(id: Long): Task? = planUseTemplate(everything(), contextIdsByTask(), dependencyEdges(), id, clock())?.let { (change, newId) -> apply(change); get(newId) }
+    fun templateChanges(listId: Long): List<TemplateChange> = templateChanges(everything(), listId)
+    fun updateTemplate(listId: Long, chosen: Set<String>, oneOff: Set<String>) = apply(planUpdateTemplate(everything(), contextIdsByTask(), listId, chosen, oneOff, clock()))
+
+    // Templates included: what changes are planned against, and the template screens read.
+    fun everything(): List<Task> = clock().let { now -> decoded().let { d -> d.rows.mapNotNull { d.tasks[it.id]?.takeUnless { t -> t.isExpired(now) } } } }
 
     // Folder mode, shared by every device (see Store.setMode). A set here always wins: it's the newest.
     fun modeFolder(): Task? = modeFolder(store.modeFolderId(), tasks().associateBy { it.id })
@@ -111,24 +146,22 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun digestOn(): Boolean = store.digestOn()
     fun setDigestOn(on: Boolean) { if (on != digestOn()) store.setDigestOn(on, maxOf(clock(), store.digestSetAt() + 1)) }
 
-    // Where a task goes when nothing says: the mode's folder, or Personal.
-    fun defaultFolderId(): Long? = modeFolderId() ?: findFolder(DEFAULT_FOLDER)?.id
+    fun defaultFolderId(): Long? = defaultFolder(tasks(), store.modeFolderId())?.id
 
     // Active and Doing follow the mode unless given a folder; null means everything (the digest's).
     fun active(folderId: Long? = modeFolderId()): List<Task> {
-        val rows = liveRows()
         val all = tasks()
-        val contexts = contextsByTaskId(rows)
+        val byId = all.associateBy { it.id }
         val contextRows = store.all(CONTEXTS).filterNot { it.isDeleted }
         val active = computeActiveTasks(
             all = all,
-            contextsByTaskId = contexts,
+            contextsByTaskId = contextIdsByTask(),
             contexts = contextRows.map { it.toContext() },
             timeWindows = contextRows.flatMap { it.timeWindows() },
-            dependencies = rows.flatMap { row -> row.dependsOn().map { TaskDependency(row.id, it) } },
+            dependencies = dependencyEdges(),
             now = clock()
         )
-        return urgentFirst(if (folderId == null) active else active.filter { it.id in subtreeIds(folderId) }, clock(), all.associateBy { it.id }, contexts)
+        return urgentFirst(active.filter { inMode(it, folderId, byId) }, clock(), dueDates())
     }
 
     // Doing's quiet Waiting section: waiting items due a check-in (waitingToCheck), in the mode's folder.
@@ -150,30 +183,27 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     // Doing as if every context were on: the nudges' view, so a task that drops out of Doing overnight
     // (a work-hours context, being away from home) still counts as sitting there.
-    fun doingIgnoringContexts(): List<Task> = filterDoing(activeIgnoringContexts(), clock(), tasks().associateBy { it.id }, emptyMap())
+    fun doingIgnoringContexts(): List<Task> = filterDoing(activeIgnoringContexts(), clock(), dueDates())
 
-    private fun activeIgnoringContexts(): List<Task> = computeActiveTasks(
-        all = tasks(), contextsByTaskId = emptyMap(), contexts = emptyList(), timeWindows = emptyList(),
-        dependencies = liveRows().flatMap { row -> row.dependsOn().map { TaskDependency(row.id, it) } }, now = clock()
-    )
+    fun activeIgnoringContexts(): List<Task> = computeActiveIgnoringContexts(tasks(), dependencyEdges(), clock())
 
-    fun doing(folderId: Long? = modeFolderId()): List<Task> = filterDoing(active(folderId), clock(), tasks().associateBy { it.id }, contextIdsByTask())
+    fun doing(folderId: Long? = modeFolderId()): List<Task> = doing(active(folderId))
+
+    // Doing out of an Active list already worked out (a page needs both).
+    fun doing(active: List<Task>): List<Task> = filterDoing(active, clock(), dueDates())
 
     // Doing's line under the list in a mode: what's due today or overdue outside it.
-    fun dueOutsideMode(): List<Task> {
-        val byId = tasks().associateBy { it.id }
-        val contexts = contextIdsByTask()
-        return dueOutsideMode(doing(null), modeFolderId(), byId, clock()) { resolveEffective(it, byId, contexts).effectiveDueDate }
-    }
+    fun dueOutsideMode(): List<Task> = dueOutsideMode(doing(null), modeFolderId(), tasks().associateBy { it.id }, clock(), dueDates())
 
-    fun effectiveDueDate(task: Task): Long? = resolveEffective(task, tasks().associateBy { it.id }, contextIdsByTask()).effectiveDueDate
+    fun dueDates() = DueDates(tasks(), dependencyEdges())
+
+    fun effectiveDueDate(task: Task): Long? = dueDates().at(task)
 
     // Open tasks anywhere under the folder, for `.list <folder>`.
     fun openInFolder(folderId: Long): List<Task> {
-        val ids = subtreeIds(folderId)
         val all = tasks()
         val byId = all.associateBy { it.id }
-        return all.filter { it.id in ids && it.id != folderId && it.type.isDoable && !it.isComplete && !isChecklistItem(it, byId) }
+        return TodoWidgetPresenter.allOpen(all, byId).filter { isUnder(it, folderId, byId) }
     }
 
     fun folders(): List<Task> = tasks().filter { it.type == TaskType.FOLDER }
@@ -185,14 +215,14 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     // See planCreate (shared with the app). Always a new id.
     fun create(task: Task, contextIds: Set<Long> = emptySet()): Task = store.transaction {
-        val change = planCreate(tasks(), task.copy(id = 0), contextIds, clock())
+        val change = planCreate(everything(), task.copy(id = 0), contextIds, clock())
         apply(change)
         change.creates.single().first
     }
 
     fun update(id: Long, change: (Task) -> Task) {
         val row = store.get(TASKS, id)?.takeUnless { it.isDeleted } ?: return
-        writeTask(change(row.toTask()).withRules(clock()), row)
+        writeTask(change(row.toTask()).withRules(clock()), row.contextIds(), row.dependsOn())
     }
 
     // The current task: the pin, with its timer and focus session (see CurrentTask), shared by every device.
@@ -208,6 +238,9 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun addTime(minutes: Int) = current { CurrentTask.addTime(it, minutes, clock()) }
     fun focus(id: Long) = current { CurrentTask.focus(it, id, clock()) }
 
+    // A timed task's play button: its own length.
+    fun startTimer(id: Long) { get(id)?.durationMinutes?.let { startTimer(id, it) } }
+
     fun pinned(): Task? = pinnedTask(tasks())
 
     fun focusSession(): Task? = CurrentTask.focusSession(tasks())
@@ -220,29 +253,21 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         return add(planQuickAdd(text), folder, star = fromDoing)
     }
 
-    fun planQuickAdd(text: String): QuickAdd = planQuickAdd(text, tasks(), contexts(), clock(), rolloverHour())
+    fun planQuickAdd(text: String): QuickAdd = planQuickAdd(text, everything(), contexts(), clock(), rolloverHour())
 
     // With the phone quick add's chips (the top bar's): they beat what the text says, except that a
     // folder named in the text beats the Folder chip. A checklist on that chip makes the text its items.
     fun planQuickAdd(text: String, chips: QuickAddChips): QuickAdd {
         val chosen = chips.folderId?.let(::get)
-        if (chosen?.type == TaskType.CHECKLIST) return QuickAdd(task = null, items = splitItems(text), intoChecklist = chosen.id)
-        val add = planQuickAdd(text)
-        val task = add.task ?: return add
+        chipItems(text, chosen)?.let { return it }
         // A chip's date is one of quick add's words ("tomorrow", "next week"), read as quick add reads it.
         fun day(word: String?) = word?.takeIf { it.isNotBlank() }?.let { QuickAddParser.parse("-s $it", clock()).startDate }
-        return add.copy(task = task.copy(
-            isStarred = task.isStarred || chips.star,
-            startDate = day(chips.start) ?: task.startDate,
-            dueDate = day(chips.due) ?: task.dueDate,
-            parentId = task.parentId ?: chosen?.takeIf { it.type == TaskType.FOLDER }?.id,
-            expiresAt = if (chips.todayOnly) nextRollover(clock(), rolloverHour()) else task.expiresAt
-        ))
+        return planQuickAdd(text).withChips(chips.star, day(chips.start), day(chips.due), chips.todayOnly, chosen, clock(), rolloverHour())
     }
 
     // See planQuickAddWrite (shared with the app). Returns the task (the checklist, for items).
     fun add(add: QuickAdd, defaultParent: Long?, star: Boolean = false): Task? = store.transaction {
-        val (change, id) = planQuickAddWrite(tasks(), add, defaultParent, clock(), ::planQuickAdd, star)
+        val (change, id) = planQuickAddWrite(everything(), add, defaultParent, clock(), ::planQuickAdd, star, contextIdsByTask(), dependencyEdges())
         apply(change)
         id?.let(::get)
     }
@@ -251,6 +276,8 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     // `under` puts it there whatever the text says (a subtask, a next step); otherwise it goes in `folder`
     // unless the text names one. Returns the new task (null for nothing, or items into a checklist).
     fun addTyped(text: String, folder: Long? = null, under: Long? = null, star: Boolean = false): Task? {
+        // Under a checklist the text is its items.
+        if (under != null && get(under)?.type == TaskType.CHECKLIST) return null.also { addItems(under, text) }
         val add = planQuickAdd(text)
         val task = add.task ?: return null.also { add(add, defaultParent = folder) }
         return add(add.copy(task = if (under != null) task.copy(parentId = under) else task), defaultParent = folder, star = star)
@@ -258,7 +285,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     fun setStarred(id: Long, starred: Boolean) = update(id) { it.copy(isStarred = starred) }
 
-    fun toggleStar(id: Long) = update(id) { it.copy(isStarred = !it.isStarred) }
+    fun toggleStar(id: Long) = update(id) { it.toggledStar() }
 
     // Hidden from Active until then, like the app's snooze.
     fun snooze(id: Long, until: Long) = update(id) { it.copy(startDate = until) }
@@ -290,10 +317,8 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     // Like the phone's: the context goes, and so does every task's assignment to it.
     fun deleteContext(id: Long) = store.transaction {
         val now = clock()
-        liveRows().filter { id in it.contextIds() }.forEach { row ->
-            store.write(TASKS, row.id, JsonObject(taskFields(row.toTask(), row.contextIds() - id, row.dependsOn()) - DELETED_AT), now)
-        }
-        store.write(CONTEXTS, id, JsonObject(mapOf(DELETED_AT to JsonPrimitive(now))), now)
+        liveRows().filter { id in it.contextIds() }.forEach { row -> writeTask(row.toTask(), row.contextIds() - id, row.dependsOn(), now) }
+        tombstone(CONTEXTS, id, now)
     }
 
     fun search(query: String, filters: SearchFilters): List<Task> = searchTasks(tasks(), contextIdsByTask(), query, filters)
@@ -302,38 +327,32 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     fun dependencyEdges(): List<TaskDependency> = liveRows().flatMap { row -> row.dependsOn().map { TaskDependency(row.id, it) } }
 
-    // The editor's save: the whole task plus its context and dependency sets. A parent or dependency
-    // that would make a loop, or points at nothing, is dropped rather than trusted from the form.
+    // The editor's save: the whole task plus its context and dependency sets, with links checked
+    // (safeParent, safeDependencies) rather than trusted from the form.
     fun edit(task: Task, contextIds: Set<Long>, dependsOn: Set<Long>) = store.transaction {
         val byId = tasks().associateBy { it.id }
         val current = byId[task.id] ?: return@transaction
-        val parentId = task.parentId.let { p -> if (p == null || (p in byId && canMoveUnder(task.id, p, byId))) p else current.parentId }
-        val folder = task.type == TaskType.FOLDER
+        val parentId = safeParent(task, current.parentId, byId)
         // withRules drops what the type can't carry (Task.typeRule).
         val saved = task.copy(
             parentId = parentId,
             // Lands at the end of a new sibling list, like reparent.
             position = if (parentId != current.parentId) null else task.position
         ).withRules(clock())
-        // A folder can't be completed, so it can't wait on anything.
-        val edges = dependencyEdges().filter { it.taskId != task.id }
-        val deps = if (folder) emptySet() else dependsOn.filterTo(mutableSetOf()) {
-            byId[it]?.type?.isLinkable == true && canDependOn(task.id, it, edges)
-        }
         val contexts = contexts().map { it.id }.toSet().let { known -> contextIds.filterTo(mutableSetOf()) { it in known } }
-        store.write(TASKS, task.id, JsonObject(taskFields(saved, contexts, deps) - DELETED_AT), clock())
+        writeTask(saved, contexts, safeDependencies(saved, dependsOn, byId, dependencyEdges()))
     }
 
-    // Moves a task under newParentId, at the end of its children, unless that would make a loop.
-    fun reparent(id: Long, newParentId: Long) {
+    // Moves a task under newParentId (null: the top level), at the end of its children, unless that would make a loop.
+    fun reparent(id: Long, newParentId: Long?) {
         val byId = tasks().associateBy { it.id }
-        if (newParentId !in byId || !canMoveUnder(id, newParentId, byId)) return
+        if (newParentId != null && (newParentId !in byId || !canMoveUnder(id, newParentId, byId))) return
         update(id) { it.copy(parentId = newParentId, position = null) }
     }
 
     // See planMoveNextTo (shared with the app's TaskRepository.moveNextTo).
     fun moveNextTo(id: Long, anchorId: Long, after: Boolean) = store.transaction {
-        val move = planMoveNextTo(tasks(), id, anchorId, after) ?: return@transaction
+        val move = planMoveItem(everything(), id, anchorId, after) ?: return@transaction
         move.positions.forEach { (taskId, position) -> update(taskId) { it.copy(parentId = move.parentId, position = position) } }
     }
 
@@ -360,76 +379,86 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         siblings.getOrNull(siblings.indexOf(task) + if (down) 1 else -1)?.let { moveNextTo(id, it.id, after = down) }
     }
 
-    // Subtasks that set their own value for one of these inherited fields, and so wouldn't follow
-    // a change to it on this task (see overridesInherited).
-    fun descendantsOverriding(id: Long, fields: Set<InheritedField>): List<Task> {
-        val rows = liveRows().associateBy { it.id }
-        return (subtreeIds(id) - id).mapNotNull { rows[it] }
-            .filter { row -> val d = row.toTask(); fields.any { overridesInherited(d, row.contextIds(), it) } }
-            .map { it.toTask() }
+    // What "Update subtasks too?" asks about: see overridingSubtasks.
+    fun overridingSubtasks(id: Long, changed: Set<InheritedField>): Pair<List<Task>, Set<InheritedField>> {
+        if (changed.isEmpty()) return emptyList<Task>() to emptySet()
+        val byId = tasks().associateBy { it.id }
+        return com.kzhovn.todoapp.repository.overridingSubtasks(byId.values.filter { isUnder(it, id, byId) }, contextIdsByTask(), changed)
     }
 
-    // Clears those fields on the given tasks, so they inherit from their ancestors again.
+    // Clears those fields on the given tasks (as stored now), so they inherit from their ancestors again.
     fun clearInherited(tasks: List<Task>, fields: Set<InheritedField>) = store.transaction {
         for (t in tasks) {
-            val row = store.get(TASKS, t.id) ?: continue
-            val cleared = row.toTask().let {
-                it.copy(
-                    startDate = it.startDate.takeUnless { InheritedField.START in fields },
-                    dueDate = it.dueDate.takeUnless { InheritedField.DUE in fields },
-                    icon = it.icon.takeUnless { InheritedField.ICON in fields }
-                )
-            }
-            val contexts = if (InheritedField.CONTEXTS in fields) emptySet() else row.contextIds()
-            store.write(TASKS, t.id, JsonObject(taskFields(cleared, contexts, row.dependsOn()) - DELETED_AT), clock())
+            val row = store.get(TASKS, t.id)?.takeUnless { it.isDeleted } ?: continue
+            writeTask(row.toTask().clearInherited(fields), if (InheritedField.CONTEXTS in fields) emptySet() else row.contextIds(), row.dependsOn())
         }
     }
 
     // Makes taskId wait for dependsOnId, unless that would create a dependency loop.
     fun addDependency(taskId: Long, dependsOnId: Long) = store.transaction {
-        val rows = liveRows()
-        val row = rows.firstOrNull { it.id == taskId } ?: return@transaction
-        val edges = rows.flatMap { r -> r.dependsOn().map { TaskDependency(r.id, it) } }
-        if (!canDependOn(taskId, dependsOnId, edges)) return@transaction
-        store.write(TASKS, taskId, JsonObject(taskFields(row.toTask(), row.contextIds(), row.dependsOn() + dependsOnId) - DELETED_AT), clock())
+        val row = liveRows().firstOrNull { it.id == taskId } ?: return@transaction
+        if (!canDependOn(taskId, dependsOnId, dependencyEdges())) return@transaction
+        writeTask(row.toTask(), row.contextIds(), row.dependsOn() + dependsOnId)
     }
 
-    // Carries out a change planned in :core (see TaskChanges), as the app's TaskRepository does.
-    private fun apply(changes: TaskChanges) = store.transaction {
-        val now = clock()
-        changes.creates.forEach { (task, contextIds) -> store.write(TASKS, task.id, taskFields(task, contextIds, emptySet()), now) }
+    // Carries out a change planned in :core (see TaskChanges), as the app's TaskRepository does: what's made or
+    // moved under a template becomes part of it (intoTemplates).
+    private fun apply(planned: TaskChanges, now: Long = clock()) = store.transaction {
+        val changes = planned.intoTemplates(everything().filter { it.isTemplate }.map { it.id }.toSet())
+        val links = changes.links.groupBy({ it.taskId }, { it.dependsOnTaskId })
+        changes.creates.forEach { (task, contextIds) -> store.write(TASKS, task.id, taskFields(task, contextIds, links[task.id].orEmpty()), now) }
         changes.updates.forEach { t -> update(t.id) { t } }
-        changes.deletes.forEach { tombstone(it, now) }
+        changes.deletes.forEach { tombstone(TASKS, it, now) }
     }
 
     // See planComplete (shared with the app).
-    fun complete(id: Long) = apply(planComplete(tasks(), contextIdsByTask(), id, clock()))
+    fun complete(id: Long) = apply(planComplete(everything(), contextIdsByTask(), id, clock()))
 
-    fun activeDescendantCount(id: Long): Int =
-        (subtreeIds(id) - id).mapNotNull(::get).count { it.type != TaskType.FOLDER && !it.isComplete }
+    fun activeDescendantCount(id: Long): Int = openDescendants(id, everything()).size
 
     fun removeDependency(taskId: Long, dependsOnId: Long) = store.transaction {
         val row = liveRows().firstOrNull { it.id == taskId } ?: return@transaction
-        store.write(TASKS, taskId, JsonObject(taskFields(row.toTask(), row.contextIds(), row.dependsOn() - dependsOnId) - DELETED_AT), clock())
+        writeTask(row.toTask(), row.contextIds(), row.dependsOn() - dependsOnId)
     }
 
     // Checklists; mirror TaskRepository's addItems, clearChecked, uncheckAll and completeChecklist.
     // See planAddItems (shared with the app): each item is read with quick add's syntax.
-    fun addItems(checklistId: Long, text: String) = apply(planAddItems(tasks(), checklistId, splitItems(text), clock(), ::planQuickAdd))
+    fun addItems(checklistId: Long, text: String) = apply(planAddItems(everything(), checklistId, splitItems(text), clock(), ::planQuickAdd))
 
     fun findChecklist(name: String): Task? = tasks().firstOrNull { it.type == TaskType.CHECKLIST && !it.isComplete && it.title.trim().equals(name.trim(), ignoreCase = true) }
 
-    fun clearChecked(checklistId: Long) = apply(planClearChecked(tasks(), checklistId))
+    // Returns the deletion's time, which restoreCleared takes to bring them back (null: nothing was checked).
+    fun clearChecked(checklistId: Long): Long? {
+        val change = planClearChecked(everything(), checklistId)
+        if (change.deletes.isEmpty()) return null
+        return clock().also { apply(change, it) }
+    }
 
-    fun uncheckAll(checklistId: Long) = apply(planUncheckAll(tasks(), checklistId))
+    // Undo for clearChecked: the items that went at `deletedAt`, with what was under them.
+    fun restoreCleared(checklistId: Long, deletedAt: Long) = store.transaction {
+        val holders = setOf(checklistId) + tasks().filter { it.parentId == checklistId && it.type == TaskType.SECTION }.map { it.id }
+        store.all(TASKS).filter { it.deletedAt == deletedAt && it.toTask().parentId in holders }.map { it.id }.forEach(::restore)
+    }
+
+    fun uncheckAll(checklistId: Long) = apply(planUncheckAll(everything(), checklistId))
+
+    // A checklist's sections: a new one at its end (planAddSection), and "Check all in Clothes" (planCheckAll).
+    fun addSection(checklistId: Long, title: String) = apply(planAddSection(everything(), checklistId, title.trim(), emptyList(), clock(), ::planQuickAdd))
+    fun checkAll(containerId: Long) = apply(planCheckAll(everything(), contextIdsByTask(), containerId, clock()))
 
     fun completeChecklist(checklistId: Long, moveUncheckedToNewList: Boolean) =
-        apply(planCompleteChecklist(tasks(), contextIdsByTask(), checklistId, moveUncheckedToNewList, clock()))
+        apply(planCompleteChecklist(everything(), contextIdsByTask(), checklistId, moveUncheckedToNewList, clock()))
 
-    fun completeWithDescendants(id: Long) = apply(planCompleteWithDescendants(tasks(), contextIdsByTask(), id, clock()))
+    fun completeWithDescendants(id: Long) = apply(planCompleteWithDescendants(everything(), contextIdsByTask(), id, clock()))
 
     // See planPromoteChildren (shared with the app).
-    fun promoteChildren(id: Long) = apply(planPromoteChildren(tasks(), id))
+    fun completeAndPromote(id: Long) = apply(planCompleteAndPromote(everything(), contextIdsByTask(), id, clock()))
+
+    // See planCompleteChoosing: the answer to completeQuestion.
+    fun completeChoosing(id: Long, moveOut: Boolean) = apply(planCompleteChoosing(everything(), contextIdsByTask(), id, moveOut, clock()))
+
+    // What completing it asks first, or null with no open subtasks.
+    fun completeQuestion(id: Long): CompleteQuestion? = get(id)?.let { completeQuestion(it, activeDescendantCount(id)) }
 
     // Open projects whose steps are all done: time to complete them or add the next step.
     fun stalled(): List<Task> = stalledProjects(tasks())
@@ -446,32 +475,38 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         }
     }
 
-    fun uncomplete(id: Long) = apply(planUncomplete(tasks(), id))
+    fun uncomplete(id: Long) = apply(planUncomplete(everything(), id))
 
     // Soft-deletes the whole subtree with one shared timestamp, which is how restore() knows which
     // descendants went down together (vs. ones deleted separately earlier).
+    // A folder's templates move to the top level instead of going with it (templatesKeptFrom).
     fun delete(id: Long) = store.transaction {
         if (get(id) == null) return@transaction
         val now = clock()
         val ids = subtreeIds(id)
-        liveRows().filter { it.id in ids }.forEach { tombstone(it.id, now) }
+        val all = everything()
+        val (moved, kept) = templatesKeptFrom(all.filter { it.id in ids }, all)
+        moved.forEach { t -> update(t.id) { t } }
+        liveRows().filter { it.id in ids && it.id !in kept }.forEach { tombstone(TASKS, it.id, now) }
     }
 
     fun restore(id: Long) = store.transaction {
         val deletedAt = store.get(TASKS, id)?.deletedAt ?: return@transaction
         val all = store.all(TASKS)
+        val byId = all.associateBy { it.id }
         subtreeIds(id, all).forEach { taskId ->
-            if (all.first { it.id == taskId }.deletedAt == deletedAt) {
+            if (byId.getValue(taskId).deletedAt == deletedAt) {
                 store.write(TASKS, taskId, JsonObject(mapOf(DELETED_AT to JsonNull)), clock())
             }
         }
     }
 
-    private fun tombstone(id: Long, now: Long) =
-        store.write(TASKS, id, JsonObject(mapOf(DELETED_AT to JsonPrimitive(now))), now)
+    private fun tombstone(table: String, id: Long, now: Long) =
+        store.write(table, id, JsonObject(mapOf(DELETED_AT to JsonPrimitive(now))), now)
 
-    private fun writeTask(task: Task, row: SyncRow) =
-        store.write(TASKS, task.id, JsonObject(taskFields(task, row.contextIds(), row.dependsOn()) - DELETED_AT), clock())
+    // A task with its context and prerequisite sets (all of them, as they should now be).
+    private fun writeTask(task: Task, contextIds: Set<Long>, dependsOn: Set<Long>, now: Long = clock()) =
+        store.write(TASKS, task.id, JsonObject(taskFields(task, contextIds, dependsOn) - DELETED_AT), now)
 
     // Every task decoded once per change to the stored rows (Store.all returns the same list until a
     // write), since one page or tray refresh reads them all several times over.
@@ -488,8 +523,6 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     }
 
     private fun liveRows(): List<SyncRow> = clock().let { now -> decoded().let { d -> d.rows.filterNot { d.tasks.getValue(it.id).isExpired(now) } } }
-
-    private fun contextsByTaskId(rows: List<SyncRow>) = rows.associate { it.id to it.contextIds() }
 
     private fun subtreeIds(rootId: Long, rows: List<SyncRow> = liveRows()): Set<Long> {
         val tasks = decoded().tasks

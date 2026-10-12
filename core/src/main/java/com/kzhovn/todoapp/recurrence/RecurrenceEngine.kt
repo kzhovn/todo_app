@@ -4,6 +4,7 @@ import com.kzhovn.todoapp.quickadd.startOfDay
 import com.kzhovn.todoapp.data.RecurrenceType
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.newId
+import com.kzhovn.todoapp.repository.createdAt
 import org.dmfs.rfc5545.recur.RecurrenceRule
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
@@ -15,7 +16,8 @@ object RecurrenceEngine {
         val rule = task.recurrenceRule ?: return null
         val nextStart = when (type) {
             RecurrenceType.AFTER_COMPLETION -> afterCompletion(rule, completedAt) ?: return null
-            RecurrenceType.RRULE -> nextRRuleOccurrence(task.startDate ?: completedAt, rule, completedAt)
+            // After its own start too, so completing one early doesn't make another on the same day.
+            RecurrenceType.RRULE -> nextRRuleOccurrence(task.startDate ?: completedAt, rule, maxOf(completedAt, task.startDate ?: completedAt))
                 ?: return null
         }
         // "After N times": each new instance starts the rule afresh from its own date, so the count
@@ -71,7 +73,6 @@ object RecurrenceEngine {
         }.getOrDefault(emptyList())
     }
 
-    // "3" days, "2w" weeks, "1m" months (calendar months: Jan 31 + 1m is Feb's last day).
     // "Skip this time": the same task moved on to its next time, as if done now (or at its start, if
     // that's still to come), without being done. Null when there's no next time (the last of "N times").
     fun skip(task: Task, now: Long): Task? = nextInstance(task, maxOf(now, task.startDate ?: now))?.let { next ->
@@ -85,7 +86,7 @@ object RecurrenceEngine {
     fun staleAt(task: Task): Long? {
         if (task.recurrenceType == null || task.dueDate != null || task.isComplete) return null
         val rule = task.recurrenceRule ?: return null
-        val start = task.startDate ?: (task.id shr 11).takeIf { it >= 1_577_836_800_000L } ?: return null
+        val start = task.startDate ?: createdAt(task) ?: return null
         val next = when (task.recurrenceType) {
             RecurrenceType.AFTER_COMPLETION -> afterCompletion(rule, start)
             RecurrenceType.RRULE -> nextRRuleOccurrence(start, rule.replace(Regex(";?COUNT=\\d+"), ""), start)
@@ -93,6 +94,7 @@ object RecurrenceEngine {
         return start + (next - start) / 2
     }
 
+    // "3" days, "2w" weeks, "1m" months (calendar months: Jan 31 + 1m is Feb's last day).
     private fun afterCompletion(rule: String, completedAt: Long): Long? {
         val n = rule.trimEnd('w', 'm').toIntOrNull() ?: return null
         return when (rule.last()) {

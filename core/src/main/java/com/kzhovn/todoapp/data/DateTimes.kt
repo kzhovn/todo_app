@@ -2,6 +2,8 @@ package com.kzhovn.todoapp.data
 
 import java.util.Calendar
 
+const val DAY_MS = 24L * 60 * 60 * 1000
+
 // Start/due times are optional. A date without a time is stored as local midnight, so "has a time"
 // means "isn't midnight".
 // ponytail: a time of exactly 00:00 reads as date-only; add a flag column if that ever matters.

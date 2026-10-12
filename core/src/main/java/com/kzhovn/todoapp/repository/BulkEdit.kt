@@ -1,7 +1,7 @@
 package com.kzhovn.todoapp.repository
 
-import com.kzhovn.todoapp.data.wouldCreateDependencyCycle
-import com.kzhovn.todoapp.data.wouldCreateCycle
+import com.kzhovn.todoapp.data.canDependOn
+import com.kzhovn.todoapp.data.canMoveUnder
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.Task
 
@@ -23,7 +23,7 @@ fun BulkEdit.applyTo(task: Task, allById: Map<Long, Task>): Task {
     val target = moveTo?.folderId
     val parentId = when {
         moveTo == null -> task.parentId
-        target != null && wouldCreateCycle(target, task.id, allById) -> task.parentId
+        target != null && !canMoveUnder(task.id, target, allById) -> task.parentId
         else -> target
     }
     return task.copy(
@@ -37,7 +37,7 @@ fun BulkEdit.applyTo(task: Task, allById: Map<Long, Task>): Task {
 
 // The edit's "depends on", unless it's the task itself or would make a dependency loop.
 fun BulkEdit.blockerFor(taskId: Long, edges: List<TaskDependency>): Long? =
-    dependsOnId?.takeIf { it != taskId && !wouldCreateDependencyCycle(it, taskId, edges) }
+    dependsOnId?.takeIf { canDependOn(taskId, it, edges) }
 
 data class DateChange(val date: Long?)      // null date = clear it
 data class FolderChange(val folderId: Long?) // null folder = move to top level

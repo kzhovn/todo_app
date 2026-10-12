@@ -22,16 +22,16 @@ fun newTaskPositions(all: List<Task>, new: Task): Map<Long, Long> {
     if (parent != null && (parent.type != TaskType.FOLDER || parent.sequential)) return emptyMap()
     val siblings = all.filter { it.parentId == new.parentId && it.id != new.id }.sortedWith(TaskOrder).toMutableList()
     fun group(t: Task) = when (t.type) { TaskType.FOLDER -> 0; TaskType.PROJECT -> 1; else -> 2 }
-    val folders = siblings.takeWhile { if (new.type == TaskType.FOLDER) group(it) == 0 else group(it) < group(new) }.size
-    val above = siblings.getOrNull(folders - 1)?.let(::sortKey)
-    val below = siblings.getOrNull(folders)?.let(::sortKey) ?: return emptyMap() // nothing below: its id sorts last
+    val at = siblings.takeWhile { if (new.type == TaskType.FOLDER) group(it) == 0 else group(it) < group(new) }.size
+    val above = siblings.getOrNull(at - 1)?.let(::sortKey)
+    val below = siblings.getOrNull(at)?.let(::sortKey) ?: return emptyMap() // nothing below: its id sorts last
     val key = when {
         above == null -> below - GAP
         below - above >= 2 -> above + (below - above) / 2
         else -> null
     }
     if (key != null) return mapOf(new.id to key)
-    siblings.add(folders, new)
+    siblings.add(at, new)
     return renumber(siblings, new.id)
 }
 
@@ -55,8 +55,21 @@ fun planMoveNextTo(all: List<Task>, taskId: Long, anchorId: Long, after: Boolean
     return Move(parentId, renumber(siblings, taskId))
 }
 
+// planMoveNextTo, but an item dragged onto a checklist section's heading goes into a section: dragged down
+// onto it, first in that section; up onto it, last in the group above (the loose items, or the section
+// before). Anything else moves as planMoveNextTo does.
+fun planMoveItem(all: List<Task>, taskId: Long, anchorId: Long, after: Boolean): Move? {
+    val anchor = all.firstOrNull { it.id == anchorId }?.takeIf { it.type == TaskType.SECTION } ?: return planMoveNextTo(all, taskId, anchorId, after)
+    val groups = checklistGroups(anchor.parentId ?: return null, all)
+    val at = groups.indexOfFirst { it.first?.id == anchorId }
+    val (section, items) = groups.getOrNull(if (after) at else at - 1) ?: return null
+    val beside = (if (after) items.firstOrNull { it.id != taskId } else items.lastOrNull { it.id != taskId })
+        ?: return Move(section?.id ?: anchor.parentId, mapOf(taskId to GAP)) // an empty group: just into it
+    return planMoveNextTo(all, taskId, beside.id, after = !after)
+}
+
 // Open projects whose subtasks are all done: time to complete the project or add the next step.
 fun stalledProjects(tasks: List<Task>): List<Task> {
-    val openChildren = tasks.filter { !it.isComplete && it.type != TaskType.FOLDER }.groupBy { it.parentId }
+    val openChildren = tasks.filter { !it.isComplete && !it.type.isContainer }.groupBy { it.parentId }
     return tasks.filter { it.type == TaskType.PROJECT && !it.isComplete && openChildren[it.id].isNullOrEmpty() }
 }

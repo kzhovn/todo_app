@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.nearestFolder
+import com.kzhovn.todoapp.data.laterText
 import androidx.compose.material.icons.filled.SkipNext
 import com.kzhovn.todoapp.data.notesMatch
 import androidx.compose.material.icons.automirrored.filled.Notes
@@ -27,6 +29,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import kotlinx.coroutines.delay
 import androidx.compose.ui.text.withStyle
 import com.kzhovn.todoapp.data.Labels
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import com.kzhovn.todoapp.data.formatDuration
@@ -94,14 +97,10 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kzhovn.todoapp.data.EffectiveTask
+import com.kzhovn.todoapp.data.ShownDue
+import androidx.compose.ui.text.font.FontStyle
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.SnoozeChoice
-import com.kzhovn.todoapp.data.chipDate
-import com.kzhovn.todoapp.data.startText
-import com.kzhovn.todoapp.data.waitingFor
-import com.kzhovn.todoapp.data.TaskContext
-import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerBorder
@@ -111,7 +110,6 @@ import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.LedgerOverdue
 import com.kzhovn.todoapp.ui.theme.LedgerStar
 import com.kzhovn.todoapp.ui.theme.folderColors
-import com.kzhovn.todoapp.data.walkParentChain
 
 @Composable
 fun TaskListScreen(
@@ -128,6 +126,7 @@ fun TaskListScreen(
     val tasks by viewModel.tasks.collectAsState()
     val subtaskCounts by viewModel.subtaskCounts.collectAsState()
     val allById by viewModel.allById.collectAsState()
+    val dues by viewModel.dues.collectAsState()
     val contextsByTaskId by viewModel.contextsByTaskId.collectAsState()
     val allContexts by viewModel.allContexts.collectAsState()
     val colors = remember(allById) { folderColors(allById.values) }
@@ -139,26 +138,26 @@ fun TaskListScreen(
 
     @Composable
     fun Row(task: Task, last: Boolean) {
-        val effective = remember(task, allById, contextsByTaskId) { resolveEffective(task, allById, contextsByTaskId) }
         // The bar shows the nearest folder ancestor's color, even for a subtask of a task.
-        val barColor = task.parentId?.let { walkParentChain(it, allById) { id -> colors[id] } } ?: LedgerBorder
+        val barColor = nearestFolder(task, allById)?.let { colors[it.id] } ?: LedgerBorder
         val notesLine = viewModel.searchQuery?.let { notesMatch(task, it) }
         // Search results come from anywhere, so they say where: the folder, then the contexts.
         val metaLine = viewModel.searchQuery?.let {
-            listOfNotNull(task.parentId?.let { p -> walkParentChain(p, allById) { id -> allById[id]?.takeIf { f -> f.type == TaskType.FOLDER }?.title } }) +
+            listOfNotNull(nearestFolder(task, allById)?.title) +
                 contextsByTaskId[task.id].orEmpty().mapNotNull { id -> allContexts[id]?.name?.let { "@$it" } }.sorted()
         }?.joinToString(" · ")?.ifEmpty { null }
-        val row = @Composable { TaskRow(task, effective, allContexts, subtaskCounts[task.id], barColor, task.id in selectedIds, subtaskParentTitle(task, allById), onCheck, onStar, onEdit, onSnooze, notesLine, metaLine) }
+        val row = @Composable { TaskRow(task, dues.of(task), subtaskCounts[task.id], barColor, task.id in selectedIds, subtaskParentTitle(task, allById), onCheck, onStar, onEdit, onSnooze, notesLine, metaLine) }
         // Swipe right to add a subtask (a checklist's are items), as in the All tree.
         SwipeToAddSubtask({ onAddSubtask(task.id) }, row)
         if (!last) HorizontalDivider(color = LedgerBorder)
     }
 
+    val sections = remember(tasks, allById, sectioned) { if (sectioned) sectionsByTopFolder(tasks, allById) else emptyList() }
     LazyColumn {
         if (!sectioned) {
             itemsIndexed(tasks, key = { _, task -> task.id }) { index, task -> Row(task, last = index == tasks.lastIndex) }
         } else {
-            sectionsByTopFolder(tasks, allById).forEach { (folder, sectionTasks) ->
+            sections.forEach { (folder, sectionTasks) ->
                 // The folderless section folds under id 0.
                 val sectionId = folder?.id ?: 0L
                 val isFolded = sectionId in folded
@@ -229,8 +228,7 @@ internal fun NotesMark() {
 @Composable
 private fun TaskRow(
     task: Task,
-    effective: EffectiveTask,
-    allContexts: Map<Long, TaskContext>,
+    shownDue: ShownDue?,
     subtasks: Pair<Int, Int>?,
     barColor: Color,
     selected: Boolean,
@@ -243,11 +241,11 @@ private fun TaskRow(
     metaLine: String? = null // search: where it lives and its contexts, as the web's results show
 ) {
     var showSnoozeMenu by remember { mutableStateOf(false) }
-    // Due styling tracks the *displayed* (effective/inherited) due date, not the task's own
-    // possibly-null field, or an inherited due date would render in the neutral colour.
+    // Due styling tracks the *displayed* (inherited) due date, not the task's own possibly-null field,
+    // or an inherited due date would render in the neutral colour.
     val now = System.currentTimeMillis()
-    val due = effective.effectiveDueDate?.takeUnless { task.isComplete }
-    val status = due?.let { dueStatus(it, now) }
+    val due = shownDue?.takeUnless { task.isComplete }
+    val status = due?.let { dueStatus(it.at, now) }
     // A month-old maybe is dimmed (backburner) but stays listed.
     val dim = if (task.isBackburner(now)) BACKBURNER_ALPHA else 1f
     Box(Modifier.background(if (selected) LedgerAccentSoft else Color.Transparent).alpha(dim)) {
@@ -276,12 +274,12 @@ private fun TaskRow(
                         // One line with the title (it wraps along), in the due colour.
                         if (due != null) {
                             val color = when (status) { DueStatus.OVERDUE -> LedgerOverdue; DueStatus.TODAY -> LedgerDueTodayText; else -> LedgerMuted }
-                            withStyle(SpanStyle(color = color, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · ${dueText(due, now)}") }
+                            // One taken from a task waiting on this one is in italics and names it.
+                            val italic = if (due.forTask != null) FontStyle.Italic else null
+                            withStyle(SpanStyle(color = color, fontWeight = FontWeight.Normal, fontSize = 12.sp, fontStyle = italic)) { append("  · ${dueText(due, now)}") }
                         }
                         // A start still to come (search shows snoozed and future tasks), or a waiting item's own line, as on the web.
-                        val later = if (task.isComplete) null else if (task.type == TaskType.WAITING) {
-                            task.dueDate?.let { "resolves ${chipDate(it)}" } ?: waitingFor(task, now)?.let { "waiting $it" }
-                        } else task.startDate?.takeIf { it > now }?.let { startText(it, now) }
+                        val later = laterText(task, now)
                         if (later != null) withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · $later") }
                         if (subtasks != null && subtasks.second > 0 && task.type != TaskType.CHECKLIST) {
                             withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · ${subtasks.first}/${subtasks.second}") }
@@ -342,7 +340,7 @@ internal fun TaskRowMenu(task: Task, expanded: Boolean, onDismiss: () -> Unit, o
             DateTiles(snoozeChoices(AppSettings.rolloverHour(context))) { until -> snooze { until } }
             HorizontalDivider(color = LedgerBorder)
             MenuRow(Labels.PIN, Icons.Filled.PushPin) { onDismiss(); scope.launch { PinnedTask.pin(context, task.id) } }
-            MenuRow("Focus", Icons.Filled.CenterFocusStrong) {
+            MenuRow(Labels.FOCUS, Icons.Filled.CenterFocusStrong) {
                 onDismiss()
                 context.startActivity(Intent(context, FocusActivity::class.java).putExtra(FocusActivity.EXTRA_TASK_ID, task.id))
             }
@@ -352,6 +350,14 @@ internal fun TaskRowMenu(task: Task, expanded: Boolean, onDismiss: () -> Unit, o
                 scope.launch {
                     (context.applicationContext as com.kzhovn.todoapp.TodoApp).repository.skip(task.id, System.currentTimeMillis())
                     PinnedTask.refresh(context)
+                }
+            }
+            // A copy kept as a template (see Templates.kt); this one carries on as it is.
+            MenuRow(Labels.SAVE_AS_TEMPLATE, Icons.Filled.ContentCopy) {
+                onDismiss()
+                scope.launch {
+                    (context.applicationContext as com.kzhovn.todoapp.TodoApp).repository.saveAsTemplate(task.id)
+                    android.widget.Toast.makeText(context, Labels.savedAsTemplate(task.title), android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -399,11 +405,11 @@ const val BACKBURNER_ALPHA = 0.45f
 // A start still to come, in the All tree: dimmed a little, less than the back burner.
 const val LATER_ALPHA = 0.65f
 
-// Shown in the checkbox's place: a project is completed as a whole, not ticked off directly.
+// In the checkbox's place, and ticked like one (asking about open steps first); muted once done.
 @Composable
-fun ProjectMark(size: Dp = 40.dp) {
-    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
-        Icon(Icons.Filled.AccountTree, contentDescription = "Project", tint = LedgerAccent, modifier = Modifier.size(size * 0.5f))
+fun ProjectMark(size: Dp = 40.dp, done: Boolean = false, onClick: () -> Unit) {
+    Box(Modifier.size(size).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        Icon(Icons.Filled.AccountTree, contentDescription = Labels.PROJECT, tint = if (done) LedgerMuted else LedgerAccent, modifier = Modifier.size(size * 0.5f))
     }
 }
 
@@ -411,7 +417,7 @@ fun ProjectMark(size: Dp = 40.dp) {
 // hourglass, a checklist's count (ticked item by item, inside it; tapping opens it), or a checkbox.
 @Composable
 fun TaskMark(task: Task, counts: Pair<Int, Int>?, due: DueStatus?, checkboxSize: Dp = 22.dp, onCheck: () -> Unit, onOpen: () -> Unit) = when (task.type) {
-    TaskType.PROJECT -> ProjectMark(36.dp)
+    TaskType.PROJECT -> ProjectMark(36.dp, task.isComplete, onCheck)
     TaskType.WAITING -> WaitingMark(36.dp)
     TaskType.CHECKLIST -> CountMark(counts?.first ?: 0, counts?.second ?: 0, touchSize = 36.dp, onClick = onOpen)
     else -> TaskCheckbox(checked = task.isComplete, due = due, size = checkboxSize, touchSize = 36.dp, onCheckedChange = onCheck)

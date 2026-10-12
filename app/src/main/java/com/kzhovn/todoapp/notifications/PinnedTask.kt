@@ -14,6 +14,7 @@ import com.kzhovn.todoapp.R
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.ui.TaskEditActivity
+import com.kzhovn.todoapp.ui.CompleteAskActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -23,13 +24,9 @@ import kotlinx.coroutines.launch
 // data change, so the notification follows pins, timers, focus, completions and deletions from anywhere
 // (app, widget, sync, web, desktop).
 object PinnedTask {
-    // Channel importance can't change once created, so raising it meant a new channel; the old,
-    // low-importance "doing" one is deleted. Low importance counts as "silent", which Pixels hide
-    // from the lock screen.
+    // High importance: low counts as "silent", which Pixels hide from the lock screen.
     private const val CHANNEL_ID = "doing_pinned"
-    private const val OLD_CHANNEL_ID = "doing"
     private const val NOTIFICATION_ID = 7001
-    const val ACTION_COMPLETE = "com.kzhovn.todoapp.PINNED_COMPLETE"
     const val ACTION_UNPIN = "com.kzhovn.todoapp.PINNED_UNPIN"
 
     private fun repository(context: Context) = (context.applicationContext as TodoApp).repository
@@ -50,7 +47,6 @@ object PinnedTask {
     // or removes the notification when nothing is. A finished focus session still shows, asking what's
     // next, until it's answered somewhere.
     suspend fun refresh(context: Context) {
-        migrateLocalPin(context)
         val task = repository(context).getPinnedTask()
         val session = repository(context).getFocusSession()
         TaskTimer.follow(context, task)
@@ -61,7 +57,9 @@ object PinnedTask {
             return
         }
         val focusing = session?.id == shows.id
-        val key = listOf(shows.id, shows.title, shows.isComplete, shows.timerEndsAt, shows.timerRemaining, focusing)
+        // Whether the timer is still running too, so its end (the alarm's refresh) turns the countdown into "time's up".
+        val running = shows.timerEndsAt?.let { it > System.currentTimeMillis() }
+        val key = listOf(shows.id, shows.title, shows.isComplete, shows.timerEndsAt, shows.timerRemaining, running, focusing)
         if (shown != key) {
             show(context, shows, focusing)
             shown = key
@@ -72,20 +70,11 @@ object PinnedTask {
     @Volatile
     private var shown: List<Any?>? = null
 
-    // Before pins synced, the phone kept its own in preferences; moved onto the task once.
-    private suspend fun migrateLocalPin(context: Context) {
-        val prefs = context.getSharedPreferences("pinned", Context.MODE_PRIVATE)
-        val id = prefs.getLong("taskId", 0L).takeIf { it != 0L } ?: return
-        prefs.edit().remove("taskId").apply()
-        if (repository(context).getTask(id)?.isComplete == false) repository(context).pin(id, System.currentTimeMillis())
-    }
-
     private fun manager(context: Context) = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     private fun show(context: Context, task: Task, focusing: Boolean) {
         val manager = manager(context)
         if (manager.getNotificationChannel(CHANNEL_ID) == null) {
-            manager.deleteNotificationChannel(OLD_CHANNEL_ID)
             // High importance (shown on the lock screen and as a heads-up), but without sound or
             // vibration: pinning is something you just did, not an alert.
             manager.createNotificationChannel(
@@ -147,14 +136,16 @@ object PinnedTask {
         }
         // Broadcast actions (not activities) run without unlocking, so Complete works on the lock screen.
         // At most three show: with a timer, Pause/Resume takes Focus's place.
-        builder.addAction(0, "Complete", action(ACTION_COMPLETE, 1))
+        // Asks about open subtasks first, as the app does (CompleteAskActivity).
+        val complete = PendingIntent.getActivity(context, 1, CompleteAskActivity.intent(context, task.id), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        builder.addAction(0, "Complete", complete)
         when {
             running -> builder.addAction(0, "Pause", TaskTimer.actionIntent(context, TaskTimer.ACTION_PAUSE, task.id, 5))
             remaining != null -> builder.addAction(0, "Resume", TaskTimer.actionIntent(context, TaskTimer.ACTION_RESUME, task.id, 6))
-            !focusing -> builder.addAction(0, "Focus", focus)
+            !focusing -> builder.addAction(0, Labels.FOCUS, focus)
         }
         // Leaving focus unpins too, so both are this one action.
-        builder.addAction(0, if (focusing) Labels.LEAVE_FOCUS else "Unpin", action(ACTION_UNPIN, 2))
+        builder.addAction(0, if (focusing) Labels.LEAVE_FOCUS else Labels.UNPIN, action(ACTION_UNPIN, 2))
         val notification = builder.build()
         manager.notify(NOTIFICATION_ID, notification)
     }
@@ -162,20 +153,10 @@ object PinnedTask {
 
 class PinnedTaskReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val app = context.applicationContext as TodoApp
-        val taskId = intent.getLongExtra(TaskEditActivity.EXTRA_TASK_ID, 0L)
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                when (intent.action) {
-                    PinnedTask.ACTION_UNPIN -> PinnedTask.unpin(context)
-                    // Like the widget: no room for the subtask dialog, so subtasks complete too. A
-                    // completed task is no longer pinned.
-                    PinnedTask.ACTION_COMPLETE -> {
-                        app.repository.completeWithDescendants(taskId, System.currentTimeMillis())
-                        PinnedTask.refresh(context)
-                    }
-                }
+                if (intent.action == PinnedTask.ACTION_UNPIN) PinnedTask.unpin(context)
             } finally {
                 pending.finish()
             }

@@ -29,8 +29,7 @@ class TaskInheritanceTest {
         val parent = Task(id = 2, title = "Parent", parentId = 1, dueDate = null)
         val child = Task(id = 3, title = "Child", parentId = 2, dueDate = null)
         val allById = mapOf(1L to grandparent, 2L to parent, 3L to child)
-        val effective = resolveEffective(child, allById, emptyMap())
-        assertEquals(500L, effective.effectiveDueDate)
+        assertEquals(500L, DueDates(allById.values, emptyList()).at(child))
     }
 
     @Test
@@ -38,8 +37,7 @@ class TaskInheritanceTest {
         val parent = Task(id = 1, title = "Parent", dueDate = null)
         val child = Task(id = 2, title = "Child", parentId = 1, dueDate = null)
         val allById = mapOf(1L to parent, 2L to child)
-        val effective = resolveEffective(child, allById, emptyMap())
-        assertNull(effective.effectiveDueDate)
+        assertNull(DueDates(allById.values, emptyList()).at(child))
     }
 
     // Termination is the assertion here: without walkUp's `seen` guard this input loops forever.
@@ -86,7 +84,23 @@ class TaskInheritanceTest {
         val task = Task(id = 1, title = "Top level")
         val effective = resolveEffective(task, mapOf(1L to task), emptyMap())
         assertNull(effective.effectiveStartDate)
-        assertNull(effective.effectiveDueDate)
+        assertNull(DueDates(listOf(task), emptyList()).at(task))
         assertEquals(emptySet<Long>(), effective.effectiveContextIds)
+    }
+
+    @Test
+    fun `a prerequisite takes a sooner due date from an open task waiting on it, and its subtasks with it`() {
+        val trip = Task(id = 1, title = "Trip", dueDate = 500L)
+        val canisters = Task(id = 2, title = "Buy canisters", dueDate = 900L)
+        val step = Task(id = 3, title = "Check size", parentId = 2)
+        val laterDue = Task(id = 4, title = "Later", dueDate = 2000L)
+        val done = Task(id = 5, title = "Done", dueDate = 100L, isComplete = true)
+        val edges = listOf(TaskDependency(1, 2), TaskDependency(4, 2), TaskDependency(5, 2))
+        val dues = DueDates(listOf(trip, canisters, step, laterDue, done), edges)
+        assertEquals(ShownDue(500L, trip), dues.of(canisters))
+        assertEquals(ShownDue(500L, trip), dues.of(step))
+        assertEquals(ShownDue(500L), dues.of(trip))
+        // Its own date wins when it's sooner.
+        assertEquals(ShownDue(400L), DueDates(listOf(trip, canisters.copy(dueDate = 400L)), edges).of(canisters.copy(dueDate = 400L)))
     }
 }

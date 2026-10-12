@@ -1,11 +1,14 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.data.linkSegments
+import com.kzhovn.todoapp.data.laterText
+import com.kzhovn.todoapp.data.waitingBlocks
+import com.kzhovn.todoapp.data.nearestFolder
+import com.kzhovn.todoapp.data.ShownDue
+import com.kzhovn.todoapp.data.completeQuestion
+import com.kzhovn.todoapp.repository.dimmedInTree
 import com.kzhovn.todoapp.widget.TodoWidgetPresenter
-import com.kzhovn.todoapp.data.isUnder
-import com.kzhovn.todoapp.data.startText
 import com.kzhovn.todoapp.data.inMode
-import com.kzhovn.todoapp.data.isChecklistItem
-import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.TaskOrder
 import kotlinx.html.h2
 import kotlinx.html.img
@@ -21,14 +24,12 @@ import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.waitingFor
 import com.kzhovn.todoapp.data.SnoozeChoice
-import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.DueStatus
 import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.data.folderColorsArgb
 import com.kzhovn.todoapp.data.formatDuration
-import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.data.sectionsByTopFolder
 import com.kzhovn.todoapp.data.stalledProjects
 import com.kzhovn.todoapp.data.subtaskParentTitle
@@ -96,32 +97,31 @@ class ListData(
     val dueOutside: List<Task> = if (mode == ListMode.DOING && modeFolder != null) service.dueOutsideMode() else emptyList()
     // Doing's quiet Waiting section: waiting items due a check-in, and how many open tasks each blocks.
     val waiting: List<Task> = if (mode == ListMode.DOING) service.waitingToCheck() else emptyList()
-    val waitingBlocks: Map<Long, Int> = if (waiting.isEmpty()) emptyMap() else
-        service.dependencyEdges().filter { e -> waiting.any { it.id == e.dependsOnTaskId } && byId[e.taskId]?.isComplete == false }.groupingBy { it.dependsOnTaskId }.eachCount()
-    private val contextIds = service.contextIdsByTask()
-    private val folderColors = folderColorsHex(all)
+    val waitingBlocks: Map<Long, Int> = if (waiting.isEmpty()) emptyMap() else waitingBlocks(waiting, service.dependencyEdges(), byId)
+    val folderColors = folderColorsHex(all)
+    // New ▾'s "From template…" (see Templates.kt).
+    val templates: List<Task> by lazy { service.templates() }
     private val counts = subtaskCounts(all)
+    // Worked out once per request: the list and the sidebar's counts both need them.
+    val active: List<Task> by lazy { service.active() }
+    // The All tree dims what isn't workable for a reason other than contexts (dimmedInTree).
+    val workable: Set<Long> by lazy { service.activeIgnoringContexts().map { it.id }.toSet() }
+    val doing: List<Task> by lazy { service.doing(active) }
     val tasks: List<Task> = when (mode) {
-        ListMode.DOING -> service.doing()
-        ListMode.ACTIVE -> service.active()
+        ListMode.DOING -> doing
+        ListMode.ACTIVE -> active
         ListMode.ALL -> emptyList() // the tree is rendered from `children`
     }
 
-    fun effectiveDue(task: Task) = resolveEffective(task, byId, contextIds).effectiveDueDate
+    private val dues = service.dueDates()
+    fun effectiveDue(task: Task) = dues.of(task)
     fun parentTitle(task: Task) = subtaskParentTitle(task, byId)
-    fun folderColor(task: Task): String? = task.parentId?.let { parent -> walkParentChain(parent, byId) { folderColors[it] } }
+    fun folderColor(task: Task): String? = nearestFolder(task, byId)?.let { folderColors[it.id] }
     fun ownColor(folder: Task) = folderColors[folder.id]
     fun subtaskCounts(task: Task): Pair<Int, Int>? = counts[task.id]
-    // As the phone's: completed tasks drop out (their open subtasks move up); completed checklists
-    // and projects stay, struck through.
-    val tree: List<OutlinerNode> by lazy { buildOutlinerTree(all, hideCompleted = true) }
-
-    // The tree's top level for this view: a folder's contents, the mode's, or everything.
-    val roots: List<OutlinerNode> by lazy {
-        val root = folder ?: modeFolder?.id
-        fun find(nodes: List<OutlinerNode>): OutlinerNode? = nodes.firstNotNullOfOrNull { if (it.task.id == root) it else find(it.children) }
-        if (root == null) tree else find(tree)?.children.orEmpty()
-    }
+    // The tree's top level for this view: a folder's contents, the mode's, or everything. As the phone's:
+    // completed tasks and projects drop out (their open subtasks move up); completed checklists stay, struck through.
+    val roots: List<OutlinerNode> by lazy { buildOutlinerTree(all, hideCompleted = true, rootId = folder ?: modeFolder?.id) }
 
     // One open project whose steps are all done, to ask about (the phone asks the same, one at a time).
     val stalled: Task? = stalledProjects(all).firstOrNull { it.id !in later }
@@ -130,13 +130,15 @@ class ListData(
 // The same colour families as the app (folderColorsArgb in :core), as CSS colours.
 internal fun folderColorsHex(tasks: Collection<Task>): Map<Long, String> = folderColorsArgb(tasks).mapValues { "#%06X".format(it.value and 0xFFFFFF) }
 
-// What leads a task's row, by type: a project's icon, a waiting item's hourglass (it's resolved from its
-// editor or Doing's Waiting section), a checklist's "3/8" (ticked item by item, inside it; opens it), or
-// a folder's icon (search only), or a task's checkbox, which `check` sets up (what ticking it does differs by list).
+// What leads a task's row, by type: a project's icon (ticked like a checkbox; done, it looks like one), a
+// waiting item's hourglass (it's resolved from its editor or Doing's Waiting section), a checklist's "3/8"
+// (ticked item by item, inside it; opens it), or a folder's icon (search only), or a task's checkbox, which
+// `check` sets up (what ticking it does differs by list).
 internal fun FlowContent.taskMark(task: Task, counts: Pair<Int, Int>?, mode: String, check: BUTTON.() -> Unit) = when (task.type) {
-    TaskType.PROJECT -> span(classes = "project") { attributes["title"] = "Project: completes when its steps are done"; icon(Icon.PROJECT, "") }
+    TaskType.PROJECT -> button(classes = "project") { check(); attributes["title"] = Labels.PROJECT; if (!task.isComplete) icon(Icon.PROJECT, "") }
     TaskType.WAITING -> span(classes = "project waiting-mark") { attributes["title"] = Labels.WAITING; icon(Icon.HOURGLASS, "") }
     TaskType.FOLDER -> span(classes = "project") { icon(Icon.FOLDER, "") } // search results only
+    TaskType.SECTION -> span(classes = "project") {} // a checklist's section: nothing to tick
     TaskType.CHECKLIST -> {
         val (done, total) = counts ?: (0 to 0)
         a(href = "/tasks/${task.id}?mode=$mode", classes = "count") { attributes["title"] = Labels.CHECKLIST; +"$done/$total" }
@@ -235,6 +237,7 @@ fun FlowContent.listColumn(data: ListData) {
                 listOf(TaskType.TASK, TaskType.PROJECT, TaskType.CHECKLIST, TaskType.FOLDER).forEach { type ->
                     a(href = "/tasks/new?type=${type.name}&mode=${data.q}") { +Labels.TYPES.first { it.first == type }.second }
                 }
+                fromTemplateItems(data.templates)
             }
         }
     }
@@ -245,24 +248,30 @@ val ListMode.path get() = "/${name.lowercase()}"
 
 // The sidebar's counts, and its folders (top level, in tree order) with their open tasks.
 // In folder mode: the counts are the mode's, and the folders are the mode folder's own.
-private class SideNav(service: TaskService) {
-    val all = service.tasks()
-    private val byId = all.associateBy { it.id }
-    val mode = service.modeFolder()
+// `list`: the page's list, whose tasks, Active and Doing it reuses rather than working them out again.
+private class SideNav(service: TaskService, list: ListData?) {
+    val all = list?.all ?: service.tasks()
+    private val byId = list?.byId ?: all.associateBy { it.id }
+    val mode = if (list != null) list.modeFolder else service.modeFolder()
+    private val active = list?.active ?: service.active()
+    private val open = TodoWidgetPresenter.allOpen(all, byId)
     val counts = mapOf(
-        ListMode.DOING to service.doing().size, ListMode.ACTIVE to service.active().size,
-        ListMode.ALL to TodoWidgetPresenter.allOpen(all, byId).count { inMode(it, mode?.id, byId) }
+        ListMode.DOING to (list?.doing ?: service.doing(active)).size, ListMode.ACTIVE to active.size,
+        ListMode.ALL to open.count { inMode(it, mode?.id, byId) }
     )
-    val colors = folderColorsHex(all)
-    val folders = all.filter { it.type == TaskType.FOLDER && it.parentId == mode?.id }.sortedWith(TaskOrder).map { folder ->
-        folder to all.count { it.type.isDoable && !it.isComplete && !isChecklistItem(it, byId) && isUnder(it, folder.id, byId) }
+    val colors = list?.folderColors ?: folderColorsHex(all)
+    val folders = all.filter { it.type == TaskType.FOLDER && it.parentId == mode?.id }.sortedWith(TaskOrder).let { shown ->
+        // Each open task counted once, under whichever of these folders it's in.
+        val ids = shown.map { it.id }.toSet()
+        val inFolder = open.groupingBy { t -> t.parentId?.let { walkParentChain(it, byId) { id -> id.takeIf { it in ids } } } }.eachCount()
+        shown.map { it to (inFolder[it.id] ?: 0) }
     }
 }
 
 // After a list action, the counts elsewhere on the page (the list's own, the sidebar's), swapped in
 // beside the list by htmx.
 fun countsOob(service: TaskService, data: ListData): String {
-    val nav = SideNav(service)
+    val nav = SideNav(service, data)
     fun count(id: String, classes: String, n: Int) = createHTML().span(classes = classes) { this.id = id; attributes["hx-swap-oob"] = "true"; +n.toString() }
     return buildString {
         if (data.mode != ListMode.ALL) append(count("list-count", "list-count", data.tasks.size))
@@ -284,7 +293,7 @@ fun HTML.shellPage(
     detail: (ASIDE.() -> Unit)? = null,
     content: DIV.() -> Unit
 ) {
-    service.focusSession()?.let { return focusPage(service, it) }
+    service.focusSession()?.let { return focusPage(service, it, list?.collapsed.orEmpty()) }
     shell(service, title, current, list, toast, detail, content)
 }
 
@@ -297,7 +306,7 @@ private fun HTML.shell(
     detail: (ASIDE.() -> Unit)?,
     content: DIV.() -> Unit
 ) = page(title) {
-    val nav = SideNav(service)
+    val nav = SideNav(service, list)
     div(classes = "shell") {
         aside(classes = "sidebar") {
             a(href = "/doing", classes = "brand") { img(src = "/static/icon-32.png", alt = "") ; +"Raspberry" }
@@ -354,7 +363,7 @@ private fun HTML.shell(
             }
             div(classes = "nav-label") { +"More" }
             nav(classes = "nav") {
-                listOf("/focus" to "Focus", "/search" to "Search", "/review" to "Review", "/contexts" to "Contexts", "/settings" to "Settings")
+                listOf("/focus" to Labels.FOCUS, "/search" to Labels.SEARCH, "/templates" to Labels.TEMPLATES, "/review" to Labels.REVIEW, "/contexts" to Labels.CONTEXTS, "/settings" to Labels.SETTINGS)
                     .forEach { (path, label) -> a(href = path, classes = if (path == current) "current" else null) { +label } }
             }
             details(classes = "shortcuts") {
@@ -485,6 +494,13 @@ private fun FlowContent.tree(data: ListData, nodes: List<OutlinerNode>, parentId
                     modeButton(item.id); attributes["tabindex"] = "-1"; attributes["title"] = "${item.title} mode"; icon(Icon.OPEN_IN_FULL, "")
                 }
             }
+        } else if (item.type == TaskType.SECTION) {
+            // A checklist's section: a plain heading over its items (renamed in the checklist's editor).
+            div(classes = "section-row") {
+                style = "padding-left: ${depth * 18}px"
+                outline()
+                span(classes = "section-title") { +item.title }
+            }
         } else {
             taskRow(data, item, depth, outline)
         }
@@ -509,12 +525,12 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
         if (task.id == data.selected) classes = classes + "current"
         attributes["data-type"] = task.type.name
         if (task.isBackburner(data.now)) classes = classes + "dim"
-        else if (data.mode == ListMode.ALL && task.startsLater(data.now)) classes = classes + "later"
+        else if (data.mode == ListMode.ALL && dimmedInTree(task, data.workable, data.byId, data.now)) classes = classes + "later"
         if (task.isComplete) classes = classes + "done"
         style = "padding-left: ${depth * 18}px; border-left-color: ${data.folderColor(task) ?: "var(--border)"}"
         outlineNode?.invoke(this)
         val due = data.effectiveDue(task)?.takeUnless { task.isComplete }
-        val status = due?.let { dueStatus(it, data.now) }
+        val status = due?.let { dueStatus(it.at, data.now) }
         taskMark(task, data.subtaskCounts(task), mode) {
             // Due today: an orange ring; overdue: rust. Each with a pale fill of its own colour.
             when (status) { DueStatus.OVERDUE -> classes = classes + "overdue"; DueStatus.TODAY -> classes = classes + "today"; else -> {} }
@@ -531,9 +547,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                 // On the title's line, wrapping along with it.
                 due?.let { dueTail(it, status!!, data.now) }
                 // A start still to come (the All tree shows snoozed and future tasks); a waiting item's own line.
-                if (task.type == TaskType.WAITING) {
-                    if (!task.isComplete) (task.dueDate?.let { "resolves ${chipDate(it)}" } ?: waitingFor(task, data.now)?.let { "waiting $it" })?.let { span(classes = "tail") { +" · $it" } }
-                } else task.startDate?.takeIf { it > data.now && !task.isComplete }?.let { span(classes = "tail") { +" · ${startText(it, data.now)}" } }
+                laterText(task, data.now)?.let { span(classes = "tail") { +" · $it" } }
                 if (task.type != TaskType.CHECKLIST) data.subtaskCounts(task)?.let { (done, total) -> span(classes = "tail") { +" · $done/$total" } }
                 if (task.recurrenceType != null) span(classes = "badge") { attributes["title"] = "Recurring"; icon(Icon.REPEAT, "") }
                 if (!task.notes.isNullOrBlank()) span(classes = "has-notes") { attributes["title"] = Labels.HAS_NOTES; icon(Icon.NOTES, "") }
@@ -576,7 +590,13 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                 button(classes = "menu-row") {
                     hx("post", "/focus/start?task=${task.id}", "this")
                     icon(Icon.CENTER_FOCUS, "")
-                    +"Focus"
+                    +Labels.FOCUS
+                }
+                // A copy kept as a template; this one carries on as it is.
+                button(classes = "menu-row") {
+                    attributes["hx-post"] = "/tasks/${task.id}/save-template"
+                    attributes["hx-swap"] = "none"
+                    +Labels.SAVE_AS_TEMPLATE
                 }
                 // A repeat: on to its next time without doing this one.
                 if (task.recurrenceType != null) button(classes = "menu-row") {
@@ -608,20 +628,14 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
 }
 
 // "· due today" after a title, in the due colour (see DueStatus); the same words as the app's rows.
-internal fun FlowContent.dueTail(due: Long, status: DueStatus, now: Long) = span(classes = "tail due " + status.name.lowercase()) {
+// One taken from a task waiting on this one is in italics and names it.
+internal fun FlowContent.dueTail(due: ShownDue, status: DueStatus, now: Long) = span(classes = "tail due " + status.name.lowercase() + if (due.forTask != null) " for" else "") {
     +" · ${dueText(due, now)}"
 }
 
 // A note's text with its links opening in a new tab (trailing punctuation isn't part of the link).
-internal fun FlowContent.linkified(text: String) {
-    var at = 0
-    Regex("https?://\\S+").findAll(text).forEach { m ->
-        val url = m.value.trimEnd('.', ',', ')', ';', ':', '!', '?')
-        +text.substring(at, m.range.first)
-        a(href = url) { target = "_blank"; rel = "noopener"; +url }
-        at = m.range.first + url.length
-    }
-    +text.substring(at)
+internal fun FlowContent.linkified(text: String) = linkSegments(text).forEach { (part, isLink) ->
+    if (isLink) a(href = part) { target = "_blank"; rel = "noopener"; +part } else +part
 }
 
 // Opens a link's page in the detail panel, keeping the list as it is (the URL still changes, so reload
@@ -636,10 +650,10 @@ internal fun A.openInPanel() {
 
 fun DIV.deletedToastContents(task: Task, q: String) {
     classes = setOf("show")
-    span { +"Deleted “${task.title}”" }
+    span { +Labels.deleted(task.title) }
     button {
         hx("post", "/tasks/${task.id}/restore?mode=$q")
-        +"Undo"
+        +Labels.UNDO
     }
 }
 
@@ -660,17 +674,18 @@ private fun FlowContent.stalledPrompt(project: Task, mode: ListMode, q: String) 
 fun DIV.askSubtasksToast(task: Task, open: Int, url: String, target: String, include: String? = null) {
     id = "toast"
     attributes["hx-swap-oob"] = "true"
+    val question = completeQuestion(task, open) ?: return
     classes = setOf("show", "question")
-    span { +"Complete “${task.title}”? ${Labels.activeSubtasks(open)}" }
+    span { +"Complete “${task.title}”? ${question.text}" }
     val sep = if ('?' in url) '&' else '?'
-    listOf("complete" to Labels.COMPLETE_SUBTASKS_TOO, "promote" to Labels.MOVE_SUBTASKS_OUT).forEach { (choice, label) ->
+    listOf("complete" to question.completeAll, "promote" to question.moveOut).forEach { (choice, label) ->
         button {
             hx("post", "$url${sep}subtasks=$choice", target)
             include?.let { attributes["hx-include"] = it }
             +label
         }
     }
-    button(classes = "dismiss") { +"Cancel" }
+    button(classes = "dismiss") { +question.cancel }
 }
 
 // The pin, in the editor and the sidebar's Now box: a click pins or unpins at once (not on Save);
@@ -686,7 +701,7 @@ internal fun FlowContent.pinControl(task: Task, pinned: Boolean, refresh: Boolea
     div(classes = "pin-menu") {
         button(type = ButtonType.button, classes = "menu-row") { hx("post", toggle, "closest .pin-control"); icon(Icon.PUSH_PIN, ""); +(if (pinned) Labels.UNPIN else Labels.PIN) }
         // Every device goes into focus on it.
-        button(type = ButtonType.button, classes = "menu-row") { hx("post", "/focus/start?task=${task.id}", "this"); icon(Icon.CENTER_FOCUS, ""); +"Focus" }
+        button(type = ButtonType.button, classes = "menu-row") { hx("post", "/focus/start?task=${task.id}", "this"); icon(Icon.CENTER_FOCUS, ""); +Labels.FOCUS }
         // app.js's play handler starts (or pauses) the shared timer, as a row's ▶ does.
         task.durationMinutes?.let { minutes ->
             button(type = ButtonType.button, classes = "menu-row play") {
@@ -720,6 +735,6 @@ fun DIV.undoToastContents(task: Task, q: String) {
     span { +"Completed “${task.title}”" }
     button {
         hx("post", "/tasks/${task.id}/uncomplete?mode=$q")
-        +"Undo"
+        +Labels.UNDO
     }
 }

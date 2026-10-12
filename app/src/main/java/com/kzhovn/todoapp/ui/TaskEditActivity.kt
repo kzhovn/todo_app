@@ -34,6 +34,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,6 +49,7 @@ import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.LinkKind
 import com.kzhovn.todoapp.data.linkCandidates
+import com.kzhovn.todoapp.data.nearbyFirst
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.formatDuration
 import com.kzhovn.todoapp.focus.FocusActivity
@@ -95,14 +99,16 @@ class TaskEditActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val app = application as TodoApp
         val taskId = intent.getLongExtra(EXTRA_TASK_ID, 0L)
+        val asTemplate = intent.getBooleanExtra(EXTRA_CREATE_AS_TEMPLATE, false)
         val initialType = when {
             intent.getBooleanExtra(EXTRA_CREATE_AS_FOLDER, false) -> TaskType.FOLDER
             intent.getBooleanExtra(EXTRA_CREATE_AS_PROJECT, false) -> TaskType.PROJECT
+            asTemplate -> TaskType.CHECKLIST // most templates are lists (packing)
             else -> TaskType.TASK
         }
         setContent {
             LedgerTheme {
-                val vm = remember { TaskEditViewModel(app.repository, app.contextRepository, taskId, initialType) }
+                val vm = remember { TaskEditViewModel(app.repository, app.contextRepository, taskId, initialType, asTemplate) }
                 Editor(vm)
             }
         }
@@ -166,6 +172,9 @@ class TaskEditActivity : ComponentActivity() {
         // also folds an open note back into its preview.
         val focusManager = LocalFocusManager.current
         val showBreadcrumb = !vm.isNew && vm.allById[vm.task.parentId] != null
+        val snackbarHostState = remember { SnackbarHostState() }
+        UndoDelete((application as TodoApp).repository, snackbarHostState, onUndone = { vm.refresh() })
+        Box(Modifier.fillMaxSize()) {
         Column(
             Modifier.fillMaxSize().background(LedgerBackground)
                 .pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }
@@ -174,6 +183,8 @@ class TaskEditActivity : ComponentActivity() {
                 .padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = if (showBreadcrumb) 4.dp else 16.dp)
         ) {
             if (showBreadcrumb) Breadcrumb(vm, openTask)
+            // A template: Use makes a list from it, opened in its place.
+            if (vm.task.isTemplate && !vm.isNew) TemplateBanner { vm.useTemplate { id -> openTask(id); finish() } }
             TitleBox(
                 vm, pinned,
                 onTogglePin = {
@@ -186,6 +197,7 @@ class TaskEditActivity : ComponentActivity() {
                 },
                 onDone = { if (vm.isLoaded && vm.task.title.isNotBlank()) onSave() }
             )
+            vm.template?.let { t -> FromTemplateLine(t, onOpenTemplate = { openTask(t.id) }, onUpdate = { vm.reviewTemplateChanges() }) }
             TypeRow(vm)
             TimingSection(vm, this@TaskEditActivity, onRepeat = { dialog = EditorDialog.Repeat }, onTimer = { dialog = EditorDialog.Timer })
             PropertiesSection(
@@ -194,7 +206,7 @@ class TaskEditActivity : ComponentActivity() {
                 onManageContexts = { startActivity(Intent(this@TaskEditActivity, ContextsActivity::class.java)) }
             )
             PrioritySection(vm)
-            if (vm.task.type == TaskType.CHECKLIST) ItemsSection(vm, onClearChecked = { dialog = EditorDialog.ClearChecked })
+            if (vm.task.type == TaskType.CHECKLIST) ItemsSection(vm, openTask, onClearChecked = { dialog = EditorDialog.ClearChecked })
             RelatedSection(
                 vm, openTask,
                 onAddSubtask = { dialog = EditorDialog.SubtaskPicker },
@@ -205,6 +217,9 @@ class TaskEditActivity : ComponentActivity() {
             BottomBar(
                 vm,
                 onDelete = { scope.launch { dialog = EditorDialog.Delete(vm.descendantCount()) } },
+                onSaveAsTemplate = {
+                    vm.saveAsTemplate { Toast.makeText(this@TaskEditActivity, Labels.savedAsTemplate(vm.task.title), Toast.LENGTH_SHORT).show() }
+                },
                 onCompleteList = {
                     val unchecked = vm.allTasks.count { it.parentId == vm.taskId && !it.isComplete }
                     if (unchecked > 0) dialog = EditorDialog.UncheckedItems(unchecked)
@@ -213,6 +228,12 @@ class TaskEditActivity : ComponentActivity() {
                 onSave = onSave
             )
         }
+        SnackbarHost(snackbarHostState, Modifier.align(Alignment.BottomCenter))
+        }
+
+        vm.templateChanges?.let { changes ->
+            vm.template?.let { t -> UpdateTemplateSheet(t, changes, vm.allById, onUpdate = vm::updateTemplate, onDismiss = { vm.templateChanges = null }) }
+        }
 
         val close = { dialog = null }
         when (val d = dialog) {
@@ -220,7 +241,7 @@ class TaskEditActivity : ComponentActivity() {
             is EditorDialog.Delete -> ConfirmDialog(
                 title = "Delete this ${if (vm.task.type == TaskType.FOLDER) "folder" else "task"}?",
                 body = if (d.descendants > 0) "This will also delete ${d.descendants} subtask${if (d.descendants == 1) "" else "s"}." else null,
-                confirmLabel = "Delete",
+                confirmLabel = Labels.DELETE,
                 onConfirm = {
                     close()
                     // A new task isn't saved yet: deleting it just discards it.
@@ -246,7 +267,8 @@ class TaskEditActivity : ComponentActivity() {
                 }
                 TaskPickerDialog(
                     title = "Add a subtask",
-                    tasks = candidates,
+                    lists = remember(candidates) { nearbyFirst(task, candidates, vm.allTasks, System.currentTimeMillis()) },
+                    allById = vm.allById,
                     onPick = { close(); vm.adoptSubtask(it) },
                     onCreateNew = {
                         close()
@@ -263,7 +285,8 @@ class TaskEditActivity : ComponentActivity() {
                 }
                 TaskPickerDialog(
                     title = "Add a dependent task",
-                    tasks = candidates,
+                    lists = remember(candidates) { nearbyFirst(task, candidates, vm.allTasks, System.currentTimeMillis()) },
+                    allById = vm.allById,
                     onPick = { picked ->
                         close()
                         vm.addDependent(picked) { Toast.makeText(this, "“${picked.title}” now depends on this", Toast.LENGTH_SHORT).show() }
@@ -292,7 +315,8 @@ class TaskEditActivity : ComponentActivity() {
                 }
                 TaskPickerDialog(
                     title = "Add a prerequisite",
-                    tasks = candidates,
+                    lists = remember(candidates) { nearbyFirst(task, candidates, vm.allTasks, System.currentTimeMillis()) },
+                    allById = vm.allById,
                     onPick = { picked -> vm.dependencyIds = vm.dependencyIds + picked.id; close() },
                     // Linked when the task saves, like a picked one.
                     onCreateNew = { close(); quickAddLinked(vm.folderId()) { ids -> vm.dependencyIds = vm.dependencyIds + ids } },
@@ -344,6 +368,7 @@ class TaskEditActivity : ComponentActivity() {
         const val EXTRA_TASK_ID = "task_id"
         const val EXTRA_CREATE_AS_FOLDER = "create_as_folder"
         const val EXTRA_CREATE_AS_PROJECT = "create_as_project"
+        const val EXTRA_CREATE_AS_TEMPLATE = "create_as_template"
         // An unsaved new task (Task JSON) to start from, e.g. quick add's "Edit all details".
         const val EXTRA_DRAFT = "draft"
         const val EXTRA_DRAFT_DEPENDS_ON = "draft_depends_on"

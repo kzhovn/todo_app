@@ -1,9 +1,9 @@
 package com.kzhovn.todoapp.data
 
-// Walks a parentId chain starting at startId, visiting each id in turn until `visit` returns
-// non-null or a cycle is detected — a revisited id stops the walk instead of looping forever,
-// since nothing in the data layer forbids a duplicate parentId chain. Shared by wouldCreateCycle
-// (searches for a specific id) and resolveEffective (resolves the first non-null field value).
+import com.kzhovn.todoapp.repository.createdAt
+
+// Walks a parentId chain from startId until `visit` returns non-null. A revisited id stops the walk
+// instead of looping forever, since nothing in the data layer forbids a parentId cycle.
 fun <T> walkParentChain(startId: Long, allById: Map<Long, Task>, visit: (Long) -> T?): T? {
     val seen = mutableSetOf<Long>()
     var current: Long? = startId
@@ -34,23 +34,59 @@ fun canMoveUnder(taskId: Long, newParentId: Long, allById: Map<Long, Task>): Boo
 fun canDependOn(taskId: Long, dependsOnId: Long, edges: List<TaskDependency>): Boolean =
     dependsOnId != taskId && !wouldCreateDependencyCycle(dependsOnId, taskId, edges)
 
+private fun canDependOn(taskId: Long, dependsOnId: Long, adjacency: Map<Long, List<Long>>): Boolean =
+    dependsOnId != taskId && !wouldCreateDependencyCycle(dependsOnId, taskId, adjacency)
+
+// An edit's links as every device saves them, whatever the form sent. A parent that would make a loop,
+// or is gone, falls back to the stored one.
+fun safeParent(task: Task, storedParentId: Long?, allById: Map<Long, Task>): Long? =
+    task.parentId?.let { p -> if (p in allById && canMoveUnder(task.id, p, allById)) p else storedParentId }
+
+// A dependency that would make a loop, or on a folder (never completed), is dropped; a folder waits on nothing.
+fun safeDependencies(task: Task, dependsOn: Set<Long>, allById: Map<Long, Task>, edges: List<TaskDependency>): Set<Long> {
+    if (task.type == TaskType.FOLDER) return emptySet()
+    val adjacency = dependsOnMap(edges)
+    return dependsOn.filterTo(mutableSetOf()) { allById[it]?.type?.isLinkable == true && canDependOn(task.id, it, adjacency) }
+}
+
 enum class LinkKind { SUBTASK, PREREQUISITE, DEPENDENT }
 
 // The open tasks that could be linked to `task` as `kind` and aren't already, by title.
 fun linkCandidates(task: Task, kind: LinkKind, all: List<Task>, edges: List<TaskDependency>): List<Task> {
     val byId = all.associateBy { it.id }
     val open = all.filter { it.id != task.id && !it.isComplete }
+    val adjacency by lazy { dependsOnMap(edges) }
     return when (kind) {
-        LinkKind.SUBTASK -> open.filter { it.type != TaskType.FOLDER && (task.id == 0L || it.parentId != task.id) && canMoveUnder(it.id, task.id, byId) }
+        LinkKind.SUBTASK -> open.filter { !it.type.isContainer && (task.id == 0L || it.parentId != task.id) && canMoveUnder(it.id, task.id, byId) }
         LinkKind.PREREQUISITE -> {
             val linked = edges.filter { it.taskId == task.id }.map { it.dependsOnTaskId }.toSet()
-            open.filter { it.type.isLinkable && it.id !in linked && canDependOn(task.id, it.id, edges) }
+            open.filter { it.type.isLinkable && it.id !in linked && canDependOn(task.id, it.id, adjacency) }
         }
         LinkKind.DEPENDENT -> {
             val linked = edges.filter { it.dependsOnTaskId == task.id }.map { it.taskId }.toSet()
-            open.filter { it.type.isLinkable && it.id !in linked && canDependOn(it.id, task.id, edges) }
+            open.filter { it.type.isLinkable && it.id !in linked && canDependOn(it.id, task.id, adjacency) }
         }
     }.sortedBy { it.title.lowercase() }
+}
+
+// The related pickers' list, nearest first: tasks beside this one (its siblings and its own subtasks), then
+// the rest of its folder, then ones added in the last two weeks (newest first), then everything else.
+// Empty sections are left out.
+fun nearbyFirst(task: Task, candidates: List<Task>, all: List<Task>, now: Long): List<Pair<String, List<Task>>> {
+    val byId = all.associateBy { it.id }
+    var rest = candidates
+    // A checklist's items aren't offered as nearby: they'd crowd out the tasks (search still finds them).
+    fun take(pick: (Task) -> Boolean): List<Task> = rest.partition { pick(it) && !isChecklistItem(it, byId) }.also { rest = it.second }.first
+    val beside = take { (task.parentId != null && it.parentId == task.parentId) || (task.id != 0L && it.parentId == task.id) }
+    val folder = byId[task.parentId]?.takeIf { it.type == TaskType.FOLDER } ?: nearestFolder(task, byId)
+    val inFolder = folder?.let { f -> take { isUnder(it, f.id, byId) } }.orEmpty()
+    val recent = take { t -> createdAt(t)?.let { now - it < 14 * DAY_MS } == true }.sortedByDescending { it.id }
+    return listOf(
+        Labels.BESIDE_THIS to beside,
+        Labels.inFolder(folder?.title.orEmpty()) to inFolder,
+        Labels.ADDED_RECENTLY to recent,
+        Labels.EVERYTHING_ELSE to rest
+    ).filter { it.second.isNotEmpty() }
 }
 
 // Folders (and whatever else is passed, e.g. checklists) as a tree in sibling order, each with its depth:

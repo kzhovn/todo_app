@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.focus
 
+import com.kzhovn.todoapp.data.DueDates
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.kzhovn.todoapp.ui.theme.LedgerSearchBackground
 import com.kzhovn.todoapp.ui.linkified
@@ -8,14 +9,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.heightIn
 import com.kzhovn.todoapp.AppSettings
-import com.kzhovn.todoapp.data.checklistItems
+import com.kzhovn.todoapp.data.checklistGroups
+import com.kzhovn.todoapp.data.OutlinerPreferences
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.repository.focusSearch
-import com.kzhovn.todoapp.repository.nextFocusTasks
-import com.kzhovn.todoapp.data.findFolder
+import com.kzhovn.todoapp.repository.focusLists
+import com.kzhovn.todoapp.data.defaultFolder
 import com.kzhovn.todoapp.data.inMode
 import com.kzhovn.todoapp.data.modeFolder
-import com.kzhovn.todoapp.data.DEFAULT_FOLDER
 import com.kzhovn.todoapp.data.Labels
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
@@ -26,6 +27,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,13 +65,12 @@ import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.data.dueText
-import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.notifications.PinnedTask
-import com.kzhovn.todoapp.repository.dayOfWeekMask
 import com.kzhovn.todoapp.repository.filterDoing
-import com.kzhovn.todoapp.repository.minuteOfDay
 import com.kzhovn.todoapp.ui.TaskCheckbox
 import com.kzhovn.todoapp.ui.TaskPickerDialog
+import com.kzhovn.todoapp.ui.CompleteSubtasksDialog
+import com.kzhovn.todoapp.data.CompleteQuestion
 import com.kzhovn.todoapp.ui.TimerButton
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
@@ -100,11 +101,16 @@ class FocusActivity : ComponentActivity() {
                 val task = session?.takeUnless { it.isComplete }
                 val askNext = session?.isComplete == true
                 var effectiveDue by remember { mutableStateOf<Long?>(null) }
-                // A checklist in focus: its items, to tick off here.
-                var items by remember { mutableStateOf<List<Task>>(emptyList()) }
-                var candidates by remember { mutableStateOf<List<Task>?>(null) }
+                // A checklist in focus: its items, to tick off here, under their sections (folded as the
+                // checklist's editor has them, on this phone).
+                var groups by remember { mutableStateOf<List<Pair<Task?, List<Task>>>>(emptyList()) }
+                val prefs = remember { OutlinerPreferences(this@FocusActivity) }
+                var folded by remember { mutableStateOf(emptySet<Long>()) }
+                var candidates by remember { mutableStateOf<List<Pair<String, List<Task>>>?>(null) }
                 var leaving by remember { mutableStateOf<String?>(null) }
                 var adding by remember { mutableStateOf(false) }
+                // The focused task's open subtasks, asked about before it's done: its id and how many.
+                var subtaskQuestion by remember { mutableStateOf<Pair<Long, CompleteQuestion>?>(null) }
                 // Adding from the "Focus on" picker: the new task is the one to focus on.
                 var addToFocus by remember { mutableStateOf(false) }
                 val scope = rememberCoroutineScope()
@@ -114,8 +120,9 @@ class FocusActivity : ComponentActivity() {
                     val s = repository.getFocusSession()
                     session = s
                     val all = if (s != null) repository.getAllTasks() else emptyList()
-                    effectiveDue = s?.let { t -> resolveEffective(t, all.associateBy { it.id }, repository.getAllTaskContexts()).effectiveDueDate }
-                    items = s?.takeIf { it.type == TaskType.CHECKLIST }?.let { checklistItems(it.id, all) }.orEmpty()
+                    effectiveDue = s?.let { DueDates(all, repository.getAllDependencyEdges()).at(it) }
+                    groups = s?.takeIf { it.type == TaskType.CHECKLIST }?.let { checklistGroups(it.id, all) }.orEmpty().filter { (section, its) -> section != null || its.isNotEmpty() }
+                    folded = prefs.collapsedIds()
                     if (s != null && !locked) { locked = true; startLockTask() }
                 }
 
@@ -129,16 +136,23 @@ class FocusActivity : ComponentActivity() {
                 // Every task, for the picker's search (any open task, not just Doing or Active).
                 var allTasks by remember { mutableStateOf<List<Task>>(emptyList()) }
 
-                suspend fun pickable(finished: Task? = null): List<Task> {
+                suspend fun pickable(finished: Task? = null): List<Pair<String, List<Task>>> {
                     val now = System.currentTimeMillis()
                     val all = repository.getAllTasks().also { allTasks = it }
                     val byId = all.associateBy { it.id }
                     val contexts = repository.getAllTaskContexts()
                     // In folder mode, the mode's tasks (its search too).
                     val mode = modeFolder(AppSettings.modeFolderId(this@FocusActivity), byId)?.id
-                    val active = repository.getActiveTasksFrom(all, contexts, now, minuteOfDay(now), dayOfWeekMask(now)).filter { inMode(it, mode, byId) }
-                    val doing = filterDoing(active, now, byId, contexts)
-                    return nextFocusTasks(active, doing, finished, byId)
+                    val active = repository.getActiveTasksFrom(all, contexts, now).filter { inMode(it, mode, byId) }
+                    val doing = filterDoing(active, now, DueDates(all, repository.getAllDependencyEdges()))
+                    return focusLists(active, doing, all.filter { inMode(it, mode, byId) }, finished, byId)
+                }
+
+                // The session stays on the done task, so every device asks what's next.
+                fun finish(id: Long, moveOut: Boolean) = scope.launch {
+                    repository.completeChoosing(id, moveOut, System.currentTimeMillis())
+                    PinnedTask.refresh(this@FocusActivity)
+                    reload()
                 }
 
                 fun exit() {
@@ -174,7 +188,7 @@ class FocusActivity : ComponentActivity() {
                 Box(Modifier.fillMaxSize().background(LedgerBackground).padding(24.dp)) {
                     task?.let { t ->
                         Column(Modifier.align(Alignment.Center).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Focus", fontSize = 13.sp, color = LedgerMuted, letterSpacing = 2.sp)
+                            Text(Labels.FOCUS, fontSize = 13.sp, color = LedgerMuted, letterSpacing = 2.sp)
                             Spacer(Modifier.height(16.dp))
                             Text(t.title, fontSize = 28.sp, fontWeight = FontWeight.Medium, color = LedgerInk, textAlign = TextAlign.Center, lineHeight = 34.sp)
                             effectiveDue?.let { due -> Text(dueText(due, System.currentTimeMillis()), fontSize = 14.sp, color = LedgerMuted, modifier = Modifier.padding(top = 8.dp)) }
@@ -186,8 +200,20 @@ class FocusActivity : ComponentActivity() {
                                         .background(LedgerSearchBackground, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 10.dp)
                                 )
                             }
-                            if (items.isNotEmpty()) Column(Modifier.padding(top = 20.dp).heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
-                                items.forEach { item ->
+                            if (groups.isNotEmpty()) Column(Modifier.padding(top = 20.dp).heightIn(max = 320.dp).verticalScroll(rememberScrollState())) {
+                                groups.forEach { (section, sectionItems) ->
+                                section?.let { sec ->
+                                    val isFolded = sec.id in folded
+                                    Text(
+                                        (if (isFolded) "▸ " else "▾ ") + sec.title + "  ${sectionItems.count { it.isComplete }}/${sectionItems.size}",
+                                        fontSize = 15.sp, fontWeight = FontWeight.Bold, color = LedgerMuted,
+                                        modifier = Modifier.padding(top = 10.dp, bottom = 2.dp).clickable {
+                                            folded = if (isFolded) folded - sec.id else folded + sec.id
+                                            scope.launch { prefs.setCollapsed(sec.id, !isFolded) }
+                                        }
+                                    )
+                                }
+                                if (section == null || section.id !in folded) sectionItems.forEach { item ->
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         TaskCheckbox(checked = item.isComplete, due = null, size = 26.dp, touchSize = 48.dp) {
                                             scope.launch { repository.toggleComplete(item.id, System.currentTimeMillis()); reload() }
@@ -198,6 +224,7 @@ class FocusActivity : ComponentActivity() {
                                         )
                                     }
                                 }
+                                }
                             }
                             t.durationMinutes?.let { minutes ->
                                 Spacer(Modifier.height(20.dp))
@@ -206,11 +233,10 @@ class FocusActivity : ComponentActivity() {
                             Spacer(Modifier.height(32.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 TaskCheckbox(checked = false, due = effectiveDue?.let { dueStatus(it, System.currentTimeMillis()) }, size = 36.dp, touchSize = 56.dp) {
-                                    // The session stays on the done task, so every device asks what's next.
+                                    // Open subtasks are asked about first, as everywhere else.
                                     scope.launch {
-                                        repository.completeWithDescendants(t.id, System.currentTimeMillis())
-                                        PinnedTask.refresh(this@FocusActivity)
-                                        reload()
+                                        val question = repository.completeQuestion(t.id)
+                                        if (question != null) subtaskQuestion = t.id to question else finish(t.id, moveOut = false)
                                     }
                                 }
                                 Text("Done", fontSize = 16.sp, color = LedgerMuted)
@@ -229,7 +255,9 @@ class FocusActivity : ComponentActivity() {
                 if (!adding) candidates?.let { list ->
                     TaskPickerDialog(
                         title = Labels.FOCUS_ON,
-                        tasks = list,
+                        lists = list,
+                        allById = allTasks.associateBy { it.id },
+                        chips = true,
                         searchAll = { query ->
                             val byId = allTasks.associateBy { it.id }
                             val mode = modeFolder(AppSettings.modeFolderId(this@FocusActivity), byId)?.id
@@ -243,10 +271,19 @@ class FocusActivity : ComponentActivity() {
                     )
                 }
 
+                subtaskQuestion?.let { (id, question) ->
+                    CompleteSubtasksDialog(
+                        question,
+                        onCompleteAll = { subtaskQuestion = null; finish(id, moveOut = false) },
+                        onMoveOut = { subtaskQuestion = null; finish(id, moveOut = true) },
+                        onDismiss = { subtaskQuestion = null }
+                    )
+                }
+
                 if (askNext && candidates == null) {
                     AlertDialog(
                         onDismissRequest = {},
-                        title = { Text("Done!") },
+                        title = { Text(Labels.FOCUS_DONE) },
                         text = { Text(Labels.FOCUS_NEXT_OR_FINISH) },
                         confirmButton = { Button(onClick = { scope.launch { candidates = pickable(finished = session) } }) { Text("Next task") } },
                         dismissButton = { TextButton(onClick = { end() }) { Text(Labels.IM_DONE) } }
@@ -264,7 +301,7 @@ class FocusActivity : ComponentActivity() {
                             val add = repository.planQuickAdd(text, AppSettings.rolloverHour(this@FocusActivity), now)
                             // Into folder mode's folder or Personal unless it names a folder, like quick add with no folder chosen.
                             val folders = repository.getFolders()
-                            val home = modeFolder(AppSettings.modeFolderId(this@FocusActivity), folders.associateBy { it.id }) ?: findFolder(folders, DEFAULT_FOLDER)
+                            val home = defaultFolder(folders, AppSettings.modeFolderId(this@FocusActivity))
                             val created = repository.quickAdd(add, home?.id, now)?.let { repository.getTask(it) }
                             if (focusOnIt && created != null && add.task != null) {
                                 candidates = null
@@ -288,8 +325,8 @@ class FocusActivity : ComponentActivity() {
                                 modifier = Modifier.fillMaxWidth()
                             )
                         },
-                        confirmButton = { Button(onClick = add, enabled = text.isNotBlank()) { Text(if (focusOnIt) "Focus" else "Add") } },
-                        dismissButton = { TextButton(onClick = close) { Text("Cancel") } }
+                        confirmButton = { Button(onClick = add, enabled = text.isNotBlank()) { Text(if (focusOnIt) Labels.FOCUS else "Add") } },
+                        dismissButton = { TextButton(onClick = close) { Text(Labels.CANCEL) } }
                     )
                 }
 

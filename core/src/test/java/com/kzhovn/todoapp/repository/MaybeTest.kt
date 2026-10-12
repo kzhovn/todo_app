@@ -16,4 +16,11 @@ class MaybeTest {
         assertEquals(listOf(normal), active)
         assertFalse(maybe.copy(isStarred = true).starRule().isStarred)
     }
+
+    @Test
+    fun `starring a maybe makes it a normal starred task`() {
+        val starred = Task(id = 1, title = "someday", isMaybe = true).toggledStar()
+        assertEquals(false to true, starred.isMaybe to starred.isStarred)
+        assertFalse(starred.toggledStar().isStarred)
+    }
 }

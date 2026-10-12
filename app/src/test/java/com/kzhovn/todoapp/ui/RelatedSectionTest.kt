@@ -109,7 +109,7 @@ class RelatedSectionTest {
         compose.setContent {
             LedgerTheme {
                 Column(Modifier.padding(16.dp)) {
-                    Breadcrumb(vm) {}; TitleBox(vm, false, {}, {}, {}); TypeRow(vm); TimingSection(vm, compose.activity, {}, {}); RelatedSection(vm, {}, {}, {}, {}); BottomBar(vm, {}, {}, {})
+                    Breadcrumb(vm) {}; TitleBox(vm, false, {}, {}, {}); TypeRow(vm); TimingSection(vm, compose.activity, {}, {}); RelatedSection(vm, {}, {}, {}, {}); BottomBar(vm, {}, {}, {}, {})
                     com.kzhovn.todoapp.WaitingSection(listOf(roommate), mapOf(roommate.id to 1), {}, {}, {}, {})
                 }
             }
@@ -119,6 +119,61 @@ class RelatedSectionTest {
         val bitmap = Bitmap.createBitmap(root.width, root.height * 3 / 4, Bitmap.Config.ARGB_8888)
         root.draw(android.graphics.Canvas(bitmap))
         File(dir, "waiting.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    // A checklist's items are rows like the subtasks: long-press drags one, a maybe is marked "?".
+    private fun openChecklist(): TaskEditViewModel = runBlocking {
+        db.taskDao().insert(Task(id = 20, title = "Packing", type = TaskType.CHECKLIST))
+        db.taskDao().insert(Task(id = 21, title = "Socks", parentId = 20, position = 1))
+        db.taskDao().insert(Task(id = 22, title = "Umbrella", parentId = 20, position = 2, isMaybe = true))
+        db.taskDao().insert(Task(id = 23, title = "Passport", parentId = 20, position = 3))
+        db.taskDao().insert(Task(id = 30, title = "Clothes", type = TaskType.SECTION, parentId = 20, position = 4))
+        db.taskDao().insert(Task(id = 31, title = "Swimsuit", parentId = 30, position = 1))
+        db.taskDao().insert(Task(id = 32, title = "Sandals", parentId = 30, position = 2, isComplete = true))
+        TaskEditViewModel(repository, ContextRepository(db.taskContextDao()), taskId = 20).also { it.load(null, null); it.refresh() }
+    }
+
+    @Test
+    fun longPressDragsAChecklistItemToTheTop() {
+        val vm = openChecklist()
+        compose.setContent { LedgerTheme { Column(Modifier.padding(16.dp)) { ItemsSection(vm, {}, {}) } } }
+        compose.onNodeWithText("Passport").performTouchInput {
+            down(center)
+            advanceEventTime(viewConfiguration.longPressTimeoutMillis + 100)
+            repeat(10) { moveBy(Offset(0f, -height * 0.2f)) }
+            up()
+        }
+        compose.waitForIdle()
+        assertEquals(listOf("Passport", "Socks", "Umbrella", "Clothes"), runBlocking { db.taskDao().getAllOnce().filter { it.parentId == 20L }.sortedWith(TaskOrder).map { it.title } })
+        compose.onNodeWithText("?").assertExists()
+    }
+
+    @Test
+    fun anItemDraggedDownOntoASectionGoesFirstInIt() {
+        val vm = openChecklist()
+        compose.setContent { LedgerTheme { Column(Modifier.padding(16.dp)) { ItemsSection(vm, {}, {}) } } }
+        compose.onNodeWithText("Passport").performTouchInput {
+            down(center)
+            advanceEventTime(viewConfiguration.longPressTimeoutMillis + 100)
+            repeat(5) { moveBy(Offset(0f, height * 0.2f)) }
+            up()
+        }
+        compose.waitForIdle()
+        val passport = runBlocking { db.taskDao().getById(23)!! }
+        assertEquals(30L, passport.parentId)
+        assertEquals(listOf("Passport", "Swimsuit", "Sandals"), runBlocking { com.kzhovn.todoapp.data.checklistGroups(20, db.taskDao().getAllOnce()) }.last().second.map { it.title })
+    }
+
+    @Test
+    fun renderChecklist() {
+        val vm = openChecklist()
+        val dir = System.getenv("RENDER_DIR") ?: return
+        compose.setContent { LedgerTheme { Column(Modifier.padding(16.dp)) { TitleBox(vm, false, {}, {}, {}); ItemsSection(vm, {}, {}) } } }
+        compose.waitForIdle()
+        val root = compose.activity.window.decorView
+        val bitmap = Bitmap.createBitmap(root.width, root.height * 2 / 3, Bitmap.Config.ARGB_8888)
+        root.draw(android.graphics.Canvas(bitmap))
+        File(dir, "checklist_items.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
     @Test

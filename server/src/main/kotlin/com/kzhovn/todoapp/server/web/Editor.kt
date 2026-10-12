@@ -1,9 +1,13 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.data.DAY_MS
+import com.kzhovn.todoapp.data.monthDay
+import com.kzhovn.todoapp.data.dueText
+import com.kzhovn.todoapp.data.resolvesText
+import com.kzhovn.todoapp.data.folderOf
 import com.kzhovn.todoapp.recurrence.recurrenceToSave
 import com.kzhovn.todoapp.server.quickAddChips
 import com.kzhovn.todoapp.quickadd.QuickAdd
-import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.reminderSummary
 import com.kzhovn.todoapp.data.beforeDueText
 import com.kzhovn.todoapp.repository.changedInheritedFields
@@ -14,6 +18,7 @@ import com.kzhovn.todoapp.recurrence.NTH_NAMES
 import com.kzhovn.todoapp.recurrence.recurrencePresets
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.mergeEdit
 import kotlinx.html.summary
 import kotlinx.html.details
 import com.kzhovn.todoapp.data.formatDuration
@@ -30,7 +35,13 @@ import com.kzhovn.todoapp.data.folderTree
 import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.LinkKind
 import com.kzhovn.todoapp.data.linkCandidates
-import com.kzhovn.todoapp.data.CHECK_IN_CHOICES
+import com.kzhovn.todoapp.data.nearbyFirst
+import com.kzhovn.todoapp.data.checklistGroups
+import com.kzhovn.todoapp.data.itemsIn
+import com.kzhovn.todoapp.data.isDoable
+import com.kzhovn.todoapp.data.CHECK_IN_PRESETS
+import com.kzhovn.todoapp.data.MAX_CHECK_IN_DAYS
+import com.kzhovn.todoapp.data.nextCheckIn
 import com.kzhovn.todoapp.data.checkInEvery
 import com.kzhovn.todoapp.data.checkInText
 import com.kzhovn.todoapp.data.moveOutFolderId
@@ -143,12 +154,14 @@ fun Route.editorRoutes(service: TaskService) {
     // that folder; otherwise a new task goes in Personal, as quick add's do, and a project or folder
     // starts at the top. With `text` (the top bar's "Edit all details"), a draft of that quick add.
     get("/tasks/new") {
-        val type = call.request.queryParameters["type"]?.let { runCatching { TaskType.valueOf(it) }.getOrNull() } ?: TaskType.TASK
+        // ?template=1: "+ New template" (a checklist unless said otherwise: most are lists, packing).
+        val asTemplate = call.request.queryParameters["template"] != null
+        val type = call.request.queryParameters["type"]?.let { runCatching { TaskType.valueOf(it) }.getOrNull() } ?: if (asTemplate) TaskType.CHECKLIST else TaskType.TASK
         val parent = call.folder()?.takeIf { service.get(it)?.type == TaskType.FOLDER } ?: if (type == TaskType.TASK) service.defaultFolderId() else null
         val draft = call.request.queryParameters["text"]?.let { text ->
             service.planQuickAdd(text, call.request.queryParameters.quickAddChips()).let { add -> add.takeIf { it.task != null } ?: QuickAdd(Task(title = text)) }
         }
-        val task = draft?.task?.let { it.copy(parentId = it.parentId ?: parent) } ?: Task(title = "", type = type, parentId = parent)
+        val task = draft?.task?.let { it.copy(parentId = it.parentId ?: parent) } ?: Task(title = "", type = type, parentId = parent, isTemplate = asTemplate)
         val state = EditState(task, draft?.contextIds.orEmpty(), emptySet())
         val recurrence = recurrenceSelectionFromTask(task.recurrenceType, task.recurrenceRule)
         call.respondHtml {
@@ -169,7 +182,7 @@ fun Route.editorRoutes(service: TaskService) {
         val merged = merge(base, form, current)
         val changed = changedInheritedFields(base.task, form.task, base.contextIds, form.contextIds)
         val needsQuestion = (merged.task.type == TaskType.PROJECT && service.tasks().none { it.parentId == id }) ||
-            (changed.isNotEmpty() && service.descendantsOverriding(id, changed).isNotEmpty())
+            service.overridingSubtasks(id, changed).first.isNotEmpty()
         val status = when {
             form.task.title.isBlank() || merged == current -> null
             needsQuestion -> "Not saved: press Save"
@@ -193,14 +206,14 @@ fun Route.editorRoutes(service: TaskService) {
         call.respondList(service, call.mode(), extra = createHTML().div { id = "toast"; attributes["hx-swap-oob"] = "true" })
     }
 
-    post("/tasks/{id}/prerequisite/{other}/remove") {
+    // Unlinks a prerequisite (this task waits on other) or a dependent (other waits on this task).
+    post("/tasks/{id}/{kind}/{other}/remove") {
         val id = call.taskId() ?: return@post
-        call.parameters["other"]?.toLongOrNull()?.let { service.removeDependency(id, it) }
-        call.respondSubtasks(service, id)
-    }
-    post("/tasks/{id}/dependent/{other}/remove") {
-        val id = call.taskId() ?: return@post
-        call.parameters["other"]?.toLongOrNull()?.let { service.removeDependency(it, id) }
+        val other = call.parameters["other"]?.toLongOrNull()
+        if (other != null) when (call.parameters["kind"]) {
+            "prerequisite" -> service.removeDependency(id, other)
+            "dependent" -> service.removeDependency(other, id)
+        }
         call.respondSubtasks(service, id)
     }
     // The one add field: `kind` picks subtask, prerequisite or dependent; `existing` (a suggestion) or
@@ -213,8 +226,8 @@ fun Route.editorRoutes(service: TaskService) {
         val task = service.get(id)
         val kind = p["kind"] ?: "subtask"
         if (task != null) when (kind) {
-            "prerequisite" -> existing?.let { service.addDependency(id, it) } ?: service.addTyped(text, folder = service.folderIdOf(task))?.let { service.addDependency(id, it.id) }
-            "dependent" -> existing?.let { service.addDependency(it, id) } ?: service.addTyped(text, folder = service.folderIdOf(task))?.let { service.addDependency(it.id, id) }
+            "prerequisite" -> existing?.let { service.addDependency(id, it) } ?: service.addTyped(text, folder = folderOf(task, service.tasks().associateBy { it.id }))?.let { service.addDependency(id, it.id) }
+            "dependent" -> existing?.let { service.addDependency(it, id) } ?: service.addTyped(text, folder = folderOf(task, service.tasks().associateBy { it.id }))?.let { service.addDependency(it.id, id) }
             else -> existing?.let { service.reparent(it, id) } ?: text.lines().filter { it.isNotBlank() }.forEach { service.addTyped(it, under = id) }
         }
         call.respondSubtasks(service, id, focusAddItem = true, kind = kind)
@@ -227,14 +240,20 @@ fun Route.editorRoutes(service: TaskService) {
         val all = service.tasks()
         val byId = all.associateBy { it.id }
         val task = byId[id] ?: return@get
-        val matches = if (q.isEmpty()) emptyList() else linkCandidates(task, LINK_KINDS[kind] ?: LinkKind.SUBTASK, all, service.dependencyEdges()).filter { it.title.contains(q, ignoreCase = true) }.take(8)
+        val candidates = linkCandidates(task, LINK_KINDS[kind] ?: LinkKind.SUBTASK, all, service.dependencyEdges())
+        // Typed: what matches. Empty (the field just focused): the nearest few first, as the phone's picker.
+        val sections = if (q.isEmpty()) nearbyFirst(task, candidates, all, service.now()).filter { it.first != Labels.EVERYTHING_ELSE }.map { (label, ts) -> label to ts.take(5) }
+            else listOf(null to candidates.filter { it.title.contains(q, ignoreCase = true) }.take(8))
         call.respondText(createHTML().div(classes = "suggest") {
             if (q.isNotEmpty()) button(type = ButtonType.submit, classes = "sugg new") { +"↵ New ${KIND_NOUNS[kind] ?: "subtask"} “$q”" }
-            matches.forEach { t ->
-                button(type = ButtonType.submit, classes = "sugg") {
-                    name = "existing"; value = t.id.toString()
-                    span { +t.title }
-                    span(classes = "where") { +ancestors(t, byId).joinToString(" › ") { it.title } }
+            sections.forEach { (label, matches) ->
+                label?.let { div(classes = "sugg-head") { +it } }
+                matches.forEach { t ->
+                    button(type = ButtonType.submit, classes = "sugg") {
+                        name = "existing"; value = t.id.toString()
+                        span { +t.title }
+                        span(classes = "where") { +ancestors(t, byId).joinToString(" › ") { it.title } }
+                    }
                 }
             }
         }, ContentType.Text.Html)
@@ -245,41 +264,84 @@ fun Route.editorRoutes(service: TaskService) {
         val id = call.taskId() ?: return@post
         val task = service.get(id)
         call.parameters["sub"]?.toLongOrNull()?.let(service::get)?.takeIf { task != null && it.parentId == id }?.let { sub ->
-            service.update(sub.id) { it.copy(parentId = moveOutFolderId(task!!, service.tasks().associateBy { t -> t.id }), position = null) }
+            service.reparent(sub.id, moveOutFolderId(task!!, service.tasks().associateBy { t -> t.id }))
             if (call.request.queryParameters["unlink"] == "1") { service.removeDependency(id, sub.id); service.removeDependency(sub.id, id) }
         }
         call.respondSubtasks(service, id)
     }
+    // A subtask or item (and what's under it) goes, offered back in a toast.
     post("/tasks/{id}/subtasks/{sub}/delete") {
         val id = call.taskId() ?: return@post
-        call.parameters["sub"]?.toLongOrNull()?.let(service::get)?.takeIf { it.parentId == id }?.let { service.delete(it.id) }
-        call.respondSubtasks(service, id)
+        val sub = call.parameters["sub"]?.toLongOrNull()?.let(service::get)?.takeIf { it.parentId == id } ?: return@post call.respondSubtasks(service, id)
+        service.delete(sub.id)
+        call.respondSubtasks(service, id) {
+            this.id = "toast"; attributes["hx-swap-oob"] = "true"; classes = setOf("show")
+            span { +Labels.deleted(sub.title) }
+            button { hx("post", "/tasks/$id/subtasks/${sub.id}/restore?mode=${call.listQuery()}", "#related"); +Labels.UNDO }
+        }
+    }
+    post("/tasks/{id}/subtasks/{sub}/restore") {
+        val id = call.taskId() ?: return@post
+        call.parameters["sub"]?.toLongOrNull()?.let(service::restore)
+        call.respondSubtasks(service, id, toast = { this.id = "toast"; attributes["hx-swap-oob"] = "true" })
     }
     // Drag (or Alt+arrows): the subtask goes right before/after another of this task's subtasks.
     post("/tasks/{id}/subtasks/{sub}/move") {
         val id = call.taskId() ?: return@post
         val p = call.receiveParameters()
         val sub = call.parameters["sub"]?.toLongOrNull()
-        val anchor = p["anchor"]?.toLongOrNull()?.let(service::get)?.takeIf { it.parentId == id }
-        if (sub != null && anchor != null && service.get(sub)?.parentId == id) service.moveNextTo(sub, anchor.id, after = p["after"] == "1")
+        // A subtask, or a checklist's item or section heading (an item drags into a section, see planMoveItem).
+        fun ofThis(t: Task?) = t != null && (t.parentId == id || t.parentId?.let(service::get)?.takeIf { it.type == TaskType.SECTION }?.parentId == id)
+        val anchor = p["anchor"]?.toLongOrNull()?.let(service::get)?.takeIf(::ofThis)
+        if (sub != null && anchor != null && ofThis(service.get(sub))) service.moveNextTo(sub, anchor.id, after = p["after"] == "1")
         call.respondSubtasks(service, id)
     }
     // A checklist's items: add ("milk, eggs" is two), uncheck all, clear checked.
+    // ?in=: into one of its sections ("+ Add to Clothes").
     post("/tasks/{id}/items") {
         val id = call.taskId() ?: return@post
         val text = call.receiveParameters()["text"].orEmpty()
-        if (service.get(id)?.type == TaskType.CHECKLIST) service.addItems(id, text)
-        call.respondSubtasks(service, id, focusAddItem = true)
+        val into = call.request.queryParameters["in"]?.toLongOrNull()?.let(service::get)?.takeIf { it.type == TaskType.SECTION && it.parentId == id }
+        if (into != null) service.addItems(into.id, text) else if (service.get(id)?.type == TaskType.CHECKLIST) service.addItems(id, text)
+        // The field stays open (and focused) for the next one.
+        call.respondSubtasks(service, id, focusAddItem = into == null, addingTo = into?.id)
+    }
+    // A checklist's sections: add one, fold one (per browser, with the All tree's folds), rename, check all,
+    // uncheck all. Deleting one is a subtask's delete (with Undo).
+    post("/tasks/{id}/sections") {
+        val id = call.taskId() ?: return@post
+        call.receiveParameters()["text"]?.takeIf { it.isNotBlank() && service.get(id)?.type == TaskType.CHECKLIST }?.let { service.addSection(id, it) }
+        call.respondSubtasks(service, id)
+    }
+    post("/tasks/{id}/sections/{sec}/{action}") {
+        val id = call.taskId() ?: return@post
+        val sec = call.parameters["sec"]?.toLongOrNull()?.let(service::get)?.takeIf { it.type == TaskType.SECTION && it.parentId == id } ?: return@post call.respondSubtasks(service, id)
+        when (call.parameters["action"]) {
+            "fold" -> call.toggleCollapsed(sec.id)
+            "rename" -> call.receiveParameters()["text"]?.takeIf { it.isNotBlank() }?.let { name -> service.update(sec.id) { it.copy(title = name.trim()) } }
+            "check" -> service.checkAll(sec.id)
+            "uncheck" -> service.uncheckAll(sec.id)
+            // Its +: the add field opens under its heading (unfolded, if it was folded).
+            "adding" -> { if (sec.id in call.collapsedIds()) call.toggleCollapsed(sec.id); return@post call.respondSubtasks(service, id, addingTo = sec.id) }
+        }
+        call.respondSubtasks(service, id)
     }
     post("/tasks/{id}/items/uncheck") {
         val id = call.taskId() ?: return@post
         service.uncheckAll(id)
         call.respondSubtasks(service, id)
     }
+    // Undoable, like a delete: a toast offers the items back.
     post("/tasks/{id}/items/clear") {
         val id = call.taskId() ?: return@post
-        service.clearChecked(id)
-        call.respondSubtasks(service, id)
+        val count = itemsIn(id, service.tasks()).count { it.isComplete }
+        val at = service.clearChecked(id)
+        call.respondSubtasks(service, id, toast = at?.let { { clearedToast(id, count, it, call.mode()) } })
+    }
+    post("/tasks/{id}/items/restore") {
+        val id = call.taskId() ?: return@post
+        call.request.queryParameters["at"]?.toLongOrNull()?.let { service.restoreCleared(id, it) }
+        call.respondSubtasks(service, id, toast = { this.id = "toast"; attributes["hx-swap-oob"] = "true" })
     }
     // Completing a checklist (on purpose, from its editor); unchecked items move to a new copy or are completed too.
     post("/tasks/{id}/complete-list") {
@@ -291,10 +353,17 @@ fun Route.editorRoutes(service: TaskService) {
     post("/tasks/{id}/subtasks/{sub}/toggle") {
         val id = call.taskId() ?: return@post
         val linked = service.dependencyEdges().filter { it.taskId == id || it.dependsOnTaskId == id }.flatMap { listOf(it.taskId, it.dependsOnTaskId) }.toSet()
-        call.parameters["sub"]?.toLongOrNull()?.let(service::get)?.takeIf { it.parentId == id || it.id in linked }?.let {
-            if (it.isComplete) service.uncomplete(it.id) else service.complete(it.id)
+        // A subtask, one under a subtask (shown nested), or a linked task.
+        val sub = call.parameters["sub"]?.toLongOrNull()?.let(service::get)?.takeIf { it.parentId == id || it.parentId?.let(service::get)?.parentId == id || it.id in linked }
+            ?: return@post call.respondSubtasks(service, id)
+        // Open subtasks of its own are asked about first, as in the lists.
+        val choice = call.request.queryParameters["subtasks"]
+        val open = if (sub.isComplete) 0 else service.activeDescendantCount(sub.id)
+        if (open > 0 && choice == null) return@post call.respondSubtasks(service, id) {
+            askSubtasksToast(sub, open, "/tasks/$id/subtasks/${sub.id}/toggle?mode=${call.listQuery()}", target = "#related")
         }
-        call.respondSubtasks(service, id)
+        if (sub.isComplete) service.uncomplete(sub.id) else service.completeOrDecide(sub.id, choice)
+        call.respondSubtasks(service, id, toast = { this.id = "toast"; attributes["hx-swap-oob"] = "true" }) // an answered question goes
     }
 }
 
@@ -323,15 +392,14 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     if (needsFirstStep && firstStep.isBlank()) {
         return reshow(view.copy(needFirstStep = true, error = "A project needs a first step."))
     }
-    val changed = if (id == null) emptySet() else changedInheritedFields(base.task, form.task, base.contextIds, form.contextIds)
-        .filterTo(mutableSetOf()) { service.descendantsOverriding(id, setOf(it)).isNotEmpty() }
-    val overriding = if (id == null || changed.isEmpty()) emptyList() else service.descendantsOverriding(id, changed)
+    val (overriding, changed) = if (id == null) emptyList<Task>() to emptySet() else
+        service.overridingSubtasks(id, changedInheritedFields(base.task, form.task, base.contextIds, form.contextIds))
     val inherit = params["inherit"]
     if (changed.isNotEmpty() && inherit == null) return reshow(view.copy(ask = overriding.size to changed))
 
     // A new task's prerequisite and dependent, typed in the form: made in its folder, as related work
     // usually belongs together.
-    val folderId = service.folderIdOf(merged.task)
+    val folderId = folderOf(merged.task, service.tasks().associateBy { it.id })
     fun createTyped(text: String) = service.addTyped(text, folder = folderId)?.id
     val blocker = createTyped(newDep)
     val dependsOn = merged.dependsOn + listOfNotNull(blocker)
@@ -347,13 +415,27 @@ private suspend fun RoutingContext.saveTask(service: TaskService, id: Long?) {
     if (params["resolve"] != null) service.complete(savedId)
     if (id == null && params["pin"] != null) service.pin(savedId)
     // A new checklist's lines are its items (see checklistItem); a task's, its subtasks.
-    newSubtasks.forEach { if (service.get(savedId)?.type == TaskType.CHECKLIST) service.addItems(savedId, it) else service.addTyped(it, under = savedId) }
+    newSubtasks.forEach { service.addTyped(it, under = savedId) } // a new checklist's lines are its items (addTyped)
     createTyped(newDependent)?.let { service.addDependency(it, savedId) }
     call.respondRedirect(call.listPath())
 }
 
-private suspend fun io.ktor.server.application.ApplicationCall.respondSubtasks(service: TaskService, id: Long, focusAddItem: Boolean = false, kind: String = "subtask") =
-    respondText(createHTML().div { relatedSection(service, id, mode(), focusAddItem, kind) }, ContentType.Text.Html)
+// `toast`: an out-of-band #toast to go with it.
+private suspend fun io.ktor.server.application.ApplicationCall.respondSubtasks(
+    service: TaskService, id: Long, focusAddItem: Boolean = false, kind: String = "subtask", addingTo: Long? = null, toast: (DIV.() -> Unit)? = null
+) = respondText(createHTML().div { relatedSection(service, id, mode(), focusAddItem, kind, collapsedIds(), addingTo) } + toast?.let { createHTML().div(block = it) }.orEmpty(), ContentType.Text.Html)
+
+// "Deleted 3 checked items · Undo" after Clear checked.
+private fun DIV.clearedToast(checklistId: Long, count: Int, deletedAt: Long, mode: ListMode) {
+    id = "toast"
+    attributes["hx-swap-oob"] = "true"
+    classes = setOf("show")
+    span { +"Deleted $count checked item${if (count == 1) "" else "s"}" }
+    button {
+        hx("post", "/tasks/$checklistId/items/restore?at=$deletedAt&mode=${mode.name}", "#related")
+        +Labels.UNDO
+    }
+}
 
 private val LINK_KINDS = mapOf("subtask" to LinkKind.SUBTASK, "prerequisite" to LinkKind.PREREQUISITE, "dependent" to LinkKind.DEPENDENT)
 private val KIND_NOUNS = mapOf("subtask" to "subtask", "prerequisite" to "prerequisite", "dependent" to "dependent task")
@@ -370,13 +452,17 @@ private fun parseForm(p: Parameters, base: EditState, recurrence: RecurrenceSele
     val type = p["type"]?.let { runCatching { TaskType.valueOf(it) }.getOrNull() } ?: base.task.type
     // A waiting item's date is "Resolves on" (Task.typeRule drops its star and priority on save).
     val waiting = type == TaskType.WAITING
+    val baseCheckIn = localDateTime(nextCheckIn(base.task, service.now())).toLocalDate().toString()
     val task = base.task.copy(
         title = p["title"].orEmpty().trim(),
         type = type,
         isStarred = p["starred"] != null,
-        startDate = dateTime(p["startDate"], p["startTime"]),
+        // A waiting item's start is its next check-in: kept to the minute unless its day was changed.
+        startDate = if (!waiting) dateTime(p["startDate"], p["startTime"])
+            else if (p["checkInDate"] == baseCheckIn) base.task.startDate else dateTime(p["checkInDate"], null),
         dueDate = if (waiting) dateTime(p["resolvesDate"], p["resolvesTime"]) else dateTime(p["dueDate"], p["dueTime"]),
-        checkInDays = p["checkIn"]?.toIntOrNull() ?: base.task.checkInDays,
+        checkInDays = if (!waiting) base.task.checkInDays
+            else p["checkInN"]?.toIntOrNull()?.let { it * (p["checkInUnit"]?.toIntOrNull() ?: 1) }?.coerceIn(1, MAX_CHECK_IN_DAYS),
         reminderOffsetMinutes = p["reminder"]?.toIntOrNull(),
         remindAtStart = p["remindStart"] != null,
         remindAt = dateTime(p["remindAtDate"], p["remindAtTime"]),
@@ -445,28 +531,22 @@ internal fun dateTime(date: String?, time: String?): Long? {
     return d.atTime(t ?: LocalTime.MIDNIGHT).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
 }
 
-// Three-way merge: a field the user changed in the form wins; any other keeps its current value.
-private fun merge(base: EditState, form: EditState, current: EditState): EditState {
-    fun <T> pick(field: (Task) -> T): T = if (field(form.task) != field(base.task)) field(form.task) else field(current.task)
-    val (recurrenceType, recurrenceRule) = pick { it.recurrenceType to it.recurrenceRule }
-    val task = current.task.copy(
-        title = pick { it.title }, type = pick { it.type }, isStarred = pick { it.isStarred },
-        startDate = pick { it.startDate }, dueDate = pick { it.dueDate }, reminderOffsetMinutes = pick { it.reminderOffsetMinutes }, remindAtStart = pick { it.remindAtStart }, remindAt = pick { it.remindAt },
-        parentId = pick { it.parentId }, recurrenceType = recurrenceType, recurrenceRule = recurrenceRule,
-        isMaybe = pick { it.isMaybe }, isHighPriority = pick { it.isHighPriority }, expiresAt = pick { it.expiresAt }, sequential = pick { it.sequential }, activeWithSubtasks = pick { it.activeWithSubtasks },
-        durationMinutes = pick { it.durationMinutes }, notes = pick { it.notes }
-    )
-    return EditState(
-        task,
+// Three-way merge: what the user changed in the form wins; anything else keeps its current value (see mergeEdit).
+private fun merge(base: EditState, form: EditState, current: EditState): EditState =
+    EditState(
+        mergeEdit(base.task, form.task, current.task),
         if (form.contextIds != base.contextIds) form.contextIds else current.contextIds,
         if (form.dependsOn != base.dependsOn) form.dependsOn else current.dependsOn
     )
-}
 
 private fun localDateTime(millis: Long) = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
 
+// A date and time input's values ("2026-10-07", "17:30"); no time: an empty one (see hasTime).
+private fun dateAndTime(millis: Long): Pair<String, String> = localDateTime(millis).let {
+    it.toLocalDate().toString() to if (hasTime(millis)) it.toLocalTime().withSecond(0).withNano(0).toString() else ""
+}
+
 // The folder a task sits directly in, where its new related tasks go (related work usually belongs together).
-private fun TaskService.folderIdOf(task: Task): Long? = task.parentId?.takeIf { get(it)?.type == TaskType.FOLDER }
 
 // A note, collapsed (5 lines; 2 on a phone's screen) with links that open; clicking it edits the whole
 // note (app.js). With no note it's only shown while the title card is being edited (CSS).
@@ -485,7 +565,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
     a(href = v.list.path, classes = "detail-close") { attributes["aria-label"] = "Close"; +"✕" }
     val t = v.shown.task
     val isNew = t.id == 0L
-    val all = service.tasks()
+    val all = service.tasksAround(t.id)
     val byId = all.associateBy { it.id }
     val formId = "editor-form"
     // An open task saves itself a moment after each change (see /autosave); the form still submits
@@ -504,6 +584,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
         button(type = ButtonType.submit, classes = "default-submit") { attributes["tabindex"] = "-1"; attributes["aria-hidden"] = "true"; +Labels.SAVE }
         hiddenInput(name = "base") { id = "base"; value = v.base }
         v.error?.let { p(classes = "error") { +it } }
+        if (t.isTemplate && !isNew) templateBanner(t)
         v.ask?.let { (count, fields) ->
             div(classes = "ask") {
                 p { +Labels.subtasksOverride(count, fields.joinToString(" and ") { it.label }) }
@@ -523,7 +604,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
         div(classes = "title-box") {
             // An existing task pins at once, like the phone's; a new one when it's saved.
             if (isNew) label(classes = "pin-toggle") { attributes["title"] = Labels.PIN; checkBoxInput(name = "pin") { checked = v.pin }; icon(Icon.PUSH_PIN, "") }
-            else if (t.type == TaskType.TASK && !t.isComplete) {
+            else if (t.type.isDoable && !t.isComplete) {
                 pinControl(t, service.pinned()?.id == t.id)
             }
             textArea(classes = "title-input") { name = "title"; rows = "1"; placeholder = Labels.TITLE; required = true; +t.title }
@@ -547,17 +628,41 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
         // up for a check-in, or the day it resolves itself.
         div(classes = "field-label section waiting-only") { +Labels.WAITING }
         div(classes = "pills waiting-only") {
-            popPill(Labels.CHECK_IN, Icon.REPEAT, CHECK_IN_CHOICES.firstOrNull { it.first == t.checkInEvery() }?.second, "select", "") {
-                select {
-                    name = "checkIn"
-                    CHECK_IN_CHOICES.forEach { (days, label) -> option { value = days.toString(); selected = t.checkInEvery() == days; +label } }
+            val every = t.checkInEvery()
+            // Presets fill the line below (app.js's .rep-preset handler) and close; changing the line moves the
+            // next check-in to that far from today (app.js, as withCheckInEvery).
+            popPill(Labels.CHECK_IN, Icon.REPEAT, Labels.checkIn(every), "checkin", "") {
+                div(classes = "rep") {
+                    val today = localDateTime(service.now()).toLocalDate()
+                    div(classes = "rep-presets") {
+                        CHECK_IN_PRESETS.forEach { days ->
+                            val (n, unit) = if (days % 7 == 0) days / 7 to 7 else days to 1
+                            button(type = ButtonType.button, classes = if (days == every) "rep-preset on" else "rep-preset") {
+                                attributes["data-days"] = days.toString()
+                                attributes["data-set"] = """{"checkInN":"$n","checkInUnit":"$unit","checkInDate":"${today.plusDays(days.toLong())}"}"""
+                                +Labels.checkIn(days)
+                                span(classes = "rep-when") { +monthDay(service.now() + days * DAY_MS) }
+                            }
+                        }
+                    }
+                    div(classes = "rep-line") {
+                        val weeks = every % 7 == 0
+                        +"Every"
+                        numberInput(name = "checkInN", classes = "rep-n") { value = (if (weeks) every / 7 else every).toString(); min = "1"; max = MAX_CHECK_IN_DAYS.toString() }
+                        label(classes = "pill") { radioInput(name = "checkInUnit") { value = "1"; checked = !weeks }; +"days" }
+                        label(classes = "pill") { radioInput(name = "checkInUnit") { value = "7"; checked = weeks }; +"weeks" }
+                    }
+                    label(classes = "rep-line") {
+                        +Labels.NEXT_CHECK_IN
+                        dateInput(name = "checkInDate") { value = localDateTime(nextCheckIn(t, service.now())).toLocalDate().toString() }
+                    }
                 }
             }
             datePill(Labels.RESOLVES_ON, "resolves", Icon.CALENDAR, t.dueDate.takeIf { t.type == TaskType.WAITING }, "")
         }
         if (t.type == TaskType.WAITING && !isNew) p(classes = "hint waiting-only") {
             val now = service.now()
-            +(t.dueDate?.let { "Resolves itself on ${chipDate(it)}." }
+            +(resolvesText(t)
                 ?: checkInText(t, now))
         }
         // Everything about when, as pills that open a small popover (app.js keeps their text current).
@@ -565,10 +670,9 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
         div(classes = "pills when not-waiting") {
             // Quick choices under the fields: the snooze menu's for Start, days for Due (the phone's long press).
             val now = service.now()
-            fun at(ms: Long) = localDateTime(ms).let { it.toLocalDate().toString() to if (hasTime(ms)) it.toLocalTime().withSecond(0).withNano(0).toString() else "" }
+            fun at(ms: Long) = dateAndTime(ms)
             datePill(Labels.START, "start", Icon.CALENDAR, t.startDate, "", SnoozeChoice.entries.map { it.label to at(it.at(now, service.rolloverHour())) })
             datePill(Labels.DUE, "due", Icon.FLAG, t.dueDate, "task-only", DueChoice.entries.map { it.label to at(it.at(now)) })
-            // Set here, rung by the phone: it schedules the alarm when this syncs to it.
             // Set here, rung by the phone: when it starts, before it's due, and/or at a time of its own. A
             // date with no time rings at the reminder hour in Settings.
             popPill(Labels.REMIND, Icon.BELL, reminderSummary(t, service.reminderHour()), "remind", "task-only reminder") {
@@ -579,9 +683,9 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
                     Labels.REMINDERS.forEach { (m, label) -> option { value = m?.toString().orEmpty(); selected = t.reminderOffsetMinutes == m; m?.let { attributes["data-short"] = beforeDueText(it) }; +label } }
                 }
                 div(classes = "pop-label") { +"At a time" }
-                val at = t.remindAt?.let(::localDateTime)
-                dateInput(name = "remindAtDate") { value = at?.toLocalDate()?.toString().orEmpty() }
-                timeInput(name = "remindAtTime") { value = if (t.remindAt != null && hasTime(t.remindAt!!)) at!!.toLocalTime().withSecond(0).withNano(0).toString() else "" }
+                val (atDate, atTime) = t.remindAt?.let(::dateAndTime) ?: ("" to "")
+                dateInput(name = "remindAtDate") { value = atDate }
+                timeInput(name = "remindAtTime") { value = atTime }
                 p(classes = "hint") { +"Rings on your phone. A date with no time rings at ${"%02d:00".format(service.reminderHour())} (Settings)." }
             }
             val r = v.recurrence
@@ -662,6 +766,10 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
             }
             togglePill("today", t.expiresAt != null, Icon.SNOWFLAKE, Labels.TODAY_ONLY, "task-only")
         }
+        // Not set here, but shown as its due date: a task waiting on this one is due sooner.
+        if (!isNew && !t.isComplete) service.dueDates().of(t)?.takeIf { it.forTask != null }?.let { due ->
+            p(classes = "hint due-for not-waiting") { +Labels.dueFromWaiting(dueText(due.at, service.now()), due.forTask!!.title) }
+        }
 
         div(classes = "field-label section") { +Labels.PROPERTIES }
         div(classes = "pills") {
@@ -669,7 +777,9 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
             // A set folder shows in its own colour, like the app's chip; app.js follows the pick.
             val colors = folderColorsHex(all)
             // A tree like the phone's folder picker: each folder in its colour, subfolders indented.
-            popPill(Labels.FOLDER, Icon.FOLDER, parentLabel, "tree", "tinted", tint = t.parentId?.let(colors::get)) {
+            // Under a project or checklist (or another task), its icon, not a folder's.
+            val parentIcon = when (byId[t.parentId]?.type) { null, TaskType.FOLDER -> Icon.FOLDER; TaskType.CHECKLIST -> Icon.CHECKLIST; else -> Icon.PROJECT }
+            popPill(Labels.FOLDER, parentIcon, parentLabel, "tree", "tinted", tint = t.parentId?.let(colors::get)) {
                 div(classes = "folder-tree") {
                     fun FlowContent.treeRow(value: String, title: String, depth: Int, picked: Boolean, label: String? = null, color: String? = null) =
                         label(classes = "tree-row") {
@@ -723,7 +833,8 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
             field("First step of this project", "") { textInput(name = "firstStep") { value = v.firstStep; placeholder = Labels.SUBTASK } }
         }
     }
-    if (!isNew) div { relatedSection(service, t.id, v.mode) }
+    if (!isNew && !t.isTemplate) t.fromTemplateId?.let(service::get)?.takeIf { it.isTemplate }?.let { fromTemplateLine(t.id, it) }
+    if (!isNew) div { relatedSection(service, t.id, v.mode, folded = v.list.collapsed) }
     // Outside the form (so Related tasks can sit above them), tied to it by the form attribute.
     div(classes = "editor-foot") {
         // Subtask options (none for a checklist, via CSS).
@@ -742,8 +853,14 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
                 attributes["formnovalidate"] = ""
                 +Labels.DELETE
             }
-            // Checking the last item completes nothing; a checklist is completed here, on purpose.
-            if (!isNew && t.type == TaskType.CHECKLIST && !t.isComplete) {
+            // A copy kept as a template; this one carries on as it is (answered with a toast).
+            if (!isNew && !t.isTemplate) button(type = ButtonType.button, classes = "save-template") {
+                attributes["hx-post"] = "/tasks/${t.id}/save-template"
+                attributes["hx-swap"] = "none"
+                +Labels.SAVE_AS_TEMPLATE
+            }
+            // Checking the last item completes nothing; a checklist is completed here, on purpose (a template never is).
+            if (!isNew && t.type == TaskType.CHECKLIST && !t.isComplete && !t.isTemplate) {
                 val unchecked = service.tasks().count { it.parentId == t.id && !it.isComplete }
                 fun completeButton(move: Boolean, label: String) = button(type = ButtonType.submit, classes = "complete-list") {
                     attributes["form"] = formId
@@ -763,7 +880,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
                 }
             }
             span(classes = "hint") { id = "save-status" }
-            a(href = v.list.path, classes = "cancel") { +"Cancel" }
+            a(href = v.list.path, classes = "cancel") { +Labels.CANCEL }
             // A waiting item is resolved here (it saves itself as it's edited).
             if (!isNew && t.type == TaskType.WAITING && !t.isComplete) button(type = ButtonType.submit, classes = "primary resolve") {
                 attributes["form"] = formId; name = "resolve"; value = "1"; +Labels.RESOLVED
@@ -806,9 +923,9 @@ private fun FlowContent.popPill(label: String, icon: Icon, value: String?, kind:
 // quick: (label, (date, time)) buttons that fill the fields and close the popover (app.js).
 private fun FlowContent.datePill(label: String, prefix: String, icon: Icon, millis: Long?, classes: String, quick: List<Pair<String, Pair<String, String>>> = emptyList()) =
     popPill(label, icon, millis?.let(::chipDate), "date", classes) {
-        val at = millis?.let(::localDateTime)
-        dateInput(name = "${prefix}Date") { value = at?.toLocalDate()?.toString().orEmpty() }
-        timeInput(name = "${prefix}Time") { value = if (millis != null && hasTime(millis)) at!!.toLocalTime().withSecond(0).withNano(0).toString() else "" }
+        val (date, time) = millis?.let(::dateAndTime) ?: ("" to "")
+        dateInput(name = "${prefix}Date") { value = date }
+        timeInput(name = "${prefix}Time") { value = time }
         if (quick.isNotEmpty()) div(classes = "date-quick") {
             quick.forEach { (text, value) ->
                 button(type = ButtonType.button, classes = "pill") { attributes["data-date"] = value.first; attributes["data-time"] = value.second; +text }
@@ -816,7 +933,7 @@ private fun FlowContent.datePill(label: String, prefix: String, icon: Icon, mill
         }
     }
 
-// The phone's chip date: "Sep 25", or "Sep 25 3:00 PM" with a time. app.js formats the same way.
+// "Work / Reports": a folder with the folders it's in, outermost first.
 internal fun folderPath(folder: Task, byId: Map<Long, Task>): String =
     generateSequence(folder) { byId[it.parentId]?.takeIf { p -> p.type == TaskType.FOLDER } }.map { it.title }.toList().reversed().joinToString(" / ")
 
@@ -824,10 +941,12 @@ internal fun folderPath(folder: Task, byId: Map<Long, Task>): String =
 // it), each added or unlinked at once via htmx. Filled into a div by the caller so the fragment's
 // root is #related, which htmx swaps.
 // focusAddItem: after adding items, the new field is focused again, for typing a list in one go.
-fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddItem: Boolean = false, addKind: String = "subtask") {
+// `folded`: the checklist sections folded in this browser (the All tree's folds cookie).
+// `addingTo`: the section whose + is open (its add field under its heading).
+fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddItem: Boolean = false, addKind: String = "subtask", folded: Set<Long> = emptySet(), addingTo: Long? = null) {
     this.id = "related"
     classes = setOf("related")
-    val all = service.tasks()
+    val all = service.tasksAround(id)
     val byId = all.associateBy { it.id }
     val task = byId[id] ?: return
     val m = mode.name
@@ -840,24 +959,82 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
     }
     fun FlowContent.unlink(url: String) = button(classes = "unlink") { htmx(url); attributes["aria-label"] = "Remove"; +"✕" }
 
+    // Its mark goes in front of its title, as in the lists (taskMark); ticking it toggles it here.
+    val counts = subtaskCounts(all)
+    fun FlowContent.check(t: Task) = taskMark(t, counts[t.id], m) {
+        if (t.isComplete) classes = classes + "done"
+        htmx("/tasks/$id/subtasks/${t.id}/toggle?mode=$m")
+        attributes["aria-label"] = if (t.isComplete) "Mark not done" else "Complete"
+        if (t.isComplete) icon(Icon.CHECK, "")
+    }
+    // A subtask's or an item's row: dragged by its handle (app.js) or moved with Alt+Up/Down, ticked, opened
+    // (to edit it), a maybe marked "?"; `note` tags one that's also a prerequisite or dependent.
+    fun FlowContent.childRow(child: Task, note: String? = null, inSection: Boolean = false, trailing: FlowContent.() -> Unit) = div(classes = if (inSection) "rel-row sub in-section" else "rel-row sub") {
+        attributes["data-sub"] = child.id.toString()
+        attributes["data-task"] = id.toString()
+        span(classes = "drag-handle") { attributes["draggable"] = "true"; attributes["title"] = "Drag to reorder"; +"⠿" }
+        check(child)
+        a(href = "/tasks/${child.id}?mode=$m", classes = if (child.isComplete) "done" else if (child.isMaybe) "is-maybe" else null) {
+            +child.title
+            if (child.isMaybe && !child.isComplete) span(classes = "maybe-mark") { +"?" }
+            note?.let { kindTag(it) }
+        }
+        trailing()
+    }
+
     val isChecklist = task.type == TaskType.CHECKLIST
     if (isChecklist) {
-        // Items: a checkbox and a title each, open ones first, and a field that stays for the next one.
+        // Items: as subtasks are, open ones first; loose ones, then each section (Clothes, Winter) with its
+        // heading (fold, count, ⋯) and its own add field. One list for app.js's drag, so an item drags into
+        // another section (planMoveItem). ✕ deletes an item, the ⋯ menu a section, either with Undo.
         div(classes = "field-label section") { +Labels.ITEMS }
-        val items = checklistItems(id, all)
-        items.forEach { item ->
-            div(classes = "rel-row item") {
-                button(classes = if (item.isComplete) "check done" else "check") {
-                    htmx("/tasks/$id/subtasks/${item.id}/toggle?mode=$m")
-                    attributes["aria-label"] = if (item.isComplete) "Uncheck" else "Check"
-                    if (item.isComplete) icon(Icon.CHECK, "")
-                }
-                a(href = "/tasks/${item.id}?mode=$m", classes = if (item.isComplete) "done" else null) { +item.title }
-            }
+        val groups = checklistGroups(id, all)
+        val items = groups.flatMap { it.second }
+        fun FlowContent.addForm(placeholder: String, into: Task?, focus: Boolean) = form(classes = if (into != null) "inline add-item in-section" else "inline add-item") {
+            htmx("/tasks/$id/items?mode=$m" + (into?.let { "&in=${it.id}" } ?: ""))
+            textInput(name = "text") { this.placeholder = placeholder; attributes["autocomplete"] = "off"; if (focus) autoFocus = true }
         }
-        form(classes = "inline add-item") {
-            htmx("/tasks/$id/items?mode=$m")
-            textInput(name = "text") { placeholder = "+ ${Labels.ADD_ITEM}"; attributes["autocomplete"] = "off"; if (focusAddItem) autoFocus = true }
+        if (groups.any { it.first != null || it.second.isNotEmpty() }) div(classes = "items") { groups.forEach { (section, sectionItems) ->
+            val isFolded = section != null && section.id in folded
+            section?.let { sec ->
+                div(classes = if (isFolded) "rel-row sub section-head folded" else "rel-row sub section-head") {
+                    attributes["data-sub"] = sec.id.toString()
+                    attributes["data-task"] = id.toString()
+                    button(classes = "fold") { htmx("/tasks/$id/sections/${sec.id}/fold?mode=$m"); attributes["aria-label"] = if (isFolded) "Expand" else "Collapse"; +(if (isFolded) "▸" else "▾") }
+                    span(classes = "section-title") { +sec.title }
+                    counts[sec.id]?.let { (done, total) -> span(classes = "tail") { +" $done/$total" } }
+                    button(classes = "section-add") { htmx("/tasks/$id/sections/${sec.id}/adding?mode=$m"); attributes["aria-label"] = Labels.addTo(sec.title); attributes["title"] = Labels.addTo(sec.title); +"+" }
+                    // The rest opens on right-click (app.js), as a row's menu does.
+                    details(classes = "pp section-menu") {
+                        summary(classes = "unlink") { attributes["aria-label"] = "Section menu"; +"⋯" }
+                        div(classes = "pop") {
+                            form(classes = "menu-item rename") {
+                                htmx("/tasks/$id/sections/${sec.id}/rename?mode=$m")
+                                textInput(name = "text") { value = sec.title; attributes["aria-label"] = Labels.RENAME }
+                            }
+                            button(classes = "menu-item") { htmx("/tasks/$id/sections/${sec.id}/check?mode=$m"); +Labels.checkAllIn(sec.title) }
+                            button(classes = "menu-item") { htmx("/tasks/$id/sections/${sec.id}/uncheck?mode=$m"); +Labels.uncheckAllIn(sec.title) }
+                            button(classes = "menu-item danger") { htmx("/tasks/$id/subtasks/${sec.id}/delete?mode=$m"); +Labels.DELETE_SECTION }
+                        }
+                    }
+                }
+            }
+            if (section != null && section.id == addingTo) addForm(Labels.addTo(section.title), section, focus = true)
+            if (!isFolded) {
+                sectionItems.forEach { item ->
+                    childRow(item, inSection = section != null) {
+                        button(classes = "unlink") { htmx("/tasks/$id/subtasks/${item.id}/delete?mode=$m"); attributes["aria-label"] = Labels.DELETE; +"✕" }
+                    }
+                }
+            }
+        } }
+        // "+ Add item" and "+ Add section" side by side.
+        div(classes = "add-row") {
+            addForm("+ ${Labels.ADD_ITEM}", null, focusAddItem)
+            form(classes = "inline add-item add-section") {
+                htmx("/tasks/$id/sections?mode=$m")
+                textInput(name = "text") { placeholder = Labels.ADD_SECTION; attributes["autocomplete"] = "off" }
+            }
         }
         if (items.any { it.isComplete }) div(classes = "adders") {
             button(classes = "add-link") { htmx("/tasks/$id/items/uncheck?mode=$m"); +Labels.UNCHECK_ALL }
@@ -875,28 +1052,11 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
     val dependents = if (task.type == TaskType.FOLDER) emptyList() else edges.filter { it.dependsOnTaskId == id }.mapNotNull { byId[it.taskId] }
     val subtasks = all.filter { it.parentId == id && !isChecklist }.sortedWith(TaskOrder)
     val outFolder = moveOutFolderId(task, byId)?.let { byId[it]?.title }
-    // Its mark goes in front of its title, as in the lists (taskMark); ticking it toggles it here.
-    val counts = subtaskCounts(all)
-    fun FlowContent.check(t: Task) = taskMark(t, counts[t.id], m) {
-        if (t.isComplete) classes = classes + "done"
-        htmx("/tasks/$id/subtasks/${t.id}/toggle?mode=$m")
-        attributes["aria-label"] = if (t.isComplete) "Mark not done" else "Complete"
-        if (t.isComplete) icon(Icon.CHECK, "")
-    }
     // Subtasks first, together on a faint tile; then prerequisites and dependents, tagged after their titles
     // (as a subtask that's also one is).
     if (subtasks.isNotEmpty()) div(classes = "sub-tile") { subtasks.forEach { sub ->
         val note = when (sub) { in prerequisites -> Labels.PREREQUISITE; in dependents -> Labels.DEPENDENT; else -> null }
-        // Dragged by its handle (app.js), or moved with Alt+Up/Down.
-        div(classes = "rel-row sub") {
-            attributes["data-sub"] = sub.id.toString()
-            attributes["data-task"] = id.toString()
-            span(classes = "drag-handle") { attributes["draggable"] = "true"; attributes["title"] = "Drag to reorder"; +"⠿" }
-            check(sub)
-            a(href = "/tasks/${sub.id}?mode=$m", classes = if (sub.isComplete) "done" else null) {
-                +sub.title
-                note?.let { kindTag(it) }
-            }
+        childRow(sub, note) {
             // ✕: move it out, unlink it (it stays a subtask), both, or delete it.
             details(classes = "pp unlink-menu") {
                 summary(classes = "unlink") { attributes["aria-label"] = "Remove"; +"✕" }
@@ -913,6 +1073,16 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
                 }
             }
         }
+        // One level further, indented; anything deeper is only the "1/3" count on the row it's under.
+        all.filter { it.parentId == sub.id }.sortedWith(TaskOrder).forEach { child ->
+            div(classes = "rel-row nested") {
+                check(child)
+                a(href = "/tasks/${child.id}?mode=$m", classes = if (child.isComplete) "done" else null) {
+                    +child.title
+                    if (child.type != TaskType.CHECKLIST) counts[child.id]?.let { (done, total) -> span(classes = "tail") { +" $done/$total" } }
+                }
+            }
+        }
     } }
     (prerequisites - subtasks.toSet()).forEach { p -> row(Labels.PREREQUISITE, p, leading = { check(p) }) { unlink("/tasks/$id/prerequisite/${p.id}/remove?mode=$m") } }
     (dependents - subtasks.toSet()).forEach { d -> row(Labels.DEPENDENT, d, leading = { check(d) }) { unlink("/tasks/$id/dependent/${d.id}/remove?mode=$m") } }
@@ -920,7 +1090,7 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
     // One field adds any kind: type a new task (Enter), or pick a suggestion (↓, or a click). The
     // kind switch says what to add; a checklist only links, a folder only takes subtasks.
     val kinds = buildList {
-        if (!isChecklist) add("subtask" to "Subtask")
+        if (!isChecklist) add("subtask" to Labels.SUBTASK)
         if (task.type != TaskType.FOLDER) { add("prerequisite" to Labels.PREREQUISITE); add("dependent" to Labels.DEPENDENT) }
     }
     if (kinds.isNotEmpty()) form(classes = "add-related") {
@@ -932,7 +1102,7 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
                 attributes["aria-label"] = "Add a subtask, or link a task"
                 attributes["hx-get"] = "/tasks/$id/related/suggest"
                 // Not on "change": that fires when ↓ leaves the field, and the refresh would drop the suggestion just focused.
-                attributes["hx-trigger"] = "input changed delay:200ms, kindchange"
+                attributes["hx-trigger"] = "input changed delay:200ms, kindchange, focus"
                 attributes["hx-target"] = "next .suggest"
                 attributes["hx-swap"] = "outerHTML"
                 attributes["hx-include"] = "closest form"

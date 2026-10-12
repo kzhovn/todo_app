@@ -243,16 +243,7 @@ class ContextsActivity : ComponentActivity() {
                                         type == ContextType.PLACE && wifiSsid != null
                                     }
                                 )
-                                val currentEditingId = editingContextId
-                                val savedId = if (currentEditingId != null) {
-                                    contextRepository.updateContext(contextToSave)
-                                    currentEditingId
-                                } else {
-                                    contextRepository.createContext(contextToSave)
-                                }
-                                // Replaced wholesale; a context switched to a place just drops its old ones.
-                                contextRepository.getTimeWindows(savedId).forEach { contextRepository.removeTimeWindow(it.id) }
-                                if (type == ContextType.TIME) windows.forEach { contextRepository.addTimeWindow(it.copy(id = 0, contextId = savedId)) }
+                                contextRepository.saveContext(contextToSave, windows)
                                 refresh()
                                 resetForm()
                             }
@@ -260,11 +251,11 @@ class ContextsActivity : ComponentActivity() {
                         enabled = contextProblem(TaskContext(name = name, type = type, wifiSsid = wifiSsid), windows) == null,
                         colors = ButtonDefaults.buttonColors(containerColor = LedgerAccent, contentColor = LedgerAccentInk)
                     ) {
-                        Text(if (editingContextId == null) "Create" else "Save")
+                        Text(if (editingContextId == null) Labels.CREATE else Labels.SAVE)
                     }
                     if (editingContextId != null) {
                         Spacer(Modifier.width(8.dp))
-                        Button(onClick = { resetForm() }) { Text("Cancel") }
+                        Button(onClick = { resetForm() }) { Text(Labels.CANCEL) }
                     }
                 }
             }
@@ -272,7 +263,7 @@ class ContextsActivity : ComponentActivity() {
                 ConfirmDialog(
                     title = "Delete this context?",
                     body = deleteContextQuestion(ctx.name),
-                    confirmLabel = "Delete",
+                    confirmLabel = Labels.DELETE,
                     onConfirm = {
                         contextPendingDelete = null
                         scope.launch {

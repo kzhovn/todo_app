@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.linkSegments
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextLayoutResult
@@ -40,18 +41,12 @@ import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 
-private val URL = Regex("https?://\\S+")
-
-// A note's text with its links tappable (trailing punctuation isn't part of the link).
+// A note's text with its links tappable (see linkSegments).
 fun linkified(text: String): AnnotatedString = buildAnnotatedString {
-    var at = 0
-    URL.findAll(text).forEach { m ->
-        val url = m.value.trimEnd('.', ',', ')', ';', ':', '!', '?')
-        append(text.substring(at, m.range.first))
-        withLink(LinkAnnotation.Url(url, TextLinkStyles(SpanStyle(color = LedgerAccent, textDecoration = TextDecoration.Underline)))) { append(url) }
-        at = m.range.first + url.length
+    linkSegments(text).forEach { (part, isLink) ->
+        if (isLink) withLink(LinkAnnotation.Url(part, TextLinkStyles(SpanStyle(color = LedgerAccent, textDecoration = TextDecoration.Underline)))) { append(part) }
+        else append(part)
     }
-    append(text.substring(at))
 }
 
 // The task's note, inside the title box: collapsed to two lines, tap for all of it, editable. With no
@@ -79,7 +74,9 @@ internal fun NotesArea(notes: String, titleFocused: Boolean, onChange: (String?)
                         val line = l.getLineForOffset(at)
                         // On the text itself, not the space beside a line; a link opens instead.
                         val onText = pos.y in l.getLineTop(line)..l.getLineBottom(line) && pos.x in l.getLineLeft(line)..l.getLineRight(line)
-                        if (onText && URL.findAll(notes).any { at in it.range }) return@detectTapGestures
+                        var start = 0
+                        val onLink = linkSegments(notes).any { (part, isLink) -> (isLink && at in start until start + part.length).also { start += part.length } }
+                        if (onText && onLink) return@detectTapGestures
                         tappedAt = at.takeIf { onText }
                         editing = true
                     }

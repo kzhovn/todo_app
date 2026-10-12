@@ -1,10 +1,8 @@
 package com.kzhovn.todoapp.server.web
 
-import com.kzhovn.todoapp.data.TaskType
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonObject
-import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.SnoozeChoice
 import com.kzhovn.todoapp.server.TaskService
 import io.ktor.http.ContentType
@@ -55,6 +53,7 @@ fun Route.webRoutes(service: TaskService) {
     editorRoutes(service)
     pageRoutes(service)
     focusRoutes(service)
+    templateRoutes(service)
     timerRoutes(service)
 
     // The All tree's outliner actions (app.js sends them from keys and drag).
@@ -87,12 +86,12 @@ fun Route.webRoutes(service: TaskService) {
         call.respondList(service, ListMode.ALL)
     }
 
-    // A task with open subtasks asks first, like the phone: complete them too, or move them out.
     // A waiting item's "Still waiting": hidden until its next check-in.
     post("/tasks/{id}/still-waiting") {
         call.taskId()?.let(service::stillWaiting)
         call.respondList(service, call.mode())
     }
+    // A task with open subtasks asks first, like the phone: complete them too, or move them out.
     post("/tasks/{id}/complete") {
         val id = call.taskId() ?: return@post
         val mode = call.mode()
@@ -111,10 +110,9 @@ fun Route.webRoutes(service: TaskService) {
     post("/tasks/{id}/add-subtask") {
         val parent = call.taskId()?.let(service::get) ?: return@post call.respondList(service, call.mode())
         val text = call.receiveParameters()["text"].orEmpty()
-        if (parent.type == TaskType.CHECKLIST) service.addItems(parent.id, text)
         // The parent now waits on its new subtask, so in Doing a starred parent's subtask starts starred and
-        // takes its place there, as on the phone.
-        else service.addTyped(text, under = parent.id, star = call.mode() == ListMode.DOING && parent.isStarred)
+        // takes its place there, as on the phone. (Under a checklist, addTyped adds items.)
+        service.addTyped(text, under = parent.id, star = call.mode() == ListMode.DOING && parent.isStarred)
         call.respondList(service, call.mode())
     }
     post("/tasks/{id}/uncomplete") { call.taskId()?.let(service::uncomplete); call.respondList(service, call.mode()) }
@@ -154,11 +152,11 @@ fun Route.webRoutes(service: TaskService) {
     }
 }
 
-// "complete" also completes the open subtasks; "promote" moves them out first (to the top level, as
-// the phone does); anything else completes just this task.
+// "complete" also completes the open subtasks; "promote" moves them out first (see planCompleteAndPromote);
+// anything else completes just this task.
 internal fun TaskService.completeOrDecide(id: Long, choice: String?) = when (choice) {
-    "complete" -> completeWithDescendants(id)
-    "promote" -> { promoteChildren(id); complete(id) }
+    "complete" -> completeChoosing(id, moveOut = false)
+    "promote" -> completeChoosing(id, moveOut = true)
     else -> complete(id)
 }
 
@@ -199,7 +197,7 @@ private fun Route.timerRoutes(service: TaskService) {
     }
     get("/timer") { call.respondTimer() }
     post("/timer/start") {
-        call.request.queryParameters["task"]?.toLongOrNull()?.let { id -> service.get(id)?.durationMinutes?.let { service.startTimer(id, it) } }
+        call.request.queryParameters["task"]?.toLongOrNull()?.let(service::startTimer)
         call.respondTimer()
     }
     post("/timer/pause") { service.pauseTimer(); call.respondTimer() }
@@ -207,8 +205,17 @@ private fun Route.timerRoutes(service: TaskService) {
     // Stopping unpins the task (and ends a focus session).
     post("/timer/stop") { service.unpin(); call.respondTimer() }
     post("/timer/add") { call.request.queryParameters["minutes"]?.toIntOrNull()?.takeIf { it > 0 }?.let(service::addTime); call.respondTimer() }
-    // Time's up, and it's done: like the phone's, subtasks too.
-    post("/timer/done") { service.pinned()?.let { service.completeWithDescendants(it.id) }; call.respondTimer() }
+    // Time's up, and it's done. Open subtasks are asked about first, in the toast (?subtasks= complete or
+    // promote); otherwise an empty toast, and a refresh for the timer and the list to catch up.
+    post("/timer/done") {
+        val choice = call.request.queryParameters["subtasks"]
+        val task = service.pinned()?.takeUnless { it.isComplete }
+        val open = task?.let { service.activeDescendantCount(it.id) } ?: 0
+        if (task != null && open > 0 && choice == null) return@post call.respondText(createHTML().div { askSubtasksToast(task, open, "/timer/done", target = "#toast") }, ContentType.Text.Html)
+        task?.let { service.completeOrDecide(it.id, choice) }
+        call.response.header("HX-Trigger", "refresh")
+        call.respondText(createHTML().div { attributes["id"] = "toast" }, ContentType.Text.Html)
+    }
 }
 
 // Per-browser id sets kept in cookies the server reads, so the list's periodic re-render honours them.
@@ -230,6 +237,10 @@ private val LATER = IdCookie("later", maxAge = null)
 
 private fun ApplicationCall.ids(cookie: IdCookie): Set<Long> = attributes.getOrNull(cookie.override)
     ?: request.cookies[cookie.name].orEmpty().split('.').mapNotNull { it.toLongOrNull() }.toSet()
+
+// The All tree's folds, which a checklist's sections share (one cookie, per browser).
+internal fun ApplicationCall.collapsedIds(): Set<Long> = ids(COLLAPSED)
+internal fun ApplicationCall.toggleCollapsed(id: Long) = toggleIn(COLLAPSED, id)
 
 private fun ApplicationCall.toggleIn(cookie: IdCookie, id: Long) {
     val ids = ids(cookie).let { if (id in it) it - id else it + id }

@@ -9,4 +9,11 @@
         <item name="android:colorBackgroundFloating">@color/ledger_panel</item>
         <item name="android:textColorPrimary">@color/ledger_ink</item>
     </style>
+    <!-- An invisible screen that only shows a dialog (CompleteAskActivity). -->
+    <style name="Theme.TodoApp.Translucent" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
 </resources>

@@ -10,6 +10,7 @@ import com.kzhovn.todoapp.data.TodoDatabase
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -106,7 +107,7 @@ class TaskRepositoryTest {
         repository.deleteTask(task)
         assertNull(repository.getTask(taskId))
 
-        repository.undoDelete(listOf(task))
+        repository.undoDelete(repository.lastDeleted.value!!)
         assertEquals("Oops", repository.getTask(taskId)?.title)
     }
 
@@ -115,12 +116,11 @@ class TaskRepositoryTest {
         val folderId = repository.createTask(Task(type = TaskType.FOLDER, title = "Work"))
         val childId = repository.createTask(Task(title = "Ship report", parentId = folderId))
         val folder = repository.getTask(folderId)!!
-        val child = repository.getTask(childId)!!
 
         repository.deleteTask(folder)
 
         val deleted = repository.lastDeleted.value
-        assertEquals(setOf(folderId, childId), deleted?.map { it.id }?.toSet())
+        assertEquals(setOf(folderId, childId), deleted?.tasks?.map { it.id }?.toSet())
     }
 
     @Test
@@ -128,13 +128,12 @@ class TaskRepositoryTest {
         val folderId = repository.createTask(Task(type = TaskType.FOLDER, title = "Work"))
         val childId = repository.createTask(Task(title = "Ship report", parentId = folderId))
         val folder = repository.getTask(folderId)!!
-        val child = repository.getTask(childId)!!
 
         repository.deleteTask(folder)
         assertNull(repository.getTask(folderId))
         assertNull(repository.getTask(childId))
 
-        repository.undoDelete(listOf(folder, child))
+        repository.undoDelete(repository.lastDeleted.value!!)
 
         assertEquals("Work", repository.getTask(folderId)?.title)
         assertEquals(folderId, repository.getTask(childId)?.parentId)
@@ -298,16 +297,50 @@ class TaskRepositoryTest {
     }
 
     @Test
-    fun `promoteChildrenToTopLevel detaches direct children`() = runBlocking {
-        val parentId = repository.createTask(Task(title = "Plan trip"))
+    fun `completeAndPromote moves direct children out to the folder the task is in, then completes it`() = runBlocking {
+        val folderId = repository.createTask(Task(type = TaskType.FOLDER, title = "Travel"))
+        val parentId = repository.createTask(Task(title = "Plan trip", parentId = folderId))
         val childId = repository.createTask(Task(title = "Book flight", parentId = parentId))
         repository.updateTask(repository.getTask(childId)!!.copy(position = 1)) // as after a reorder
 
-        repository.promoteChildrenToTopLevel(parentId)
+        repository.completeAndPromote(parentId, System.currentTimeMillis())
+        assertTrue(repository.getTask(parentId)!!.isComplete)
+        assertFalse(repository.getTask(childId)!!.isComplete)
 
-        assertNull(repository.getTask(childId)!!.parentId)
-        // Its position among the old siblings would misplace it at the top level.
+        assertEquals(folderId, repository.getTask(childId)!!.parentId)
+        // Its position among the old siblings would misplace it in the folder.
         assertNull(repository.getTask(childId)!!.position)
+    }
+
+    @Test
+    fun `undoDelete brings back the task's contexts and prerequisites`() = runBlocking {
+        val contexts = ContextRepository(db.taskContextDao())
+        val home = contexts.createContext(com.kzhovn.todoapp.data.TaskContext(name = "home", type = com.kzhovn.todoapp.data.ContextType.PLACE, wifiSsid = "x"))
+        val blockerId = repository.createTask(Task(title = "Buy paint"))
+        val taskId = repository.createTask(Task(title = "Paint fence"))
+        contexts.setTaskContexts(taskId, setOf(home))
+        repository.addDependency(taskId, blockerId)
+
+        repository.deleteTask(repository.getTask(taskId)!!)
+        assertTrue(contexts.getContextsForTask(taskId).isEmpty()) // no rows left behind
+        repository.undoDelete(repository.lastDeleted.value!!)
+
+        assertEquals(listOf(home), contexts.getContextsForTask(taskId).map { it.id })
+        assertEquals(setOf(blockerId), repository.getDependencyIds(taskId))
+    }
+
+    @Test
+    fun `clearChecked can be undone`() = runBlocking {
+        val listId = repository.createTask(Task(type = TaskType.CHECKLIST, title = "Groceries"))
+        repository.addItems(listId, "milk, eggs")
+        val milk = repository.getAllTasks().first { it.title == "milk" }
+        repository.toggleComplete(milk.id, System.currentTimeMillis())
+
+        repository.clearChecked(listId)
+        assertNull(repository.getTask(milk.id))
+        repository.undoDelete(repository.lastDeleted.value!!)
+
+        assertTrue(repository.getTask(milk.id)!!.isComplete)
     }
 
     @Test

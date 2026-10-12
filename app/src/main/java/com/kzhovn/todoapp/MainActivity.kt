@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp
 
+import com.kzhovn.todoapp.data.TaskType
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
@@ -11,10 +12,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.FilterChip
 import com.kzhovn.todoapp.ui.setFolderMode
 import com.kzhovn.todoapp.ui.TaskCheckbox
+import com.kzhovn.todoapp.ui.CompleteSubtasksDialog
+import com.kzhovn.todoapp.ui.TaskPickerDialog
+import androidx.compose.material.icons.filled.ContentCopy
+import com.kzhovn.todoapp.data.CompleteQuestion
 import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerBorder
-import com.kzhovn.todoapp.ui.theme.folderColors
 import com.kzhovn.todoapp.ui.SearchBar
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.platform.LocalFocusManager
@@ -64,10 +68,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
+import com.kzhovn.todoapp.ui.UndoDelete
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -168,8 +171,8 @@ class MainActivity : ComponentActivity() {
             var query by remember { mutableStateOf("") }
             var showFilters by remember { mutableStateOf(false) }
             var filters by remember { mutableStateOf(SearchFilters()) }
-            var folders by remember { mutableStateOf<List<Task>>(emptyList()) }
-            var contexts by remember { mutableStateOf<List<com.kzhovn.todoapp.data.TaskContext>>(emptyList()) }
+            // Non-null while "From template…" is open: the templates, and everything (for their folders).
+            var templatePicker by remember { mutableStateOf<Pair<List<Task>, Map<Long, Task>>?>(null) }
             // Non-null while in multi-select mode: the ids picked for a bulk edit.
             var selection by remember { mutableStateOf<Set<Long>?>(null) }
             BackHandler(enabled = selection != null) { selection = null }
@@ -189,34 +192,8 @@ class MainActivity : ComponentActivity() {
                 else viewModel.load(selectedMode)
                 onPauseOrDispose { }
             }
-            // Folders and contexts are made on other screens (the FAB's long-press menu), so coming
-            // back re-pulls them.
-            LifecycleResumeEffect(Unit) {
-                scope.launch {
-                    folders = repository.getFolders()
-                    contexts = contextRepository.getAllContexts()
-                }
-                onPauseOrDispose { }
-            }
 
-            val lastDeleted by repository.lastDeleted.collectAsState()
-            LaunchedEffect(lastDeleted) {
-                val deleted = lastDeleted ?: return@LaunchedEffect
-                val topLevelTitle = deleted.firstOrNull { it.parentId !in deleted.map { d -> d.id } }?.title
-                    ?: deleted.first().title
-                val extra = deleted.size - 1
-                val message = "Deleted \"$topLevelTitle\"" + if (extra > 0) " and $extra more" else ""
-                val result = snackbarHostState.showSnackbar(
-                    message = message,
-                    actionLabel = "Undo",
-                    duration = SnackbarDuration.Long
-                )
-                if (result == SnackbarResult.ActionPerformed) {
-                    repository.undoDelete(deleted)
-                } else {
-                    repository.clearLastDeleted()
-                }
-            }
+            UndoDelete(repository, snackbarHostState)
 
             AppDrawer(drawerState) {
             Scaffold(
@@ -235,6 +212,15 @@ class MainActivity : ComponentActivity() {
                                 onClick = {
                                     showFabMenu = false
                                     startActivity(Intent(this@MainActivity, ContextsActivity::class.java))
+                                }
+                            )
+                            // A list from a template (see Templates.kt): pick one, and it opens in the editor.
+                            DropdownMenuItem(
+                                text = { Text("+ " + Labels.FROM_TEMPLATE) },
+                                leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
+                                onClick = {
+                                    showFabMenu = false
+                                    scope.launch { templatePicker = repository.getTemplates() to repository.getEverything().associateBy { it.id } }
                                 }
                             )
                             DropdownMenuItem(
@@ -306,7 +292,10 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     if (showFilters) {
-                        FilterPanel(filters = filters, folders = folders, contexts = contexts, onFiltersChange = { filters = it })
+                        // The list's own data (it reloads on any change), for the filters' choices.
+                        val allById by viewModel.allById.collectAsState()
+                        val allContexts by viewModel.allContexts.collectAsState()
+                        FilterPanel(filters = filters, folders = allById.values.filter { it.type == TaskType.FOLDER }, contexts = allContexts.values.toList(), onFiltersChange = { filters = it })
                     }
                     if (searchMode && mode != null) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp)) {
                         FilterChip(selected = everywhere, onClick = { everywhere = !everywhere }, label = { Text("Everywhere, not just ${mode!!.title}") })
@@ -332,12 +321,10 @@ class MainActivity : ComponentActivity() {
                         if (selection != null) toggleSelected(taskId)
                         else startActivity(Intent(this@MainActivity, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, taskId))
                     }
-                    var completeDecision by remember { mutableStateOf<Pair<Long, Int>?>(null) }
+                    var completeDecision by remember { mutableStateOf<Pair<Long, CompleteQuestion>?>(null) }
                     val onCheck: (Long) -> Unit = { id ->
                         if (selection != null) toggleSelected(id)
-                        else viewModel.requestComplete(id) { taskId, activeCount ->
-                            completeDecision = taskId to activeCount
-                        }
+                        else viewModel.requestComplete(id) { taskId, question -> completeDecision = taskId to question }
                     }
                     val onStar: (Long) -> Unit = { id ->
                         if (selection != null) toggleSelected(id) else viewModel.toggleStar(id)
@@ -347,6 +334,7 @@ class MainActivity : ComponentActivity() {
                         val tasks by viewModel.tasks.collectAsState()
                         OutlinerScreen(
                             tasks = tasks,
+                            workable = viewModel.workable.collectAsState().value,
                             rootId = mode?.id,
                             onZoom = setMode,
                             onCheck = onCheck,
@@ -385,7 +373,7 @@ class MainActivity : ComponentActivity() {
                         ) }
                         // Folder mode hides the rest; this keeps it from hiding something due today.
                         val dueOutside by viewModel.dueOutside.collectAsState()
-                        if (!searchMode && dueOutside.isNotEmpty()) DueOutsideLine(dueOutside, mode?.title.orEmpty(), onOpen = onEdit, onCheck = onCheck)
+                        if (!searchMode && dueOutside.isNotEmpty()) DueOutsideLine(dueOutside, mode?.title.orEmpty(), dueOf = { viewModel.dues.value.at(it) }, onOpen = onEdit, onCheck = onCheck)
                         val waiting by viewModel.waiting.collectAsState()
                         val waitingBlocks by viewModel.waitingBlocks.collectAsState()
                         if (!searchMode && selectedMode == TaskListMode.DOING && waiting.isNotEmpty()) WaitingSection(
@@ -421,27 +409,29 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                     }
-                    completeDecision?.let { (taskId, activeCount) ->
-                        AlertDialog(
-                            onDismissRequest = { completeDecision = null },
-                            title = { Text("Complete this task?") },
-                            text = { Text(Labels.activeSubtasks(activeCount)) },
-                            confirmButton = {
-                                Button(onClick = {
-                                    viewModel.completeWithSubtasks(taskId)
-                                    completeDecision = null
-                                }) { Text(Labels.COMPLETE_SUBTASKS_TOO) }
-                            },
-                            dismissButton = {
-                                Row {
-                                    Button(onClick = {
-                                        viewModel.completeAndPromoteSubtasks(taskId)
-                                        completeDecision = null
-                                    }) { Text(Labels.MOVE_SUBTASKS_OUT) }
-                                    Spacer(Modifier.width(8.dp))
-                                    Button(onClick = { completeDecision = null }) { Text("Cancel") }
+                    templatePicker?.let { (templates, everything) ->
+                        TaskPickerDialog(
+                            title = Labels.FROM_TEMPLATE.removeSuffix("…"),
+                            lists = listOf("" to templates),
+                            allById = everything,
+                            onPick = { t ->
+                                templatePicker = null
+                                scope.launch {
+                                    repository.useTemplate(t.id, System.currentTimeMillis())?.let { id ->
+                                        startActivity(Intent(this@MainActivity, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, id))
+                                    }
                                 }
-                            }
+                            },
+                            onCreateNew = null,
+                            onDismiss = { templatePicker = null }
+                        )
+                    }
+                    completeDecision?.let { (taskId, question) ->
+                        CompleteSubtasksDialog(
+                            question,
+                            onCompleteAll = { viewModel.completeChoosing(taskId, moveOut = false); completeDecision = null },
+                            onMoveOut = { viewModel.completeChoosing(taskId, moveOut = true); completeDecision = null },
+                            onDismiss = { completeDecision = null }
                         )
                     }
                 }
@@ -468,7 +458,7 @@ class MainActivity : ComponentActivity() {
 
 // Under Doing in a mode: "2 due today outside Work", opening to the tasks themselves.
 @Composable
-private fun DueOutsideLine(tasks: List<Task>, modeTitle: String, onOpen: (Long) -> Unit, onCheck: (Long) -> Unit) {
+private fun DueOutsideLine(tasks: List<Task>, modeTitle: String, dueOf: (Task) -> Long?, onOpen: (Long) -> Unit, onCheck: (Long) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(
@@ -477,7 +467,7 @@ private fun DueOutsideLine(tasks: List<Task>, modeTitle: String, onOpen: (Long) 
         )
         if (open) tasks.forEach { task ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TaskCheckbox(checked = false, due = task.dueDate?.let { dueStatus(it, System.currentTimeMillis()) }, size = 18.dp, touchSize = 36.dp) { onCheck(task.id) }
+                TaskCheckbox(checked = false, due = dueOf(task)?.let { dueStatus(it, System.currentTimeMillis()) }, size = 18.dp, touchSize = 36.dp) { onCheck(task.id) }
                 Text(task.title, fontSize = 15.sp, color = LedgerInk, modifier = Modifier.weight(1f).clickable { onOpen(task.id) }.padding(vertical = 6.dp))
             }
         }

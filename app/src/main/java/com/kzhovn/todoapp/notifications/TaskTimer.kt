@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.notifications
 
+import com.kzhovn.todoapp.ui.CompleteAskActivity
+
 import com.kzhovn.todoapp.data.Labels
 import android.app.AlarmManager
 import android.app.NotificationChannel
@@ -20,7 +22,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlin.math.ceil
 
 // The current task's timer. It lives on the task (CurrentTask), so every device shows the same
 // countdown; its "Now" notification draws it (PinnedTask). This keeps the phone's side: `state` for the
@@ -35,9 +36,7 @@ object TaskTimer {
     private const val NOTIFICATION_ID = 7002
     const val ACTION_PAUSE = "com.kzhovn.todoapp.TIMER_PAUSE"
     const val ACTION_RESUME = "com.kzhovn.todoapp.TIMER_RESUME"
-    const val ACTION_STOP = "com.kzhovn.todoapp.TIMER_STOP"
     const val ACTION_FINISHED = "com.kzhovn.todoapp.TIMER_FINISHED"
-    const val ACTION_DONE = "com.kzhovn.todoapp.TIMER_DONE"
 
     private val _state = MutableStateFlow<State?>(null)
     val state: StateFlow<State?> = _state
@@ -58,13 +57,9 @@ object TaskTimer {
     fun resume(context: Context) = act(context) { resumeTimer(it) }
     fun addTime(context: Context, minutes: Int) = act(context) { addTime(minutes, it) }
 
-    // Stopping unpins the task, which also ends a focus session.
-    fun stop(context: Context) = act(context) { unpin() }
-
     // Follows the current task's timer (from PinnedTask.refresh, after any change from anywhere): the
     // alarm for its end, or "Time's up" if that's passed; the alert goes once it's answered anywhere.
     internal suspend fun follow(context: Context, current: Task?) {
-        migrateLocalTimer(context)
         val s = current?.let { t ->
             val endsAt = t.timerEndsAt
             val remaining = t.timerRemaining
@@ -87,16 +82,6 @@ object TaskTimer {
 
     fun clearNotification(context: Context) = manager(context).cancel(NOTIFICATION_ID)
 
-    // Before timers synced, the phone kept its own in preferences: moved onto the task once.
-    private suspend fun migrateLocalTimer(context: Context) {
-        val prefs = context.getSharedPreferences("timer", Context.MODE_PRIVATE)
-        val id = prefs.getLong("taskId", 0L).takeIf { it != 0L } ?: return
-        val endsAt = prefs.getLong("endsAt", 0L)
-        prefs.edit().remove("taskId").remove("title").remove("endsAt").remove("remaining").apply()
-        val left = endsAt - System.currentTimeMillis()
-        if (left > 0) repository(context).startTimer(id, ceil(left / 60_000.0).toInt(), System.currentTimeMillis())
-    }
-
     private fun timeUp(context: Context, s: State) {
         ensureChannel(context)
         val ask = PendingIntent.getActivity(
@@ -113,7 +98,8 @@ object TaskTimer {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .setContentIntent(ask)
-            .addAction(0, "Done", actionIntent(context, ACTION_DONE, s.taskId, 11))
+            // Asks about open subtasks first, as the app does.
+            .addAction(0, "Done", PendingIntent.getActivity(context, 11, CompleteAskActivity.intent(context, s.taskId, fromTimer = true), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
             .addAction(0, "Not yet", ask)
             .build()
         manager(context).notify(NOTIFICATION_ID, notification)
@@ -147,8 +133,6 @@ object TaskTimer {
                 lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
             })
         }
-        // The running timer used to have its own notification; it's part of the "Now" one now.
-        manager.deleteNotificationChannel("timer_running")
     }
 }
 
@@ -157,26 +141,11 @@ class TaskTimerReceiver : BroadcastReceiver() {
         when (intent.action) {
             TaskTimer.ACTION_PAUSE -> TaskTimer.pause(context)
             TaskTimer.ACTION_RESUME -> TaskTimer.resume(context)
-            TaskTimer.ACTION_STOP -> TaskTimer.stop(context)
             // The alarm: PinnedTask.refresh sees the timer is over and asks.
             TaskTimer.ACTION_FINISHED -> {
                 val pending = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try { PinnedTask.refresh(context) } finally { pending.finish() }
-                }
-            }
-            TaskTimer.ACTION_DONE -> {
-                val taskId = intent.getLongExtra(TimerDoneActivity.EXTRA_TASK_ID, 0L)
-                TaskTimer.clearNotification(context)
-                val pending = goAsync()
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        // Like the pinned task's Complete: no room for the subtask question here.
-                        (context.applicationContext as TodoApp).repository.completeWithDescendants(taskId, System.currentTimeMillis())
-                        PinnedTask.refresh(context)
-                    } finally {
-                        pending.finish()
-                    }
                 }
             }
         }

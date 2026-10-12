@@ -58,6 +58,12 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
             ReactionOutcome.DeleteIfBotMessage -> event.retrieveMessage().queue { message ->
                 if (message.author.idLong == event.jda.selfUser.idLong) message.delete().queue()
             }
+            is ReactionOutcome.Ask -> event.retrieveMessage().queue { message ->
+                message.reply(outcome.text).queue { sent ->
+                    logic.recordAsk(sent.idLong, outcome.taskId)
+                    listOf(DONE, MOVE_OUT).forEach { sent.addReaction(Emoji.fromUnicode(it)).queue() }
+                }
+            }
             ReactionOutcome.None -> Unit
         }
     }

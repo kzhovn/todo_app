@@ -8,12 +8,17 @@ description: Wrap up a Raspberry change - test, commit, build, and tell Kira wha
 1. **Test**: `tools/test.sh` (all three modules, failures only).
 2. **Commit** only your own files: another session may be editing the repo at the same time, so check
    `git status` and stage by path, never `git add -A` blindly. Push only when Kira asks.
-3. **Build** what changed: `./gradlew -q :app:assembleDebug :server:distTar`.
+3. **Build** what changed, yourself (never leave a build or install step to Kira):
+   `./gradlew -q :app:assembleDebug :server:distTar`.
 4. **Phone**, if `app/` or `core/` changed: `tools/install_phone.sh` (see the install-phone skill).
-5. **Tell Kira** what's left for her, from what the change touched (`git diff --stat <last shipped>..HEAD`):
+5. **Top bar / desktop app**, if `desktop/` changed: run `./desktop/install.sh` (it copies into this user's
+   `~/.local/share` and leaves the config alone), then check `diff -rq desktop/raspberry@kzhovn
+   ~/.local/share/gnome-shell/extensions/raspberry@kzhovn` is empty.
+6. **Tell Kira** what's left for her (only what needs her: the VM, a log-out, a phone that isn't reachable), from what the change touched (`git diff --stat <last shipped>..HEAD`):
    - `server/` or `core/` changed: deploy the server. She runs, on the VM:
      `sudo systemctl stop todo && tar xf ~/server.tar -C ~ && sudo systemctl start todo`
      (`server/build/distributions/server.tar`, copied over). A new task type or field: before the phone
      syncs, or the phone's sync fails.
-   - `desktop/raspberry@kzhovn/` changed: log out and back in (GNOME Shell only reloads an extension then).
+   - `desktop/raspberry@kzhovn/` changed: it's installed; she logs out and back in (GNOME Shell only reloads
+     an extension then).
    - Pushed or not, and anything she still has to decide.
