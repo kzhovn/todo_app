@@ -2,6 +2,7 @@
 plugins {
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.kotlin.plugin.serialization")
+    `java-test-fixtures` // the benchmarks' task list (src/testFixtures), shared by :server's and :app's
 }
 
 kotlin { jvmToolchain(17) }

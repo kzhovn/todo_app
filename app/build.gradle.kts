@@ -66,6 +66,7 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation(project(":server"))
+    testImplementation(testFixtures(project(":core"))) // the benchmark's task list (PhoneBench)
     testImplementation("org.robolectric:robolectric:4.13")
     // Compose UI tests (the note field's behaviour), run on Robolectric.
     testImplementation(platform("androidx.compose:compose-bom:2024.09.00"))
