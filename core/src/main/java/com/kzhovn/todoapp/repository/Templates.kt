@@ -139,6 +139,7 @@ private fun differs(t: Task, from: Task) = t.title != from.title || t.isMaybe !=
 // they aren't offered again. An added task is copied into the template and then paired with it.
 fun planUpdateTemplate(all: List<Task>, contexts: Map<Long, Set<Long>>, listId: Long, chosen: Set<String>, oneOff: Set<String>, now: Long): TaskChanges {
     val changes = templateChanges(all, listId)
+    val byId = all.associateBy { it.id }
     var total = TaskChanges()
     val newIds = mutableMapOf<Long, Long>() // list task -> its new template copy, for added tasks nested in added ones
     changes.filter { it.key in oneOff && it is TemplateChange.Added }.forEach { total += TaskChanges(updates = listOf((it as TemplateChange.Added).task.copy(fromTemplateId = JUST_THIS_TIME))) }
@@ -150,7 +151,7 @@ fun planUpdateTemplate(all: List<Task>, contexts: Map<Long, Set<Long>>, listId: 
                 newIds[change.task.id] = copy.id
                 TaskChanges(creates = listOf(copy to contexts[change.task.id].orEmpty()), updates = listOf(change.task.copy(fromTemplateId = copy.id)))
             }
-            is TemplateChange.Removed -> TaskChanges(deletes = all.filter { isUnder(it, change.templateTask.id, all.associateBy { t -> t.id }) }.map { it.id }.toSet() + change.templateTask.id)
+            is TemplateChange.Removed -> TaskChanges(deletes = all.filter { isUnder(it, change.templateTask.id, byId) }.map { it.id }.toSet() + change.templateTask.id)
             is TemplateChange.Changed -> TaskChanges(updates = listOf(change.templateTask.copy(
                 title = change.task.title, isMaybe = change.task.isMaybe, isHighPriority = change.task.isHighPriority,
                 durationMinutes = change.task.durationMinutes, notes = change.task.notes, type = change.task.type

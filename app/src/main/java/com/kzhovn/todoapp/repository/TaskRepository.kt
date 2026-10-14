@@ -231,8 +231,16 @@ class TaskRepository(
         apply(planUpdateTemplate(taskDao.getAllOnce(), getAllTaskContexts(), listId, chosen, oneOff, now), now)
     }
 
-    // Stores colour slots for folders that don't have one yet (see folderColorAssignments).
-    suspend fun ensureFolderColors() = atomically { folderColorAssignments(taskDao.getListedOnce()).forEach { write(it) } }
+    // What the lists and the widget show: every task but templates, after purgeExpired and with a colour slot
+    // stored for each folder without one (folderColorAssignments). One read of the table when neither has
+    // anything to do, as on most loads.
+    suspend fun listedTasks(now: Long): List<Task> {
+        val listed = atomically { taskDao.getAllOnce().let { if (purgeExpired(it, now)) taskDao.getAllOnce() else it } }.filter { !it.isTemplate }
+        val colors = folderColorAssignments(listed)
+        if (colors.isEmpty()) return listed
+        atomically { colors.forEach { write(it) } }
+        return taskDao.getListedOnce()
+    }
 
     suspend fun getAllTaskContexts(): Map<Long, Set<Long>> =
         taskContextDao.getAllCrossRefs().groupBy({ it.taskId }, { it.contextId }).mapValues { it.value.toSet() }
@@ -375,12 +383,16 @@ class TaskRepository(
     // See planResolveWaiting and planPurgeExpired. Bypasses deleteTask so it doesn't offer an undo for
     // something the user didn't just do.
     suspend fun purgeExpired(now: Long) {
-        atomically {
-            var all = taskDao.getAllOnce()
-            val resolve = planResolveWaiting(all, getAllTaskContexts(), now)
-            if (resolve != TaskChanges()) { apply(resolve, now); all = taskDao.getAllOnce() }
-            apply(planPurgeExpired(all, now), now)
-        }
+        atomically { purgeExpired(taskDao.getAllOnce(), now) }
+    }
+
+    // Over every task, as just read; true when it changed any.
+    private suspend fun purgeExpired(all: List<Task>, now: Long): Boolean {
+        val resolve = planResolveWaiting(all, getAllTaskContexts(), now)
+        val resolved = if (resolve != TaskChanges()) { apply(resolve, now); taskDao.getAllOnce() } else all
+        val purge = planPurgeExpired(resolved, now)
+        if (purge != TaskChanges()) apply(purge, now)
+        return resolved !== all || purge != TaskChanges()
     }
 
     // See planCompleteAndPromote (shared with the server).

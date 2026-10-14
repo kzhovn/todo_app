@@ -102,8 +102,7 @@ class TodoWidget : GlanceAppWidget() {
         val repository = (context.applicationContext as TodoApp).repository
         suspend fun load(): Pair<List<WidgetTaskRow>, String> {
             val now = System.currentTimeMillis()
-            repository.purgeExpired(now)
-            val allTasks = repository.getAllTasks()
+            val allTasks = repository.listedTasks(now)
             val allById = allTasks.associateBy { it.id }
             val edges = repository.getAllDependencyEdges()
             val listed = when (mode) {

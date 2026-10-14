@@ -107,12 +107,13 @@ class Store(path: String) {
         query("SELECT * FROM rows WHERE tbl = ? AND id = ?", table, id).firstOrNull()
 
     // Decoding every row's JSON is the costly part of most reads, and one page or tray refresh asks
-    // for all rows several times, so they're kept until the next write (or rollback). The same list
-    // comes back until then, which TaskService relies on to keep its own decoding.
+    // for all rows several times, so they're kept (in id order). A write swaps its row into a new list
+    // and a rollback drops them: the same list comes back until a write, and a row that wasn't written
+    // stays the same object, which TaskService relies on to decode only what changed.
     private val allCache = mutableMapOf<String, List<SyncRow>>()
 
     @Synchronized
-    fun all(table: String): List<SyncRow> = allCache.getOrPut(table) { query("SELECT * FROM rows WHERE tbl = ?", table) }
+    fun all(table: String): List<SyncRow> = allCache.getOrPut(table) { query("SELECT * FROM rows WHERE tbl = ? ORDER BY id", table) }
 
     @Synchronized
     fun getValue(key: String): String? =
@@ -159,7 +160,10 @@ class Store(path: String) {
         conn.createStatement().use { st -> st.executeQuery("SELECT COALESCE(MAX(version), 0) FROM rows").use { it.next(); it.getLong(1) } }
 
     private fun put(row: SyncRow) {
-        allCache.remove(row.table)
+        allCache[row.table]?.let { rows ->
+            val at = rows.binarySearchBy(row.id) { it.id }
+            allCache[row.table] = rows.toMutableList().apply { if (at >= 0) set(at, row) else add(-at - 1, row) }
+        }
         conn.prepareStatement("INSERT OR REPLACE INTO rows VALUES(?, ?, ?, ?, ?)").use {
             it.setString(1, row.table)
             it.setLong(2, row.id)

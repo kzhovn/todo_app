@@ -10,6 +10,8 @@ import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 object RecurrenceEngine {
+    private val COUNT = Regex("COUNT=(\\d+)")
+    private val COUNT_PART = Regex(";?COUNT=\\d+")
 
     fun nextInstance(task: Task, completedAt: Long): Task? {
         val type = task.recurrenceType ?: return null
@@ -22,7 +24,7 @@ object RecurrenceEngine {
         }
         // "After N times": each new instance starts the rule afresh from its own date, so the count
         // left is carried down one per instance, and the last instance spawns nothing.
-        val count = if (type == RecurrenceType.RRULE) Regex("COUNT=(\\d+)").find(rule)?.groupValues?.get(1)?.toInt() else null
+        val count = if (type == RecurrenceType.RRULE) COUNT.find(rule)?.groupValues?.get(1)?.toInt() else null
         if (count != null && count <= 1) return null
         val nextRule = if (count != null) rule.replace("COUNT=$count", "COUNT=${count - 1}") else rule
         // Keep the start-to-due gap constant across recurrences instead of freezing dueDate at its
@@ -89,7 +91,7 @@ object RecurrenceEngine {
         val start = task.startDate ?: createdAt(task) ?: return null
         val next = when (task.recurrenceType) {
             RecurrenceType.AFTER_COMPLETION -> afterCompletion(rule, start)
-            RecurrenceType.RRULE -> nextRRuleOccurrence(start, rule.replace(Regex(";?COUNT=\\d+"), ""), start)
+            RecurrenceType.RRULE -> nextRRuleOccurrence(start, rule.replace(COUNT_PART, ""), start)
         } ?: return null
         return start + (next - start) / 2
     }

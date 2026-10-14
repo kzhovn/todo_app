@@ -72,6 +72,16 @@ object QuickAddParser {
     // "~30m", "~1h", "~1h30m", "~1.5h": a timed task, anywhere in the text.
     private val tildeRegex = Regex("(?<!\\S)~(?:(\\d+(?:\\.\\d+)?)h)?\\s?(?:(\\d+)m)?(?!\\S)", I)
     private val itemsRegex = Regex("^(.*?)\\s*\\[([^\\[\\]]*)]$")
+    // The rest, compiled once rather than on every parse.
+    private val NOTE_SLASH = Regex("(^|\\s)//(\\s|$)")
+    private val SPACES = Regex("\\s+")
+    private val ORDINAL = Regex("(\\d)(st|nd|rd|th)")
+    private val weekdayRegex = Regex(WEEKDAY, I)
+    private val weekdayWord = Regex(WEEKDAY)
+    private val fromNowRegex = Regex("\\+(\\d+)h|in ($COUNT) (hours?|minutes?|mins?)")
+    private val timeRegex = Regex("(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?", I)
+    private val offsetRegex = Regex("\\+(\\d+)([dwm])|in ($COUNT) (day|week|month)s?")
+    private val monthDayRegex = Regex("(?:([a-z]+) (\\d{1,2})|(\\d{1,2}) ([a-z]+))")
 
     // A timed task leads with its duration and "of": "1 hour of ticket work", "30 minutes of research",
     // "an hour of", "1.5 hours of", "1h 30m of". "of" is required, so a title that merely starts with a
@@ -89,7 +99,7 @@ object QuickAddParser {
     fun splitNotes(input: String): Pair<String, String?> {
         val lines = input.trim().lines()
         val first = lines.first()
-        val slash = Regex("(^|\\s)//(\\s|$)").find(first)
+        val slash = NOTE_SLASH.find(first)
         val title = if (slash == null) first else first.substring(0, slash.range.first)
         val notes = listOfNotNull(slash?.let { first.substring(it.range.last + 1) }) + lines.drop(1)
         return title to notes.joinToString("\n").trim().ifEmpty { null }
@@ -133,7 +143,7 @@ object QuickAddParser {
         }
         val flags = pinRegex.findAll(text).map { it.groupValues[1].lowercase() }.toSet()
         text = text.replace(pinRegex, "")
-        text = text.replace(Regex("\\s+"), " ").trim()
+        text = text.replace(SPACES, " ").trim()
         // "wait …" first: a waiting item.
         val waiting = waitRegex.find(text)?.also { text = text.removeRange(it.range) } != null
         // A "?", "*" or "!" ending the title itself (after the flags and phrases above are stripped) marks a
@@ -147,7 +157,7 @@ object QuickAddParser {
             text = text.dropLast(1).trimEnd()
         }
         var minutes = tildeRegex.find(text)?.takeIf { it.groupValues[1].isNotEmpty() || it.groupValues[2].isNotEmpty() }?.let { m ->
-            text = text.removeRange(m.range).replace(Regex("\\s+"), " ").trim()
+            text = text.removeRange(m.range).replace(SPACES, " ").trim()
             ((m.groupValues[1].toDoubleOrNull() ?: 0.0) * 60 + (m.groupValues[2].toIntOrNull() ?: 0)).toInt().takeIf { it > 0 }
         }
 
@@ -209,7 +219,7 @@ object QuickAddParser {
         )
         else -> RecurrenceSelection(
             RecurrencePreset.CALENDAR, unit = RecurrenceUnit.WEEK,
-            weekdaysMask = Regex(WEEKDAY, I).findAll(g[6]).fold(0) { mask, d -> mask or (1 shl weekdayIndex(d.value)) }
+            weekdaysMask = weekdayRegex.findAll(g[6]).fold(0) { mask, d -> mask or (1 shl weekdayIndex(d.value)) }
         )
     }
 
@@ -239,9 +249,9 @@ object QuickAddParser {
     }
 
     private fun minutesFromNow(value: String): Int? {
-        val v = value.trim().lowercase().replace(Regex("\\s+"), " ")
+        val v = value.trim().lowercase().replace(SPACES, " ")
         if (v == "in half an hour" || v == "in half a hour") return 30
-        val m = Regex("\\+(\\d+)h|in ($COUNT) (hours?|minutes?|mins?)").matchEntire(v) ?: return null
+        val m = fromNowRegex.matchEntire(v) ?: return null
         if (m.groupValues[1].isNotEmpty()) return m.groupValues[1].toInt() * 60
         val n = count(m.groupValues[2])
         return if (m.groupValues[3].startsWith("h")) n * 60 else n
@@ -254,7 +264,7 @@ object QuickAddParser {
     }
 
     private fun parseTime(value: String): Pair<Int, Int>? {
-        val m = Regex("(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?", I).matchEntire(value.trim()) ?: return null
+        val m = timeRegex.matchEntire(value.trim()) ?: return null
         var hour = m.groupValues[1].toInt()
         val minute = m.groupValues[2].ifEmpty { "0" }.toInt()
         when (m.groupValues[3].lowercase()) {
@@ -265,20 +275,20 @@ object QuickAddParser {
     }
 
     private fun parseDate(value: String, now: Long): Long? {
-        val word = value.lowercase().replace(Regex("\\s+"), " ").trim()
+        val word = value.lowercase().replace(SPACES, " ").trim()
         val cal = Calendar.getInstance().apply { timeInMillis = now }
         val dow = cal.get(Calendar.DAY_OF_WEEK)
         // Always a future day: "due monday" said on a Monday means next week.
         fun ahead(target: Int) = cal.apply { add(Calendar.DAY_OF_YEAR, ((target - dow + 7) % 7).takeIf { it != 0 } ?: 7) }.startOfDay()
-        val offset = Regex("\\+(\\d+)([dwm])|in ($COUNT) (day|week|month)s?").matchEntire(word)
-        val monthDay = Regex("(?:([a-z]+) (\\d{1,2})|(\\d{1,2}) ([a-z]+))").matchEntire(word.replace(Regex("(\\d)(st|nd|rd|th)"), "$1"))
+        val offset = offsetRegex.matchEntire(word)
+        val monthDay = monthDayRegex.matchEntire(word.replace(ORDINAL, "$1"))
         return when {
             word == "today" -> cal.startOfDay()
             word == "tomorrow" -> cal.apply { add(Calendar.DAY_OF_YEAR, 1) }.startOfDay()
             word == "next week" -> ahead(Calendar.MONDAY)
             // Today if it's already the weekend.
             word.endsWith("weekend") -> if (dow == Calendar.SATURDAY || dow == Calendar.SUNDAY) cal.startOfDay() else ahead(Calendar.SATURDAY)
-            Regex(WEEKDAY).matches(word.removePrefix("next ")) -> ahead(weekdayIndex(word.removePrefix("next ")) + 1)
+            weekdayWord.matches(word.removePrefix("next ")) -> ahead(weekdayIndex(word.removePrefix("next ")) + 1)
             offset != null -> {
                 val n = count(offset.groupValues[1].ifEmpty { offset.groupValues[3] })
                 val field = when (offset.groupValues[2].ifEmpty { offset.groupValues[4] }.first()) {

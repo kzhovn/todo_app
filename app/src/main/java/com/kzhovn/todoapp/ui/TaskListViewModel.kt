@@ -109,7 +109,7 @@ class TaskListViewModel(
         reloading = viewModelScope.launch {
             when (val s = shown) {
                 is Shown.Tab -> loadTab(s.mode)
-                is Shown.Search -> { refreshSubtaskCounts(); _tasks.value = repository.search(s.query, s.filters) }
+                is Shown.Search -> { refreshSubtaskCounts(repository.listedTasks(clock())); _tasks.value = repository.search(s.query, s.filters) }
             }
         }
     }
@@ -118,8 +118,7 @@ class TaskListViewModel(
 
     private suspend fun loadTab(mode: TaskListMode) {
         val now = clock()
-        repository.purgeExpired(now)
-        val all = refreshSubtaskCounts()
+        val all = refreshSubtaskCounts(repository.listedTasks(now))
         val byId = _allById.value
         val folder = _mode.value?.id
         _dueOutside.value = emptyList()
@@ -146,9 +145,7 @@ class TaskListViewModel(
 
     fun move(taskId: Long, anchorId: Long, after: Boolean) = act { repository.moveNextTo(taskId, anchorId, after) }
 
-    private suspend fun refreshSubtaskCounts(): List<Task> {
-        repository.ensureFolderColors()
-        val all = repository.getAllTasks()
+    private suspend fun refreshSubtaskCounts(all: List<Task>): List<Task> {
         _stalledProjects.value = stalledProjects(all)
         _subtaskCounts.value = subtaskCounts(all)
         _allById.value = all.associateBy { it.id }

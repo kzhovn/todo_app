@@ -111,7 +111,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         val now = clock()
         apply(planResolveWaiting(tasks(), contextIdsByTask(), now))
         // Expired tasks are hidden from tasks(), so this reads every live row.
-        apply(planPurgeExpired(decoded().tasks.values.toList(), now))
+        apply(planPurgeExpired(decoded().entries.map { it.task }, now))
     }
 
     fun deletedTask(id: Long): Task? = store.get(TASKS, id)?.takeIf { it.isDeleted }?.toTask()
@@ -131,7 +131,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun updateTemplate(listId: Long, chosen: Set<String>, oneOff: Set<String>) = apply(planUpdateTemplate(everything(), contextIdsByTask(), listId, chosen, oneOff, clock()))
 
     // Templates included: what changes are planned against, and the template screens read.
-    fun everything(): List<Task> = clock().let { now -> decoded().let { d -> d.rows.mapNotNull { d.tasks[it.id]?.takeUnless { t -> t.isExpired(now) } } } }
+    fun everything(): List<Task> = liveEntries().map { it.task }
 
     // Folder mode, shared by every device (see Store.setMode). A set here always wins: it's the newest.
     fun modeFolder(): Task? = modeFolder(store.modeFolderId(), tasks().associateBy { it.id })
@@ -295,7 +295,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     fun contexts(): List<TaskContext> = store.all(CONTEXTS).filterNot { it.isDeleted }.map { it.toContext() }
 
-    fun contextIdsByTask(): Map<Long, Set<Long>> = liveRows().associate { it.id to it.contextIds() }
+    fun contextIdsByTask(): Map<Long, Set<Long>> = liveEntries().associate { it.task.id to it.contextIds }
 
     fun timeWindows(contextId: Long): List<ContextTimeWindow> =
         store.get(CONTEXTS, contextId)?.takeUnless { it.isDeleted }?.timeWindows().orEmpty()
@@ -317,7 +317,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     // Like the phone's: the context goes, and so does every task's assignment to it.
     fun deleteContext(id: Long) = store.transaction {
         val now = clock()
-        liveRows().filter { id in it.contextIds() }.forEach { row -> writeTask(row.toTask(), row.contextIds() - id, row.dependsOn(), now) }
+        liveEntries().filter { id in it.contextIds }.forEach { e -> writeTask(e.task, e.contextIds - id, e.dependsOn, now) }
         tombstone(CONTEXTS, id, now)
     }
 
@@ -325,7 +325,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     fun dependsOn(id: Long): Set<Long> = store.get(TASKS, id)?.dependsOn().orEmpty()
 
-    fun dependencyEdges(): List<TaskDependency> = liveRows().flatMap { row -> row.dependsOn().map { TaskDependency(row.id, it) } }
+    fun dependencyEdges(): List<TaskDependency> = liveEntries().flatMap { e -> e.dependsOn.map { TaskDependency(e.task.id, it) } }
 
     // The editor's save: the whole task plus its context and dependency sets, with links checked
     // (safeParent, safeDependencies) rather than trusted from the form.
@@ -396,9 +396,9 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     // Makes taskId wait for dependsOnId, unless that would create a dependency loop.
     fun addDependency(taskId: Long, dependsOnId: Long) = store.transaction {
-        val row = liveRows().firstOrNull { it.id == taskId } ?: return@transaction
+        val e = liveEntries().firstOrNull { it.task.id == taskId } ?: return@transaction
         if (!canDependOn(taskId, dependsOnId, dependencyEdges())) return@transaction
-        writeTask(row.toTask(), row.contextIds(), row.dependsOn() + dependsOnId)
+        writeTask(e.task, e.contextIds, e.dependsOn + dependsOnId)
     }
 
     // Carries out a change planned in :core (see TaskChanges), as the app's TaskRepository does: what's made or
@@ -417,8 +417,8 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun activeDescendantCount(id: Long): Int = openDescendants(id, everything()).size
 
     fun removeDependency(taskId: Long, dependsOnId: Long) = store.transaction {
-        val row = liveRows().firstOrNull { it.id == taskId } ?: return@transaction
-        writeTask(row.toTask(), row.contextIds(), row.dependsOn() - dependsOnId)
+        val e = liveEntries().firstOrNull { it.task.id == taskId } ?: return@transaction
+        writeTask(e.task, e.contextIds, e.dependsOn - dependsOnId)
     }
 
     // Checklists; mirror TaskRepository's addItems, clearChecked, uncheckAll and completeChecklist.
@@ -487,7 +487,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         val all = everything()
         val (moved, kept) = templatesKeptFrom(all.filter { it.id in ids }, all)
         moved.forEach { t -> update(t.id) { t } }
-        liveRows().filter { it.id in ids && it.id !in kept }.forEach { tombstone(TASKS, it.id, now) }
+        liveEntries().filter { it.task.id in ids && it.task.id !in kept }.forEach { tombstone(TASKS, it.task.id, now) }
     }
 
     fun restore(id: Long) = store.transaction {
@@ -508,25 +508,30 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     private fun writeTask(task: Task, contextIds: Set<Long>, dependsOn: Set<Long>, now: Long = clock()) =
         store.write(TASKS, task.id, JsonObject(taskFields(task, contextIds, dependsOn) - DELETED_AT), now)
 
-    // Every task decoded once per change to the stored rows (Store.all returns the same list until a
-    // write), since one page or tray refresh reads them all several times over.
-    private class Decoded(val source: List<SyncRow>, val rows: List<SyncRow>, val tasks: Map<Long, Task>)
+    // Every task decoded once, with its context and prerequisite sets: one page or tray refresh reads them
+    // all several times over. Store.all returns the same list until a write, which keeps every row it didn't
+    // write as the same object, so only written rows are decoded again.
+    private class Entry(val row: SyncRow, val task: Task, val contextIds: Set<Long>, val dependsOn: Set<Long>)
+    private class Decoded(val source: List<SyncRow>, val entries: List<Entry>, val byId: Map<Long, Entry>)
 
     @Volatile
     private var decodedCache: Decoded? = null
 
     private fun decoded(): Decoded {
         val source = store.all(TASKS)
-        decodedCache?.takeIf { it.source === source }?.let { return it }
-        val rows = source.filterNot { it.isDeleted }
-        return Decoded(source, rows, rows.associate { it.id to it.toTask() }).also { decodedCache = it }
+        val previous = decodedCache
+        if (previous?.source === source) return previous
+        val entries = source.filterNot { it.isDeleted }.map { row ->
+            previous?.byId?.get(row.id)?.takeIf { it.row === row } ?: Entry(row, row.toTask(), row.contextIds(), row.dependsOn())
+        }
+        return Decoded(source, entries, entries.associateBy { it.row.id }).also { decodedCache = it }
     }
 
-    private fun liveRows(): List<SyncRow> = clock().let { now -> decoded().let { d -> d.rows.filterNot { d.tasks.getValue(it.id).isExpired(now) } } }
+    private fun liveEntries(): List<Entry> = clock().let { now -> decoded().entries.filterNot { it.task.isExpired(now) } }
 
-    private fun subtreeIds(rootId: Long, rows: List<SyncRow> = liveRows()): Set<Long> {
-        val tasks = decoded().tasks
-        val children = rows.groupBy({ (tasks[it.id] ?: it.toTask()).parentId }, { it.id })
+    private fun subtreeIds(rootId: Long, rows: List<SyncRow> = liveEntries().map { it.row }): Set<Long> {
+        val decoded = decoded().byId
+        val children = rows.groupBy({ (decoded[it.id]?.task ?: it.toTask()).parentId }, { it.id })
         val result = mutableSetOf<Long>()
         val stack = ArrayDeque(listOf(rootId))
         while (stack.isNotEmpty()) {

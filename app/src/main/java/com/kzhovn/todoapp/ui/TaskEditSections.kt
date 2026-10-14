@@ -413,8 +413,9 @@ internal fun TimingSection(vm: TaskEditViewModel, activity: Activity, onRepeat: 
             TogglePill(Labels.TODAY_ONLY, Icons.Filled.AcUnit, on = task.expiresAt != null, onToggle = toggleToday)
         }
     }
-    // Not set here, but shown as its due date: a task waiting on this one is due sooner.
-    val dueFor = remember(vm.allTasks, vm.dependencyEdges, task) {
+    // Not set here, but shown as its due date: a task waiting on this one is due sooner. Worked out over every
+    // task, so only again when what it goes by changes (not on each keystroke in the title).
+    val dueFor = remember(vm.allTasks, vm.dependencyEdges, task.dueDate, task.parentId, task.isComplete) {
         if (vm.isNew || task.isComplete) null else DueDates(vm.allTasks.map { if (it.id == task.id) task else it }, vm.dependencyEdges).of(task)?.takeIf { it.forTask != null }
     }
     dueFor?.let { Text(Labels.dueFromWaiting(dueText(it.at, System.currentTimeMillis()), it.forTask!!.title), fontSize = 12.sp, color = LedgerMuted, fontStyle = FontStyle.Italic, modifier = Modifier.padding(top = 6.dp)) }

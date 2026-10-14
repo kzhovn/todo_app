@@ -10,7 +10,6 @@ import com.kzhovn.todoapp.data.newTaskPositions
 import com.kzhovn.todoapp.quickadd.QuickAdd
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.completed
-import com.kzhovn.todoapp.data.isUnder
 import com.kzhovn.todoapp.data.moveOutFolderId
 import com.kzhovn.todoapp.data.newId
 import com.kzhovn.todoapp.data.resolvesBy
@@ -35,7 +34,17 @@ data class TaskChanges(
     }
 }
 
-private fun descendants(id: Long, all: List<Task>): List<Task> = all.associateBy { it.id }.let { byId -> all.filter { isUnder(it, id, byId) } }
+// Everything below any of `ids`, in `all`'s order. One pass down a children map, so many roots cost one.
+private fun descendants(ids: Collection<Long>, all: List<Task>): List<Task> {
+    if (ids.isEmpty()) return emptyList()
+    val children = all.groupBy { it.parentId }
+    val below = HashSet<Long>()
+    val stack = ArrayDeque(ids)
+    while (stack.isNotEmpty()) children[stack.removeLast()]?.forEach { if (below.add(it.id)) stack.add(it.id) }
+    return all.filter { it.id in below }
+}
+
+private fun descendants(id: Long, all: List<Task>): List<Task> = descendants(listOf(id), all)
 
 // What "complete subtasks too" completes, and what the "N active subtasks" question counts.
 fun openDescendants(id: Long, all: List<Task>): List<Task> = descendants(id, all).filter { !it.type.isContainer && !it.isComplete }
@@ -161,12 +170,12 @@ fun planQuickAddWrite(
 
 // "Today only" tasks past their day go, with everything under them (deleted, not kept as done).
 fun planPurgeExpired(all: List<Task>, now: Long): TaskChanges =
-    TaskChanges(deletes = all.filter { it.isExpired(now) }.flatMap { t -> descendants(t.id, all).map { it.id } + t.id }.toSet())
+    all.filter { it.isExpired(now) }.map { it.id }.let { ids -> TaskChanges(deletes = descendants(ids, all).map { it.id }.toSet() + ids) }
 
 // A checklist's (or one section's) checked items are gone for good (after asking): a groceries list would
 // otherwise fill up.
 fun planClearChecked(all: List<Task>, checklistId: Long): TaskChanges =
-    TaskChanges(deletes = itemsIn(checklistId, all).filter { it.isComplete }.flatMap { t -> descendants(t.id, all).map { it.id } + t.id }.toSet())
+    itemsIn(checklistId, all).filter { it.isComplete }.map { it.id }.let { ids -> TaskChanges(deletes = descendants(ids, all).map { it.id }.toSet() + ids) }
 
 // Unchecks every item of a checklist (or one section), each as reopening it would (a repeating item's
 // untouched next one is taken back).
