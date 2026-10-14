@@ -16,12 +16,14 @@ connect() {
     local until=$((SECONDS + 90))
     while true; do
         S=$(find_phone)
-        [[ -n "$S" ]] && "$ADB" connect "$S" >/dev/null && return 0
+        # `adb connect` exits 0 even when it fails; only its message tells.
+        [[ -n "$S" ]] && "$ADB" connect "$S" | grep -q "connected to" && return 0
         ((SECONDS >= until)) && break
         [[ -z "${looking:-}" ]] && looking=1 && echo "Looking for the phone (up to 90s)..." >&2
         sleep 5
     done
-    echo "The phone isn't advertising wireless debugging. Turn it on; if it says it's not paired, pair with"
+    if [[ -n "$S" ]]; then echo "The phone is at $S but won't connect: the pairing was lost. Pair again with"
+    else echo "The phone isn't advertising wireless debugging. Turn it on; if it says it's not paired, pair with"; fi
     echo "  $ADB pair <ip>:<pairing port> <code>   (Wireless debugging > Pair device with pairing code)"
     exit 2
 }
@@ -30,6 +32,7 @@ retry() { for _ in 1 2 3; do "$@" && return 0; sleep 5; connect; done; return 1;
 
 connect
 state=$("$ADB" -s "$S" shell dumpsys activity activities | grep -o 'mLockTaskModeState=[A-Z]*' | head -1)
+if [[ -z "$state" ]]; then echo "Couldn't read the phone's state; not installing."; exit 1; fi
 if [[ "$state" != "mLockTaskModeState=NONE" ]]; then
     echo "A focus session is running ($state); not installing. Render screens with ScreenshotRender instead."
     exit 3
