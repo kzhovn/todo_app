@@ -73,7 +73,6 @@ class ReviewTest {
         )
         val page = review(tasks, emptyList(), now, 4, Zoom.WEEK)
         assertEquals(mapOf("created" to 3 * day, "started later" to day, "pre-sync, started" to 2 * day), page.timeToDone.associate { it.task.title to it.ms })
-        assertEquals(2 * day, medianMs(page.timeToDone))
         assertEquals(listOf("Same day" to 0, "1–2 days" to 2, "3–6 days" to 1), bucketCounts(page.timeToDone, DONE_BUCKETS).take(3))
     }
 

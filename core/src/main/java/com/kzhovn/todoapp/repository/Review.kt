@@ -6,7 +6,6 @@ import com.kzhovn.todoapp.data.deadline
 import com.kzhovn.todoapp.data.inMode
 import com.kzhovn.todoapp.data.isChecklistItem
 import com.kzhovn.todoapp.data.isDoable
-import com.kzhovn.todoapp.data.outermostFolder
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -47,8 +46,6 @@ fun bucketCounts(ages: List<Aged>, buckets: List<Pair<String, Int>>): List<Pair<
     }
 }
 
-fun medianMs(ages: List<Aged>): Long? = ages.map { it.ms }.sorted().let { if (it.isEmpty()) null else it[it.size / 2] }
-
 // "same day", "3d", "2w", "4mo".
 fun shortAge(ms: Long, underADay: String = "same day"): String {
     val days = ms / DAY_MS
@@ -59,10 +56,6 @@ fun shortAge(ms: Long, underADay: String = "same day"): String {
         else -> "${days / 30}mo"
     }
 }
-
-// The median per top-level folder (null: no folder), in the order the folders first appear.
-fun medianByTopFolder(ages: List<Aged>, byId: Map<Long, Task>): List<Pair<Task?, Long>> =
-    ages.groupBy { outermostFolder(it.task, byId) }.mapNotNull { (folder, group) -> medianMs(group)?.let { folder to it } }
 
 class ReviewPage(
     val zoom: Zoom,

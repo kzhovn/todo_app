@@ -26,7 +26,6 @@ object Labels {
     const val BACK_TO_TODAY = "Back to today"
     const val TIME_TO_DONE = "Time to done"
     fun timeToDoneCaption(count: Int) = "from start or creation · $count tasks, repeats left out"
-    const val MEDIAN_BY_FOLDER = "Median by folder"
     const val TOOK_LONGEST = "Took longest"
     const val WAITING_NOW = "Waiting now"
     const val WAITING_NOW_CAPTION = "Active tasks, plus those only held back by a context, by how long they've waited"

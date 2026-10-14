@@ -69,7 +69,6 @@ import com.kzhovn.todoapp.repository.ReviewPage
 import com.kzhovn.todoapp.repository.WAITING_BUCKETS
 import com.kzhovn.todoapp.repository.Zoom
 import com.kzhovn.todoapp.repository.bucketCounts
-import com.kzhovn.todoapp.repository.medianByTopFolder
 import com.kzhovn.todoapp.repository.review
 import com.kzhovn.todoapp.repository.shortAge
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
@@ -213,14 +212,6 @@ internal fun ReviewScreen(
             if (page.timeToDone.isNotEmpty()) {
                 SectionTitle(Labels.TIME_TO_DONE, Labels.timeToDoneCaption(page.timeToDone.size))
                 HBars(bucketCounts(page.timeToDone, DONE_BUCKETS), LedgerAccent)
-                SmallLabel(Labels.MEDIAN_BY_FOLDER)
-                medianByTopFolder(page.timeToDone, byId).forEach { (folder, median) ->
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
-                        Box(Modifier.size(8.dp).clip(CircleShape).background(colorOf(folder)))
-                        Text(folder?.title ?: Labels.NO_FOLDER, fontSize = 13.sp, color = LedgerInk, modifier = Modifier.weight(1f).padding(start = 6.dp))
-                        Text(shortAge(median), fontSize = 12.sp, color = LedgerMuted)
-                    }
-                }
                 SmallLabel(Labels.TOOK_LONGEST)
                 page.timeToDone.sortedByDescending { it.ms }.take(3).forEach { TaskLine(it.task, shortAge(it.ms)) }
             }

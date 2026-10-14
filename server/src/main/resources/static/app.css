@@ -281,8 +281,7 @@ form.inline button { padding: 6px 10px; border: 1px solid var(--border); border-
 .hbars .lab { color: var(--muted); text-align: right; }
 .hbars .fill { height: 12px; border-radius: 0 3px 3px 0; opacity: .85; }
 .hbars .num { color: var(--muted); }
-.median-row { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 2px 0; border-bottom: 1px solid var(--border); }
-.done-row .age, .median-row .age { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.done-row .age { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
 .due-bar { display: flex; gap: 2px; height: 10px; border-radius: 5px; overflow: hidden; margin: 6px 0; }
 .due-bar .on-time { background: var(--good); }
 .due-bar .late { background: var(--overdue); }

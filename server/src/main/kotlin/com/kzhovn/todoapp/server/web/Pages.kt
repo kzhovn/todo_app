@@ -31,7 +31,6 @@ import com.kzhovn.todoapp.repository.ReviewPage
 import com.kzhovn.todoapp.repository.WAITING_BUCKETS
 import com.kzhovn.todoapp.repository.Zoom
 import com.kzhovn.todoapp.repository.bucketCounts
-import com.kzhovn.todoapp.repository.medianByTopFolder
 import com.kzhovn.todoapp.repository.review
 import com.kzhovn.todoapp.repository.shortAge
 import com.kzhovn.todoapp.server.TaskService
@@ -413,14 +412,6 @@ private fun HTML.reviewPage(service: TaskService, zoom: Zoom, end: LocalDate?, e
             div(classes = "twocol") {
                 div { hbars(bucketCounts(page.timeToDone, DONE_BUCKETS), "var(--accent)") }
                 div {
-                    div(classes = "folder-name") { +Labels.MEDIAN_BY_FOLDER }
-                    medianByTopFolder(page.timeToDone, byId).forEach { (folder, median) ->
-                        div(classes = "median-row") {
-                            span(classes = "swatch") { style = "background: ${colorOf(folder)}" }
-                            span { +(folder?.title ?: Labels.NO_FOLDER) }
-                            span(classes = "age") { +shortAge(median) }
-                        }
-                    }
                     div(classes = "folder-name") { +Labels.TOOK_LONGEST }
                     page.timeToDone.sortedByDescending { it.ms }.take(5).forEach { taskRow(it.task, shortAge(it.ms)) }
                 }
