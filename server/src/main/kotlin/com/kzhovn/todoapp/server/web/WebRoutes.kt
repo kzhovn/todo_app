@@ -8,6 +8,7 @@ import com.kzhovn.todoapp.server.TaskService
 import io.ktor.http.ContentType
 import io.ktor.http.Cookie
 import io.ktor.http.CookieEncoding
+import io.ktor.http.HttpHeaders
 import io.ktor.http.Parameters
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.html.respondHtml
@@ -25,14 +26,23 @@ import kotlinx.html.div
 import kotlinx.html.stream.createHTML
 
 
+// From the webjar on the classpath, so there's no CDN and no vendored copy; served at /static/$HTMX.
+internal const val HTMX = "htmx/htmx.min.js"
+internal val htmx: ByteArray = Route::class.java.classLoader.getResource("META-INF/resources/webjars/htmx.org/2.0.11/dist/htmx.min.js")!!.readBytes()
+
+// Static files never change under a URL (asset() puts a hash of the file in it), so browsers keep them.
+private const val CACHE_FOR_GOOD = "max-age=31536000, immutable"
+
 // No login here: Caddy's basic_auth guards every web page, and Main only mounts these routes when the
 // server listens on loopback, i.e. is reachable solely through Caddy.
 fun Route.webRoutes(service: TaskService) {
     // Explicit route: staticResources() treats dots in a resource path as package separators, which
     // mangles the webjar's "htmx.org/2.0.11" directory.
-    val htmx = Route::class.java.classLoader.getResource("META-INF/resources/webjars/htmx.org/2.0.11/dist/htmx.min.js")!!.readBytes()
-    get("/static/htmx/htmx.min.js") { call.respondBytes(htmx, ContentType.Text.JavaScript) }
-    staticResources("/static", "static")
+    get("/static/$HTMX") {
+        call.response.header(HttpHeaders.CacheControl, CACHE_FOR_GOOD)
+        call.respondBytes(htmx, ContentType.Text.JavaScript)
+    }
+    staticResources("/static", "static") { modify { _, call -> call.response.header(HttpHeaders.CacheControl, CACHE_FOR_GOOD) } }
 
     get("/") { call.respondRedirect("/doing") }
     ListMode.entries.forEach { mode ->

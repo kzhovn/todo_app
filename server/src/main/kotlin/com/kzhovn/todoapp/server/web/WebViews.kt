@@ -64,6 +64,8 @@ import kotlinx.html.summary
 import kotlinx.html.textInput
 import kotlinx.html.title
 import kotlinx.html.unsafe
+import java.util.concurrent.ConcurrentHashMap
+import java.util.zip.CRC32
 
 enum class ListMode(val label: String) { DOING(Labels.DOING), ACTIVE(Labels.ACTIVE), ALL(Labels.ALL) }
 
@@ -187,9 +189,24 @@ internal enum class Icon(val path: String) {
     DATE_RANGE("M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z")
 }
 
+// Each icon points into the page's one copy of the paths (iconSprite), which keeps a long list's markup short.
+// Fill and stroke are inherited into the copy, so CSS colours an icon through its svg, not its path.
 internal fun FlowContent.icon(icon: Icon, classes: String, color: String? = null) = span(classes = "icon $classes") {
     color?.let { style = "color: $it" }
-    unsafe { +"<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"${icon.path}\"/></svg>" }
+    unsafe { +"<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><use href=\"#i-${icon.name}\"/></svg>" }
+}
+
+// Every page carries it, so a list or panel swapped in by htmx finds its icons.
+private val iconSprite = Icon.entries.joinToString("", "<svg class=\"sprite\" aria-hidden=\"true\">", "</svg>") {
+    "<symbol id=\"i-${it.name}\" viewBox=\"0 0 24 24\"><path d=\"${it.path}\"/></symbol>"
+}
+
+// A static file's URL, with a hash of the file: browsers keep static files for good (webRoutes), so a changed
+// file has to be a new URL.
+private val assetVersions = ConcurrentHashMap<String, String>()
+internal fun asset(path: String): String = "/static/$path?v=" + assetVersions.getOrPut(path) {
+    val bytes = if (path == HTMX) htmx else Icon::class.java.classLoader.getResource("static/$path")!!.readBytes()
+    CRC32().apply { update(bytes) }.value.toString(36)
 }
 
 fun HTML.page(title: String, content: BODY.() -> Unit) {
@@ -197,15 +214,18 @@ fun HTML.page(title: String, content: BODY.() -> Unit) {
         meta(charset = "utf-8")
         meta(name = "viewport", content = "width=device-width, initial-scale=1")
         title(title)
-        link(rel = "stylesheet", href = "/static/app.css")
+        link(rel = "stylesheet", href = asset("app.css"))
         // The phone app's raspberry icon, cropped as the launcher shows it.
-        link(rel = "icon", href = "/static/icon-32.png", type = "image/png") { attributes["sizes"] = "32x32" }
-        link(rel = "icon", href = "/static/icon-192.png", type = "image/png") { attributes["sizes"] = "192x192" }
-        link(rel = "apple-touch-icon", href = "/static/apple-touch-icon.png")
-        script(src = "/static/htmx/htmx.min.js") {}
-        script(src = "/static/app.js") { defer = true }
+        link(rel = "icon", href = asset("icon-32.png"), type = "image/png") { attributes["sizes"] = "32x32" }
+        link(rel = "icon", href = asset("icon-192.png"), type = "image/png") { attributes["sizes"] = "192x192" }
+        link(rel = "apple-touch-icon", href = asset("apple-touch-icon.png"))
+        script(src = asset(HTMX)) {}
+        script(src = asset("app.js")) { defer = true }
     }
-    body { content() }
+    body {
+        unsafe { +iconSprite }
+        content()
+    }
 }
 
 // deleted: a task just deleted from the editor, offered back with an Undo toast.
@@ -309,7 +329,7 @@ private fun HTML.shell(
     val nav = SideNav(service, list)
     div(classes = "shell") {
         aside(classes = "sidebar") {
-            a(href = "/doing", classes = "brand") { img(src = "/static/icon-32.png", alt = "") ; +"Raspberry" }
+            a(href = "/doing", classes = "brand") { img(src = asset("icon-32.png"), alt = "") ; +"Raspberry" }
             // Folder mode, in the folder's colour; ✕ (or z, outside a folder's view) leaves it everywhere.
             nav.mode?.let { mode ->
                 div(classes = "modebar") {

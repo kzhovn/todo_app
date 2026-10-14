@@ -60,7 +60,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .empty { color: var(--muted); padding: 24px; }
 .folder { font-weight: 600; color: var(--muted); padding: 10px 12px 4px; display: flex; align-items: center; gap: 6px; }
 .icon { display: inline-flex; }
-.icon svg { width: 100%; height: 100%; }
+.icon svg { width: 100%; height: 100%; fill: currentColor; }
+.sprite { position: absolute; width: 0; height: 0; }
 .folder-icon { width: 14px; height: 14px; color: var(--muted); }
 .row { display: flex; align-items: center; gap: 6px; min-height: 40px; padding-right: 4px; border-left: 4px solid var(--border); border-bottom: 1px solid var(--border); }
 .row.dim { opacity: .45; }
@@ -84,8 +85,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .badge .icon { width: 10px; height: 10px; }
 .meta { display: flex; gap: 8px; font-size: 12px; color: var(--muted); margin-top: 2px; align-items: center; }
 .star { color: var(--check); width: 30px; height: 32px; display: flex; align-items: center; justify-content: center; }
-.star svg path { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
-.star.on svg path { fill: color-mix(in srgb, var(--star) 28%, transparent); }
+.star svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
+.star.on svg { fill: color-mix(in srgb, var(--star) 28%, transparent); }
 .star .icon { width: 24px; height: 24px; }
 .star.on { color: var(--star); }
 .maybe { font-weight: 700; color: var(--muted); width: 32px; text-align: center; }
@@ -139,9 +140,9 @@ label.pin-toggle { cursor: pointer; }
 .star-toggle { cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
 .star-toggle input { display: none; }
 .star-toggle .icon { width: 24px; height: 24px; color: var(--check); }
-.star-toggle svg path { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
+.star-toggle svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
 .star-toggle:has(input:checked) .icon { color: var(--star); }
-.star-toggle:has(input:checked) svg path { fill: color-mix(in srgb, var(--star) 28%, transparent); }
+.star-toggle:has(input:checked) svg { fill: color-mix(in srgb, var(--star) 28%, transparent); }
 .pills { display: flex; flex-wrap: wrap; gap: 6px; }
 .pill { cursor: pointer; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; color: var(--muted); }
 .pill input { display: none; }

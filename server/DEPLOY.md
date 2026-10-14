@@ -116,6 +116,8 @@ Then write `/etc/caddy/Caddyfile`. With a bare IP address:
 	basic_auth @web {
 		<USER> <HASH>
 	}
+	# Compressed: a list page is mostly repeated markup (the All tree's 3 MB at 3000 tasks is 112 KB gzipped).
+	encode zstd gzip
 	reverse_proxy 127.0.0.1:8080
 }
 ```
