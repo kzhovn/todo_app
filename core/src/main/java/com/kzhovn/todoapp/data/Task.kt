@@ -83,7 +83,10 @@ data class Task(
     @ColumnInfo(defaultValue = "0") val isTemplate: Boolean = false,
     // In a list made from a template: the template task this one was copied from, so the two can be compared
     // (templateChanges). 0: added to the list "just this time", never offered to the template.
-    val fromTemplateId: Long? = null
+    val fromTemplateId: Long? = null,
+    // A step of an in-order parent that doesn't hold up the step after it ("Hang the rest" beside "Start dryer"):
+    // it comes up with that step, which doesn't wait for it. See stepsUpNow.
+    @ColumnInfo(defaultValue = "0") val alongsideNext: Boolean = false
 ) {
     fun isExpired(now: Long): Boolean = expiresAt != null && expiresAt <= now
 

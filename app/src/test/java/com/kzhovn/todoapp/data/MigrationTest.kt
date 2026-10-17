@@ -54,5 +54,6 @@ class MigrationTest {
         assertEquals(null, task.focusedAt)
         assertFalse(task.isTemplate)
         assertEquals(null, task.fromTemplateId)
+        assertFalse(task.alongsideNext)
     }
 }

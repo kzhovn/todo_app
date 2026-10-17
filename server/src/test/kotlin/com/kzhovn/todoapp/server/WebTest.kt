@@ -909,6 +909,24 @@ class WebTest {
     }
 
     @Test
+    fun `a step that doesn't hold up the next shows its mark, and the row menu and editor switch it`() = web {
+        client.submitForm("/quickadd", parameters { append("text", "Laundry > take wet out &> hang the rest > start dryer"); append("mode", "DOING") })
+        val hang = service.tasks().single { it.title == "hang the rest" }
+        assertTrue(hang.alongsideNext)
+        assertTrue(client.get("/all").bodyAsText().contains("class=\"alongside\""))
+        client.post("/tasks/${hang.id}/alongside?mode=ALL")
+        assertFalse(service.get(hang.id)!!.alongsideNext)
+        val editor = client.get("/tasks/${hang.id}?mode=ALL").bodyAsText()
+        assertTrue(editor.contains(Labels.ALONGSIDE_NEXT))
+        client.submitForm("/tasks/${hang.id}", parameters {
+            append("title", "hang the rest"); append("type", "TASK"); append("parent", hang.parentId.toString())
+            append("alongsideShown", "1"); append("alongsideNext", "on")
+        })
+        assertTrue(service.get(hang.id)!!.alongsideNext)
+        assertTrue(client.get("/tasks/${hang.id}?mode=ALL").bodyAsText().contains(Labels.comesUpWith("start dryer")))
+    }
+
+    @Test
     fun `a waiting item's Timer is saved from its own pill`() = web {
         val wait = service.create(Task(title = "Pasta", type = TaskType.WAITING))
         client.submitForm("/tasks/${wait.id}", parameters { append("title", "Pasta"); append("type", "WAITING"); append("duration", "10"); append("duration", "") })

@@ -158,6 +158,11 @@ class TaskRepository(
         write(taskDao.getById(taskId)?.takeIf { it.type == TaskType.WAITING }?.let { stillWaiting(it, now) } ?: return, now)
     }
 
+    // A step's "Don't hold up the next step" / "Hold up the next step" (its row menu).
+    suspend fun toggleAlongside(taskId: Long) {
+        write(taskDao.getById(taskId)?.let { it.copy(alongsideNext = !it.alongsideNext) } ?: return)
+    }
+
     // A running wait's "+10 min" (Doing's Running line, its notification).
     suspend fun moreWait(taskId: Long, now: Long) {
         write(taskDao.getById(taskId)?.takeIf { it.isTimedWait && !it.isComplete }?.withMoreWait(Labels.MORE_WAIT_MINUTES, now) ?: return, now)

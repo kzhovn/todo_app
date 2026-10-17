@@ -71,6 +71,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.outlined.HourglassEmpty
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
@@ -152,7 +153,7 @@ fun TaskListScreen(
             listOfNotNull(nearestFolder(task, allById)?.title) +
                 contextsByTaskId[task.id].orEmpty().mapNotNull { id -> allContexts[id]?.name?.let { "@$it" } }.sorted()
         }?.joinToString(" · ")?.ifEmpty { null }
-        val row = @Composable { TaskRow(task, dues.of(task), subtaskCounts[task.id], barColor, task.id in selectedIds, subtaskParentTitle(task, allById), onCheck, onStar, onEdit, onSnooze, notesLine, metaLine) }
+        val row = @Composable { TaskRow(task, dues.of(task), subtaskCounts[task.id], barColor, task.id in selectedIds, subtaskParentTitle(task, allById), onCheck, onStar, onEdit, onSnooze, notesLine, metaLine, inOrderStep = allById[task.parentId]?.sequential == true) }
         // Swipe right to add a subtask (a checklist's are items), as in the All tree.
         SwipeToAddSubtask({ onAddSubtask(task.id) }, row)
         if (!last) HorizontalDivider(color = LedgerBorder)
@@ -245,7 +246,8 @@ internal fun TaskRow(
     onSnooze: (Long, Long) -> Unit,
     notesLine: String? = null, // search: the line of the notes it matched
     metaLine: String? = null, // search: where it lives and its contexts, as the web's results show
-    tag: String? = null // the calendar: what put it on its day ("starts", "reminder 5:00 PM"), said in place of a start to come
+    tag: String? = null, // the calendar: what put it on its day ("starts", "reminder 5:00 PM"), said in place of a start to come
+    inOrderStep: Boolean = false // a step of an in-order parent: its menu can free the next step, and ↷ shows it has
 ) {
     var showSnoozeMenu by remember { mutableStateOf(false) }
     // Due styling tracks the *displayed* (inherited) due date, not the task's own possibly-null field,
@@ -278,6 +280,7 @@ internal fun TaskRow(
                             withLink(LinkAnnotation.Clickable("parent", style) { onEdit(parentId) }) { append("$parentTitle: ") }
                         }
                         append(task.title)
+                        if (inOrderStep && task.alongsideNext) withStyle(SpanStyle(color = LedgerAccent, fontWeight = FontWeight.Normal)) { append(" ${Labels.ALONGSIDE_MARK}") }
                         // One line with the title (it wraps along), in the due colour.
                         if (due != null) {
                             val color = when (status) { DueStatus.OVERDUE -> LedgerOverdue; DueStatus.TODAY -> LedgerDueTodayText; else -> LedgerMuted }
@@ -321,13 +324,13 @@ internal fun TaskRow(
         // DropdownMenu is Popup-based (SubcomposeLayout internally) and can't answer the intrinsic
         // width queries an IntrinsicSize.Min row needs from its children, so it lives outside the Row
         // as a plain sibling.
-        TaskRowMenu(task, showSnoozeMenu, onDismiss = { showSnoozeMenu = false }, onSnooze = onSnooze)
+        TaskRowMenu(task, showSnoozeMenu, onDismiss = { showSnoozeMenu = false }, onSnooze = onSnooze, inOrderStep = inOrderStep)
     }
 }
 
 // A row's long-press menu, the lists' and the All tree's: snooze, pin, focus, and skip for a repeat.
 @Composable
-internal fun TaskRowMenu(task: Task, expanded: Boolean, onDismiss: () -> Unit, onSnooze: (Long, Long) -> Unit) {
+internal fun TaskRowMenu(task: Task, expanded: Boolean, onDismiss: () -> Unit, onSnooze: (Long, Long) -> Unit, inOrderStep: Boolean = false) {
     val scope = rememberCoroutineScope()
     DropdownMenu(
         expanded = expanded,
@@ -362,6 +365,11 @@ internal fun TaskRowMenu(task: Task, expanded: Boolean, onDismiss: () -> Unit, o
                     (context.applicationContext as com.kzhovn.todoapp.TodoApp).repository.skip(task.id, System.currentTimeMillis())
                     PinnedTask.refresh(context)
                 }
+            }
+            // A step of an in-order parent: whether the next one waits for it (Workflows.kt).
+            if (inOrderStep) MenuRow(if (task.alongsideNext) Labels.HOLD_UP else Labels.DONT_HOLD_UP, Icons.AutoMirrored.Filled.Redo) {
+                onDismiss()
+                scope.launch { (context.applicationContext as com.kzhovn.todoapp.TodoApp).repository.toggleAlongside(task.id) }
             }
             // A copy kept as a template (see Templates.kt); this one carries on as it is.
             MenuRow(Labels.SAVE_AS_TEMPLATE, Icons.Filled.ContentCopy) {

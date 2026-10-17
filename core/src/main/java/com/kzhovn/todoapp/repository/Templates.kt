@@ -137,7 +137,7 @@ fun templateChanges(all: List<Task>, listId: Long): List<TemplateChange> {
 const val JUST_THIS_TIME = 0L
 
 private fun differs(t: Task, from: Task) = t.title != from.title || t.isMaybe != from.isMaybe || t.isHighPriority != from.isHighPriority ||
-    t.durationMinutes != from.durationMinutes || t.notes.orEmpty() != from.notes.orEmpty() || t.type != from.type
+    t.durationMinutes != from.durationMinutes || t.notes.orEmpty() != from.notes.orEmpty() || t.type != from.type || t.alongsideNext != from.alongsideNext
 
 // Writes the chosen differences into the template; `oneOff` ones (added items) are marked "just this time" so
 // they aren't offered again. An added task is copied into the template and then paired with it.
@@ -158,7 +158,7 @@ fun planUpdateTemplate(all: List<Task>, contexts: Map<Long, Set<Long>>, listId: 
             is TemplateChange.Removed -> TaskChanges(deletes = all.filter { isUnder(it, change.templateTask.id, byId) }.map { it.id }.toSet() + change.templateTask.id)
             is TemplateChange.Changed -> TaskChanges(updates = listOf(change.templateTask.copy(
                 title = change.task.title, isMaybe = change.task.isMaybe, isHighPriority = change.task.isHighPriority,
-                durationMinutes = change.task.durationMinutes, notes = change.task.notes, type = change.task.type
+                durationMinutes = change.task.durationMinutes, notes = change.task.notes, type = change.task.type, alongsideNext = change.task.alongsideNext
             ).withRules(now)))
             is TemplateChange.Moved -> TaskChanges(updates = listOf(change.templateTask.copy(parentId = change.toTemplateId, position = null)))
         }
@@ -188,7 +188,8 @@ fun describe(change: TemplateChange, byId: Map<Long, Task>): Pair<String, String
 private fun changedWhat(t: Task, from: Task): String = listOfNotNull(
     "now a maybe".takeIf { t.isMaybe && !from.isMaybe }, "no longer a maybe".takeIf { !t.isMaybe && from.isMaybe },
     "now high priority".takeIf { t.isHighPriority && !from.isHighPriority }, "timer changed".takeIf { t.durationMinutes != from.durationMinutes },
-    "note changed".takeIf { t.notes.orEmpty() != from.notes.orEmpty() }, "type changed".takeIf { t.type != from.type }
+    "note changed".takeIf { t.notes.orEmpty() != from.notes.orEmpty() }, "type changed".takeIf { t.type != from.type },
+    "now doesn't hold up the next step".takeIf { t.alongsideNext && !from.alongsideNext }, "holds up the next step again".takeIf { !t.alongsideNext && from.alongsideNext }
 ).joinToString(", ").let { if (it.isEmpty()) "" else ": $it" }
 
 // What the review starts with ticked: everything but removals (taking out of the template is deliberate).

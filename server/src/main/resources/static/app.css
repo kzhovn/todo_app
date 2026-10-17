@@ -479,6 +479,7 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .project.waiting-mark .icon { width: 12px; height: 12px; }
 .defer { font: inherit; font-size: 11px; border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; color: var(--muted); background: var(--panel); cursor: pointer; flex: none; }
 .defer:hover { border-color: var(--accent); color: var(--accent); }
+.alongside { color: var(--accent); margin-left: 5px; font-size: 13px; cursor: default; }
 /* Doing's Running line: workflows' waits counting down (WebViews' runningSection). */
 .running-section { margin: 6px 12px 8px; display: flex; flex-direction: column; gap: 6px; }
 .running-row { display: flex; align-items: center; gap: 10px; background: var(--today-bg); border-radius: 8px; padding: 7px 10px; font-size: 13px; }

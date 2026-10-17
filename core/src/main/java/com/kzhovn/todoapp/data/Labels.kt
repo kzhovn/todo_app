@@ -142,6 +142,13 @@ object Labels {
     fun thenStep(title: String) = "then $title"
     fun waitDone(title: String) = "$title's done"
     fun nextStep(title: String) = "next: $title"
+    // A step that doesn't hold up the next one (Task.alongsideNext): its switch, the row menu's line, its mark.
+    const val ALONGSIDE_NEXT = "Doesn't hold up the next step"
+    const val DONT_HOLD_UP = "Don't hold up the next step"
+    const val HOLD_UP = "Hold up the next step"
+    const val ALONGSIDE_MARK = "↷"
+    fun comesUpWith(title: String) = "Comes up with $title, which won't wait for it."
+    const val NOTHING_AFTER = "Nothing comes after it yet, so this does nothing."
     fun followUp(title: String) = "Ask about: $title"
 
     const val START = "Start"

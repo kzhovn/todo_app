@@ -182,7 +182,7 @@ fun planQuickAddWrite(
     val id = created.creates.single().first.id
     items(id)
     add.sections.forEach { (name, sectionItems) -> step(planAddSection(current, id, name, sectionItems, now, plan)) }
-    add.steps.forEach { text -> projectStep(text, id, plan)?.let { (t, c) -> step(planCreate(current, t, c, now)) } }
+    add.steps.forEach { (text, alongside) -> projectStep(text, id, plan)?.let { (t, c) -> step(planCreate(current, t.copy(alongsideNext = alongside), c, now)) } }
     if (add.focus) step(TaskChanges(updates = CurrentTask.focus(current, id, now)))
     else if (add.pin) step(TaskChanges(updates = CurrentTask.pin(current, id, now)))
     return total to id

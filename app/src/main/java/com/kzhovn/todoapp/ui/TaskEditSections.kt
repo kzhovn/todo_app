@@ -17,6 +17,8 @@ import com.kzhovn.todoapp.data.dueText
 import androidx.compose.ui.text.font.FontStyle
 import com.kzhovn.todoapp.data.resolvesText
 import com.kzhovn.todoapp.data.isTimedWait
+import androidx.compose.material3.Switch
+import com.kzhovn.todoapp.repository.stepAfter
 import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.data.ReminderKind
 import com.kzhovn.todoapp.data.reminderTimes
@@ -482,6 +484,17 @@ internal fun PropertiesSection(vm: TaskEditViewModel, onPickFolder: () -> Unit, 
                 )
             }
         }
+    }
+    // A step of an in-order parent can leave the next one free to come up beside it (Workflows.kt).
+    if (vm.allById[task.parentId]?.sequential == true) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            Text(Labels.ALONGSIDE_NEXT, fontSize = 14.sp, color = LedgerInk, modifier = Modifier.weight(1f))
+            Switch(checked = task.alongsideNext, onCheckedChange = { vm.task = vm.task.copy(alongsideNext = it) })
+        }
+        if (task.alongsideNext) Text(
+            stepAfter(task, vm.allTasks)?.let { Labels.comesUpWith(it.title) } ?: Labels.NOTHING_AFTER,
+            fontSize = 12.sp, color = LedgerMuted
+        )
     }
 }
 

@@ -113,6 +113,11 @@ fun Route.webRoutes(service: TaskService) {
         call.taskId()?.let(service::stillWaiting)
         call.respondList(service, call.mode())
     }
+    // A step's "Don't hold up the next step" / "Hold up the next step", from its row menu.
+    post("/tasks/{id}/alongside") {
+        call.taskId()?.let(service::toggleAlongside)
+        call.respondList(service, call.mode())
+    }
     // A running wait's "+10 min", on Doing's Running line.
     post("/tasks/{id}/more-wait") {
         call.taskId()?.let(service::moreWait)

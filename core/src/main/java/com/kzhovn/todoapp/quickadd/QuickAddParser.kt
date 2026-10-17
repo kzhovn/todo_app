@@ -16,12 +16,13 @@ import java.util.Calendar
 // Everything a quick add asks for. `task` is null when the text only adds items to an existing
 // checklist ("groceries: milk, eggs"); otherwise `items` are the new checklist's ("packing [a, b]"), and
 // `sections` its sections with theirs ("packing [passport; clothes: socks, shirt; winter: coat]"), and `steps` an
-// in-order project's ("laundry > start wash > 50m > switch to dryer").
+// in-order project's ("laundry > start wash > 50m > switch to dryer"), each with whether it holds up the next one
+// (false for one after "&>": "take wet out &> hang the rest > start dryer").
 data class QuickAdd(
     val task: Task?,
     val items: List<String> = emptyList(),
     val sections: List<Pair<String, List<String>>> = emptyList(),
-    val steps: List<String> = emptyList(),
+    val steps: List<Pair<String, Boolean>> = emptyList(),
     val fromTemplate: Long? = null, // "use packing": a list from this template, `task` its title and dates
     val intoChecklist: Long? = null,
     val contextIds: Set<Long> = emptySet(),

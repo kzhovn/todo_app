@@ -81,6 +81,22 @@ class TaskListViewModelTest {
     }
 
     @Test
+    fun `a step that doesn't hold up the next is active with it, until the row menu's toggle turns that off`() = runTest {
+        val laundry = repository.createTask(Task(title = "Laundry", type = com.kzhovn.todoapp.data.TaskType.PROJECT, sequential = true))
+        val hang = repository.createTask(Task(title = "Hang the rest", parentId = laundry, alongsideNext = true))
+        repository.createTask(Task(title = "Start dryer", parentId = laundry))
+
+        viewModel.load(TaskListMode.ACTIVE)
+        advanceUntilIdle()
+        assertEquals(setOf("Hang the rest", "Start dryer"), viewModel.tasks.value.map { it.title }.toSet())
+
+        repository.toggleAlongside(hang)
+        viewModel.reload()
+        advanceUntilIdle()
+        assertEquals(listOf("Hang the rest"), viewModel.tasks.value.map { it.title })
+    }
+
+    @Test
     fun `active mode excludes tasks with a future start date`() = runTest {
         repository.createTask(Task(title = "Ready now"))
         repository.createTask(Task(title = "Not yet", startDate = now + 1_000))

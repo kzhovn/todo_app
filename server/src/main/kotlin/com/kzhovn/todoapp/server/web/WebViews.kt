@@ -216,6 +216,7 @@ internal enum class Icon(val path: String) {
     SEARCH("M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"),
     REFRESH("M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"),
     CHECKLIST("M22 7h-9v2h9V7zm0 8h-9v2h9v-2zM5.54 11L2 7.46l1.41-1.41 2.12 2.12 4.24-4.24 1.41 1.41L5.54 11zm0 8L2 15.46l1.41-1.41 2.12 2.12 4.24-4.24 1.41 1.41L5.54 19z"),
+    REDO("M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z"), // Redo
     DATE_RANGE("M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z")
 }
 
@@ -635,6 +636,7 @@ internal fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outline
                 if (data.mode != ListMode.ALL) data.parentTitle(task)?.let { a(href = "/tasks/${task.parentId}?mode=$mode", classes = "parent") { openInPanel(); +"$it: " } }
                 a(href = "/tasks/${task.id}?mode=$mode", classes = "edit") { openInPanel(); +task.title }
                 if (task.isHighPriority) span(classes = "priority-high") { attributes["title"] = "High priority"; +"!" }
+                if (task.alongsideNext && data.byId[task.parentId]?.sequential == true) span(classes = "alongside") { attributes["title"] = Labels.ALONGSIDE_NEXT; +Labels.ALONGSIDE_MARK }
                 // On the title's line, wrapping along with it.
                 due?.let { dueTail(it, status!!, data.now) }
                 // A start still to come (the All tree shows snoozed and future tasks); a waiting item's own line.
@@ -685,6 +687,12 @@ internal fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outline
                     hx("post", "/focus/start?task=${task.id}", "this")
                     icon(Icon.CENTER_FOCUS, "")
                     +Labels.FOCUS
+                }
+                // A step of an in-order parent: whether the next one waits for it (Workflows.kt).
+                if (data.byId[task.parentId]?.sequential == true) button(classes = "menu-row") {
+                    hx("post", "/tasks/${task.id}/alongside?mode=$mode")
+                    icon(Icon.REDO, "")
+                    +(if (task.alongsideNext) Labels.HOLD_UP else Labels.DONT_HOLD_UP)
                 }
                 // A copy kept as a template; this one carries on as it is.
                 button(classes = "menu-row") {

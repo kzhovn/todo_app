@@ -63,6 +63,32 @@ class WorkflowsTest {
         assertTrue(after.byId(7).isStarred)
     }
 
+    @Test fun aStepThatDoesntHoldUpTheNextComesUpWithItAndTheWaitAfterRunsWithoutIt() {
+        val takeWet = Task(id = 2, title = "Take wet out", parentId = 1)
+        val hang = Task(id = 3, title = "Hang the rest", parentId = 1, alongsideNext = true)
+        val dryer = Task(id = 4, title = "Start dryer", parentId = 1)
+        val drying = Task(id = 5, title = "Drying", type = TaskType.WAITING, durationMinutes = 90, parentId = 1)
+        val takeOutDry = Task(id = 6, title = "Take out of dryer", parentId = 1)
+        val tasks = complete(listOf(laundry, takeWet, hang, dryer, drying, takeOutDry), 2)
+        assertEquals(listOf("Hang the rest", "Start dryer"), active(tasks, now))
+        assertTrue(tasks.byId(3).isStarred && tasks.byId(4).isStarred)
+        val dryerStarted = complete(tasks, 4, now + min)
+        assertEquals(now + 91 * min, dryerStarted.byId(5).dueDate)
+        assertTrue(dryerStarted.byId(6).isStarred)
+        assertEquals(listOf("Hang the rest"), active(dryerStarted, now + 2 * min))
+        assertEquals(listOf("Hang the rest", "Take out of dryer"), active(dryerStarted, now + 91 * min))
+        // Ticking it later starts nothing new, and reopening it takes nothing back.
+        val hung = complete(dryerStarted, 3, now + 5 * min)
+        assertEquals(now + 91 * min, planUncomplete(hung, 3).applyTo(hung).byId(5).dueDate)
+    }
+
+    @Test fun aWaitThatDoesntHoldUpTheNextStartsAndTheNextStepComesUpAtOnce() {
+        val rising = washing.copy(title = "Rising", alongsideNext = true)
+        val tasks = complete(listOf(laundry, start, rising, switch), 2)
+        assertEquals(now + 50 * min, tasks.byId(3).dueDate)
+        assertEquals(listOf("Switch to dryer"), active(tasks, now))
+    }
+
     @Test fun inOrderProjectsWithoutATimedWaitStarNothing() {
         val plain = listOf(laundry, start, switch)
         assertFalse(complete(plain, 2).byId(4).isStarred)
@@ -111,6 +137,7 @@ class WorkflowsTest {
 
     @Test fun quickAddArrowsMakeAnInOrderProjectWithWaits() {
         fun plan(text: String) = planQuickAdd(text, emptyList(), emptyList(), now, 4)
+        assertEquals(listOf(false, true, false), plan("Laundry > take wet out &> hang the rest > start dryer").steps.map { it.second })
         val add = plan("Laundry > start wash > 50m > switch to dryer > wait drying ~1.5h > hang it")
         assertEquals(TaskType.PROJECT, add.task!!.type)
         assertTrue(add.task!!.sequential)

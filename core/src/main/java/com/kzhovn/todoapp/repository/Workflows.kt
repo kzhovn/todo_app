@@ -20,23 +20,35 @@ private fun openSteps(parentId: Long, all: Collection<Task>): List<Task> =
 
 private fun starred(t: Task): Task? = t.takeIf { it.type.isDoable && !it.isStarred && !it.isMaybe }?.copy(isStarred = true)
 
-// The workflow moving on (from planComplete, with the step already ticked in `all`): the next step is starred, or
-// if it's a wait, the wait starts (timed from `from`) and the step after it is starred, to come up when it ends.
-// The last step done finishes a project (a repeating one makes its next run); a task with steps is then up itself.
+// The steps of an in-order parent that are up now, from its open steps in order: the first, and past any that don't
+// hold up the next (alongsideNext), the one after it too, and so on. A wait whose time has come counts as done,
+// though nothing has resolved it yet. computeActiveTasks and planAdvance both go by it.
+fun stepsUpNow(openInOrder: List<Task>, now: Long): List<Task> {
+    val steps = openInOrder.filter { !it.resolvesBy(now) }
+    val holding = steps.indexOfFirst { !it.alongsideNext }
+    return if (holding < 0) steps else steps.take(holding + 1)
+}
+
+// The workflow moving on (from planComplete, with the step already ticked in `all`): the steps now up are starred,
+// and a wait among them starts (timed from `from`). A wait holding up what's after it has those steps starred
+// already, so they're in Doing when it ends. The last step done finishes a project (a repeating one makes its next
+// run); a task with steps is then up itself.
 fun planAdvance(all: List<Task>, contexts: Map<Long, Set<Long>>, parentId: Long, from: Long, now: Long): TaskChanges {
-    // A wait whose time has come counts as done, though nothing has resolved it yet (as in computeActiveTasks).
-    val steps = openSteps(parentId, all).filter { !it.resolvesBy(now) }
-    val next = steps.firstOrNull()
-        ?: return if (all.firstOrNull { it.id == parentId }?.type == TaskType.PROJECT) planComplete(all, contexts, parentId, now) else TaskChanges()
-    if (!next.isTimedWait) return TaskChanges(updates = listOfNotNull(starred(next)))
-    val after = steps.getOrNull(1)?.takeIf { !it.isTimedWait }
-    return TaskChanges(updates = listOfNotNull(next.takeIf { it.dueDate == null }?.startedWait(from), after?.let(::starred)))
+    val open = openSteps(parentId, all)
+    if (open.isEmpty()) return if (all.firstOrNull { it.id == parentId }?.type == TaskType.PROJECT) planComplete(all, contexts, parentId, now) else TaskChanges()
+    val up = stepsUpNow(open, now)
+    val holdingWait = up.lastOrNull()?.takeIf { it.isTimedWait && !it.alongsideNext }
+    val afterWait = holdingWait?.let { w -> stepsUpNow(open.dropWhile { it.id != w.id }.drop(1), now) }.orEmpty().filter { !it.isTimedWait }
+    val starts = up.filter { it.isTimedWait && it.dueDate == null }.map { it.startedWait(from) }
+    return TaskChanges(updates = starts + (up.filter { !it.isTimedWait } + afterWait).mapNotNull(::starred))
 }
 
 // Reopening a step takes back the wait ticking it started (it can't be running before the step is done).
 fun planUnstartWait(all: List<Task>, reopened: Task): TaskChanges {
     val parent = all.firstOrNull { it.id == reopened.parentId }
     if (!isWorkflow(parent, all)) return TaskChanges()
+    // One that doesn't hold up the next step didn't start anything.
+    if (reopened.alongsideNext) return TaskChanges()
     val wait = openSteps(parent!!.id, all).dropWhile { it.id != reopened.id }.getOrNull(1)?.takeIf { it.isTimedWait && it.dueDate != null }
     return TaskChanges(updates = listOfNotNull(wait?.copy(dueDate = null, remindAt = null)))
 }

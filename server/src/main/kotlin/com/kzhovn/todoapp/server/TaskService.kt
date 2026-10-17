@@ -184,6 +184,8 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         return com.kzhovn.todoapp.repository.runningWaits(all, clock()).filter { inMode(it.wait, folderId, byId) }
     }
 
+    fun toggleAlongside(id: Long) = update(id) { it.copy(alongsideNext = !it.alongsideNext) }
+
     // A running wait's "+10 min".
     fun moreWait(id: Long) { get(id)?.takeIf { it.isTimedWait && !it.isComplete }?.let { t -> update(id) { t.withMoreWait(Labels.MORE_WAIT_MINUTES, clock()) } } }
 

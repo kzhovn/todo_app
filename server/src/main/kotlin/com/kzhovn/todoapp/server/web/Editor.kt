@@ -5,6 +5,7 @@ import com.kzhovn.todoapp.data.monthDay
 import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.data.resolvesText
 import com.kzhovn.todoapp.data.isTimedWait
+import com.kzhovn.todoapp.repository.stepAfter
 import com.kzhovn.todoapp.data.folderOf
 import com.kzhovn.todoapp.recurrence.recurrenceToSave
 import com.kzhovn.todoapp.server.quickAddChips
@@ -479,6 +480,7 @@ private fun parseForm(p: Parameters, base: EditState, recurrence: RecurrenceSele
         durationMinutes = p.getAll("duration").orEmpty().let { if (waiting) it.firstOrNull() else it.lastOrNull() }?.toIntOrNull()?.takeIf { it > 0 },
         expiresAt = if (p["today"] != null) base.task.expiresAt ?: nextRollover(service.now(), service.rolloverHour()) else null,
         sequential = p["sequential"] != null,
+        alongsideNext = if (p["alongsideShown"] != null) p["alongsideNext"] != null else base.task.alongsideNext,
         activeWithSubtasks = p["activeWithSubtasks"] != null,
         notes = p["notes"]?.replace("\r\n", "\n")?.trimEnd()?.ifBlank { null }
     )
@@ -812,6 +814,14 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
                 label(classes = "pill") { checkBoxInput(name = "ctx") { value = c.id.toString(); checked = c.id in v.shown.contextIds }; +"@${c.name}" }
             }
             a(href = "/contexts", classes = "pill manage") { +Labels.MANAGE_CONTEXTS }
+            // A step of an in-order parent can leave the next one free to come up beside it (Workflows.kt).
+            if (byId[t.parentId]?.sequential == true) {
+                hiddenInput(name = "alongsideShown") { value = "1" }
+                togglePill("alongsideNext", t.alongsideNext, Icon.REDO, Labels.ALONGSIDE_NEXT)
+            }
+        }
+        if (t.alongsideNext && byId[t.parentId]?.sequential == true) p(classes = "hint") {
+            +(stepAfter(t, service.tasks())?.let { Labels.comesUpWith(it.title) } ?: Labels.NOTHING_AFTER)
         }
         // High (!), normal or maybe (?), picked like the type. A maybe is hidden from Active and Doing.
         div(classes = "field-label section task-only not-waiting") { +Labels.PRIORITY }

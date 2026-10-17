@@ -23,6 +23,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Rect
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import com.kzhovn.todoapp.ui.theme.LedgerBackground
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -204,6 +206,7 @@ private fun OutlinerRow(
     val task = node.task
     val hasChildren = node.children.isNotEmpty()
     val hasMenu = task.type.isDoable || task.type == TaskType.WAITING
+    val inOrderStep = allById[task.parentId]?.sequential == true
     val indent = (8 + depth * 18).dp
     // Where a drag hovering this row would land: the top/bottom quarter reorders it before/after
     // this row, the middle nests it inside.
@@ -338,6 +341,7 @@ private fun OutlinerRow(
                         modifier = Modifier.weight(1f).clickable { onEdit(task.id) }
                     )
                     if (task.isHighPriority) PriorityMark()
+                    if (inOrderStep && task.alongsideNext) Text(Labels.ALONGSIDE_MARK, fontSize = 14.sp, color = LedgerAccent, modifier = Modifier.padding(horizontal = 4.dp).semantics { contentDescription = Labels.ALONGSIDE_NEXT })
                     if (!task.notes.isNullOrBlank()) NotesMark()
                     task.durationMinutes?.takeIf { task.type != TaskType.WAITING }?.let { TimerButton(task, it) } // a wait's timer runs by itself
                     if (task.type == TaskType.WAITING) {
@@ -355,7 +359,7 @@ private fun OutlinerRow(
                 }
             }
         }
-        TaskRowMenu(task, menuOpen, onDismiss = { menuOpen = false }, onSnooze = onSnooze)
+        TaskRowMenu(task, menuOpen, onDismiss = { menuOpen = false }, onSnooze = onSnooze, inOrderStep = inOrderStep)
     }
 }
 
