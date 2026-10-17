@@ -21,15 +21,6 @@ fun templateRoots(all: Collection<Task>): List<Task> {
     return all.filter { it.isTemplate && byId[it.parentId]?.isTemplate != true }.sortedBy { it.title.lowercase() }
 }
 
-// The template a template task belongs to (its top), or null for a task that isn't in one.
-fun templateRootOf(task: Task, byId: Map<Long, Task>): Task? {
-    if (!task.isTemplate) return null
-    var t = task
-    val seen = HashSet<Long>()
-    while (seen.add(t.id)) t = byId[t.parentId]?.takeIf { it.isTemplate } ?: return t
-    return t
-}
-
 // What's made or moved under a template becomes part of it: an item added to the Packing template, a task
 // moved into it. Applied by each side's storage to every change, with the ids of the template tasks it has.
 fun TaskChanges.intoTemplates(templateIds: Set<Long>): TaskChanges {

@@ -1,10 +1,11 @@
 package com.kzhovn.todoapp.recurrence
 
-import com.kzhovn.todoapp.quickadd.startOfDay
 import com.kzhovn.todoapp.data.RecurrenceType
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.isTimedWait
 import com.kzhovn.todoapp.data.newId
+import com.kzhovn.todoapp.data.startOfDay
+import com.kzhovn.todoapp.data.zoned
 import com.kzhovn.todoapp.repository.createdAt
 import org.dmfs.rfc5545.recur.RecurrenceRule
 import java.util.TimeZone
@@ -127,12 +128,10 @@ object RecurrenceEngine {
         val n = rule.trimEnd('w', 'm').toIntOrNull() ?: return null
         return when (rule.last()) {
             'w' -> completedAt + TimeUnit.DAYS.toMillis(7L * n)
-            'm' -> java.util.Calendar.getInstance().apply { timeInMillis = completedAt; add(java.util.Calendar.MONTH, n) }.timeInMillis
+            'm' -> zoned(completedAt).plusMonths(n.toLong()).toInstant().toEpochMilli()
             else -> completedAt + TimeUnit.DAYS.toMillis(n.toLong())
         }
     }
-
-    private fun startOfDay(ms: Long) = java.util.Calendar.getInstance().apply { timeInMillis = ms }.startOfDay()
 
     private fun nextRRuleOccurrence(dtStart: Long, rrule: String, after: Long): Long? {
         val recurrenceRule = RecurrenceRule(rrule)

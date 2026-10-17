@@ -16,18 +16,13 @@ import com.kzhovn.todoapp.data.isChecklistItem
 import com.kzhovn.todoapp.data.isUnder
 import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.data.walkParentChain
+import com.kzhovn.todoapp.data.zoned
 
-// Shared by every Active/Doing caller (app, widget, server) so all agree on "now" using the same
-// Calendar arithmetic in the default timezone.
-fun minuteOfDay(epochMillis: Long): Int {
-    val cal = java.util.Calendar.getInstance().apply { timeInMillis = epochMillis }
-    return cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
-}
+// Shared by every Active/Doing caller (app, widget, server) so all agree on "now" in the default timezone.
+fun minuteOfDay(epochMillis: Long): Int = zoned(epochMillis).let { it.hour * 60 + it.minute }
 
-fun dayOfWeekMask(epochMillis: Long): Int {
-    val cal = java.util.Calendar.getInstance().apply { timeInMillis = epochMillis }
-    return 1 shl (cal.get(java.util.Calendar.DAY_OF_WEEK) - 1)
-}
+// Su=0 .. Sa=6, as ContextTimeWindow.daysMask counts them.
+fun dayOfWeekMask(epochMillis: Long): Int = 1 shl (zoned(epochMillis).dayOfWeek.value % 7)
 
 // Computed in Kotlin rather than SQL: effective start date and contexts are inherited from
 // ancestors (see resolveEffective), which a single query can't express without several recursive

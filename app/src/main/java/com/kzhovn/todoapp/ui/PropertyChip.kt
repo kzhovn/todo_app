@@ -30,11 +30,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kzhovn.todoapp.quickadd.startOfDay
+import com.kzhovn.todoapp.data.dayStart
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.data.chipDate
+import java.time.LocalDate
 import java.util.Calendar
 
 // Shared by the quick-add overlay and the full edit screen. Always shows its label (e.g.
@@ -104,7 +105,7 @@ fun pickDate(activity: Activity, currentValue: Long?, withTime: Boolean = true, 
     val dialog = DatePickerDialog(activity, null, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH))
     dialog.datePicker.firstDayOfWeek = Calendar.MONDAY
     title?.let(dialog::setTitle)
-    fun picked() = dialog.datePicker.let { Calendar.getInstance().apply { set(it.year, it.month, it.dayOfMonth) }.startOfDay() }
+    fun picked() = dialog.datePicker.let { dayStart(LocalDate.of(it.year, it.month + 1, it.dayOfMonth)) }
     dialog.setButton(DialogInterface.BUTTON_POSITIVE, "OK") { _, _ ->
         onPicked(existingTime?.let { atTime(picked(), cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE)) } ?: picked())
     }

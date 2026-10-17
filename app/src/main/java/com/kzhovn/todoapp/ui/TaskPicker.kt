@@ -118,7 +118,7 @@ fun TaskPickerDialog(
                         PickerRow(task, allById, colors[nearestFolder(task, allById)?.id], now) { onPick(task) }
                     }
                 }
-                if (shown.all { it.second.isEmpty() }) item { Text(if (results != null) "No task matches" else "Nothing here", color = LedgerMuted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 12.dp)) }
+                if (shown.all { it.second.isEmpty() }) item { Text(if (results != null) "No task matches" else Labels.NOTHING_HERE, color = LedgerMuted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 12.dp)) }
             }
             OutlinedTextField(
                 value = query, onValueChange = { query = it }, singleLine = true,

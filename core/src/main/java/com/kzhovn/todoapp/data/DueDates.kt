@@ -2,7 +2,6 @@ package com.kzhovn.todoapp.data
 
 import java.text.DateFormat
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -48,7 +47,4 @@ private fun dayText(due: Long, now: Long): String {
 }
 
 // Days since the epoch in local time, so calendar days compare across DST.
-private fun dayIndex(millis: Long): Long = Calendar.getInstance().run {
-    timeInMillis = millis
-    (timeInMillis + get(Calendar.ZONE_OFFSET) + get(Calendar.DST_OFFSET)) / 86_400_000L
-}
+private fun dayIndex(millis: Long): Long = localDay(millis).toEpochDay()

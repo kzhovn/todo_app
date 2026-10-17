@@ -4,7 +4,7 @@ import com.kzhovn.todoapp.data.RecurrenceType
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.TaskType
-import com.kzhovn.todoapp.quickadd.startOfDay
+import com.kzhovn.todoapp.data.startOfDay
 import com.kzhovn.todoapp.sync.SyncJson
 import com.kzhovn.todoapp.sync.SyncRequest
 import com.kzhovn.todoapp.sync.SyncResponse
@@ -293,7 +293,7 @@ class ServerTest {
         val due = logic.parseAdd("-- work: update bug due today")!!
         assertEquals("update bug", due.title)
         assertEquals(work.id, due.parentId)
-        assertEquals(java.util.Calendar.getInstance().apply { timeInMillis = now }.startOfDay(), due.dueDate)
+        assertEquals(startOfDay(now), due.dueDate)
     }
 
     @Test

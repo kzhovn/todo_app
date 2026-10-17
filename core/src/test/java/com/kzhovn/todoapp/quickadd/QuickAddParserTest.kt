@@ -45,7 +45,7 @@ class QuickAddParserTest {
     }
 
     private fun dayOffset(date: Long?): Int {
-        val today = java.util.Calendar.getInstance().startOfDay()
+        val today = com.kzhovn.todoapp.data.startOfDay(System.currentTimeMillis())
         return Math.round((date!! - today) / 86_400_000.0).toInt()
     }
 

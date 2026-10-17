@@ -28,6 +28,10 @@ import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.hasTime
+import com.kzhovn.todoapp.data.atTimeMillis
+import com.kzhovn.todoapp.data.clockTime
+import com.kzhovn.todoapp.data.localDay
+import com.kzhovn.todoapp.data.zoned
 import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.data.nextRollover
 import com.kzhovn.todoapp.data.ancestors
@@ -100,11 +104,13 @@ import kotlinx.html.stream.createHTML
 import kotlinx.html.textArea
 import kotlinx.html.textInput
 import kotlinx.html.timeInput
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
-import java.time.Instant
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import java.time.LocalDate
 import java.time.LocalTime
-import java.time.ZoneId
 
 // The task editor: one plain form for the task's own fields, plus htmx actions for its subtasks and
 // dependents, which (like the phone's) take effect immediately.
@@ -455,7 +461,7 @@ private fun parseForm(p: Parameters, base: EditState, recurrence: RecurrenceSele
     val type = p["type"]?.let { runCatching { TaskType.valueOf(it) }.getOrNull() } ?: base.task.type
     // A waiting item's date is "Resolves on" (Task.typeRule drops its star and priority on save).
     val waiting = type == TaskType.WAITING
-    val baseCheckIn = localDateTime(nextCheckIn(base.task, service.now())).toLocalDate().toString()
+    val baseCheckIn = localDay(nextCheckIn(base.task, service.now())).toString()
     val task = base.task.copy(
         title = p["title"].orEmpty().trim(),
         type = type,
@@ -509,11 +515,11 @@ private fun parseRecurrence(p: Parameters): RecurrenceSelection {
 }
 
 // A preset's form values, which app.js copies into the builder's fields.
-private fun presetFields(r: RecurrenceSelection): String = buildList {
-    add("\"repeat\":\"${r.preset.name}\""); add("\"n\":\"${r.n}\""); add("\"unit\":\"${r.unit.name}\"")
-    add("\"wd\":[${(0..6).filter { r.weekdaysMask and (1 shl it) != 0 }.joinToString(",") { "\"$it\"" }}]")
-    add("\"monthly\":\"${if (r.monthlyNth == null) "day" else "nth"}\""); add("\"ends\":\"never\"")
-}.joinToString(",", "{", "}")
+private fun presetFields(r: RecurrenceSelection): String = buildJsonObject {
+    put("repeat", r.preset.name); put("n", r.n.toString()); put("unit", r.unit.name)
+    putJsonArray("wd") { (0..6).filter { r.weekdaysMask and (1 shl it) != 0 }.forEach { add(it.toString()) } }
+    put("monthly", if (r.monthlyNth == null) "day" else "nth"); put("ends", "never")
+}.toString()
 
 // "Next: Sat Oct 3 · Sat Nov 7 · Sat Dec 5"; re-rendered (hx) on every change in the popover. It
 // also carries the pill's text (data-summary), read by app.js.
@@ -535,7 +541,7 @@ internal fun dateTime(date: String?, time: String?): Long? {
     val t = time?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
     // A time alone means today, as in quick add ("start 5pm").
     val d = date?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now().takeIf { t != null } ?: return null
-    return d.atTime(t ?: LocalTime.MIDNIGHT).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    return d.atTimeMillis(t ?: LocalTime.MIDNIGHT)
 }
 
 // Three-way merge: what the user changed in the form wins; anything else keeps its current value (see mergeEdit).
@@ -546,10 +552,8 @@ private fun merge(base: EditState, form: EditState, current: EditState): EditSta
         if (form.dependsOn != base.dependsOn) form.dependsOn else current.dependsOn
     )
 
-private fun localDateTime(millis: Long) = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
-
 // A date and time input's values ("2026-10-07", "17:30"); no time: an empty one (see hasTime).
-private fun dateAndTime(millis: Long): Pair<String, String> = localDateTime(millis).let {
+private fun dateAndTime(millis: Long): Pair<String, String> = zoned(millis).let {
     it.toLocalDate().toString() to if (hasTime(millis)) it.toLocalTime().withSecond(0).withNano(0).toString() else ""
 }
 
@@ -640,13 +644,13 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
             // next check-in to that far from today (app.js, as withCheckInEvery).
             popPill(Labels.CHECK_IN, Icon.REPEAT, Labels.checkIn(every), "checkin", "") {
                 div(classes = "rep") {
-                    val today = localDateTime(service.now()).toLocalDate()
+                    val today = localDay(service.now())
                     div(classes = "rep-presets") {
                         CHECK_IN_PRESETS.forEach { days ->
                             val (n, unit) = if (days % 7 == 0) days / 7 to 7 else days to 1
                             button(type = ButtonType.button, classes = if (days == every) "rep-preset on" else "rep-preset") {
                                 attributes["data-days"] = days.toString()
-                                attributes["data-set"] = """{"checkInN":"$n","checkInUnit":"$unit","checkInDate":"${today.plusDays(days.toLong())}"}"""
+                                attributes["data-set"] = buildJsonObject { put("checkInN", "$n"); put("checkInUnit", "$unit"); put("checkInDate", "${today.plusDays(days.toLong())}") }.toString()
                                 +Labels.checkIn(days)
                                 span(classes = "rep-when") { +monthDay(service.now() + days * DAY_MS) }
                             }
@@ -661,7 +665,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
                     }
                     label(classes = "rep-line") {
                         +Labels.NEXT_CHECK_IN
-                        dateInput(name = "checkInDate") { value = localDateTime(nextCheckIn(t, service.now())).toLocalDate().toString() }
+                        dateInput(name = "checkInDate") { value = localDay(nextCheckIn(t, service.now())).toString() }
                     }
                 }
             }
@@ -678,7 +682,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
             // Restarts the clock: app.js moves the next check-in an interval from today, saved like any edit.
             if (resolves == null) button(type = ButtonType.button, classes = "still-waiting") {
                 val next = stillWaiting(t, now)
-                attributes["data-date"] = localDateTime(nextCheckIn(next, now)).toLocalDate().toString()
+                attributes["data-date"] = localDay(nextCheckIn(next, now)).toString()
                 attributes["data-hint"] = checkInText(next, now)
                 +Labels.STILL_WAITING
             }
@@ -704,7 +708,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
                 val (atDate, atTime) = t.remindAt?.let(::dateAndTime) ?: ("" to "")
                 dateInput(name = "remindAtDate") { value = atDate }
                 timeInput(name = "remindAtTime") { value = atTime }
-                p(classes = "hint") { +"Rings on your phone. A date with no time rings at ${"%02d:00".format(service.reminderHour())} (Settings)." }
+                p(classes = "hint") { +"Rings on your phone. A date with no time rings at ${clockTime(service.reminderHour() * 60)} (Settings)." }
             }
             val r = v.recurrence
             // Presets on top (one click); "After completion…" and "Custom…" open the builder below.
@@ -747,7 +751,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
                             }
                         }
                         div(classes = "rep-month") {
-                            val day = localDateTime(anchor).dayOfMonth
+                            val day = localDay(anchor).dayOfMonth
                             label { radioInput(name = "monthly") { value = "day"; checked = r.monthlyNth == null }; +"On the ${ordinal(day)}" }
                             label {
                                 radioInput(name = "monthly") { value = "nth"; checked = r.monthlyNth != null }; +"On the "
@@ -760,7 +764,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
                             label { radioInput(name = "ends") { value = "never"; checked = r.until == null && r.count == null }; +"Never" }
                             label {
                                 radioInput(name = "ends") { value = "until"; checked = r.until != null }; +"On "
-                                dateInput(name = "until") { value = r.until?.let { localDateTime(it).toLocalDate().toString() }.orEmpty() }
+                                dateInput(name = "until") { value = r.until?.let { localDay(it).toString() }.orEmpty() }
                             }
                             label {
                                 radioInput(name = "ends") { value = "count"; checked = r.count != null }; +"After "

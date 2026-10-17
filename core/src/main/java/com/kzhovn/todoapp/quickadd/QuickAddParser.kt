@@ -4,14 +4,19 @@ import com.kzhovn.todoapp.data.RecurrenceType
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.atTime
+import com.kzhovn.todoapp.data.dayStart
+import com.kzhovn.todoapp.data.localDay
 import com.kzhovn.todoapp.data.splitItems
+import com.kzhovn.todoapp.data.startOfDay
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
 import com.kzhovn.todoapp.recurrence.RecurrenceSelection
 import com.kzhovn.todoapp.recurrence.RecurrenceUnit
 import com.kzhovn.todoapp.recurrence.WEEKDAYS_MASK
 import com.kzhovn.todoapp.recurrence.toTaskFields
-import java.util.Calendar
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.temporal.TemporalAdjusters
 
 // Everything a quick add asks for. `task` is null when the text only adds items to an existing
 // checklist ("groceries: milk, eggs"); otherwise `items` are the new checklist's ("packing [a, b]"), and
@@ -234,17 +239,17 @@ object QuickAddParser {
     private fun weekdayIndex(day: String) = listOf("sun", "mon", "tue", "wed", "thu", "fri", "sat").indexOf(day.lowercase().take(3))
 
     private fun firstOccurrence(rule: String, now: Long): Long {
-        val today = Calendar.getInstance().apply { timeInMillis = now }.startOfDay()
+        val today = startOfDay(now)
         // Only a rule naming weekdays can skip today; any other one lands on its start.
         if ("BYDAY" !in rule) return today
-        val yesterday = Calendar.getInstance().apply { timeInMillis = today; add(Calendar.DAY_OF_YEAR, -1) }.timeInMillis
+        val yesterday = dayStart(localDay(now).minusDays(1))
         return RecurrenceEngine.preview(RecurrenceType.RRULE, rule, yesterday, today, count = 1).firstOrNull() ?: today
     }
 
     // A time alone ("due 5pm", "-d 17:00") means today at that time.
     private fun resolve(dateText: String, timeText: String, now: Long): Long? {
         minutesFromNow(dateText)?.let { return now + it * 60_000L }
-        val today = Calendar.getInstance().apply { timeInMillis = now }.startOfDay()
+        val today = startOfDay(now)
         val (day, time) = when {
             dateText.isEmpty() -> today to timeText
             else -> parseDate(dateText, now)?.let { it to timeText }
@@ -283,53 +288,42 @@ object QuickAddParser {
 
     private fun parseDate(value: String, now: Long): Long? {
         val word = value.lowercase().replace(SPACES, " ").trim()
-        val cal = Calendar.getInstance().apply { timeInMillis = now }
-        val dow = cal.get(Calendar.DAY_OF_WEEK)
+        val today = localDay(now)
         // Always a future day: "due monday" said on a Monday means next week.
-        fun ahead(target: Int) = cal.apply { add(Calendar.DAY_OF_YEAR, ((target - dow + 7) % 7).takeIf { it != 0 } ?: 7) }.startOfDay()
+        fun ahead(target: DayOfWeek) = today.with(TemporalAdjusters.next(target))
         val offset = offsetRegex.matchEntire(word)
         val monthDay = monthDayRegex.matchEntire(word.replace(ORDINAL, "$1"))
-        return when {
-            word == "today" -> cal.startOfDay()
-            word == "tomorrow" -> cal.apply { add(Calendar.DAY_OF_YEAR, 1) }.startOfDay()
-            word == "next week" -> ahead(Calendar.MONDAY)
+        val day = when {
+            word == "today" -> today
+            word == "tomorrow" -> today.plusDays(1)
+            word == "next week" -> ahead(DayOfWeek.MONDAY)
             // Today if it's already the weekend.
-            word.endsWith("weekend") -> if (dow == Calendar.SATURDAY || dow == Calendar.SUNDAY) cal.startOfDay() else ahead(Calendar.SATURDAY)
-            weekdayWord.matches(word.removePrefix("next ")) -> ahead(weekdayIndex(word.removePrefix("next ")) + 1)
+            word.endsWith("weekend") -> if (today.dayOfWeek == DayOfWeek.SATURDAY || today.dayOfWeek == DayOfWeek.SUNDAY) today else ahead(DayOfWeek.SATURDAY)
+            weekdayWord.matches(word.removePrefix("next ")) -> ahead(DayOfWeek.SUNDAY.plus(weekdayIndex(word.removePrefix("next ")).toLong()))
             offset != null -> {
-                val n = count(offset.groupValues[1].ifEmpty { offset.groupValues[3] })
-                val field = when (offset.groupValues[2].ifEmpty { offset.groupValues[4] }.first()) {
-                    'w' -> Calendar.WEEK_OF_YEAR
-                    'm' -> Calendar.MONTH
-                    else -> Calendar.DAY_OF_YEAR
+                val n = count(offset.groupValues[1].ifEmpty { offset.groupValues[3] }).toLong()
+                when (offset.groupValues[2].ifEmpty { offset.groupValues[4] }.first()) {
+                    'w' -> today.plusWeeks(n)
+                    'm' -> today.plusMonths(n)
+                    else -> today.plusDays(n)
                 }
-                cal.apply { add(field, n) }.startOfDay()
             }
             monthDay != null -> {
                 val month = MONTHS.indexOf(monthDay.groupValues[1].ifEmpty { monthDay.groupValues[4] }.take(3)).takeIf { it >= 0 } ?: return null
-                val day = monthDay.groupValues[2].ifEmpty { monthDay.groupValues[3] }.toInt()
+                val dayOfMonth = monthDay.groupValues[2].ifEmpty { monthDay.groupValues[3] }.toInt()
                 // The next such date: "oct 12" in November is next year's. One that doesn't exist ("feb 30") is none.
-                val thisYear = cal.get(Calendar.YEAR)
-                strictDate(thisYear, month, day, now)?.takeIf { it >= cal.startOfDay() } ?: strictDate(thisYear + 1, month, day, now)
+                date(today.year, month + 1, dayOfMonth)?.takeIf { it >= today } ?: date(today.year + 1, month + 1, dayOfMonth)
             }
             else -> runCatching {
-                val (year, month, day) = word.split("-").map { it.toInt() }
-                strictDate(year, month - 1, day, now)
+                val (year, month, dayOfMonth) = word.split("-").map { it.toInt() }
+                date(year, month, dayOfMonth)
             }.getOrNull()
         }
+        return day?.let(::dayStart)
     }
 
-    // That day's start (month 0-based, as Calendar counts), or null if it doesn't exist: Calendar alone
-    // would roll Feb 30 into March.
-    private fun strictDate(year: Int, month: Int, day: Int, now: Long): Long? {
-        runCatching { java.time.LocalDate.of(year, month + 1, day) }.getOrNull() ?: return null
-        return Calendar.getInstance().apply { timeInMillis = now; set(year, month, day) }.startOfDay()
-    }
+    // Null if it doesn't exist (Feb 30).
+    private fun date(year: Int, month: Int, day: Int): LocalDate? = runCatching { LocalDate.of(year, month, day) }.getOrNull()
 
     private val MONTHS = listOf("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
 }
-
-fun Calendar.startOfDay(): Long = apply {
-    set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
-    set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-}.timeInMillis

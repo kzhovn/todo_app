@@ -234,7 +234,7 @@ fun FlowContent.focusCandidates(service: TaskService, finished: Task?, query: St
         val mode = if (everywhere) null else service.modeFolderId()
         focusSearch(all, query).filter { inMode(it, mode, byId) }.take(30)
     }
-    if (candidates.isEmpty()) p(classes = "empty") { +(if (query.isBlank()) "Nothing here" else "No open task matches") }
+    if (candidates.isEmpty()) p(classes = "empty") { +(if (query.isBlank()) Labels.NOTHING_HERE else "No open task matches") }
     candidates.forEach { t ->
         button(classes = "cand") {
             hx("post", "/focus/start?task=${t.id}", "this")

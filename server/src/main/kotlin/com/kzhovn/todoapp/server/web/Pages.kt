@@ -533,7 +533,7 @@ private fun HTML.settingsPage(service: TaskService) = shellPage(service, "Raspbe
                 +"Day rolls over at "
                 select {
                     name = "rolloverHour"
-                    (0..23).forEach { h -> option { value = "$h"; selected = h == rolloverHour; +"%02d:00".format(h) } }
+                    (0..23).forEach { h -> option { value = "$h"; selected = h == rolloverHour; +clockTime(h * 60) } }
                 }
             }
             p(classes = "hint") { +"“${Labels.TODAY_ONLY}” tasks are deleted at this time, and a snooze to tomorrow wakes then. The phone uses it too." }
@@ -541,7 +541,7 @@ private fun HTML.settingsPage(service: TaskService) = shellPage(service, "Raspbe
                 +"Reminders on a date with no time go off at "
                 select {
                     name = "reminderHour"
-                    (0..23).forEach { h -> option { value = "$h"; selected = h == reminderHour; +"%02d:00".format(h) } }
+                    (0..23).forEach { h -> option { value = "$h"; selected = h == reminderHour; +clockTime(h * 60) } }
                 }
             }
             p(classes = "hint") { +"For a reminder when a task starts, before it's due, or on a day you pick, when that date has no time. Rung on the phone." }

@@ -4,6 +4,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Switch
 import com.kzhovn.todoapp.data.Labels
+import com.kzhovn.todoapp.data.clockTime
 import android.app.TimePickerDialog
 import android.os.Bundle
 import androidx.compose.foundation.clickable
@@ -55,7 +56,7 @@ class SyncSettingsActivity : ComponentActivity() {
                     Spacer(Modifier.height(12.dp))
                     var rolloverHour by remember { mutableStateOf(AppSettings.rolloverHour(app)) }
                     Text(
-                        "Day rolls over at ${"%02d".format(rolloverHour)}:00",
+                        "Day rolls over at ${clockTime(rolloverHour * 60)}",
                         color = LedgerInk,
                         fontSize = 15.sp,
                         modifier = Modifier.clickable {
@@ -71,7 +72,7 @@ class SyncSettingsActivity : ComponentActivity() {
                     Spacer(Modifier.height(16.dp))
                     var reminderHour by remember { mutableStateOf(AppSettings.reminderHour(app)) }
                     Text(
-                        "Reminders on a date with no time at ${"%02d".format(reminderHour)}:00",
+                        "Reminders on a date with no time at ${clockTime(reminderHour * 60)}",
                         color = LedgerInk, fontSize = 15.sp,
                         modifier = Modifier.clickable {
                             TimePickerDialog(this@SyncSettingsActivity, { _, hour, _ ->

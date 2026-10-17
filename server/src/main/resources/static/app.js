@@ -419,6 +419,9 @@
 
   // --- Task editor. Pills open popovers (one at a time); their text follows the controls inside, in
   // the same words as the phone's chips (Labels / chipDate / formatDuration in Kotlin).
+  // A local date as a date input's value and the server's ?month= / ?day= read it: "2026-10" / "2026-10-07".
+  const monthOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const dayOf = (d) => `${monthOf(d)}-${String(d.getDate()).padStart(2, "0")}`;
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const pillDate = (date, time) => {
     // A time alone is today's (the server reads it so too).
@@ -462,7 +465,7 @@
     if (days <= 0) return;
     const d = new Date();
     d.setDate(d.getDate() + days);
-    pop.querySelector("[name=checkInDate]").value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    pop.querySelector("[name=checkInDate]").value = dayOf(d);
   });
   function pillValue(pp) {
     const pop = pp.querySelector(".pop");
@@ -673,8 +676,6 @@
     const el = document.getElementById("calendar");
     if (!el || !window.FullCalendar) return;
     const agenda = () => document.getElementById("list").dataset;
-    const monthOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    const dayOf = (d) => `${monthOf(d)}-${String(d.getDate()).padStart(2, "0")}`;
     const load = (month, day) => htmx.ajax("GET", `/list/calendar?month=${month}` + (day ? `&day=${day}` : ""), { target: "#list", swap: "outerHTML" });
     const calendar = new FullCalendar.Calendar(el, {
       initialView: "dayGridMonth",

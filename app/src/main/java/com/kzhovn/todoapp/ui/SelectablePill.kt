@@ -17,9 +17,8 @@ import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 
-// Shared "selectable pill" shape — was ContextsActivity's private TypeOption and FilterPanel's
-// private FilterChipItem, identical apart from font size/padding, which both callers now pass
-// explicitly to preserve their exact current look.
+// A label tinted when selected: a context's type, the filter panel's chips, the weekday toggle (each
+// sized its own way).
 @Composable
 fun SelectablePill(
     label: String,

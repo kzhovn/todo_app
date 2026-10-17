@@ -30,6 +30,8 @@ const countdown = (ms) => {
     const s = Math.max(0, Math.ceil(ms / 1000)), mm = String(Math.floor(s / 60) % 60).padStart(2, '0'), ss = String(s % 60).padStart(2, '0');
     return s >= 3600 ? `${Math.floor(s / 3600)}:${mm}:${ss}` : `${Math.floor(s / 60)}:${ss}`;
 };
+// A form body or query string; empty values are left out.
+const formEncode = (form) => Object.entries(form).filter(([, v]) => v !== '').map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
 // Quick add's Start and Due chips: quick add's own words, sent as typed.
 const DAY_LABELS = {today: 'Today', tomorrow: 'Tomorrow', 'next week': 'Next week', weekend: 'Weekend'};
 
@@ -59,8 +61,7 @@ class Api {
         const message = Soup.Message.new(method, this.url + path);
         message.request_headers.append('Authorization', `Bearer ${this._token}`);
         if (form) {
-            const body = Object.entries(form).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
-            message.set_request_body_from_bytes('application/x-www-form-urlencoded', new GLib.Bytes(new TextEncoder().encode(body)));
+            message.set_request_body_from_bytes('application/x-www-form-urlencoded', new GLib.Bytes(new TextEncoder().encode(formEncode(form))));
         }
         const bytes = await this._session.send_and_read_async(message, GLib.PRIORITY_DEFAULT, null);
         if (message.get_status() !== Soup.Status.OK) throw new Error(`HTTP ${message.get_status()}`);
@@ -394,7 +395,7 @@ class Indicator extends PanelMenu.Button {
         const actions = new St.BoxLayout({style_class: 'rb-quickadd-actions'});
         // The full editor on a draft of what's typed, like the phone's "Edit all details".
         actions.add_child(this._button({label: 'Edit all details', style_class: 'rb-link'}, () => {
-            const query = Object.entries({...form(), mode: this._mode.toUpperCase()}).filter(([, v]) => v !== '').map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+            const query = formEncode({...form(), mode: this._mode.toUpperCase()});
             this._draft = '';
             this._chips = {folder: chips.folder};
             this._open(`/tasks/new?${query}`);
