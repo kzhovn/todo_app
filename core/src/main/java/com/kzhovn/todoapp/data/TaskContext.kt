@@ -14,7 +14,9 @@ data class TaskContext(
     val name: String,
     val type: ContextType,
     val wifiSsid: String? = null,
-    val isCurrentlySatisfied: Boolean = false
+    val isCurrentlySatisfied: Boolean = false,
+    // Set by hand (on holiday, home without wifi): overrides the wifi and the clock until set back to null.
+    val forced: Boolean? = null
 )
 
 // What a context still needs before it can be saved (null: nothing), the same on every device.

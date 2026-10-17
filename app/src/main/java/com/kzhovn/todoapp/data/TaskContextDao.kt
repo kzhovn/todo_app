@@ -26,6 +26,9 @@ interface TaskContextDao {
     @Query("UPDATE contexts SET isCurrentlySatisfied = :satisfied WHERE id = :id")
     suspend fun setSatisfied(id: Long, satisfied: Boolean)
 
+    @Query("UPDATE contexts SET forced = :forced WHERE id = :id")
+    suspend fun setForced(id: Long, forced: Boolean?)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun assignContext(crossRef: TaskContextCrossRef)
 

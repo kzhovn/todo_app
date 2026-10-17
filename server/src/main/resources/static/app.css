@@ -297,6 +297,7 @@ form.inline button { padding: 6px 10px; border: 1px solid var(--border); border-
 .context-name { font-weight: 600; }
 .context-row .hint { width: auto; flex: 1; }
 .context-row a { color: var(--accent); text-decoration: none; font-size: 13px; }
+.context-forced .pill { background: none; font: inherit; font-size: 13px; }
 .context-row .delete { color: var(--overdue); font-size: 13px; }
 .context-form { padding: 16px 0 0; }
 .context-form h2 { font-size: 15px; margin: 0; }

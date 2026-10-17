@@ -150,6 +150,11 @@ fun Route.pageRoutes(service: TaskService) {
         service.saveContext(form.context, form.windows)
         call.respondRedirect("/contexts")
     }
+    post("/contexts/{id}/forced") {
+        val forced = call.receiveParameters()["forced"]?.toBooleanStrictOrNull() // "auto": null
+        call.parameters["id"]?.toLongOrNull()?.let { service.setContextForced(it, forced) }
+        call.respondRedirect("/contexts")
+    }
     // Confirmed in the browser (hx-confirm), like the phone: there's no undo for this one.
     post("/contexts/{id}/delete") {
         call.parameters["id"]?.toLongOrNull()?.let(service::deleteContext)
@@ -558,11 +563,18 @@ private fun HTML.settingsPage(service: TaskService) = shellPage(service, "Raspbe
 private fun HTML.contextsPage(service: TaskService, form: ContextForm) = shellPage(service, "Raspberry · Contexts", "/contexts") {
     div(classes = "contexts") {
         h1 { +"Contexts" }
-        p(classes = "hint") { +"Tasks with a context are active only while it holds: on a wifi network (the phone checks), or within a time window. A filter-only one just groups tasks to search by." }
+        p(classes = "hint") { +"Tasks with a context are active only while it holds: on a wifi network (the phone checks), or within a time window. A filter-only one just groups tasks to search by. On or Off holds a context that way until it's set back to Auto." }
         service.contexts().sortedBy { it.name.lowercase() }.forEach { c ->
             div(classes = "context-row") {
                 span(classes = "context-name") { +"@${c.name}" }
                 span(classes = "hint") { +describeContext(c, service.timeWindows(c.id)) }
+                form(action = "/contexts/${c.id}/forced", method = FormMethod.post, classes = "pills context-forced") {
+                    Labels.CONTEXT_FORCED.forEach { (value, label) ->
+                        button(type = ButtonType.submit, name = "forced", classes = if (c.forced == value) "pill set" else "pill") {
+                            this.value = value?.toString() ?: "auto"; +label
+                        }
+                    }
+                }
                 a(href = "/contexts?edit=${c.id}") { +"Edit" }
                 form(classes = "inline-delete") {
                     attributes["hx-post"] = "/contexts/${c.id}/delete"

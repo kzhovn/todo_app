@@ -324,10 +324,16 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         val saved = context.copy(
             id = existing?.id ?: newId(),
             wifiSsid = context.wifiSsid.takeIf { place },
-            isCurrentlySatisfied = existing?.isCurrentlySatisfied ?: false
+            isCurrentlySatisfied = existing?.isCurrentlySatisfied ?: false,
+            forced = existing?.forced
         )
         store.write(CONTEXTS, saved.id, contextFields(saved, if (context.type == ContextType.TIME) windows else emptyList()), clock())
         return saved
+    }
+
+    fun setContextForced(id: Long, forced: Boolean?) {
+        val row = store.get(CONTEXTS, id)?.takeUnless { it.isDeleted } ?: return
+        store.write(CONTEXTS, id, contextFields(row.toContext().copy(forced = forced), row.timeWindows()), clock())
     }
 
     // Like the phone's: the context goes, and so does every task's assignment to it.

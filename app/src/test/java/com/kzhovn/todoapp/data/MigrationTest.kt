@@ -42,6 +42,7 @@ class MigrationTest {
         val room = Room.databaseBuilder(context, TodoDatabase::class.java, file.path)
             .addMigrations(*ALL_MIGRATIONS).allowMainThreadQueries().build()
         val task = runBlocking { room.taskDao().getById(1) }!!
+        val ctx = runBlocking { room.taskContextDao().getById(room.taskContextDao().insert(TaskContext(name = "Home", type = ContextType.PLACE))) }!!
         room.close()
 
         assertEquals("kept", task.title)
@@ -55,5 +56,6 @@ class MigrationTest {
         assertFalse(task.isTemplate)
         assertEquals(null, task.fromTemplateId)
         assertFalse(task.alongsideNext)
+        assertEquals(null, ctx.forced)
     }
 }

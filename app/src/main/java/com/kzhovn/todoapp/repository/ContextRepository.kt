@@ -31,12 +31,14 @@ class ContextRepository(
 
     suspend fun updateContext(context: TaskContext) = contextDao.update(context)
 
+    suspend fun setForced(contextId: Long, forced: Boolean?) = contextDao.setForced(contextId, forced)
+
     // The contexts screen's save: the context with its time windows, replaced wholesale (a context switched
-    // to a place just drops its old ones). Returns its id.
+    // to a place just drops its old ones), keeping whatever it's set to by hand. Returns its id.
     suspend fun saveContext(context: TaskContext, windows: List<ContextTimeWindow>): Long {
         var id = context.id
         transaction {
-            if (id == 0L) id = createContext(context) else updateContext(context)
+            if (id == 0L) id = createContext(context) else updateContext(context.copy(forced = contextDao.getById(id)?.forced))
             contextDao.deleteTimeWindowsForContext(id)
             if (context.type == ContextType.TIME) windows.forEach { contextDao.insertTimeWindow(it.copy(id = 0, contextId = id)) }
         }

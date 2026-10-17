@@ -71,6 +71,7 @@ fun computeActiveTasks(
 
     fun isContextSatisfied(contextId: Long): Boolean {
         val ctx = allContexts[contextId] ?: return true
+        ctx.forced?.let { return it }
         return when (ctx.type) {
             ContextType.PLACE -> ctx.isCurrentlySatisfied
             ContextType.LABEL -> true
@@ -94,10 +95,11 @@ fun computeActiveTasks(
         // its items are ticked off inside it.
         if (task.type == TaskType.TASK && !task.activeWithSubtasks && childrenByParentId[task.id].orEmpty().any { !it.type.isContainer && !it.isComplete && !it.isExpired(now) }) return@filter false
         val effective = resolveEffective(task, allById, contextsByTaskId)
-        // Due today or overdue, a time context (work hours, evenings) doesn't hold it back; a place one still does.
+        // Due today or overdue, a time context (work hours, evenings) doesn't hold it back; a place one, or one
+        // turned off by hand, still does.
         val urgent = dues.at(task)?.let { dueStatus(it, now) != DueStatus.LATER } == true
         (effective.effectiveStartDate == null || effective.effectiveStartDate <= now) &&
-            effective.effectiveContextIds.all { isContextSatisfied(it) || (urgent && allContexts[it]?.type == ContextType.TIME) }
+            effective.effectiveContextIds.all { isContextSatisfied(it) || (urgent && allContexts[it]?.let { c -> c.type == ContextType.TIME && c.forced == null } == true) }
     }
 }
 

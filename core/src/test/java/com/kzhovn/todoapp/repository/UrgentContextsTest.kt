@@ -36,4 +36,13 @@ class UrgentContextsTest {
         val active = computeActiveTasks(listOf(stamps), mapOf(14L to setOf(3L)), listOf(errands), emptyList(), emptyList(), now)
         assertEquals(listOf("Buy stamps"), active.map { it.title })
     }
+
+    @Test fun `a context set by hand overrides its wifi and clock, and off holds back even a task due today`() {
+        val tasks = listOf(Task(id = 15, title = "Water plants"), Task(id = 16, title = "Submit report", dueDate = now))
+        val contexts = mapOf(15L to setOf(2L), 16L to setOf(1L))
+        fun active(home: TaskContext, work: TaskContext) =
+            computeActiveTasks(tasks, contexts, listOf(work, home), listOf(closed), emptyList(), now).map { it.title }
+        assertEquals(listOf("Water plants", "Submit report"), active(home.copy(forced = true), workHours))
+        assertEquals(emptyList<String>(), active(home.copy(isCurrentlySatisfied = true, forced = false), workHours.copy(forced = false)))
+    }
 }

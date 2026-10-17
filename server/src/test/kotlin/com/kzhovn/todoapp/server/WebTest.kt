@@ -315,6 +315,13 @@ class WebTest {
         noRedirects.submitForm("/contexts", parameters { append("id", office.id.toString()); append("name", "Home"); append("type", "PLACE"); append("ssid", "HomeNet") })
         assertEquals(listOf("Home" to "HomeNet"), service.contexts().map { it.name to it.wifiSsid })
 
+        // Set by hand, it stays so through an edit, until set back to Auto.
+        noRedirects.submitForm("/contexts/${office.id}/forced", parameters { append("forced", "true") })
+        noRedirects.submitForm("/contexts", parameters { append("id", office.id.toString()); append("name", "Home"); append("type", "PLACE"); append("ssid", "HomeNet") })
+        assertEquals(true, service.contexts().single().forced)
+        noRedirects.submitForm("/contexts/${office.id}/forced", parameters { append("forced", "auto") })
+        assertEquals(null, service.contexts().single().forced)
+
         val task = service.create(Task(title = "Water plants"))
         service.edit(task, setOf(office.id), emptySet())
         client.post("/contexts/${office.id}/delete")

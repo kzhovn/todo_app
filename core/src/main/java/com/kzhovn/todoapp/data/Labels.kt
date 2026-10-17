@@ -79,6 +79,8 @@ object Labels {
     const val PLACE_CONTEXT = "Place (wifi)"
     const val TIME_CONTEXT = "Time window"
     const val LABEL_CONTEXT = "Filter only"
+    // TaskContext.forced's choices: on its own (wifi, the clock), or held on or off by hand.
+    val CONTEXT_FORCED = listOf(null to "Auto", true to "On", false to "Off")
 
     // Repeat
     const val DONT_REPEAT = "Don't repeat"

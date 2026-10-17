@@ -150,11 +150,20 @@ class ContextsActivity : ComponentActivity() {
                             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).clickable { loadForEdit(ctx) },
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "${ctx.name} — ${describeContext(ctx, windowsOf[ctx.id].orEmpty())}",
-                                fontSize = 14.sp, color = LedgerInk,
-                                modifier = Modifier.weight(1f)
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "${ctx.name} — ${describeContext(ctx, windowsOf[ctx.id].orEmpty())}",
+                                    fontSize = 14.sp, color = LedgerInk
+                                )
+                                Row(modifier = Modifier.padding(top = 4.dp)) {
+                                    Labels.CONTEXT_FORCED.forEach { (value, label) ->
+                                        SelectablePill(label = label, selected = ctx.forced == value, fontSize = 12.sp, verticalPadding = 3.dp, onClick = {
+                                            scope.launch { contextRepository.setForced(ctx.id, value); refresh() }
+                                        })
+                                        Spacer(Modifier.width(6.dp))
+                                    }
+                                }
+                            }
                             Icon(
                                 Icons.Filled.Close,
                                 contentDescription = "Delete ${ctx.name}",
