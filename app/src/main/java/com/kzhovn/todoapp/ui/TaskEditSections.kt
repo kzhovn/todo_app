@@ -53,6 +53,7 @@ import com.kzhovn.todoapp.data.checkInEvery
 import com.kzhovn.todoapp.data.completed
 import com.kzhovn.todoapp.data.checkInText
 import com.kzhovn.todoapp.data.nextCheckIn
+import com.kzhovn.todoapp.data.stillWaiting
 import com.kzhovn.todoapp.data.withCheckInEvery
 import com.kzhovn.todoapp.data.ancestors
 import com.kzhovn.todoapp.data.isUnder
@@ -237,9 +238,17 @@ private fun WaitingTiming(vm: TaskEditViewModel, activity: Activity) {
         )
     }
     val now = System.currentTimeMillis()
-    val hint = resolvesText(task)
-        ?: if (vm.isNew) null else checkInText(task, now)
-    hint?.let { Text(it, fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.padding(top = 6.dp)) }
+    val resolves = resolvesText(task)
+    if (resolves != null) Text(resolves, fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.padding(top = 6.dp))
+    else if (!vm.isNew) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+            Text(checkInText(task, now), fontSize = 12.sp, color = LedgerMuted)
+            // Restarts the clock: the next check-in an interval from today (saved with the rest on leaving).
+            Text(
+                Labels.STILL_WAITING, fontSize = 12.sp, color = LedgerAccent,
+                modifier = Modifier.padding(start = 8.dp).border(1.dp, LedgerAccent, RoundedCornerShape(5.dp)).clip(RoundedCornerShape(5.dp))
+                    .clickable { vm.task = stillWaiting(vm.task, System.currentTimeMillis()) }.padding(horizontal = 9.dp, vertical = 3.dp)
+            )
+        }
 }
 
 // High (!), normal or maybe (?). A maybe is hidden from Active and Doing and never starred.

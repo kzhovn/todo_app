@@ -44,6 +44,7 @@ import com.kzhovn.todoapp.data.MAX_CHECK_IN_DAYS
 import com.kzhovn.todoapp.data.nextCheckIn
 import com.kzhovn.todoapp.data.checkInEvery
 import com.kzhovn.todoapp.data.checkInText
+import com.kzhovn.todoapp.data.stillWaiting
 import com.kzhovn.todoapp.data.moveOutFolderId
 import com.kzhovn.todoapp.recurrence.RecurrencePreset
 import com.kzhovn.todoapp.recurrence.RecurrenceSelection
@@ -662,8 +663,15 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
         }
         if (t.type == TaskType.WAITING && !isNew) p(classes = "hint waiting-only") {
             val now = service.now()
-            +(resolvesText(t)
-                ?: checkInText(t, now))
+            val resolves = resolvesText(t)
+            span { +(resolves ?: checkInText(t, now)) }
+            // Restarts the clock: app.js moves the next check-in an interval from today, saved like any edit.
+            if (resolves == null) button(type = ButtonType.button, classes = "still-waiting") {
+                val next = stillWaiting(t, now)
+                attributes["data-date"] = localDateTime(nextCheckIn(next, now)).toLocalDate().toString()
+                attributes["data-hint"] = checkInText(next, now)
+                +Labels.STILL_WAITING
+            }
         }
         // Everything about when, as pills that open a small popover (app.js keeps their text current).
         div(classes = "field-label section not-waiting") { +Labels.TIMING }

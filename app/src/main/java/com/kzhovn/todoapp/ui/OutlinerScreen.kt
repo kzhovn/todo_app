@@ -92,6 +92,7 @@ fun OutlinerScreen(
     onAddSubtask: (Long) -> Unit,
     onMove: (taskId: Long, anchorId: Long, after: Boolean) -> Unit = { _, _, _ -> },
     onSnooze: (Long, Long) -> Unit = { _, _ -> },
+    onStillWaiting: (Long) -> Unit = {},
     selectedIds: Set<Long> = emptySet(),
     // Folder mode: the tree starts inside this folder, and each other folder has a button to zoom into it.
     rootId: Long? = null,
@@ -141,7 +142,7 @@ fun OutlinerScreen(
         }
     }
 
-    val actions = OutlinerActions(::toggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, onZoom, onSnooze)
+    val actions = OutlinerActions(::toggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, onZoom, onSnooze, onStillWaiting)
     LazyColumn(state = listState, modifier = Modifier.onGloballyPositioned { listBounds = it.boundsInRoot() }) {
         renderNodes(tree, depth = 0, collapsed = collapsed, actions = actions, allById = allById, counts = counts, colors = colors, selectedIds = selectedIds, workable = workable)
     }
@@ -179,7 +180,8 @@ private data class OutlinerActions(
     val onMove: (Long, Long, Boolean) -> Unit,
     val onDragAt: (Float?) -> Unit,
     val onZoom: ((Long) -> Unit)?,
-    val onSnooze: (Long, Long) -> Unit
+    val onSnooze: (Long, Long) -> Unit,
+    val onStillWaiting: (Long) -> Unit
 )
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -196,10 +198,11 @@ private fun OutlinerRow(
     selected: Boolean,
     workable: Set<Long>
 ) {
-    val (onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, onZoom, onSnooze) = actions
+    val (onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, onZoom, onSnooze, onStillWaiting) = actions
     var menuOpen by remember { mutableStateOf(false) }
     val task = node.task
     val hasChildren = node.children.isNotEmpty()
+    val hasMenu = task.type.isDoable || task.type == TaskType.WAITING
     val indent = (8 + depth * 18).dp
     // Where a drag hovering this row would land: the top/bottom quarter reorders it before/after
     // this row, the middle nests it inside.
@@ -266,7 +269,7 @@ private fun OutlinerRow(
                 .padding(start = indent, top = 1.dp, bottom = 1.dp, end = 8.dp)
                 .dragAndDropSource {
                     // Press and hold, then move: drags the task. Press and hold without moving: its menu,
-                    // as on the lists' rows (not for folders and projects, which it doesn't fit).
+                    // as on the lists' rows (not for folders and projects, which it doesn't fit; a waiting item's is Follow up).
                     var moved = false
                     detectDragGesturesAfterLongPress(
                         onDragStart = { moved = false },
@@ -276,8 +279,8 @@ private fun OutlinerRow(
                                 startTransfer(DragAndDropTransferData(ClipData.newPlainText("task_id", task.id.toString())))
                             }
                         },
-                        onDragEnd = { if (!moved && task.type.isDoable) menuOpen = true },
-                        onDragCancel = { if (!moved && task.type.isDoable) menuOpen = true }
+                        onDragEnd = { if (!moved && hasMenu) menuOpen = true },
+                        onDragCancel = { if (!moved && hasMenu) menuOpen = true }
                     )
                 }
                 .dragAndDropTarget(
@@ -342,6 +345,7 @@ private fun OutlinerRow(
                         waitingTail(task, now)?.let {
                             Text(it, fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.padding(horizontal = 8.dp))
                         }
+                        if (task.dueDate == null && !task.isComplete) DeferPill(task) { onStillWaiting(task.id) }
                     } else if (task.isMaybe) {
                         MaybeMark(36.dp)
                     } else {

@@ -295,6 +295,8 @@ object Labels {
         days % 7 == 0 -> "Every ${days / 7} weeks"
         else -> "Every $days days"
     }
+    // A waiting row's Still waiting button: "+3d", "+1w".
+    fun deferBy(days: Int): String = if (days % 7 == 0) "+${days / 7}w" else "+${days}d"
 
     fun unitName(unit: RecurrenceUnit) = when (unit) { RecurrenceUnit.DAY -> "day"; RecurrenceUnit.WEEK -> "week"; RecurrenceUnit.MONTH -> "month" }
     private fun plural(n: Int, word: String) = "$n $word${if (n == 1) "" else "s"}"

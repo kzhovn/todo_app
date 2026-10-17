@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.BorderStroke
 import com.kzhovn.todoapp.focus.FocusActivity
+import com.kzhovn.todoapp.quickadd.QuickAddActivity
+import androidx.compose.material.icons.filled.Add
 import android.content.Intent
 import com.kzhovn.todoapp.data.DueStatus
 import com.kzhovn.todoapp.data.dueStatus
@@ -29,6 +31,9 @@ import androidx.compose.runtime.mutableLongStateOf
 import kotlinx.coroutines.delay
 import androidx.compose.ui.text.withStyle
 import com.kzhovn.todoapp.data.Labels
+import com.kzhovn.todoapp.data.checkInEvery
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -334,7 +339,11 @@ internal fun TaskRowMenu(task: Task, expanded: Boolean, onDismiss: () -> Unit, o
             onDismiss()
             onSnooze(task.id, until(System.currentTimeMillis()))
         }
-        Column(Modifier.width(236.dp)) {
+        // A waiting item's only action here: a task of your own to chase it, typed into quick add.
+        if (task.type == TaskType.WAITING) MenuRow(Labels.FOLLOW_UP, Icons.Filled.Add) {
+            onDismiss()
+            context.startActivity(Intent(context, QuickAddActivity::class.java).putExtra(QuickAddActivity.EXTRA_TEXT, Labels.followUp(task.title)))
+        } else Column(Modifier.width(236.dp)) {
             Text(Labels.SNOOZE, fontSize = 11.sp, color = LedgerMuted, letterSpacing = 0.4.sp, modifier = Modifier.padding(start = 14.dp, top = 4.dp, bottom = 6.dp))
             // Three equal tiles lined up with the rows' icons below.
             DateTiles(snoozeChoices(AppSettings.rolloverHour(context))) { until -> snooze { until } }
@@ -418,19 +427,29 @@ fun ProjectMark(size: Dp = 40.dp, done: Boolean = false, onClick: () -> Unit) {
 @Composable
 fun TaskMark(task: Task, counts: Pair<Int, Int>?, due: DueStatus?, checkboxSize: Dp = 22.dp, onCheck: () -> Unit, onOpen: () -> Unit) = when (task.type) {
     TaskType.PROJECT -> ProjectMark(36.dp, task.isComplete, onCheck)
-    TaskType.WAITING -> WaitingMark(36.dp)
+    TaskType.WAITING -> WaitingMark(36.dp, checkboxSize, onCheck)
     TaskType.CHECKLIST -> CountMark(counts?.first ?: 0, counts?.second ?: 0, touchSize = 36.dp, onClick = onOpen)
     else -> TaskCheckbox(checked = task.isComplete, due = due, size = checkboxSize, touchSize = 36.dp, onCheckedChange = onCheck)
 }
 
-// A waiting item's plain hourglass, in the checkbox's place: it's resolved from its editor or the
-// Waiting section, not ticked off.
+// A waiting item's hourglass in a checkbox's ring, ticked like one: Resolved.
 @Composable
-fun WaitingMark(size: Dp = 40.dp) {
-    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
-        Icon(Icons.Outlined.HourglassEmpty, contentDescription = Labels.WAITING, tint = LedgerMuted, modifier = Modifier.size(size * 0.5f))
+fun WaitingMark(touchSize: Dp = 40.dp, size: Dp = 22.dp, onResolved: () -> Unit) {
+    Box(Modifier.size(touchSize).clip(CircleShape).clickable(onClick = onResolved), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(size).border(1.5.dp, LedgerCheckBorder, CircleShape), contentAlignment = Alignment.Center) {
+            Icon(Icons.Outlined.HourglassEmpty, contentDescription = Labels.RESOLVED, tint = LedgerMuted, modifier = Modifier.size(size * 0.6f))
+        }
     }
 }
+
+// A waiting row's Still waiting: "+3d", the next check-in one interval from today.
+@Composable
+fun DeferPill(task: Task, onClick: () -> Unit) = Text(
+    Labels.deferBy(task.checkInEvery()), fontSize = 11.sp, color = LedgerMuted,
+    modifier = Modifier.padding(horizontal = 4.dp).semantics { contentDescription = Labels.STILL_WAITING }
+        .border(1.dp, LedgerBorder, RoundedCornerShape(5.dp)).clip(RoundedCornerShape(5.dp))
+        .clickable(onClick = onClick).padding(horizontal = 6.dp, vertical = 2.dp)
+)
 
 // A checklist's "3/8" (items checked of all), in the checkbox's place.
 @Composable

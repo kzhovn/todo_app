@@ -464,18 +464,21 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .tree-row:has(input:checked) { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 
 /* Doing's quiet Waiting section, and a waiting item's hourglass wherever it shows. */
-.waiting-mark { color: var(--muted); }
 .waiting-section { border-top: 1px solid var(--border); margin: 14px 12px 0; padding-top: 4px; }
 .waiting-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 4px 0 2px 4px; }
 .waiting-row { display: flex; align-items: center; gap: 10px; padding: 5px 4px; font-size: 14px; color: var(--muted); }
-.waiting-row .waiting-mark { display: flex; width: 18px; justify-content: center; }
+.waiting-row .waiting-mark { margin-left: 0; }
 .waiting-row a { color: var(--ink); opacity: .8; text-decoration: none; }
 .waiting-row a:hover { text-decoration: underline; }
 .waiting-row .meta { margin-left: auto; font-size: 11px; white-space: nowrap; }
-.waiting-actions { display: none; gap: 6px; }
-.waiting-row:hover .waiting-actions, .waiting-row:focus-within .waiting-actions { display: flex; }
-.waiting-actions button { font: inherit; font-size: 11px; border: 1px solid var(--border); border-radius: 5px; padding: 2px 8px; color: var(--muted); background: var(--panel); cursor: pointer; }
-.waiting-actions .go { color: var(--good); border-color: var(--good); }
+/* A waiting item's hourglass sits in a checkbox's ring and ticks like one; "+3d" puts it off. */
+.waiting-mark { border: 1.5px solid var(--check); border-radius: 50%; color: var(--muted); }
+.waiting-mark:hover { background: var(--accent-soft); }
+/* Even, so it sits on whole pixels inside the 22px ring. */
+.project.waiting-mark .icon { width: 12px; height: 12px; }
+.defer { font: inherit; font-size: 11px; border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; color: var(--muted); background: var(--panel); cursor: pointer; flex: none; }
+.defer:hover { border-color: var(--accent); color: var(--accent); }
+.still-waiting { font: inherit; font-size: 12px; margin-left: 8px; border: 1px solid var(--accent); border-radius: 5px; padding: 2px 9px; color: var(--accent); background: none; cursor: pointer; }
 .rel-row .waiting-mark { display: flex; align-items: center; justify-content: center; }
 .primary.resolve { background: var(--good); border-color: var(--good); }
 

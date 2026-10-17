@@ -1,11 +1,8 @@
 package com.kzhovn.todoapp
 
 import com.kzhovn.todoapp.data.TaskType
-import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.border
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,11 +37,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.HorizontalDivider
 import com.kzhovn.todoapp.ui.WaitingMark
+import com.kzhovn.todoapp.ui.DeferPill
+import com.kzhovn.todoapp.ui.TaskRowMenu
 import com.kzhovn.todoapp.data.waitingFor
-import com.kzhovn.todoapp.ui.theme.LedgerGood
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -344,6 +341,7 @@ class MainActivity : ComponentActivity() {
                             onReparent = { taskId, newParentId -> viewModel.reparent(taskId, newParentId) },
                             onMove = { taskId, anchorId, after -> viewModel.move(taskId, anchorId, after) },
                             onSnooze = { id, until -> viewModel.snooze(id, until) },
+                            onStillWaiting = viewModel::stillWaiting,
                             onAddSubtask = { parentId ->
                                 startActivity(
                                     Intent(this@MainActivity, QuickAddActivity::class.java)
@@ -377,11 +375,7 @@ class MainActivity : ComponentActivity() {
                         val waiting by viewModel.waiting.collectAsState()
                         val waitingBlocks by viewModel.waitingBlocks.collectAsState()
                         if (!searchMode && selectedMode == TaskListMode.DOING && waiting.isNotEmpty()) WaitingSection(
-                            waiting, waitingBlocks, onOpen = onEdit, onResolved = onCheck,
-                            onStillWaiting = viewModel::stillWaiting,
-                            onFollowUp = { task ->
-                                startActivity(Intent(this@MainActivity, QuickAddActivity::class.java).putExtra(QuickAddActivity.EXTRA_TEXT, Labels.followUp(task.title)))
-                            }
+                            waiting, waitingBlocks, onOpen = onEdit, onResolved = onCheck, onStillWaiting = viewModel::stillWaiting
                         )
                     }
                     // A project whose subtasks are all done asks what's next. "Later" only snoozes it for
@@ -474,37 +468,28 @@ private fun DueOutsideLine(tasks: List<Task>, modeTitle: String, dueOf: (Task) -
     }
 }
 
-// Doing's quiet Waiting section, under a hairline: waiting items due a check-in. Tapping one shows its
-// actions; the title opens it. Gone entirely when there's nothing to check on.
+// Doing's quiet Waiting section, under a hairline: waiting items due a check-in, each resolved by its
+// hourglass or put off by its "+3d". Press and hold for Follow up. Gone entirely when there's nothing to check on.
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun WaitingSection(
-    tasks: List<Task>, blocks: Map<Long, Int>, onOpen: (Long) -> Unit, onResolved: (Long) -> Unit,
-    onStillWaiting: (Long) -> Unit, onFollowUp: (Task) -> Unit
+    tasks: List<Task>, blocks: Map<Long, Int>, onOpen: (Long) -> Unit, onResolved: (Long) -> Unit, onStillWaiting: (Long) -> Unit
 ) {
-    var openId by remember { mutableStateOf<Long?>(null) }
+    var menuId by remember { mutableStateOf<Long?>(null) }
     val now = System.currentTimeMillis()
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
         HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(top = 10.dp))
         Text(Labels.WAITING.uppercase(), fontSize = 10.sp, letterSpacing = 0.6.sp, color = LedgerMuted, modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 2.dp))
         tasks.forEach { task ->
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { openId = if (openId == task.id) null else task.id }) {
-                WaitingMark(32.dp)
-                Text(task.title, fontSize = 14.sp, color = LedgerMuted, modifier = Modifier.weight(1f).clickable { onOpen(task.id) }.padding(vertical = 6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().combinedClickable(onClick = { onOpen(task.id) }, onLongClick = { menuId = task.id })) {
+                WaitingMark(32.dp, 18.dp) { onResolved(task.id) }
+                Text(task.title, fontSize = 14.sp, color = LedgerMuted, modifier = Modifier.weight(1f).padding(vertical = 6.dp))
                 Text(
                     listOfNotNull(waitingFor(task, now), blocks[task.id]?.let { "blocks $it" }).joinToString(" · "),
-                    fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.padding(horizontal = 8.dp)
+                    fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.padding(horizontal = 4.dp)
                 )
-            }
-            if (openId == task.id) Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(start = 32.dp, bottom = 6.dp)) {
-                @Composable
-                fun action(text: String, color: Color = LedgerMuted, onClick: () -> Unit) = Text(
-                    text, fontSize = 12.sp, color = color,
-                    modifier = Modifier.border(1.dp, if (color == LedgerMuted) LedgerBorder else color, RoundedCornerShape(5.dp))
-                        .clickable { openId = null; onClick() }.padding(horizontal = 9.dp, vertical = 3.dp)
-                )
-                action(Labels.STILL_WAITING) { onStillWaiting(task.id) }
-                action(Labels.RESOLVED, LedgerGood) { onResolved(task.id) }
-                action(Labels.FOLLOW_UP) { onFollowUp(task) }
+                DeferPill(task) { onStillWaiting(task.id) }
+                TaskRowMenu(task, menuId == task.id, onDismiss = { menuId = null }, onSnooze = { _, _ -> })
             }
         }
     }

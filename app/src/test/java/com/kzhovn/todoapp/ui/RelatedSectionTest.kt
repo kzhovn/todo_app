@@ -110,7 +110,7 @@ class RelatedSectionTest {
             LedgerTheme {
                 Column(Modifier.padding(16.dp)) {
                     Breadcrumb(vm) {}; TitleBox(vm, false, {}, {}, {}); TypeRow(vm); TimingSection(vm, compose.activity, {}, {}); RelatedSection(vm, {}, {}, {}, {}); BottomBar(vm, {}, {}, {}, {})
-                    com.kzhovn.todoapp.WaitingSection(listOf(roommate), mapOf(roommate.id to 1), {}, {}, {}, {})
+                    com.kzhovn.todoapp.WaitingSection(listOf(roommate), mapOf(roommate.id to 1), {}, {}, {})
                 }
             }
         }

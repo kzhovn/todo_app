@@ -280,7 +280,7 @@
       section.open = true;
       return;
     }
-    const more = e.target.closest(".row[data-task-id]")?.querySelector("details.more");
+    const more = e.target.closest(".row[data-task-id], .waiting-row")?.querySelector("details.more");
     if (!more || e.target.closest("input, textarea")) return;
     e.preventDefault();
     closeMenus(more);
@@ -645,8 +645,18 @@
     const b = e.target.closest?.("[data-follow-up]");
     const box = b && document.getElementById("quickadd");
     if (!box) return;
+    b.closest("details")?.removeAttribute("open");
     box.value = b.dataset.followUp;
     box.focus();
+  });
+  // A waiting item's "Still waiting" in its editor: the next check-in an interval from today, autosaved.
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest?.(".still-waiting");
+    const date = b && document.querySelector(".editor [name=checkInDate]");
+    if (!date) return;
+    date.value = b.dataset.date;
+    date.dispatchEvent(new Event("change", { bubbles: true }));
+    b.previousElementSibling.textContent = b.dataset.hint;
   });
   document.addEventListener("paste", (e) => {
     const form = e.target.closest?.(".add-related");

@@ -23,6 +23,7 @@ import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.waitingFor
+import com.kzhovn.todoapp.data.checkInEvery
 import com.kzhovn.todoapp.data.SnoozeChoice
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.DueStatus
@@ -133,12 +134,12 @@ class ListData(
 internal fun folderColorsHex(tasks: Collection<Task>): Map<Long, String> = folderColorsArgb(tasks).mapValues { "#%06X".format(it.value and 0xFFFFFF) }
 
 // What leads a task's row, by type: a project's icon (ticked like a checkbox; done, it looks like one), a
-// waiting item's hourglass (it's resolved from its editor or Doing's Waiting section), a checklist's "3/8"
+// waiting item's hourglass in a checkbox's ring (ticked like one: Resolved), a checklist's "3/8"
 // (ticked item by item, inside it; opens it), or a folder's icon (search only), or a task's checkbox, which
 // `check` sets up (what ticking it does differs by list).
 internal fun FlowContent.taskMark(task: Task, counts: Pair<Int, Int>?, mode: String, check: BUTTON.() -> Unit) = when (task.type) {
     TaskType.PROJECT -> button(classes = "project") { check(); attributes["title"] = Labels.PROJECT; if (!task.isComplete) icon(Icon.PROJECT, "") }
-    TaskType.WAITING -> span(classes = "project waiting-mark") { attributes["title"] = Labels.WAITING; icon(Icon.HOURGLASS, "") }
+    TaskType.WAITING -> button(classes = "project waiting-mark") { check(); attributes["title"] = Labels.RESOLVED; icon(Icon.HOURGLASS, "") }
     TaskType.FOLDER -> span(classes = "project") { icon(Icon.FOLDER, "") } // search results only
     TaskType.SECTION -> span(classes = "project") {} // a checklist's section: nothing to tick
     TaskType.CHECKLIST -> {
@@ -463,17 +464,29 @@ fun DIV.listContents(data: ListData) {
         val m = data.q
         data.waiting.forEach { t ->
             div(classes = "waiting-row") {
-                span(classes = "waiting-mark") { icon(Icon.HOURGLASS, "") }
+                attributes["data-task-id"] = t.id.toString()
+                taskMark(t, null, m) { hx("post", "/tasks/${t.id}/complete?mode=$m") }
                 a(href = "/tasks/${t.id}?mode=$m", classes = "edit") { openInPanel(); +t.title }
                 span(classes = "meta") { +listOfNotNull(waitingFor(t, data.now), data.waitingBlocks[t.id]?.let { "blocks $it" }).joinToString(" · ") }
-                span(classes = "waiting-actions") {
-                    button { hx("post", "/tasks/${t.id}/still-waiting?mode=$m"); +Labels.STILL_WAITING }
-                    button(classes = "go") { hx("post", "/tasks/${t.id}/complete?mode=$m"); +Labels.RESOLVED }
-                    // Fills the quick add box (app.js) with a task to chase it up.
-                    button { attributes["data-follow-up"] = Labels.followUp(t.title); +Labels.FOLLOW_UP }
-                }
+                deferPill(t, m)
+                waitingMenu(t)
             }
         }
+    }
+}
+
+// A waiting row's Still waiting: "+3d", the next check-in one interval from today.
+private fun FlowContent.deferPill(task: Task, mode: String) = button(classes = "defer") {
+    hx("post", "/tasks/${task.id}/still-waiting?mode=$mode")
+    attributes["title"] = Labels.STILL_WAITING
+    +Labels.deferBy(task.checkInEvery())
+}
+
+// A waiting item's right-click menu: Follow up fills the quick add box (app.js) with a task to chase it.
+private fun FlowContent.waitingMenu(task: Task) = details(classes = "more") {
+    summary { +"⋯" }
+    div(classes = "menu") {
+        button(classes = "menu-row") { attributes["data-follow-up"] = Labels.followUp(task.title); icon(Icon.ADD, ""); +Labels.FOLLOW_UP }
     }
 }
 
@@ -586,7 +599,10 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                 span(classes = "play-time") { +formatDuration(minutes) }
             }
         }
-        details(classes = "more") {
+        if (task.type == TaskType.WAITING) {
+            if (task.dueDate == null && !task.isComplete) deferPill(task, mode)
+            waitingMenu(task)
+        } else details(classes = "more") {
             summary { attributes["aria-label"] = "Snooze"; +"⋯" }
             // "Snooze" over three equal tiles, like the app's row menu.
             div(classes = "menu") {
