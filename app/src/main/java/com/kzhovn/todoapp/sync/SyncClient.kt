@@ -17,12 +17,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
-import java.security.KeyStore
-import java.security.cert.CertificateFactory
-import javax.net.ssl.HttpsURLConnection
-import javax.net.ssl.SSLContext
-import javax.net.ssl.SSLSocketFactory
-import javax.net.ssl.TrustManagerFactory
 
 data class SyncConfig(
     val url: String, val token: String, val rolloverHour: Int? = null, val rolloverSetAt: Long = 0,
@@ -173,7 +167,6 @@ class SyncClient(
     private fun post(config: SyncConfig, request: SyncRequest): SyncResponse {
         val conn = URL(config.url.trimEnd('/') + "/sync").openConnection() as HttpURLConnection
         try {
-            if (conn is HttpsURLConnection) pinnedSocketFactory?.let { conn.sslSocketFactory = it }
             conn.requestMethod = "POST"
             conn.doOutput = true
             conn.connectTimeout = 15_000
@@ -186,18 +179,5 @@ class SyncClient(
         } finally {
             conn.disconnect()
         }
-    }
-
-    // The server uses a self-signed certificate bundled as an asset. It's trusted for this
-    // connection only, not app-wide. Without the asset, normal public-CA validation applies.
-    private val pinnedSocketFactory: SSLSocketFactory? by lazy {
-        val pem = runCatching { context.assets.open("server_cert.pem") }.getOrNull() ?: return@lazy null
-        val cert = pem.use { CertificateFactory.getInstance("X.509").generateCertificate(it) }
-        val keyStore = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
-            load(null)
-            setCertificateEntry("server", cert)
-        }
-        val trust = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply { init(keyStore) }
-        SSLContext.getInstance("TLS").apply { init(null, trust.trustManagers, null) }.socketFactory
     }
 }
