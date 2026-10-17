@@ -891,6 +891,31 @@ class WebTest {
     }
 
     @Test
+    fun `a workflow from quick add runs its wait on Doing's Running line and stars the next step`() = web {
+        client.submitForm("/quickadd", parameters { append("text", "Laundry > start wash > wait washing ~50m > switch to dryer"); append("mode", "DOING") })
+        val start = service.tasks().single { it.title == "start wash" }
+        client.post("/tasks/${start.id}/complete?mode=DOING")
+        val doing = client.get("/doing").bodyAsText()
+        assertTrue(doing.contains("running-row") && doing.contains("then switch to dryer") && doing.contains("50m left"))
+        val washing = service.tasks().single { it.title == "washing" }
+        client.post("/tasks/${washing.id}/more-wait?mode=DOING")
+        assertTrue(client.get("/doing").bodyAsText().contains("1h left"))
+        assertTrue(service.tasks().single { it.title == "switch to dryer" }.isStarred)
+        // Over early: it resolves and the next step is in Doing.
+        client.post("/tasks/${washing.id}/complete?mode=DOING")
+        val after = client.get("/doing").bodyAsText()
+        assertFalse(after.contains("running-row"))
+        assertTrue(after.contains("switch to dryer"))
+    }
+
+    @Test
+    fun `a waiting item's Timer is saved from its own pill`() = web {
+        val wait = service.create(Task(title = "Pasta", type = TaskType.WAITING))
+        client.submitForm("/tasks/${wait.id}", parameters { append("title", "Pasta"); append("type", "WAITING"); append("duration", "10"); append("duration", "") })
+        assertEquals(10, service.get(wait.id)!!.durationMinutes)
+    }
+
+    @Test
     fun `the All tree dims a task whose start is still to come`() = web {
         val later = service.create(Task(title = "Later", startDate = service.now() + 86_400_000L))
         val now = service.create(Task(title = "Now"))

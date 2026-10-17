@@ -4,6 +4,7 @@ import com.kzhovn.todoapp.data.DAY_MS
 import com.kzhovn.todoapp.data.monthDay
 import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.data.resolvesText
+import com.kzhovn.todoapp.data.isTimedWait
 import com.kzhovn.todoapp.data.folderOf
 import com.kzhovn.todoapp.recurrence.recurrenceToSave
 import com.kzhovn.todoapp.server.quickAddChips
@@ -466,13 +467,16 @@ private fun parseForm(p: Parameters, base: EditState, recurrence: RecurrenceSele
             else p["checkInN"]?.toIntOrNull()?.let { it * (p["checkInUnit"]?.toIntOrNull() ?: 1) }?.coerceIn(1, MAX_CHECK_IN_DAYS),
         reminderOffsetMinutes = p["reminder"]?.toIntOrNull(),
         remindAtStart = p["remindStart"] != null,
-        remindAt = dateTime(p["remindAtDate"], p["remindAtTime"]),
+        // A running timed wait's reminder is its own switch (the Remind pill is hidden for waiting items).
+        remindAt = if (waiting && p["waitRemind"] != null) dateTime(p["resolvesDate"], p["resolvesTime"])
+            else if (waiting && base.task.isTimedWait && base.task.dueDate != null) null else dateTime(p["remindAtDate"], p["remindAtTime"]),
         parentId = p["parent"]?.toLongOrNull(),
         recurrenceType = recurrenceType,
         recurrenceRule = recurrenceRule,
         isMaybe = p["priority"] == "maybe",
         isHighPriority = p["priority"] == "high",
-        durationMinutes = p["duration"]?.toIntOrNull()?.takeIf { it > 0 },
+        // Two Timer pills, the waiting item's first (see timerPill's callers): the one for the type picked.
+        durationMinutes = p.getAll("duration").orEmpty().let { if (waiting) it.firstOrNull() else it.lastOrNull() }?.toIntOrNull()?.takeIf { it > 0 },
         expiresAt = if (p["today"] != null) base.task.expiresAt ?: nextRollover(service.now(), service.rolloverHour()) else null,
         sequential = p["sequential"] != null,
         activeWithSubtasks = p["activeWithSubtasks"] != null,
@@ -660,6 +664,10 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
                 }
             }
             datePill(Labels.RESOLVES_ON, "resolves", Icon.CALENDAR, t.dueDate.takeIf { t.type == TaskType.WAITING }, "")
+            // A timed wait (a workflow's 50 minutes): it resolves itself that long after it starts. Comes before the
+            // task's own Timer pill, which parseForm relies on to tell the two "duration" fields apart.
+            timerPill(t, "")
+            if (t.isTimedWait && t.dueDate != null) togglePill("waitRemind", t.remindAt != null, Icon.BELL, Labels.REMIND_WHEN_DONE)
         }
         if (t.type == TaskType.WAITING && !isNew) p(classes = "hint waiting-only") {
             val now = service.now()
@@ -765,13 +773,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
                 }
             }
             // A timed task: its play button counts this down (app.js on the web, TaskTimer on the phone).
-            popPill(Labels.TIMER, Icon.TIMER, t.durationMinutes?.let(::formatDuration), "timer", "task-only reminder") {
-                div(classes = "pills") {
-                    Labels.TIMER_PRESETS.forEach { m -> button(type = ButtonType.button, classes = "pill preset") { attributes["data-minutes"] = m.toString(); +formatDuration(m) } }
-                }
-                numberInput(name = "duration", classes = "duration-input") { value = t.durationMinutes?.toString().orEmpty(); min = "1"; placeholder = "minutes" }
-                span(classes = "hint inline-hint") { +"minutes" }
-            }
+            timerPill(t, "task-only reminder")
             togglePill("today", t.expiresAt != null, Icon.SNOWFLAKE, Labels.TODAY_ONLY, "task-only")
         }
         // Not set here, but shown as its due date: a task waiting on this one is due sooner.
@@ -915,6 +917,14 @@ internal fun FlowContent.field(label: String, classes: String, content: FlowCont
 
 // A pill that opens a popover of controls. `value` is its text when set (else the label shows);
 // `kind` tells app.js how to re-derive that text as the controls change.
+private fun FlowContent.timerPill(t: Task, classes: String) = popPill(Labels.TIMER, Icon.TIMER, t.durationMinutes?.let(::formatDuration), "timer", classes) {
+    div(classes = "pills") {
+        Labels.TIMER_PRESETS.forEach { m -> button(type = ButtonType.button, classes = "pill preset") { attributes["data-minutes"] = m.toString(); +formatDuration(m) } }
+    }
+    numberInput(name = "duration", classes = "duration-input") { value = t.durationMinutes?.toString().orEmpty(); min = "1"; placeholder = "minutes" }
+    span(classes = "hint inline-hint") { +"minutes" }
+}
+
 private fun FlowContent.popPill(label: String, icon: Icon, value: String?, kind: String, classes: String, tint: String? = null, content: FlowContent.() -> Unit) =
     details(classes = "pp $classes") {
         tint?.let { attributes["style"] = "--tint: $it" }

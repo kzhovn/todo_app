@@ -133,6 +133,15 @@ object Labels {
     const val STILL_WAITING = "Still waiting"
     const val RESOLVED = "Resolved"
     const val FOLLOW_UP = "Follow up"
+    // Workflows: a wait's default title, the Running line over Doing, and the wait's notification.
+    const val WAIT = "Wait"
+    const val RUNNING = "Running"
+    const val MORE_WAIT = "+10 min"
+    const val MORE_WAIT_MINUTES = 10
+    const val REMIND_WHEN_DONE = "Remind when it's done"
+    fun thenStep(title: String) = "then $title"
+    fun waitDone(title: String) = "$title's done"
+    fun nextStep(title: String) = "next: $title"
     fun followUp(title: String) = "Ask about: $title"
 
     const val START = "Start"

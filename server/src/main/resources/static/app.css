@@ -479,6 +479,17 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .project.waiting-mark .icon { width: 12px; height: 12px; }
 .defer { font: inherit; font-size: 11px; border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; color: var(--muted); background: var(--panel); cursor: pointer; flex: none; }
 .defer:hover { border-color: var(--accent); color: var(--accent); }
+/* Doing's Running line: workflows' waits counting down (WebViews' runningSection). */
+.running-section { margin: 6px 12px 8px; display: flex; flex-direction: column; gap: 6px; }
+.running-row { display: flex; align-items: center; gap: 10px; background: var(--today-bg); border-radius: 8px; padding: 7px 10px; font-size: 13px; }
+.running-label { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; color: var(--today); }
+.running-row a { color: var(--ink); text-decoration: none; }
+.running-row a:hover { text-decoration: underline; }
+.running-row .then { color: var(--muted); }
+.running-row .left { margin-left: auto; color: var(--today); font-weight: 600; white-space: nowrap; }
+.running-done { background: none; border: 0; padding: 2px; cursor: pointer; color: var(--muted); display: inline-flex; }
+.running-done svg { width: 16px; height: 16px; fill: currentColor; }
+.running-done:hover { color: var(--good); }
 .still-waiting { font: inherit; font-size: 12px; margin-left: 8px; border: 1px solid var(--accent); border-radius: 5px; padding: 2px 9px; color: var(--accent); background: none; cursor: pointer; }
 .rel-row .waiting-mark { display: flex; align-items: center; justify-content: center; }
 .primary.resolve { background: var(--good); border-color: var(--good); }

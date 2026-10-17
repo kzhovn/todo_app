@@ -14,13 +14,29 @@ val CHECK_IN_PRESETS = listOf(3, 7, 14)
 
 fun Task.checkInEvery(): Int = checkInDays ?: DEFAULT_CHECK_IN_DAYS
 
+// A wait with a timer (the washing machine's 50 minutes): it resolves itself that long after it starts, which in
+// a workflow is when the step before it is ticked (see Workflows.kt), and otherwise when it's made. Never checked in on.
+val Task.isTimedWait: Boolean get() = type == TaskType.WAITING && durationMinutes != null
+
+// Started at `from`: due when its timer's done, with a reminder then (the reminder can be cleared, for this run).
+fun Task.startedWait(from: Long): Task = (from + durationMinutes!! * 60_000L).let { copy(dueDate = it, remindAt = it) }
+
+// "+10 min" on a running wait (the Running line, its notification): later by that much, its reminder too.
+fun Task.withMoreWait(minutes: Int, now: Long): Task {
+    val end = maxOf(dueDate ?: now, now) + minutes * 60_000L
+    return copy(dueDate = end, remindAt = if (remindAt != null) end else null)
+}
+
+// "32m left", "1h 10m left": a running wait's time left, to the next whole minute.
+fun timeLeft(endsAt: Long, now: Long): String = formatDuration(((endsAt - now + 59_999) / 60_000).toInt().coerceAtLeast(1)) + " left"
+
 // The first check-in comes an interval after it was made (an unsaved one's, from now); "Still waiting"
 // and the editor move startDate.
 fun nextCheckIn(task: Task, now: Long): Long = task.startDate ?: (createdAt(task) ?: now) + task.checkInEvery() * DAY_MS
 
 // Open, undated waiting items whose check-in has come round, longest waiting first.
 fun waitingToCheck(all: List<Task>, now: Long): List<Task> =
-    all.filter { it.type == TaskType.WAITING && !it.isComplete && it.dueDate == null && nextCheckIn(it, now) <= now }
+    all.filter { it.type == TaskType.WAITING && !it.isComplete && it.dueDate == null && !it.isTimedWait && nextCheckIn(it, now) <= now }
         .sortedBy { createdAt(it) ?: 0L }
 
 // "Still waiting": hidden until the next check-in.
@@ -41,11 +57,20 @@ fun checkInText(task: Task, now: Long): String = listOfNotNull(
     waitingFor(task, now)?.let { "Waiting $it." }
 ).joinToString(" ")
 
-// A waiting item's tail in its row: "resolves Oct 9", or "waiting 9 days".
-fun waitingTail(task: Task, now: Long): String? = task.dueDate?.let { "resolves ${chipDate(it)}" } ?: waitingFor(task, now)?.let { "waiting $it" }
+// A waiting item's tail in its row: "resolves Oct 9", or "waiting 9 days"; a timed one's "32m left", or its
+// length before it starts ("50m").
+fun waitingTail(task: Task, now: Long): String? = when {
+    task.isTimedWait && task.dueDate == null -> formatDuration(task.durationMinutes!!)
+    task.isTimedWait && task.dueDate!! > now -> timeLeft(task.dueDate, now)
+    else -> task.dueDate?.let { "resolves ${chipDate(it)}" } ?: waitingFor(task, now)?.let { "waiting $it" }
+}
 
-// The editor's line for one with a date.
-fun resolvesText(task: Task): String? = task.dueDate?.let { "Resolves itself on ${chipDate(it)}." }
+// The editor's line for one with a date, or a timed one still to start.
+fun resolvesText(task: Task): String? = when {
+    task.isTimedWait && task.dueDate == null -> "Starts when the step before it is ticked, and resolves itself ${formatDuration(task.durationMinutes!!)} later."
+    task.isTimedWait -> "Resolves itself at ${chipDate(task.dueDate!!)}."
+    else -> task.dueDate?.let { "Resolves itself on ${chipDate(it)}." }
+}
 
 // A list row's line after its title: a waiting item's tail, or a start still to come ("starts Fri").
 fun laterText(task: Task, now: Long): String? = when {

@@ -13,6 +13,9 @@ private val contextRegex = Regex("(?<!\\S)@(\\S+)(?!\\S)")
 private val TODAY_ONLY_PREFIXES = setOf("d", "daily")
 // When a folder, checklist and project share a name, the first of these wins.
 private val TARGETS = listOf(TaskType.FOLDER, TaskType.CHECKLIST, TaskType.PROJECT)
+// "laundry > start wash > 50m > switch to dryer": two or more spaced arrows make an in-order project of the steps
+// (one alone stays in the title: "Compare A > B").
+private val STEP_ARROW = Regex("\\s+>\\s+")
 
 // Quick add with the names in it matched, the same on every device: "work: x" into the folder
 // (or project) Work, "groceries: milk, eggs" as items into the checklist Groceries, "d: x" today
@@ -31,14 +34,17 @@ fun planQuickAdd(input: String, tasks: Collection<Task>, contexts: Collection<Ta
     val body = if (todayOnly || target != null) prefix!!.groupValues[2] else input
     if (target?.type == TaskType.CHECKLIST) return QuickAdd(task = null, items = splitItems(body), intoChecklist = target.id)
 
+    val parts = body.split(STEP_ARROW)
+    val steps = if (parts.size >= 3) parts.drop(1) else emptyList()
     // Contexts only come from the title's part, not the note's.
-    val (titlePart, notes) = QuickAddParser.splitNotes(body)
+    val (titlePart, notes) = QuickAddParser.splitNotes(if (steps.isEmpty()) body else parts[0])
     val byName = contexts.associateBy { it.name.lowercase().replace(" ", "") }
     val contextIds = mutableSetOf<Long>()
     val text = contextRegex.replace(titlePart) { m -> byName[m.groupValues[1].lowercase()]?.let { contextIds += it.id; "" } ?: m.value }
     val parsed = QuickAddParser.read(text, now)
     val task = parsed.task!!.copy(parentId = target?.id, expiresAt = if (todayOnly) nextRollover(now, rolloverHour) else null, notes = notes)
-    return parsed.copy(task = task, contextIds = contextIds)
+        .let { if (steps.isEmpty()) it else it.copy(type = TaskType.PROJECT, sequential = true) }
+    return parsed.copy(task = task, contextIds = contextIds, steps = steps)
 }
 
 private fun fromTemplate(input: String, tasks: Collection<Task>, now: Long): QuickAdd? {

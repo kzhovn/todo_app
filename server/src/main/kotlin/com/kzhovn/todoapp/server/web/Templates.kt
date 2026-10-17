@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.repository.isWorkflow
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.repository.describe
@@ -35,9 +36,10 @@ import kotlinx.html.stream.createHTML
 // sidebar's one Templates page, Use (from it and from New ▾), Save as template, and the Update template review.
 fun Route.templateRoutes(service: TaskService) {
     get("/templates") { call.respondHtml { templatesPage(service) } }
-    // A list from the template, opened in the editor.
+    // A list from the template, opened in the editor; a workflow starts instead, its first step in Doing.
     post("/templates/{id}/use") {
         val made = call.parameters["id"]?.toLongOrNull()?.let(service::useTemplate) ?: return@post call.respondRedirect("/templates")
+        if (isWorkflow(made, service.tasks())) return@post call.respondRedirect(ListMode.DOING.path)
         call.respondRedirect("/tasks/${made.id}?mode=${call.mode().name}")
     }
     // From the editor or a row's menu; answered with a toast only.

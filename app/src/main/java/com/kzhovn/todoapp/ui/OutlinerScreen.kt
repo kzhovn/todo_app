@@ -10,6 +10,7 @@ import com.kzhovn.todoapp.data.OutlinerNode
 import com.kzhovn.todoapp.data.buildOutlinerTree
 import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.dueStatus
+import com.kzhovn.todoapp.data.isTimedWait
 import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.gestures.scrollBy
@@ -338,14 +339,14 @@ private fun OutlinerRow(
                     )
                     if (task.isHighPriority) PriorityMark()
                     if (!task.notes.isNullOrBlank()) NotesMark()
-                    task.durationMinutes?.let { TimerButton(task, it) }
+                    task.durationMinutes?.takeIf { task.type != TaskType.WAITING }?.let { TimerButton(task, it) } // a wait's timer runs by itself
                     if (task.type == TaskType.WAITING) {
                         // How long it's been waiting, or the day it resolves itself.
                         val now = System.currentTimeMillis()
                         waitingTail(task, now)?.let {
                             Text(it, fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.padding(horizontal = 8.dp))
                         }
-                        if (task.dueDate == null && !task.isComplete) DeferPill(task) { onStillWaiting(task.id) }
+                        if (task.dueDate == null && !task.isComplete && !task.isTimedWait) DeferPill(task) { onStillWaiting(task.id) }
                     } else if (task.isMaybe) {
                         MaybeMark(36.dp)
                     } else {

@@ -2,6 +2,13 @@ package com.kzhovn.todoapp
 
 import com.kzhovn.todoapp.data.TaskType
 import androidx.compose.ui.draw.clip
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.delay
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.widthIn
@@ -42,6 +49,10 @@ import com.kzhovn.todoapp.ui.WaitingMark
 import com.kzhovn.todoapp.ui.DeferPill
 import com.kzhovn.todoapp.ui.TaskRowMenu
 import com.kzhovn.todoapp.data.waitingFor
+import com.kzhovn.todoapp.data.timeLeft
+import com.kzhovn.todoapp.repository.RunningWait
+import com.kzhovn.todoapp.ui.theme.LedgerUp
+import com.kzhovn.todoapp.ui.theme.LedgerUpSoft
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -350,6 +361,10 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                     } else Column {
+                        val running by viewModel.running.collectAsState()
+                        if (!searchMode && selectedMode == TaskListMode.DOING && running.isNotEmpty()) RunningSection(
+                            running, onOpen = onEdit, onDone = onCheck, onMoreWait = viewModel::moreWait, onEnded = viewModel::reload
+                        )
                         Box(Modifier.weight(1f, fill = false)) { TaskListScreen(
                             viewModel = viewModel,
                             onCheck = onCheck,
@@ -412,7 +427,8 @@ class MainActivity : ComponentActivity() {
                                 templatePicker = null
                                 scope.launch {
                                     repository.useTemplate(t.id, System.currentTimeMillis())?.let { id ->
-                                        startActivity(Intent(this@MainActivity, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, id))
+                                        if (repository.isWorkflow(id)) selectedMode = TaskListMode.DOING
+                                        else startActivity(Intent(this@MainActivity, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, id))
                                     }
                                 }
                             },
@@ -490,6 +506,37 @@ internal fun WaitingSection(
                 )
                 DeferPill(task) { onStillWaiting(task.id) }
                 TaskRowMenu(task, menuId == task.id, onDismiss = { menuId = null }, onSnooze = { _, _ -> })
+            }
+        }
+    }
+}
+
+// Doing's Running line: one row per workflow wait counting down, with the step after it. ✓ ends it early (the
+// machine finished), +10 min puts it off. Ticks each half minute, and reloads the list once a wait is over.
+@Composable
+internal fun RunningSection(running: List<RunningWait>, onOpen: (Long) -> Unit, onDone: (Long) -> Unit, onMoreWait: (Long) -> Unit, onEnded: () -> Unit) {
+    val now by produceState(System.currentTimeMillis()) { while (true) { delay(30_000); value = System.currentTimeMillis() } }
+    LaunchedEffect(now) { if (running.any { it.wait.dueDate!! <= now }) onEnded() }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        running.forEach { (wait, next) ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(LedgerUpSoft).clickable { onOpen(wait.id) }.padding(start = 10.dp)
+            ) {
+                Text(Labels.RUNNING.uppercase(), fontSize = 10.sp, letterSpacing = 0.6.sp, fontWeight = FontWeight.Bold, color = LedgerUp)
+                Text(
+                    wait.title + (next?.let { " · " + Labels.thenStep(it.title) } ?: ""), fontSize = 13.sp, color = LedgerInk, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 8.dp)
+                )
+                Text(timeLeft(wait.dueDate!!, now), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = LedgerUp)
+                IconButton(onClick = { onDone(wait.id) }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Check, contentDescription = Labels.RESOLVED, tint = LedgerMuted, modifier = Modifier.size(18.dp))
+                }
+                Text(
+                    Labels.MORE_WAIT, fontSize = 11.sp, color = LedgerMuted,
+                    modifier = Modifier.padding(end = 8.dp).border(1.dp, LedgerBorder, RoundedCornerShape(5.dp)).clip(RoundedCornerShape(5.dp))
+                        .clickable { onMoreWait(wait.id) }.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
             }
         }
     }

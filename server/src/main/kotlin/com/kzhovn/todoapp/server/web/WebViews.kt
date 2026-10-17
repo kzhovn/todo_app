@@ -3,6 +3,9 @@ package com.kzhovn.todoapp.server.web
 import com.kzhovn.todoapp.data.linkSegments
 import com.kzhovn.todoapp.data.laterText
 import com.kzhovn.todoapp.data.waitingBlocks
+import com.kzhovn.todoapp.data.timeLeft
+import com.kzhovn.todoapp.data.isTimedWait
+import com.kzhovn.todoapp.repository.RunningWait
 import com.kzhovn.todoapp.data.nearestFolder
 import com.kzhovn.todoapp.data.ShownDue
 import com.kzhovn.todoapp.data.completeQuestion
@@ -122,6 +125,8 @@ class ListData(
     // Doing's quiet Waiting section: waiting items due a check-in, and how many open tasks each blocks.
     val waiting: List<Task> = if (mode == ListMode.DOING) service.waitingToCheck() else emptyList()
     val waitingBlocks: Map<Long, Int> = if (waiting.isEmpty()) emptyMap() else waitingBlocks(waiting, service.dependencyEdges(), byId)
+    // Doing's Running line: waits counting down, each with the step that comes after it.
+    val running: List<RunningWait> = if (mode == ListMode.DOING) service.runningWaits() else emptyList()
     val folderColors = folderColorsHex(all)
     // New ▾'s "From template…" (see Templates.kt).
     val templates: List<Task> by lazy { service.templates() }
@@ -453,6 +458,7 @@ fun DIV.listContents(data: ListData) {
     attributes["hx-trigger"] = "every 60s, visibilitychange from:document, refresh from:body"
     attributes["hx-swap"] = "outerHTML"
     data.stalled?.let { stalledPrompt(it, data.mode, data.q) }
+    runningSection(data)
     if (data.mode == ListMode.ALL) {
         if (data.roots.isEmpty()) p(classes = "empty") { +Labels.NOTHING_HERE }
         tree(data, data.roots, parentId = null, depth = 0)
@@ -499,6 +505,26 @@ fun DIV.listContents(data: ListData) {
                 span(classes = "meta") { +listOfNotNull(waitingFor(t, data.now), data.waitingBlocks[t.id]?.let { "blocks $it" }).joinToString(" · ") }
                 deferPill(t, m)
                 waitingMenu(t)
+            }
+        }
+    }
+}
+
+// Doing's Running line, one row per wait counting down (the list re-renders each minute): ✓ ends it early (the
+// machine finished), +10 min puts it off.
+private fun FlowContent.runningSection(data: ListData) {
+    if (data.running.isEmpty()) return
+    val m = data.q
+    div(classes = "running-section") {
+        data.running.forEach { (wait, next) ->
+            div(classes = "running-row") {
+                attributes["data-task-id"] = wait.id.toString()
+                span(classes = "running-label") { +Labels.RUNNING }
+                a(href = "/tasks/${wait.id}?mode=$m", classes = "edit") { openInPanel(); +wait.title }
+                next?.let { span(classes = "then") { +" · ${Labels.thenStep(it.title)}" } }
+                span(classes = "left") { +timeLeft(wait.dueDate!!, data.now) }
+                button(classes = "running-done") { hx("post", "/tasks/${wait.id}/complete?mode=$m"); attributes["title"] = Labels.RESOLVED; icon(Icon.CHECK, "") }
+                button(classes = "defer") { hx("post", "/tasks/${wait.id}/more-wait?mode=$m"); +Labels.MORE_WAIT }
             }
         }
     }
@@ -593,7 +619,8 @@ internal fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outline
         if (task.isComplete) classes = classes + "done"
         style = "padding-left: ${depth * 18}px; border-left-color: ${data.folderColor(task) ?: "var(--border)"}"
         outlineNode?.invoke(this)
-        val due = data.effectiveDue(task)?.takeUnless { task.isComplete }
+        // A timed wait's end shows as its own tail ("32m left"), not as a due date.
+        val due = data.effectiveDue(task)?.takeUnless { task.isComplete || task.isTimedWait }
         val status = due?.let { dueStatus(it.at, data.now) }
         taskMark(task, data.subtaskCounts(task), mode) {
             // Due today: an orange ring; overdue: rust. Each with a pale fill of its own colour.
@@ -618,8 +645,8 @@ internal fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outline
             }
         }
         // A timed task's play button, "▶ 1h"; app.js runs the countdown (one at a time, per browser)
-        // and shows the time left on it.
-        task.durationMinutes?.let { minutes ->
+        // and shows the time left on it. A wait's timer runs by itself (Workflows.kt).
+        task.durationMinutes?.takeIf { task.type != TaskType.WAITING }?.let { minutes ->
             button(classes = "play") {
                 attributes["data-task-id"] = task.id.toString()
                 attributes["data-minutes"] = minutes.toString()
@@ -631,7 +658,7 @@ internal fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outline
             }
         }
         if (task.type == TaskType.WAITING) {
-            if (task.dueDate == null && !task.isComplete) deferPill(task, mode)
+            if (task.dueDate == null && !task.isComplete && !task.isTimedWait) deferPill(task, mode)
             waitingMenu(task)
         } else details(classes = "more") {
             summary { attributes["aria-label"] = "Snooze"; +"⋯" }
@@ -770,7 +797,7 @@ internal fun FlowContent.pinControl(task: Task, pinned: Boolean, refresh: Boolea
         // Every device goes into focus on it.
         button(type = ButtonType.button, classes = "menu-row") { hx("post", "/focus/start?task=${task.id}", "this"); icon(Icon.CENTER_FOCUS, ""); +Labels.FOCUS }
         // app.js's play handler starts (or pauses) the shared timer, as a row's ▶ does.
-        task.durationMinutes?.let { minutes ->
+        task.durationMinutes?.takeIf { task.type != TaskType.WAITING }?.let { minutes ->
             button(type = ButtonType.button, classes = "menu-row play") {
                 attributes["data-task-id"] = task.id.toString(); attributes["data-minutes"] = minutes.toString(); attributes["data-title"] = task.title
                 icon(Icon.PLAY, ""); +"Timer · ${formatDuration(minutes)}"

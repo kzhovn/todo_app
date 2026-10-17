@@ -86,7 +86,11 @@ fun planUseTemplate(all: List<Task>, contexts: Map<Long, Set<Long>>, edges: List
     val root = copy.creates.first { it.first.id == rootId }.first
     val positions = newTaskPositions(all.filter { !it.isTemplate }, root.copy(position = null))
     val placed = copy.copy(creates = copy.creates.map { (t, c) -> (if (t.id == rootId) t.copy(position = positions[rootId]) else t).withRules(now) to c })
-    return placed + TaskChanges(updates = all.mapNotNull { t -> positions[t.id]?.takeIf { t.id != rootId }?.let { t.copy(position = it) } }) to rootId
+    val made = placed + TaskChanges(updates = all.mapNotNull { t -> positions[t.id]?.takeIf { t.id != rootId }?.let { t.copy(position = it) } })
+    // A workflow starts right away: its first step comes up starred, in Doing (or a leading wait starts).
+    val after = made.applyTo(all)
+    val start = if (isWorkflow(after.first { it.id == rootId }, after)) planAdvance(after, contexts, rootId, now, now) else TaskChanges()
+    return made + start to rootId
 }
 
 // How a list made from a template differs from it, for "Update template…": what was added to the list, taken

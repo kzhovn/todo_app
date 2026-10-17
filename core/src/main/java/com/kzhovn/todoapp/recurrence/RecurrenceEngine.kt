@@ -3,6 +3,7 @@ package com.kzhovn.todoapp.recurrence
 import com.kzhovn.todoapp.quickadd.startOfDay
 import com.kzhovn.todoapp.data.RecurrenceType
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.isTimedWait
 import com.kzhovn.todoapp.data.newId
 import com.kzhovn.todoapp.repository.createdAt
 import org.dmfs.rfc5545.recur.RecurrenceRule
@@ -52,12 +53,15 @@ object RecurrenceEngine {
     fun successorSubtasks(completed: Task, next: Task, descendants: List<Task>): List<Pair<Long, Task>> {
         val shift = (next.startDate ?: return emptyList()) - (completed.startDate ?: completed.completedAt ?: return emptyList())
         val newIds = mutableMapOf(completed.id to next.id)
+        // A workflow's steps start the next run afresh: waits not started, nothing starred (see Workflows.kt).
+        val workflows = (descendants + completed).filter { p -> p.sequential && descendants.any { it.parentId == p.id && it.isTimedWait } }.map { it.id }.toSet()
         return descendants.sortedBy { it.id }.mapNotNull { sub ->
             val parent = newIds[sub.parentId] ?: return@mapNotNull null
             if (sub.recurrenceType != null) return@mapNotNull null
             val copy = sub.copy(
                 id = newId(), parentId = parent, isComplete = false, completedAt = null, pinnedAt = null, timerEndsAt = null, timerRemaining = null, focusedAt = null,
-                startDate = sub.startDate?.plus(shift), dueDate = sub.dueDate?.plus(shift)
+                startDate = sub.startDate?.plus(shift), dueDate = if (sub.isTimedWait) null else sub.dueDate?.plus(shift),
+                remindAt = if (sub.isTimedWait) null else sub.remindAt, isStarred = sub.isStarred && sub.parentId !in workflows
             )
             newIds[sub.id] = copy.id
             sub.id to copy

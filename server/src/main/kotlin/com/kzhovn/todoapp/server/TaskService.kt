@@ -18,6 +18,10 @@ import com.kzhovn.todoapp.repository.TemplateChange
 import com.kzhovn.todoapp.repository.planSaveAsTemplate
 import com.kzhovn.todoapp.repository.planUpdateTemplate
 import com.kzhovn.todoapp.repository.planUseTemplate
+import com.kzhovn.todoapp.repository.RunningWait
+import com.kzhovn.todoapp.data.isTimedWait
+import com.kzhovn.todoapp.data.Labels
+import com.kzhovn.todoapp.data.withMoreWait
 import com.kzhovn.todoapp.repository.templateChanges
 import com.kzhovn.todoapp.repository.templateRoots
 import com.kzhovn.todoapp.repository.templatesKeptFrom
@@ -172,6 +176,16 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     }
 
     fun stillWaiting(id: Long) { get(id)?.takeIf { it.type == TaskType.WAITING }?.let { t -> update(id) { stillWaiting(t, clock()) } } }
+
+    // Doing's Running line: waits counting down (see Workflows.kt), in the mode's folder.
+    fun runningWaits(folderId: Long? = modeFolderId()): List<RunningWait> {
+        val all = tasks()
+        val byId = all.associateBy { it.id }
+        return com.kzhovn.todoapp.repository.runningWaits(all, clock()).filter { inMode(it.wait, folderId, byId) }
+    }
+
+    // A running wait's "+10 min".
+    fun moreWait(id: Long) { get(id)?.takeIf { it.isTimedWait && !it.isComplete }?.let { t -> update(id) { t.withMoreWait(Labels.MORE_WAIT_MINUTES, clock()) } } }
 
     // Review's "Waiting now": Active with contexts ignored, so a task held back only by a context counts.
     // In the mode's folder, unless `everywhere`.

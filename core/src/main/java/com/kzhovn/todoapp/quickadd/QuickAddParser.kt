@@ -15,11 +15,13 @@ import java.util.Calendar
 
 // Everything a quick add asks for. `task` is null when the text only adds items to an existing
 // checklist ("groceries: milk, eggs"); otherwise `items` are the new checklist's ("packing [a, b]"), and
-// `sections` its sections with theirs ("packing [passport; clothes: socks, shirt; winter: coat]").
+// `sections` its sections with theirs ("packing [passport; clothes: socks, shirt; winter: coat]"), and `steps` an
+// in-order project's ("laundry > start wash > 50m > switch to dryer").
 data class QuickAdd(
     val task: Task?,
     val items: List<String> = emptyList(),
     val sections: List<Pair<String, List<String>>> = emptyList(),
+    val steps: List<String> = emptyList(),
     val fromTemplate: Long? = null, // "use packing": a list from this template, `task` its title and dates
     val intoChecklist: Long? = null,
     val contextIds: Set<Long> = emptySet(),
@@ -93,6 +95,10 @@ object QuickAddParser {
     )
 
     fun parse(input: String, now: Long = System.currentTimeMillis()): Task = read(input, now).task!!
+
+    // A step that's only a length ("50m", "1.5h", "1h 20m"), the timer's syntax without its "~": a wait.
+    fun bareLength(step: String): Int? = tildeRegex.matchEntire("~" + step.trim())?.takeIf { it.groupValues[1].isNotEmpty() || it.groupValues[2].isNotEmpty() }
+        ?.let { m -> ((m.groupValues[1].toDoubleOrNull() ?: 0.0) * 60 + (m.groupValues[2].toIntOrNull() ?: 0)).toInt().takeIf { it > 0 } }
 
     // The note: everything after the first line, or after " // " on it ("call bank // ask about the
     // fee"). A URL's "//" never counts, since it follows ":" rather than a space.

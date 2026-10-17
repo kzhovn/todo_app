@@ -23,6 +23,9 @@ import com.kzhovn.todoapp.data.canMoveUnder
 import com.kzhovn.todoapp.data.safeDependencies
 import com.kzhovn.todoapp.data.safeParent
 import com.kzhovn.todoapp.notifications.ReminderScheduler
+import com.kzhovn.todoapp.data.isTimedWait
+import com.kzhovn.todoapp.data.Labels
+import com.kzhovn.todoapp.data.withMoreWait
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 import com.kzhovn.todoapp.quickadd.QuickAdd
 import com.kzhovn.todoapp.quickadd.planQuickAdd
@@ -155,6 +158,11 @@ class TaskRepository(
         write(taskDao.getById(taskId)?.takeIf { it.type == TaskType.WAITING }?.let { stillWaiting(it, now) } ?: return, now)
     }
 
+    // A running wait's "+10 min" (Doing's Running line, its notification).
+    suspend fun moreWait(taskId: Long, now: Long) {
+        write(taskDao.getById(taskId)?.takeIf { it.isTimedWait && !it.isComplete }?.withMoreWait(Labels.MORE_WAIT_MINUTES, now) ?: return, now)
+    }
+
     // Every change to an existing task goes through here, as the server's TaskService.update: the write
     // rules (Task.withRules), then the row and its reminder alarms.
     private suspend fun write(task: Task, now: Long = System.currentTimeMillis()) {
@@ -223,6 +231,9 @@ class TaskRepository(
         apply(change, now)
         id
     }
+
+    // A workflow (see Workflows.kt in :core) starts when made from its template, so it's shown in Doing, not opened.
+    suspend fun isWorkflow(id: Long): Boolean = taskDao.getAllOnce().let { all -> isWorkflow(all.firstOrNull { it.id == id }, all) }
 
     suspend fun templateChanges(listId: Long): List<TemplateChange> = templateChanges(taskDao.getAllOnce(), listId)
 

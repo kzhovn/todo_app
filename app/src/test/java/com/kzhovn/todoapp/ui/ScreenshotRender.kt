@@ -161,4 +161,15 @@ class ScreenshotRender {
             draw(compose.activity.window.decorView, "review_${z.name.lowercase()}")
         }
     }
+
+    @Test
+    fun runningLine() {
+        if (dir == null) return
+        val now = System.currentTimeMillis()
+        val washing = Task(id = 1, title = "Washing", type = TaskType.WAITING, durationMinutes = 50, dueDate = now + 32 * 60_000L + 1000)
+        val pasta = Task(id = 2, title = "Pasta", type = TaskType.WAITING, durationMinutes = 10, dueDate = now + 6 * 60_000L + 1000)
+        val running = listOf(com.kzhovn.todoapp.repository.RunningWait(pasta, null), com.kzhovn.todoapp.repository.RunningWait(washing, Task(id = 3, title = "Switch to dryer")))
+        compose.setContent { LedgerTheme { Column(Modifier.width(400.dp)) { com.kzhovn.todoapp.RunningSection(running, {}, {}, {}, {}) } } }
+        draw(compose.activity.window.decorView, "running_line")
+    }
 }

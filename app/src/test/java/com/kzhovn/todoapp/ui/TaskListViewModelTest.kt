@@ -62,6 +62,25 @@ class TaskListViewModelTest {
     }
 
     @Test
+    fun `doing's running line shows a workflow's wait with the step after it, and +10 min puts it off`() = runTest {
+        val laundry = repository.createTask(Task(title = "Laundry", type = com.kzhovn.todoapp.data.TaskType.PROJECT, sequential = true))
+        val start = repository.createTask(Task(title = "Start wash", parentId = laundry))
+        val washing = repository.createTask(Task(title = "Washing", type = com.kzhovn.todoapp.data.TaskType.WAITING, durationMinutes = 50, parentId = laundry))
+        repository.createTask(Task(title = "Switch to dryer", parentId = laundry))
+        repository.markComplete(start, now - 10 * 60_000L)
+
+        viewModel.load(TaskListMode.DOING)
+        advanceUntilIdle()
+        val running = viewModel.running.value.single()
+        assertEquals("Washing" to "Switch to dryer", running.wait.title to running.next?.title)
+        assertEquals(now + 40 * 60_000L, running.wait.dueDate)
+
+        viewModel.moreWait(washing)
+        advanceUntilIdle()
+        assertEquals(now + 50 * 60_000L, viewModel.running.value.single().wait.dueDate)
+    }
+
+    @Test
     fun `active mode excludes tasks with a future start date`() = runTest {
         repository.createTask(Task(title = "Ready now"))
         repository.createTask(Task(title = "Not yet", startDate = now + 1_000))

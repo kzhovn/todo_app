@@ -16,6 +16,7 @@ import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.dueText
 import androidx.compose.ui.text.font.FontStyle
 import com.kzhovn.todoapp.data.resolvesText
+import com.kzhovn.todoapp.data.isTimedWait
 import com.kzhovn.todoapp.data.chipDate
 import com.kzhovn.todoapp.data.ReminderKind
 import com.kzhovn.todoapp.data.reminderTimes
@@ -207,7 +208,7 @@ internal fun TypeRow(vm: TaskEditViewModel) {
 // no check-ins).
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun WaitingTiming(vm: TaskEditViewModel, activity: Activity) {
+private fun WaitingTiming(vm: TaskEditViewModel, activity: Activity, onTimer: () -> Unit) {
     val task = vm.task
     SectionLabel(Labels.WAITING)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -236,6 +237,18 @@ private fun WaitingTiming(vm: TaskEditViewModel, activity: Activity) {
             onClear = { vm.task = vm.task.copy(dueDate = null) },
             showLabelWhenSet = false
         )
+        // A timed wait (a workflow's 50 minutes) resolves itself that long after it starts, with a reminder then.
+        PropertyChip(
+            label = Labels.TIMER,
+            valueText = task.durationMinutes?.let(::formatDuration),
+            icon = Icons.Filled.Timer,
+            onClick = onTimer,
+            onClear = { vm.task = vm.task.copy(durationMinutes = null) },
+            showLabelWhenSet = false
+        )
+        if (task.isTimedWait && task.dueDate != null) TogglePill(Labels.REMIND_WHEN_DONE, Icons.Filled.Notifications, on = task.remindAt != null) {
+            vm.task = vm.task.copy(remindAt = if (vm.task.remindAt == null) vm.task.dueDate else null)
+        }
     }
     val now = System.currentTimeMillis()
     val resolves = resolvesText(task)
@@ -341,7 +354,7 @@ private fun QuickDateMenu(expanded: Boolean, label: String, choices: List<DateCh
 @Composable
 internal fun TimingSection(vm: TaskEditViewModel, activity: Activity, onRepeat: () -> Unit, onTimer: () -> Unit) {
     val task = vm.task
-    if (task.type == TaskType.WAITING) return WaitingTiming(vm, activity)
+    if (task.type == TaskType.WAITING) return WaitingTiming(vm, activity, onTimer)
     SectionLabel(Labels.TIMING)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         // A long press offers quick choices: the snooze menu's for Start, today/tomorrow/next week for Due.

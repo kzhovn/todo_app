@@ -37,6 +37,7 @@ import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.repository.TaskRepository
+import com.kzhovn.todoapp.MainActivity
 import com.kzhovn.todoapp.repository.templateSize
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
 import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
@@ -72,7 +73,7 @@ class TemplatesActivity : ComponentActivity() {
                         LazyColumn {
                             items(shown.orEmpty(), key = { it.first.id }) { (template, summary) ->
                                 TemplateRow(template, summary, onOpen = { open(template.id) }) {
-                                    scope.launch { repository.useTemplate(template.id, System.currentTimeMillis())?.let(::open) }
+                                    scope.launch { repository.useTemplate(template.id, System.currentTimeMillis())?.let { opened(repository, it) } }
                                 }
                             }
                         }
@@ -83,6 +84,14 @@ class TemplatesActivity : ComponentActivity() {
     }
 
     private fun open(id: Long) = startActivity(Intent(this, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, id))
+
+    // A list from the template opens in the editor; a workflow has started, so Doing shows instead.
+    private suspend fun opened(repository: TaskRepository, id: Long) {
+        if (!repository.isWorkflow(id)) return open(id)
+        startActivity(Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_MODE, TaskListMode.DOING.name)
+            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        finish()
+    }
 
     companion object {
         fun newTemplateIntent(context: Context): Intent = Intent(context, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_CREATE_AS_TEMPLATE, true)

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Add
 import android.content.Intent
 import com.kzhovn.todoapp.data.DueStatus
 import com.kzhovn.todoapp.data.dueStatus
+import com.kzhovn.todoapp.data.isTimedWait
 import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.ui.theme.LedgerDueToday
 import com.kzhovn.todoapp.ui.theme.LedgerDueTodayText
@@ -250,7 +251,7 @@ internal fun TaskRow(
     // Due styling tracks the *displayed* (inherited) due date, not the task's own possibly-null field,
     // or an inherited due date would render in the neutral colour.
     val now = System.currentTimeMillis()
-    val due = shownDue?.takeUnless { task.isComplete }
+    val due = shownDue?.takeUnless { task.isComplete || task.isTimedWait } // a timed wait shows its time left instead
     val status = due?.let { dueStatus(it.at, now) }
     // A month-old maybe is dimmed (backburner) but stays listed.
     val dim = if (task.isBackburner(now)) BACKBURNER_ALPHA else 1f
@@ -308,7 +309,7 @@ internal fun TaskRow(
                 if (task.isHighPriority) PriorityMark()
                 if (!task.notes.isNullOrBlank()) NotesMark()
             }
-            task.durationMinutes?.let { TimerButton(task, it) }
+            task.durationMinutes?.takeIf { task.type != TaskType.WAITING }?.let { TimerButton(task, it) } // a wait's timer runs by itself
             if (task.isMaybe) {
                 MaybeMark(34.dp)
             } else {

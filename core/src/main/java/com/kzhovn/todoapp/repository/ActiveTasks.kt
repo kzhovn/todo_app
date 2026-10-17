@@ -15,6 +15,7 @@ import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.isChecklistItem
 import com.kzhovn.todoapp.data.isUnder
 import com.kzhovn.todoapp.data.resolveEffective
+import com.kzhovn.todoapp.data.resolvesBy
 import com.kzhovn.todoapp.data.walkParentChain
 
 // Shared by every Active/Doing caller (app, widget, server) so all agree on "now" using the same
@@ -64,12 +65,13 @@ fun computeActiveTasks(
 
     val childrenByParentId = all.groupBy { it.parentId }
 
-    // Under a sequential parent, only the first incomplete child (in sibling order) is workable.
+    // Under a sequential parent, only the first incomplete child (in sibling order) is workable. A wait whose time
+    // has come counts as done already, so a workflow's next step is up on the minute, before anything resolves it.
     val firstOpenChild = mutableMapOf<Long, Task?>()
     fun isSequentiallyBlocked(task: Task): Boolean {
         val parent = task.parentId?.let { allById[it] } ?: return false
         if (!parent.sequential) return false
-        val first = firstOpenChild.getOrPut(parent.id) { childrenByParentId[parent.id].orEmpty().filter { !it.isComplete }.minWithOrNull(TaskOrder) } ?: return false
+        val first = firstOpenChild.getOrPut(parent.id) { childrenByParentId[parent.id].orEmpty().filter { !it.isComplete && !it.resolvesBy(now) }.minWithOrNull(TaskOrder) } ?: return false
         return first.id != task.id
     }
 

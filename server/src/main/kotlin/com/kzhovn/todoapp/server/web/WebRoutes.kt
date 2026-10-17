@@ -113,6 +113,11 @@ fun Route.webRoutes(service: TaskService) {
         call.taskId()?.let(service::stillWaiting)
         call.respondList(service, call.mode())
     }
+    // A running wait's "+10 min", on Doing's Running line.
+    post("/tasks/{id}/more-wait") {
+        call.taskId()?.let(service::moreWait)
+        call.respondList(service, call.mode())
+    }
     // A task with open subtasks asks first, like the phone: complete them too, or move them out.
     post("/tasks/{id}/complete") {
         val id = call.taskId() ?: return@post

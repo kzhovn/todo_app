@@ -21,6 +21,8 @@ import com.kzhovn.todoapp.repository.ContextRepository
 import com.kzhovn.todoapp.repository.TaskRepository
 import com.kzhovn.todoapp.repository.filterDoing
 import com.kzhovn.todoapp.data.waitingToCheck
+import com.kzhovn.todoapp.repository.RunningWait
+import com.kzhovn.todoapp.repository.runningWaits
 import com.kzhovn.todoapp.data.waitingBlocks
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -89,6 +91,12 @@ class TaskListViewModel(
 
     fun stillWaiting(taskId: Long) = act { repository.stillWaiting(taskId, clock()) }
 
+    // Doing's Running line: workflows' waits counting down, each with the step after it (see Workflows.kt).
+    private val _running = MutableStateFlow<List<RunningWait>>(emptyList())
+    val running: StateFlow<List<RunningWait>> = _running
+
+    fun moreWait(taskId: Long) = act { repository.moreWait(taskId, clock()) }
+
     // A change, then the list again. (Room's invalidation also reloads it; the explicit one keeps a list
     // without that feed, as in the tests, current.)
     private fun act(block: suspend () -> Unit) = viewModelScope.launch { block(); reload() }
@@ -123,6 +131,7 @@ class TaskListViewModel(
         val folder = _mode.value?.id
         _dueOutside.value = emptyList()
         _waiting.value = if (mode == TaskListMode.DOING) waitingToCheck(all, now).filter { inMode(it, folder, byId) } else emptyList()
+        _running.value = if (mode == TaskListMode.DOING) runningWaits(all, now).filter { inMode(it.wait, folder, byId) } else emptyList()
         if (_waiting.value.isNotEmpty()) _waitingBlocks.value = waitingBlocks(_waiting.value, repository.getAllDependencyEdges(), byId)
         _tasks.value = when (mode) {
             // The tree roots itself at the mode's folder (OutlinerScreen's rootId).

@@ -9,6 +9,8 @@ import com.kzhovn.todoapp.AppSettings
 import com.kzhovn.todoapp.data.ReminderKind
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.reminderTimes
+import com.kzhovn.todoapp.data.isTimedWait
+import android.os.Build
 
 // A PendingIntent's identity: the full Long id in the Intent's data, so two tasks never collide the way
 // a truncated Int request code would let them. Used by the alarms and the reminder notification.
@@ -24,7 +26,10 @@ class ReminderScheduler(private val context: Context, private val alarmManager: 
             val triggerAt = times[kind]
             // A past time would fire straight away, on save.
             if (triggerAt == null || triggerAt <= now) alarmManager.cancel(pendingIntentFor(task, kind))
-            // Inexact: within a few minutes of triggerAt is fine for a reminder.
+            // A workflow's wait ends on the minute (exact, as TaskTimer's end); for any other reminder, within a few
+            // minutes of triggerAt is fine.
+            else if (task.isTimedWait && kind == ReminderKind.AT && (Build.VERSION.SDK_INT < 31 || alarmManager.canScheduleExactAlarms()))
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntentFor(task, kind))
             else alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntentFor(task, kind))
         }
     }

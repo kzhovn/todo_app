@@ -8,10 +8,13 @@ import com.kzhovn.todoapp.data.itemsIn
 import com.kzhovn.todoapp.data.checklistItems
 import com.kzhovn.todoapp.data.newTaskPositions
 import com.kzhovn.todoapp.quickadd.QuickAdd
+import com.kzhovn.todoapp.quickadd.QuickAddParser
+import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.completed
 import com.kzhovn.todoapp.data.moveOutFolderId
 import com.kzhovn.todoapp.data.newId
+import com.kzhovn.todoapp.data.isTimedWait
 import com.kzhovn.todoapp.data.resolvesBy
 import com.kzhovn.todoapp.recurrence.RecurrenceEngine
 
@@ -30,7 +33,7 @@ data class TaskChanges(
     // The task list as it will be afterwards, for planning a next step on top of this one.
     fun applyTo(all: List<Task>): List<Task> {
         val updated = updates.associateBy { it.id }
-        return all.filter { it.id !in deletes }.map { updated[it.id] ?: it } + creates.map { it.first }
+        return (all.filter { it.id !in deletes } + creates.map { it.first }).map { updated[it.id] ?: it }
     }
 }
 
@@ -50,21 +53,30 @@ private fun descendants(id: Long, all: List<Task>): List<Task> = descendants(lis
 fun openDescendants(id: Long, all: List<Task>): List<Task> = descendants(id, all).filter { !it.type.isContainer && !it.isComplete }
 
 // Completes a task. A repeating one gets its next instance, which keeps the task's contexts (not its
-// dependencies) and gets fresh copies of its subtasks.
+// dependencies) and gets fresh copies of its subtasks. A workflow's step moves the workflow on (planAdvance).
 fun planComplete(all: List<Task>, contexts: Map<Long, Set<Long>>, id: Long, now: Long): TaskChanges {
     val task = all.firstOrNull { it.id == id }?.takeUnless { it.isComplete } ?: return TaskChanges()
     val completed = task.completed(now)
-    val next = RecurrenceEngine.nextInstance(completed, now) ?: return TaskChanges(updates = listOf(completed))
-    val copies = listOf(id to next) + RecurrenceEngine.successorSubtasks(completed, next, descendants(id, all))
-    return TaskChanges(updates = listOf(completed), creates = copies.map { (originalId, copy) -> copy to contexts[originalId].orEmpty() })
+    val next = RecurrenceEngine.nextInstance(completed, now)
+    val done = if (next == null) TaskChanges(updates = listOf(completed)) else {
+        val copies = listOf(id to next) + RecurrenceEngine.successorSubtasks(completed, next, descendants(id, all))
+        TaskChanges(updates = listOf(completed), creates = copies.map { (originalId, copy) -> copy to contexts[originalId].orEmpty() })
+    }
+    val parent = all.firstOrNull { it.id == task.parentId }
+    if (!isWorkflow(parent, all)) return done
+    // A wait resolved late (nothing ran at the minute) still times the next wait from when it ended.
+    val from = task.dueDate?.takeIf { task.isTimedWait && it <= now } ?: now
+    return done + planAdvance(done.applyTo(all), contexts, parent!!.id, from, now)
 }
 
-// Reopens a task, taking back the next instance its completion made if that hasn't been touched since.
+// Reopens a task, taking back the next instance its completion made if that hasn't been touched since, and the
+// wait it started in a workflow.
 fun planUncomplete(all: List<Task>, id: Long): TaskChanges {
     val task = all.firstOrNull { it.id == id }?.takeIf { it.isComplete } ?: return TaskChanges()
     val successor = RecurrenceEngine.untouchedSuccessor(task, all)
     val gone = successor?.let { s -> descendants(s.id, all).map { it.id }.toSet() + s.id }.orEmpty()
-    return TaskChanges(updates = listOf(task.copy(isComplete = false, completedAt = null)), deletes = gone)
+    val reopened = TaskChanges(updates = listOf(task.copy(isComplete = false, completedAt = null)), deletes = gone)
+    return reopened + planUnstartWait(reopened.applyTo(all), task)
 }
 
 // Completes every open descendant first, each on its own (so a repeating subtask still makes its next
@@ -105,9 +117,9 @@ private fun <T> planEach(all: List<Task>, items: List<T>, step: (List<Task>, T) 
 }
 
 // A new task, placed among its siblings as new tasks are (newTaskPositions: it may move a few of them),
-// with the write rules applied. A task with no id yet gets one.
+// with the write rules applied (and a kitchen timer started: startedIfDue). A task with no id yet gets one.
 fun planCreate(all: List<Task>, task: Task, contextIds: Set<Long> = emptySet(), now: Long): TaskChanges {
-    val new = (if (task.id == 0L) task.copy(id = newId()) else task).withRules(now)
+    val new = (if (task.id == 0L) task.copy(id = newId()) else task).withRules(now).startedIfDue(all, now)
     val positions = newTaskPositions(all, new)
     return TaskChanges(
         creates = listOf(new.copy(position = positions[new.id] ?: new.position) to contextIds),
@@ -120,6 +132,13 @@ fun planCreate(all: List<Task>, task: Task, contextIds: Set<Long> = emptySet(), 
 // focus, or another type are not.
 fun checklistItem(text: String, checklistId: Long, plan: (String) -> QuickAdd): Pair<Task, Set<Long>>? =
     plan(text).let { add -> add.task?.takeIf { it.title.isNotBlank() }?.let { it.copy(type = TaskType.TASK, parentId = checklistId) to add.contextIds } }
+
+// A step typed after quick add's arrows: a bare length is a wait ("50m"), anything else is read as quick add reads
+// a task ("wait washing ~50m" a named wait).
+fun projectStep(text: String, projectId: Long, plan: (String) -> QuickAdd): Pair<Task, Set<Long>>? {
+    QuickAddParser.bareLength(text)?.let { return Task(title = Labels.WAIT, type = TaskType.WAITING, durationMinutes = it, parentId = projectId) to emptySet() }
+    return plan(text).let { add -> add.task?.takeIf { it.title.isNotBlank() && it.type != TaskType.FOLDER }?.let { it.copy(parentId = projectId) to add.contextIds } }
+}
 
 // Items into a checklist, each as checklistItem reads it, in order at its end.
 fun planAddItems(all: List<Task>, checklistId: Long, items: List<String>, now: Long, plan: (String) -> QuickAdd): TaskChanges =
@@ -163,6 +182,7 @@ fun planQuickAddWrite(
     val id = created.creates.single().first.id
     items(id)
     add.sections.forEach { (name, sectionItems) -> step(planAddSection(current, id, name, sectionItems, now, plan)) }
+    add.steps.forEach { text -> projectStep(text, id, plan)?.let { (t, c) -> step(planCreate(current, t, c, now)) } }
     if (add.focus) step(TaskChanges(updates = CurrentTask.focus(current, id, now)))
     else if (add.pin) step(TaskChanges(updates = CurrentTask.pin(current, id, now)))
     return total to id
