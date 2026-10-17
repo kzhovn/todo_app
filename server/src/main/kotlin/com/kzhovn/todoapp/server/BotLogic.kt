@@ -9,6 +9,7 @@ import com.kzhovn.todoapp.data.CompleteQuestion
 import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.quickadd.QuickAdd
 import kotlinx.serialization.Serializable
+import net.dv8tion.jda.api.utils.MarkdownSanitizer
 import kotlinx.serialization.encodeToString
 import com.kzhovn.todoapp.sync.SyncJson
 import com.kzhovn.todoapp.sync.SyncRow
@@ -45,6 +46,10 @@ Tap an item's emoji to complete it (un-tap to undo). One with open subtasks asks
 With the morning digest, anything in Doing for 3+ days gets a message (again every 3 days):
 🔽 moves it out (unstars it); reply with `-- step` lines to break it into subtasks.
 """.trimIndent()
+// A title as typed: its `*`, `_` or `~~` shown, not read as Discord formatting (which would also break a done
+// line's strike-through).
+private fun shown(title: String): String = MarkdownSanitizer.escape(title)
+
 private const val MAX_REACTIONS = 20 // Discord's per-message limit on distinct reactions
 private const val MAX_CHARS = 2000 // Discord's message length limit
 
@@ -188,13 +193,13 @@ class BotLogic(private val service: TaskService, private val store: Store) {
     }
 
     fun nudgeText(task: Task, days: Int) =
-        "“${task.title}” has been in Doing for $days days. React $MOVE_OUT to move it out, or reply with `-- step` lines to break it up."
+        "“${shown(task.title)}” has been in Doing for $days days. React $MOVE_OUT to move it out, or reply with `-- step` lines to break it up."
 
     fun recordNudge(messageId: Long, taskId: Long) = saveLink(messageId, MessageLink(nudgeFor = taskId))
 
     // ✅ on a task with open subtasks asks first, as the apps do: a reply, answered by reacting to it.
     fun askText(task: Task, question: CompleteQuestion) =
-        "“${task.title}”: ${question.text} React $DONE: ${question.completeAll.lowercase()}, or $MOVE_OUT: ${question.moveOut.lowercase()} (remove your $DONE to leave it open)."
+        "“${shown(task.title)}”: ${question.text} React $DONE: ${question.completeAll.lowercase()}, or $MOVE_OUT: ${question.moveOut.lowercase()} (remove your $DONE to leave it open)."
 
     fun recordAsk(messageId: Long, taskId: Long) = saveLink(messageId, MessageLink(askFor = taskId))
 
@@ -331,7 +336,7 @@ class BotLogic(private val service: TaskService, private val store: Store) {
     }
 
     private fun describe(task: Task, dues: DueDates): String {
-        val title = task.title.take(120) + (if (task.isMaybe) " ?" else "") + (if (task.isHighPriority) " !" else "")
+        val title = shown(task.title.take(120)) + (if (task.isMaybe) " ?" else "") + (if (task.isHighPriority) " !" else "")
         // In the same words as every other list ("due today", "due Fri", "due Oct 12").
         val due = dues.of(task)?.let { " · " + dueText(it, service.now()) }.orEmpty()
         return title + due

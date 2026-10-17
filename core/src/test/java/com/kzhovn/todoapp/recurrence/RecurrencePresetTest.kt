@@ -94,4 +94,29 @@ class RecurrencePresetTest {
         val selection = recurrenceSelectionFromTask(RecurrenceType.RRULE, "FREQ=YEARLY")
         assertEquals(RecurrenceSelection(RecurrencePreset.NONE), selection)
     }
+
+    @Test
+    fun `an imported rule's date-only UNTIL shows as that day`() {
+        val s = recurrenceSelectionFromTask(RecurrenceType.RRULE, "FREQ=WEEKLY;BYDAY=MO,TH;UNTIL=20261020")
+        assertEquals(com.kzhovn.todoapp.data.dayStart(java.time.LocalDate.of(2026, 10, 20)), s.until)
+        assertEquals((1 shl 1) or (1 shl 4), s.weekdaysMask)
+    }
+
+    @Test
+    fun `a rule that doesn't parse or the picker can't show is none`() {
+        assertEquals(RecurrencePreset.NONE, recurrenceSelectionFromTask(RecurrenceType.RRULE, "FREQ=NOPE").preset)
+        assertEquals(RecurrencePreset.NONE, recurrenceSelectionFromTask(RecurrenceType.RRULE, "FREQ=YEARLY").preset)
+    }
+
+    @Test
+    fun `the picker reads back what it writes`() {
+        listOf(
+            RecurrenceSelection(RecurrencePreset.CALENDAR, n = 2, unit = RecurrenceUnit.WEEK, weekdaysMask = 0b0101010),
+            RecurrenceSelection(RecurrencePreset.CALENDAR, unit = RecurrenceUnit.MONTH, monthlyNth = -1, monthlyWeekday = 5, count = 4),
+            RecurrenceSelection(RecurrencePreset.CALENDAR, unit = RecurrenceUnit.DAY, until = com.kzhovn.todoapp.data.dayStart(java.time.LocalDate.of(2026, 12, 31))),
+        ).forEach { picked ->
+            val (type, rule) = picked.toTaskFields()
+            assertEquals(picked, recurrenceSelectionFromTask(type, rule))
+        }
+    }
 }

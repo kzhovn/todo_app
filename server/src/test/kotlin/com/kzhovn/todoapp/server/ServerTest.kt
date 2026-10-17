@@ -392,6 +392,13 @@ class ServerTest {
     }
 
     @Test
+    fun `list lines show a title's markdown characters as typed`() {
+        service.create(Task(title = "fix *args* and ~~old~~ code", isStarred = true))
+        val line = logic.listChunks(service.doing()).single().content
+        assertTrue(line, line.contains("fix \\*args\\* and \\~~old\\~~ code"))
+    }
+
+    @Test
     fun `source-message reactions complete, delete, star, and undo`() {
         assertTrue(logic.onAdd(1L, "https://discord.com/channels/@me/2/1", "-- call mom -d tomorrow"))
         val id = service.tasks().single().id

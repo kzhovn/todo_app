@@ -2,7 +2,13 @@ package com.kzhovn.todoapp.recurrence
 
 import com.kzhovn.todoapp.data.RecurrenceType
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.dayStart
+import com.kzhovn.todoapp.data.startOfDay
+import org.dmfs.rfc5545.DateTime
+import org.dmfs.rfc5545.recur.Freq
+import org.dmfs.rfc5545.recur.RecurrenceRule
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -35,22 +41,15 @@ private val UNTIL_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
 private fun weekdaysMaskToByDay(mask: Int): String =
     (0..6).filter { mask and (1 shl it) != 0 }.joinToString(",") { WEEKDAY_CODES[it] }
 
-private fun byDayToWeekdaysMask(byDay: String): Int =
-    byDay.split(",").fold(0) { acc, code ->
-        val idx = WEEKDAY_CODES.indexOf(code)
-        if (idx >= 0) acc or (1 shl idx) else acc
-    }
-
 // UNTIL is the end of that local day, in UTC, as RFC 5545 wants for a date-time start.
 private fun untilToRule(day: Long): String {
     val endOfDay = Instant.ofEpochMilli(day).atZone(ZoneId.systemDefault()).toLocalDate().atTime(23, 59, 59).atZone(ZoneId.systemDefault())
     return endOfDay.withZoneSameInstant(ZoneOffset.UTC).format(UNTIL_FORMAT)
 }
 
-private fun untilFromRule(value: String): Long? = runCatching {
-    java.time.LocalDateTime.parse(value, UNTIL_FORMAT).atZone(ZoneOffset.UTC).withZoneSameInstant(ZoneId.systemDefault())
-        .toLocalDate().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-}.getOrNull()
+// The local day an UNTIL ends on: a date as it reads, a UTC time on whatever day it is here.
+private fun untilDay(until: DateTime): Long =
+    if (until.isAllDay || until.isFloating) dayStart(LocalDate.of(until.year, until.month + 1, until.dayOfMonth)) else startOfDay(until.timestamp)
 
 fun RecurrenceSelection.toTaskFields(): Pair<RecurrenceType?, String?> = when (preset) {
     RecurrencePreset.NONE -> null to null
@@ -76,8 +75,8 @@ fun RecurrenceSelection.toTaskFields(): Pair<RecurrenceType?, String?> = when (p
     }
 }
 
-// Unrecognized FREQ values fall back to NONE for display purposes rather than crashing — this is
-// a preset picker, not a general RRULE parser (RecurrenceEngine itself handles arbitrary rules).
+// What the picker shows for a task's repeat. One it can't show (yearly, or a rule that doesn't parse) is NONE;
+// RecurrenceEngine still runs any rule lib-recur reads.
 fun recurrenceSelectionFromTask(recurrenceType: RecurrenceType?, recurrenceRule: String?): RecurrenceSelection {
     if (recurrenceType == null || recurrenceRule == null) return RecurrenceSelection(RecurrencePreset.NONE)
     return when (recurrenceType) {
@@ -86,28 +85,25 @@ fun recurrenceSelectionFromTask(recurrenceType: RecurrenceType?, recurrenceRule:
             RecurrenceSelection(RecurrencePreset.AFTER_COMPLETION_N_DAYS, n = recurrenceRule.trimEnd('w', 'm').toIntOrNull() ?: 1, unit = unit)
         }
         RecurrenceType.RRULE -> {
-            val parts = recurrenceRule.split(";").mapNotNull {
-                val eq = it.indexOf('=')
-                if (eq < 0) null else it.substring(0, eq) to it.substring(eq + 1)
-            }.toMap()
-            val unit = when (parts["FREQ"]) {
-                "DAILY" -> RecurrenceUnit.DAY
-                "WEEKLY" -> RecurrenceUnit.WEEK
-                "MONTHLY" -> RecurrenceUnit.MONTH
+            val rule = runCatching { RecurrenceRule(recurrenceRule) }.getOrNull() ?: return RecurrenceSelection(RecurrencePreset.NONE)
+            val unit = when (rule.freq) {
+                Freq.DAILY -> RecurrenceUnit.DAY
+                Freq.WEEKLY -> RecurrenceUnit.WEEK
+                Freq.MONTHLY -> RecurrenceUnit.MONTH
                 else -> return RecurrenceSelection(RecurrencePreset.NONE)
             }
-            val byDay = parts["BYDAY"]
+            val byDay = rule.byDayPart.orEmpty()
             // Monthly "1SA" / "-1FR": the nth weekday.
-            val nth = if (unit == RecurrenceUnit.MONTH) byDay?.let { Regex("^(-?\\d)([A-Z]{2})$").find(it) } else null
+            val nth = byDay.singleOrNull()?.takeIf { unit == RecurrenceUnit.MONTH && it.pos != 0 }
             RecurrenceSelection(
                 RecurrencePreset.CALENDAR,
-                n = parts["INTERVAL"]?.toIntOrNull() ?: 1,
+                n = rule.interval,
                 unit = unit,
-                weekdaysMask = if (unit == RecurrenceUnit.WEEK) byDay?.let(::byDayToWeekdaysMask) ?: 0 else 0,
-                monthlyNth = nth?.groupValues?.get(1)?.toInt(),
-                monthlyWeekday = nth?.let { WEEKDAY_CODES.indexOf(it.groupValues[2]).coerceAtLeast(0) } ?: 6,
-                until = parts["UNTIL"]?.let(::untilFromRule),
-                count = parts["COUNT"]?.toIntOrNull()
+                weekdaysMask = if (unit == RecurrenceUnit.WEEK) byDay.fold(0) { mask, d -> mask or (1 shl d.weekday.ordinal) } else 0,
+                monthlyNth = nth?.pos,
+                monthlyWeekday = nth?.weekday?.ordinal ?: 6,
+                until = rule.until?.let(::untilDay),
+                count = rule.count
             )
         }
     }
