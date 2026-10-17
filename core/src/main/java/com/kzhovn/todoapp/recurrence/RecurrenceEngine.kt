@@ -75,6 +75,28 @@ object RecurrenceEngine {
         }.getOrDefault(emptyList())
     }
 
+    // The calendar's coming times of a repeat, after the one open now, up to `until`: on its due day if it has
+    // one (kept the same gap after the start, as nextInstance does), else its start. A schedule shows each time;
+    // a repeat counted from completion only the next, as if this one were done on time.
+    fun upcoming(task: Task, now: Long, until: Long): List<Long> {
+        val type = task.recurrenceType ?: return emptyList()
+        val rule = task.recurrenceRule ?: return emptyList()
+        val anchor = task.startDate ?: now
+        val shift = task.dueDate?.minus(anchor) ?: 0L
+        val starts = when (type) {
+            RecurrenceType.AFTER_COMPLETION -> listOfNotNull(afterCompletion(rule, maxOf(anchor, now)))
+            RecurrenceType.RRULE -> runCatching {
+                val iterator = RecurrenceRule(rule).iterator(anchor, TimeZone.getDefault())
+                val after = maxOf(anchor, now)
+                // ponytail: capped walk, enough for a daily repeat over years of overdue; a rule that never lands stops here too.
+                generateSequence { if (iterator.hasNext()) iterator.next().timestamp else null }
+                    .take(MAX_WALK).dropWhile { it <= after }.takeWhile { it + shift < until }.toList()
+            }.getOrDefault(emptyList())
+        }
+        return starts.map { it + shift }
+    }
+    private const val MAX_WALK = 5000
+
     // "Skip this time": the same task moved on to its next time, as if done now (or at its start, if
     // that's still to come), without being done. Null when there's no next time (the last of "N times").
     fun skip(task: Task, now: Long): Task? = nextInstance(task, maxOf(now, task.startDate ?: now))?.let { next ->

@@ -4,7 +4,8 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import kotlinx.serialization.Serializable
 
-enum class ContextType { TIME, PLACE }
+// LABEL: just a name to filter by ("errands", "laptop"), with no place or time; it never holds a task back.
+enum class ContextType { TIME, PLACE, LABEL }
 
 @Serializable
 @Entity(tableName = "contexts")
@@ -24,9 +25,10 @@ fun contextProblem(context: TaskContext, windows: List<ContextTimeWindow>): Stri
     else -> null
 }
 
-// "Wifi: Home", or "09:00–17:00 Mon Tue", as the contexts lists show it.
+// "Wifi: Home", "09:00–17:00 Mon Tue" or "Filter only", as the contexts lists show it.
 fun describeContext(context: TaskContext, windows: List<ContextTimeWindow>): String = when (context.type) {
     ContextType.PLACE -> "Wifi: ${context.wifiSsid}"
+    ContextType.LABEL -> Labels.LABEL_CONTEXT
     ContextType.TIME -> windows.joinToString(", ") { w ->
         val days = if (w.daysMask == ContextTimeWindow.ALL_DAYS) "every day"
         else Labels.WEEKDAYS.filter { (bit, _) -> w.daysMask and (1 shl bit) != 0 }.joinToString(" ") { it.second }

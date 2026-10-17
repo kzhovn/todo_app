@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.Icon
@@ -62,6 +63,7 @@ import kotlinx.coroutines.launch
 fun AppDrawer(
     drawerState: DrawerState,
     reviewSelected: Boolean = false,
+    calendarSelected: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -105,6 +107,9 @@ fun AppDrawer(
                 )
                 HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
                 Item(Labels.FOCUS, Icons.Filled.CenterFocusStrong, false) { context.startActivity(Intent(context, FocusActivity::class.java)) }
+                Item(Labels.CALENDAR, Icons.Filled.CalendarMonth, calendarSelected) {
+                    if (!calendarSelected) context.startActivity(Intent(context, CalendarActivity::class.java))
+                }
                 Item(Labels.REVIEW, Icons.Filled.BarChart, reviewSelected) {
                     if (!reviewSelected) context.startActivity(Intent(context, ReviewActivity::class.java))
                 }

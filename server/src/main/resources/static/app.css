@@ -303,7 +303,8 @@ form.inline button { padding: 6px 10px; border: 1px solid var(--border); border-
 .window-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; width: 100%; }
 .window-row input[type=time] { padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
 .context-form:has(input[name=type][value=PLACE]:checked) .time-only,
-.context-form:has(input[name=type][value=TIME]:checked) .place-only { display: none; }
+.context-form:has(input[name=type][value=TIME]:checked) .place-only,
+.context-form:has(input[name=type][value=LABEL]:checked) :is(.place-only, .time-only) { display: none; }
 
 /* Parity: bulk selection, the stalled-project prompt, the subtasks question, new-item links */
 .list-tools { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 8px 12px 0; font-size: 13px; color: var(--muted); }
@@ -624,3 +625,40 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .section-menu .pop button { text-align: left; padding: 6px 8px; border-radius: 5px; }
 .section-menu .pop button:hover { background: var(--tile); }
 .section-menu .pop .danger { color: var(--overdue); }
+/* The calendar: the kinds of date (a colour each, on chips and in the grid), FullCalendar's month in the app's
+   colours, and the agenda's day headings. */
+.k-due { --c: var(--accent); } .k-overdue { --c: var(--overdue); } .k-start { --c: var(--good); } .k-repeat { --c: var(--muted); }
+.k-waiting { --c: var(--today); } .k-reminder { --c: var(--star); } .k-done { --c: var(--check); }
+.kinds { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 20px 0; }
+.kind { display: inline-flex; align-items: center; gap: 6px; }
+.kind .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.kind.k-repeat .dot { background: none; border: 1.5px solid var(--c); }
+.calendar { margin: 10px 20px 4px; font-size: 13px;
+  --fc-border-color: var(--border); --fc-page-bg-color: var(--bg); --fc-neutral-bg-color: var(--tile); --fc-today-bg-color: transparent;
+  --fc-button-text-color: var(--ink); --fc-button-bg-color: var(--panel); --fc-button-border-color: var(--border);
+  --fc-button-hover-bg-color: var(--tile); --fc-button-hover-border-color: var(--border);
+  --fc-button-active-bg-color: var(--accent-soft); --fc-button-active-border-color: var(--accent); --fc-more-link-text-color: var(--muted); }
+.calendar .fc-toolbar-title { font-size: 16px; }
+.calendar .fc-button { font-size: 13px; padding: 3px 10px; box-shadow: none !important; }
+.calendar .fc-col-header-cell-cushion, .calendar .fc-daygrid-day-number { color: var(--muted); text-decoration: none; font-size: 12px; }
+.calendar .fc-daygrid-day { cursor: pointer; }
+.calendar .fc-day-today .fc-daygrid-day-number { background: var(--accent); color: #fff; border-radius: 9px; padding: 1px 6px; margin: 2px; font-weight: 600; }
+.calendar .fc-day.picked { background: var(--accent-soft); }
+.calendar .fc-day-other .fc-daygrid-day-number { opacity: .5; }
+.calendar .fc-event { background: color-mix(in srgb, var(--c, var(--accent)) 14%, transparent); border: 0; border-left: 2px solid var(--c, var(--accent)); border-radius: 3px; cursor: pointer; }
+.calendar .fc-event .fc-event-title { color: var(--ink); font-size: 11.5px; }
+.calendar .fc-event.k-repeat { background: none; border-left-style: dashed; }
+.calendar .fc-event.k-repeat .fc-event-title { color: var(--muted); font-style: italic; }
+.calendar .fc-event.k-done .fc-event-title { color: var(--muted); text-decoration: line-through; }
+.calendar .fc-event.maybe { opacity: .5; }
+.calendar .fc-popover { background: var(--panel); border-color: var(--border); }
+.agenda-day { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: var(--muted); padding: 14px 20px 4px; }
+.agenda-day.today { color: var(--ink); }
+.agenda-day.overdue { color: var(--overdue); }
+.agenda-day .all-upcoming { margin-left: auto; font-weight: 400; }
+.list .empty + .empty { display: none; }
+.row.quiet { cursor: default; }
+.row.quiet.done .title a { color: var(--muted); text-decoration: line-through; }
+.quiet-mark { width: 16px; height: 16px; margin: 0 4px 0 9px; color: var(--muted); flex-shrink: 0; }
+.day-add { margin: 10px 20px; }
+.day-add input { width: 100%; }

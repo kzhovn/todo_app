@@ -37,6 +37,35 @@ object Labels {
     fun nothingDoneIn(window: String) = "Nothing completed in $window."
     fun late(ms: Long) = "${com.kzhovn.todoapp.repository.shortAge(ms, "under a day")} late"
 
+    // Calendar (see CalendarDates.kt)
+    const val CALENDAR = "Calendar"
+    const val TODAY = "Today"
+    const val OVERDUE = "Overdue"
+    const val ALL_UPCOMING = "All upcoming"
+    const val NOTHING_THAT_DAY = "Nothing that day."
+    fun dateKind(kind: DateKind) = when (kind) {
+        DateKind.DUE -> "Due"; DateKind.START -> "Starts"; DateKind.REPEAT -> "Repeats"
+        DateKind.WAITING -> WAITING; DateKind.REMINDER -> "Reminders"; DateKind.DONE -> "Done"
+    }
+    fun addTo(day: java.time.LocalDate) = "Add to ${dayName(day, "MMM d")}…"
+    // An agenda heading: "Overdue", "Today · Oct 16", "Tomorrow · Oct 17", "Mon · Oct 19".
+    fun agendaHeading(day: java.time.LocalDate?, today: java.time.LocalDate): String = when (day) {
+        null -> OVERDUE
+        today -> "$TODAY · ${dayName(day, "MMM d")}"
+        today.plusDays(1) -> "$SNOOZE_TOMORROW · ${dayName(day, "MMM d")}"
+        else -> dayName(day, if (day.year == today.year) "EEE · MMM d" else "EEE · MMM d, yyyy")
+    }
+    private fun dayName(day: java.time.LocalDate, pattern: String) = day.format(java.time.format.DateTimeFormatter.ofPattern(pattern, java.util.Locale.US))
+    // What put a row on its day, after its title; null for a due date, which the row already shows.
+    fun dateTag(entry: CalendarEntry): String? = when (entry.kind) {
+        DateKind.DUE -> null
+        DateKind.START -> "starts" + if (hasTime(entry.at)) " " + timeText(entry.at) else ""
+        DateKind.REPEAT -> "repeats"
+        DateKind.WAITING -> if (entry.task.dueDate != null) "resolves" else "check in"
+        DateKind.REMINDER -> "reminder " + timeText(entry.at)
+        DateKind.DONE -> "done"
+    }
+
     // Focus mode
     const val FOCUS = "Focus"
     const val FOCUS_DONE = "Done!"
@@ -49,6 +78,7 @@ object Labels {
     const val NEW_CONTEXT = "New context"
     const val PLACE_CONTEXT = "Place (wifi)"
     const val TIME_CONTEXT = "Time window"
+    const val LABEL_CONTEXT = "Filter only"
 
     // Repeat
     const val DONT_REPEAT = "Don't repeat"

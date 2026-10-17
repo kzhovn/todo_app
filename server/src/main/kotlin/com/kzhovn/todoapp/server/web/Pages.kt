@@ -558,7 +558,7 @@ private fun HTML.settingsPage(service: TaskService) = shellPage(service, "Raspbe
 private fun HTML.contextsPage(service: TaskService, form: ContextForm) = shellPage(service, "Raspberry · Contexts", "/contexts") {
     div(classes = "contexts") {
         h1 { +"Contexts" }
-        p(classes = "hint") { +"Tasks with a context are active only while it holds: on a wifi network (the phone checks), or within a time window." }
+        p(classes = "hint") { +"Tasks with a context are active only while it holds: on a wifi network (the phone checks), or within a time window. A filter-only one just groups tasks to search by." }
         service.contexts().sortedBy { it.name.lowercase() }.forEach { c ->
             div(classes = "context-row") {
                 span(classes = "context-name") { +"@${c.name}" }
@@ -581,6 +581,7 @@ private fun HTML.contextsPage(service: TaskService, form: ContextForm) = shellPa
             div(classes = "pills") {
                 label(classes = "pill") { radioInput(name = "type") { value = ContextType.PLACE.name; checked = c.type == ContextType.PLACE }; +Labels.PLACE_CONTEXT }
                 label(classes = "pill") { radioInput(name = "type") { value = ContextType.TIME.name; checked = c.type == ContextType.TIME }; +Labels.TIME_CONTEXT }
+                label(classes = "pill") { radioInput(name = "type") { value = ContextType.LABEL.name; checked = c.type == ContextType.LABEL }; +Labels.LABEL_CONTEXT }
             }
             div(classes = "field place-only") {
                 span(classes = "field-label") { +"Wifi network name (SSID)" }

@@ -77,6 +77,7 @@ fun computeActiveTasks(
         val ctx = allContexts[contextId] ?: return true
         return when (ctx.type) {
             ContextType.PLACE -> ctx.isCurrentlySatisfied
+            ContextType.LABEL -> true
             ContextType.TIME -> windowsByContext[contextId].orEmpty().any { w ->
                 (w.daysMask and todayMask) != 0 &&
                     if (w.windowStartMinute <= w.windowEndMinute) {

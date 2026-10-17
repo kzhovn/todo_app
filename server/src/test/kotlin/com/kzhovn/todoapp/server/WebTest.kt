@@ -137,6 +137,30 @@ class WebTest {
     }
 
     @Test
+    fun `the calendar shows due dates, a chip adds starts, and a picked day's quick add is due that day`() = web {
+        val today = java.time.LocalDate.now()
+        service.create(Task(title = "Renew passport", dueDate = com.kzhovn.todoapp.data.dayStart(today.plusDays(1))))
+        service.create(Task(title = "Plan trip", startDate = com.kzhovn.todoapp.data.dayStart(today.plusDays(2))))
+        assertEquals(HttpStatusCode.OK, client.get("/calendar").status)
+        assertEquals(HttpStatusCode.OK, client.get("/static/fullcalendar/index.global.min.js").status)
+        val range = "start=${today.minusDays(7)}&end=${today.plusDays(30)}"
+        val events = client.get("/calendar/events?$range").bodyAsText()
+        assertTrue(events.contains("Renew passport"))
+        assertFalse(events.contains("Plan trip"))
+
+        val flipped = client.post("/calendar/kind/start?mode=CALENDAR")
+        val cookie = flipped.headers[HttpHeaders.SetCookie]!!.substringBefore(';')
+        assertTrue(flipped.bodyAsText().let { it.contains(">Plan trip<") && it.contains(" · starts<") })
+        assertTrue(client.get("/calendar/events?$range") { header(HttpHeaders.Cookie, cookie) }.bodyAsText().contains("Plan trip"))
+
+        val day = today.plusDays(3)
+        val picked = client.get("/list/calendar?day=$day").bodyAsText()
+        assertTrue(picked.contains(Labels.NOTHING_THAT_DAY))
+        client.submitForm("/calendar/add?day=$day&mode=CALENDAR", parameters { append("text", "Pay deposit") })
+        assertEquals(day, com.kzhovn.todoapp.data.localDay(service.tasks().single { it.title == "Pay deposit" }.dueDate!!))
+    }
+
+    @Test
     fun `the All tree hides completed tasks as the phone does`() = web {
         val done = service.create(Task(title = "Old milestone"))
         service.create(Task(title = "Next step", parentId = done.id))

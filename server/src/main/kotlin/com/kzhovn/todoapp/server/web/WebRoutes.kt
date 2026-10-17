@@ -24,11 +24,20 @@ import io.ktor.server.routing.post
 import io.ktor.util.AttributeKey
 import kotlinx.html.div
 import kotlinx.html.stream.createHTML
+import com.kzhovn.todoapp.data.DEFAULT_DATE_KINDS
+import com.kzhovn.todoapp.data.DateKind
+import com.kzhovn.todoapp.data.localDay
+import java.time.LocalDate
+import java.time.YearMonth
 
 
-// From the webjar on the classpath, so there's no CDN and no vendored copy; served at /static/$HTMX.
+// From webjars on the classpath, so there's no CDN and no vendored copy; each served at /static/<its key>.
 internal const val HTMX = "htmx/htmx.min.js"
-internal val htmx: ByteArray = Route::class.java.classLoader.getResource("META-INF/resources/webjars/htmx.org/2.0.11/dist/htmx.min.js")!!.readBytes()
+internal const val FULLCALENDAR = "fullcalendar/index.global.min.js" // the calendar page's month grid
+internal val webjars: Map<String, ByteArray> = mapOf(
+    HTMX to "htmx.org/2.0.11/dist/htmx.min.js",
+    FULLCALENDAR to "fullcalendar/6.1.15/index.global.min.js",
+).mapValues { (_, path) -> Route::class.java.classLoader.getResource("META-INF/resources/webjars/$path")!!.readBytes() }
 
 // Static files never change under a URL (asset() puts a hash of the file in it), so browsers keep them.
 private const val CACHE_FOR_GOOD = "max-age=31536000, immutable"
@@ -36,11 +45,13 @@ private const val CACHE_FOR_GOOD = "max-age=31536000, immutable"
 // No login here: Caddy's basic_auth guards every web page, and Main only mounts these routes when the
 // server listens on loopback, i.e. is reachable solely through Caddy.
 fun Route.webRoutes(service: TaskService) {
-    // Explicit route: staticResources() treats dots in a resource path as package separators, which
+    // Explicit routes: staticResources() treats dots in a resource path as package separators, which
     // mangles the webjar's "htmx.org/2.0.11" directory.
-    get("/static/$HTMX") {
-        call.response.header(HttpHeaders.CacheControl, CACHE_FOR_GOOD)
-        call.respondBytes(htmx, ContentType.Text.JavaScript)
+    webjars.forEach { (path, bytes) ->
+        get("/static/$path") {
+            call.response.header(HttpHeaders.CacheControl, CACHE_FOR_GOOD)
+            call.respondBytes(bytes, ContentType.Text.JavaScript)
+        }
     }
     staticResources("/static", "static") { modify { _, call -> call.response.header(HttpHeaders.CacheControl, CACHE_FOR_GOOD) } }
 
@@ -64,6 +75,7 @@ fun Route.webRoutes(service: TaskService) {
     pageRoutes(service)
     focusRoutes(service)
     templateRoutes(service)
+    calendarRoutes(service)
     timerRoutes(service)
 
     // The All tree's outliner actions (app.js sends them from keys and drag).
@@ -177,13 +189,27 @@ internal fun ApplicationCall.mode() =
 
 // A folder's view of the All tree (?folder=), which every action on it carries along.
 internal fun ApplicationCall.folder() = request.queryParameters["folder"]?.toLongOrNull()
-internal fun ApplicationCall.listQuery() = mode().name + (folder()?.let { "&folder=$it" } ?: "")
-internal fun ApplicationCall.listPath() = mode().path + (folder()?.let { "?folder=$it" } ?: "")
+internal fun ApplicationCall.listQuery() = listData(mode()).q
+internal fun ApplicationCall.listPath() = listData(mode()).path
 
 internal fun ApplicationCall.listData(service: TaskService, mode: ListMode, selected: Long? = null): ListData {
     service.ensureFolderColors()
-    return ListData(service, mode, ids(COLLAPSED), ids(LATER), ids(SECTIONS), folder = folder(), selected = selected)
+    return ListData(service, mode, ids(COLLAPSED), ids(LATER), ids(SECTIONS), folder = folder(), selected = selected, calendar = calendarView(mode, service.now()))
 }
+
+// Just the list's query and path, without working out the list.
+private fun ApplicationCall.listData(mode: ListMode) = ListPlace(mode, folder(), calendarView(mode, System.currentTimeMillis()))
+
+// The calendar's month (?month=2026-10, else this one) and picked day (?day=2026-10-20), which every action on
+// it carries along, and the kinds of date shown: the default's, with those flipped by this browser's chips.
+internal fun ApplicationCall.calendarView(mode: ListMode, now: Long): CalendarView? {
+    if (mode != ListMode.CALENDAR) return null
+    val q = request.queryParameters
+    val month = q["month"]?.let { runCatching { YearMonth.parse(it) }.getOrNull() } ?: YearMonth.from(localDay(now))
+    val flipped = ids(KINDS).mapNotNull { DateKind.entries.getOrNull(it.toInt()) }.toSet()
+    return CalendarView(month, q["day"]?.let { runCatching { LocalDate.parse(it) }.getOrNull() }, (DEFAULT_DATE_KINDS - flipped) + (flipped - DEFAULT_DATE_KINDS))
+}
+internal fun ApplicationCall.flipKind(kind: DateKind) = toggleIn(KINDS, kind.ordinal.toLong())
 
 internal suspend fun ApplicationCall.respondList(service: TaskService, mode: ListMode, extra: String? = null) {
     // A focus session started (here or elsewhere): the page reloads, into it.
@@ -240,6 +266,9 @@ private val COLLAPSED = IdCookie("collapsed", maxAge = 365 * 24 * 3600)
 
 // Active's folded folder sections, remembered for a year like the tree's folds.
 private val SECTIONS = IdCookie("sections", maxAge = 365 * 24 * 3600)
+
+// The calendar's kinds of date flipped from the default (by ordinal), remembered for a year.
+private val KINDS = IdCookie("kinds", maxAge = 365 * 24 * 3600)
 
 // Stalled projects put off with "Later": for this browser session, like the phone's (which asks
 // again the next time the app starts).

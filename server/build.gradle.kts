@@ -16,6 +16,8 @@ dependencies {
     implementation("io.ktor:ktor-server-html-builder:3.1.3")
     // htmx as a webjar: served from the classpath, so there's no CDN and no vendored copy to update.
     runtimeOnly("org.webjars.npm:htmx.org:2.0.11")
+    // Its one-file bundle has the plugins in it already.
+    runtimeOnly("org.webjars.npm:fullcalendar:6.1.15") { isTransitive = false }
     implementation("org.xerial:sqlite-jdbc:3.53.4.0")
     implementation("net.dv8tion:JDA:5.6.1") { exclude(module = "opus-java") }
     implementation("org.slf4j:slf4j-simple:2.0.20")

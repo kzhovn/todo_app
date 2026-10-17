@@ -177,6 +177,8 @@ class ContextsActivity : ComponentActivity() {
                     SelectablePill(label = Labels.PLACE_CONTEXT, selected = type == ContextType.PLACE, onClick = { type = ContextType.PLACE })
                     Spacer(Modifier.width(12.dp))
                     SelectablePill(label = Labels.TIME_CONTEXT, selected = type == ContextType.TIME, onClick = { type = ContextType.TIME })
+                    Spacer(Modifier.width(12.dp))
+                    SelectablePill(label = Labels.LABEL_CONTEXT, selected = type == ContextType.LABEL, onClick = { type = ContextType.LABEL })
                 }
                 Spacer(Modifier.height(8.dp))
                 if (type == ContextType.PLACE) {
@@ -205,7 +207,7 @@ class ContextsActivity : ComponentActivity() {
                             )
                         }
                     }
-                } else {
+                } else if (type == ContextType.TIME) {
                     Column {
                         windows.forEachIndexed { index, window ->
                             WindowRow(

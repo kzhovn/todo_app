@@ -65,10 +65,31 @@ import kotlinx.html.summary
 import kotlinx.html.textInput
 import kotlinx.html.title
 import kotlinx.html.unsafe
+import com.kzhovn.todoapp.data.AgendaDay
+import com.kzhovn.todoapp.data.DateKind
+import com.kzhovn.todoapp.data.agenda
+import java.time.LocalDate
+import java.time.YearMonth
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.CRC32
 
-enum class ListMode(val label: String) { DOING(Labels.DOING), ACTIVE(Labels.ACTIVE), ALL(Labels.ALL) }
+// The calendar (CalendarPage.kt) is a list too, so its agenda's rows act and re-render as the others do; it
+// sits under More, not with the three lists.
+enum class ListMode(val label: String) { DOING(Labels.DOING), ACTIVE(Labels.ACTIVE), ALL(Labels.ALL), CALENDAR(Labels.CALENDAR) }
+val LISTS = ListMode.entries - ListMode.CALENDAR
+
+// The calendar's month on screen, the day picked in it (null: the agenda runs on), and the kinds of date shown.
+data class CalendarView(val month: YearMonth, val day: LocalDate?, val kinds: Set<DateKind>)
+
+// Where a list is: its mode, a folder's view of the All tree, the calendar's month and day.
+class ListPlace(val mode: ListMode, val folder: Long?, val calendar: CalendarView?) {
+    // In a URL's query ("mode=ALL&folder=12" goes in as `?mode=$q`), so an action on a row re-renders the same
+    // view; `path` is the page itself.
+    val q: String get() = mode.name + extra("&")
+    val path: String get() = mode.path + extra("?")
+    private fun extra(first: String) = listOfNotNull(folder?.let { "folder=$it" }, calendar?.let { "month=${it.month}" }, calendar?.day?.let { "day=$it" })
+        .joinToString("&").let { if (it.isEmpty()) "" else first + it }
+}
 
 
 // Everything a list needs, computed once per request from the live task set. `collapsed`: the All
@@ -83,12 +104,12 @@ class ListData(
     val folded: Set<Long> = emptySet(), // Active's folded folder sections; 0 = no folder
     val now: Long = service.now(),
     val folder: Long? = null,
-    val selected: Long? = null
+    val selected: Long? = null,
+    val calendar: CalendarView? = null
 ) {
-    // This list in a URL's query ("mode=ALL&folder=12" goes in as `?mode=$q`), so an action on a row
-    // re-renders the same view; `path` is the page itself.
-    val q: String get() = mode.name + (folder?.let { "&folder=$it" } ?: "")
-    val path: String get() = mode.path + (folder?.let { "?folder=$it" } ?: "")
+    private val place = ListPlace(mode, folder, calendar)
+    val q: String get() = place.q
+    val path: String get() = place.path
     val title: String get() = folder?.let { byId[it]?.title } ?: mode.label
 
     val all: List<Task> = service.tasks()
@@ -113,7 +134,10 @@ class ListData(
     val tasks: List<Task> = when (mode) {
         ListMode.DOING -> doing
         ListMode.ACTIVE -> active
-        ListMode.ALL -> emptyList() // the tree is rendered from `children`
+        ListMode.ALL, ListMode.CALENDAR -> emptyList() // the tree is rendered from `roots`, the calendar from `agenda`
+    }
+    val agenda: List<AgendaDay> by lazy {
+        calendar?.let { agenda(all, it.month, it.day, it.kinds, now, service.reminderHour(), modeFolder?.id) }.orEmpty()
     }
 
     private val dues = service.dueDates()
@@ -206,7 +230,7 @@ private val iconSprite = Icon.entries.joinToString("", "<svg class=\"sprite\" ar
 // file has to be a new URL.
 private val assetVersions = ConcurrentHashMap<String, String>()
 internal fun asset(path: String): String = "/static/$path?v=" + assetVersions.getOrPut(path) {
-    val bytes = if (path == HTMX) htmx else Icon::class.java.classLoader.getResource("static/$path")!!.readBytes()
+    val bytes = webjars[path] ?: Icon::class.java.classLoader.getResource("static/$path")!!.readBytes()
     CRC32().apply { update(bytes) }.value.toString(36)
 }
 
@@ -235,6 +259,7 @@ fun HTML.listPage(service: TaskService, data: ListData, deleted: Task? = null) =
 
 // The list column: a header (the list's name, bulk selection, New) over the list itself.
 fun FlowContent.listColumn(data: ListData) {
+    if (data.mode == ListMode.CALENDAR) return calendarColumn(data)
     div(classes = "list-head") {
         h2 {
             +data.title
@@ -295,8 +320,8 @@ fun countsOob(service: TaskService, data: ListData): String {
     val nav = SideNav(service, data)
     fun count(id: String, classes: String, n: Int) = createHTML().span(classes = classes) { this.id = id; attributes["hx-swap-oob"] = "true"; +n.toString() }
     return buildString {
-        if (data.mode != ListMode.ALL) append(count("list-count", "list-count", data.tasks.size))
-        ListMode.entries.forEach { append(count("n-${it.name.lowercase()}", "n", nav.counts.getValue(it))) }
+        if (data.mode in LISTS - ListMode.ALL) append(count("list-count", "list-count", data.tasks.size))
+        LISTS.forEach { append(count("n-${it.name.lowercase()}", "n", nav.counts.getValue(it))) }
         nav.folders.forEach { (folder, open) -> append(count("n-${folder.id}", "n", open)) }
     }
 }
@@ -362,7 +387,7 @@ private fun HTML.shell(
                 }
             }
             nav(classes = "nav") {
-                ListMode.entries.forEach { m ->
+                LISTS.forEach { m ->
                     a(href = m.path, classes = if (m.path == current) "current" else null) { +m.label; span(classes = "n") { id = "n-${m.name.lowercase()}"; +nav.counts.getValue(m).toString() } }
                 }
             }
@@ -384,8 +409,8 @@ private fun HTML.shell(
             }
             div(classes = "nav-label") { +"More" }
             nav(classes = "nav") {
-                listOf("/focus" to Labels.FOCUS, "/search" to Labels.SEARCH, "/templates" to Labels.TEMPLATES, "/review" to Labels.REVIEW, "/contexts" to Labels.CONTEXTS, "/settings" to Labels.SETTINGS)
-                    .forEach { (path, label) -> a(href = path, classes = if (path == current) "current" else null) { +label } }
+                listOf("/focus" to Labels.FOCUS, "/calendar" to Labels.CALENDAR, "/search" to Labels.SEARCH, "/templates" to Labels.TEMPLATES, "/review" to Labels.REVIEW, "/contexts" to Labels.CONTEXTS, "/settings" to Labels.SETTINGS)
+                    .forEach { (path, label) -> a(href = path, classes = if (path == current.substringBefore('?')) "current" else null) { +label } }
             }
             details(classes = "shortcuts") {
                 summary { +"Shortcuts and syntax" }
@@ -422,13 +447,17 @@ private fun FlowContent.syntaxKey() = div(classes = "key") {
 fun DIV.listContents(data: ListData) {
     classes = if (data.mode == ListMode.ALL) setOf("list", "outline") else setOf("list")
     id = "list"
-    attributes["hx-get"] = "/list/${data.mode.name.lowercase()}" + (data.folder?.let { "?folder=$it" } ?: "")
+    attributes["hx-get"] = "/list/${data.mode.name.lowercase()}" + data.path.removePrefix(data.mode.path)
+    // app.js keeps the calendar's grid on the agenda's month and day.
+    data.calendar?.let { attributes["data-month"] = it.month.toString(); attributes["data-day"] = it.day?.toString().orEmpty() }
     attributes["hx-trigger"] = "every 60s, visibilitychange from:document, refresh from:body"
     attributes["hx-swap"] = "outerHTML"
     data.stalled?.let { stalledPrompt(it, data.mode, data.q) }
     if (data.mode == ListMode.ALL) {
         if (data.roots.isEmpty()) p(classes = "empty") { +Labels.NOTHING_HERE }
         tree(data, data.roots, parentId = null, depth = 0)
+    } else if (data.mode == ListMode.CALENDAR) {
+        agendaContents(data)
     } else if (data.tasks.isEmpty()) {
         p(classes = "empty") { +Labels.NOTHING_HERE }
     } else if (data.mode == ListMode.ACTIVE) {
@@ -551,13 +580,15 @@ private fun FlowContent.chevron(id: Long, hasChildren: Boolean, collapsed: Boole
     }
 }
 
-private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineNode: (DIV.() -> Unit)? = null) {
+// `tag`: on the calendar, what put the row on its day ("starts", "reminder 5:00 PM"), said in place of a start to come.
+internal fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineNode: (DIV.() -> Unit)? = null, tag: String? = null) {
     val mode = data.q
     div(classes = "row") {
         attributes["data-task-id"] = task.id.toString()
         if (task.id == data.selected) classes = classes + "current"
         attributes["data-type"] = task.type.name
-        if (task.isBackburner(data.now)) classes = classes + "dim"
+        // The calendar shows maybes, dimmed.
+        if (task.isBackburner(data.now) || (data.mode == ListMode.CALENDAR && task.isMaybe)) classes = classes + "dim"
         else if (data.mode == ListMode.ALL && dimmedInTree(task, data.workable, data.byId, data.now)) classes = classes + "later"
         if (task.isComplete) classes = classes + "done"
         style = "padding-left: ${depth * 18}px; border-left-color: ${data.folderColor(task) ?: "var(--border)"}"
@@ -580,7 +611,7 @@ private fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outlineN
                 // On the title's line, wrapping along with it.
                 due?.let { dueTail(it, status!!, data.now) }
                 // A start still to come (the All tree shows snoozed and future tasks); a waiting item's own line.
-                laterText(task, data.now)?.let { span(classes = "tail") { +" · $it" } }
+                (tag ?: laterText(task, data.now))?.let { span(classes = "tail") { +" · $it" } }
                 if (task.type != TaskType.CHECKLIST) data.subtaskCounts(task)?.let { (done, total) -> span(classes = "tail") { +" · $done/$total" } }
                 if (task.recurrenceType != null) span(classes = "badge") { attributes["title"] = "Recurring"; icon(Icon.REPEAT, "") }
                 if (!task.notes.isNullOrBlank()) span(classes = "has-notes") { attributes["title"] = Labels.HAS_NOTES; icon(Icon.NOTES, "") }

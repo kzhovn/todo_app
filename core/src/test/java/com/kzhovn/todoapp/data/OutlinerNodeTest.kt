@@ -18,6 +18,19 @@ class OutlinerNodeTest {
     }
 
     @Test
+    fun `hiding completed drops every kind of done item, resolved waiting ones too`() {
+        val tasks = listOf(
+            Task(id = 1, type = TaskType.FOLDER, title = "Home"),
+            Task(id = 2, type = TaskType.WAITING, title = "Landlord replies", parentId = 1, isComplete = true),
+            Task(id = 3, type = TaskType.PROJECT, title = "Move", parentId = 1, isComplete = true),
+            Task(id = 4, title = "Book van", parentId = 3),
+            Task(id = 5, type = TaskType.CHECKLIST, title = "Packing", parentId = 1, isComplete = true),
+            Task(id = 6, title = "Socks", parentId = 5)
+        )
+        assertEquals(listOf("Book van"), buildOutlinerTree(tasks, hideCompleted = true)[0].children.map { it.task.title })
+    }
+
+    @Test
     fun `tasks nest under their parent folder`() {
         val tasks = listOf(
             Task(id = 1, type = TaskType.FOLDER, title = "Home"),

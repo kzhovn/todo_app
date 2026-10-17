@@ -29,4 +29,11 @@ class UrgentContextsTest {
         assertEquals(listOf("Submit report", "Pay invoice"), active.map { it.title })
         assertEquals(listOf("Pay invoice", "Submit report"), filterDoing(active, now, DueDates(all, emptyList())).map { it.title })
     }
+
+    @Test fun `a filter-only context never holds a task back`() {
+        val errands = TaskContext(id = 3, name = "errands", type = ContextType.LABEL)
+        val stamps = Task(id = 14, title = "Buy stamps")
+        val active = computeActiveTasks(listOf(stamps), mapOf(14L to setOf(3L)), listOf(errands), emptyList(), emptyList(), now)
+        assertEquals(listOf("Buy stamps"), active.map { it.title })
+    }
 }

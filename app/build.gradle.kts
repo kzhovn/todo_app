@@ -59,6 +59,8 @@ dependencies {
     ksp("androidx.room:room-compiler:2.6.1")
 
     implementation("androidx.glance:glance-appwidget:1.1.0")
+    // The calendar's month grid (swiping between months); its day cells are ours.
+    implementation("com.kizitonwose.calendar:compose:2.6.2")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
     implementation(project(":core"))

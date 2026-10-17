@@ -310,7 +310,7 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
             wifiSsid = context.wifiSsid.takeIf { place },
             isCurrentlySatisfied = existing?.isCurrentlySatisfied ?: false
         )
-        store.write(CONTEXTS, saved.id, contextFields(saved, if (place) emptyList() else windows), clock())
+        store.write(CONTEXTS, saved.id, contextFields(saved, if (context.type == ContextType.TIME) windows else emptyList()), clock())
         return saved
     }
 

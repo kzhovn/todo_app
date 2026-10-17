@@ -27,9 +27,9 @@ fun buildOutlinerTree(tasks: List<Task>, hideCompleted: Boolean = false): List<O
                 val children = build(task.id)
                 if (hideCompleted && task.type == TaskType.CHECKLIST && task.isComplete) {
                     emptyList() // its items and sections only live inside it
-                } else if (hideCompleted && (task.type == TaskType.TASK || task.type == TaskType.PROJECT) && task.isComplete) {
-                    // Splice this task's still-visible children in at the same level instead of
-                    // dropping them along with their now-hidden completed parent.
+                } else if (hideCompleted && task.isComplete) {
+                    // Anything done (a task, a project, a resolved waiting item) goes; its still-visible
+                    // children are spliced in at the same level instead of dropping with it.
                     children
                 } else {
                     val node = if (task.type == TaskType.FOLDER) OutlinerNode.FolderNode(task, children)

@@ -85,7 +85,8 @@ class QuickAddActivity : ComponentActivity() {
             var title by remember { mutableStateOf(intent.getStringExtra(EXTRA_TEXT).orEmpty()) }
             var starred by remember { mutableStateOf(startStarred) }
             var startDate by remember { mutableStateOf<Long?>(null) }
-            var dueDate by remember { mutableStateOf<Long?>(null) }
+            // The calendar's "Add to Oct 20…": due that day.
+            var dueDate by remember { mutableStateOf(intent.getLongExtra(EXTRA_DUE, 0L).takeIf { it != 0L }) }
             var folder by remember { mutableStateOf<Task?>(null) }
             var showFolderPicker by remember { mutableStateOf(false) }
             var folders by remember { mutableStateOf<List<Task>>(emptyList()) }
@@ -261,6 +262,7 @@ class QuickAddActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_PARENT_ID = "parent_id"
+        const val EXTRA_DUE = "due"
         // Text to start with (a waiting item's "Follow up").
         const val EXTRA_TEXT = "text"
         const val EXTRA_FOLDER_ID = "folder_id"

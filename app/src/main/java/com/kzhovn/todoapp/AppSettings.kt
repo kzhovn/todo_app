@@ -1,7 +1,9 @@
 package com.kzhovn.todoapp
 
 import android.content.Context
+import com.kzhovn.todoapp.data.DEFAULT_DATE_KINDS
 import com.kzhovn.todoapp.data.DEFAULT_REMINDER_HOUR
+import com.kzhovn.todoapp.data.DateKind
 import com.kzhovn.todoapp.data.DEFAULT_ROLLOVER_HOUR
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -29,6 +31,12 @@ object AppSettings {
     fun digestSetAt(context: Context): Long = prefs(context).getLong("digestSetAt", 0)
     fun setDigestOn(context: Context, on: Boolean, setAt: Long = System.currentTimeMillis()) =
         prefs(context).edit().putBoolean("digestOn", on).putLong("digestSetAt", setAt).apply()
+
+    // The calendar's chips: the kinds of date it shows, on this device only.
+    fun calendarKinds(context: Context): Set<DateKind> = prefs(context).getStringSet("calendarKinds", null)
+        ?.mapNotNull { name -> DateKind.entries.firstOrNull { it.name == name } }?.toSet() ?: DEFAULT_DATE_KINDS
+    fun setCalendarKinds(context: Context, kinds: Set<DateKind>) =
+        prefs(context).edit().putStringSet("calendarKinds", kinds.map { it.name }.toSet()).apply()
 
     // Folder mode (FolderMode.kt): the folder every device is zoomed into (null: none), synced like the
     // rollover hour. modeChanges ticks on every change, so the lists and widgets redraw.

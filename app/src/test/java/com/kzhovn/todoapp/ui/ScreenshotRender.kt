@@ -70,6 +70,32 @@ class ScreenshotRender {
     }
 
     @Test
+    fun calendar() {
+        if (dir == null) return
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val db = androidx.room.Room.inMemoryDatabaseBuilder(context, com.kzhovn.todoapp.data.TodoDatabase::class.java).allowMainThreadQueries()
+            .setQueryExecutor { it.run() }.setTransactionExecutor { it.run() }.build()
+        val alarms = context.getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
+        val repository = com.kzhovn.todoapp.repository.TaskRepository(db.taskDao(), com.kzhovn.todoapp.notifications.ReminderScheduler(context, alarms), db.taskContextDao())
+        val today = java.time.LocalDate.now()
+        fun on(days: Long) = com.kzhovn.todoapp.data.dayStart(today.plusDays(days))
+        kotlinx.coroutines.runBlocking {
+            listOf(
+                Task(title = "Call dentist", dueDate = on(-2)), Task(title = "Submit expense report", dueDate = on(0)),
+                Task(title = "Renew passport", dueDate = on(4)), Task(title = "Pack for Boston", startDate = on(0)),
+                Task(title = "Water plants", startDate = on(2), recurrenceType = com.kzhovn.todoapp.data.RecurrenceType.RRULE, recurrenceRule = "FREQ=WEEKLY"),
+                Task(title = "Try a pottery class", dueDate = on(8), isMaybe = true), Task(title = "Car registration", dueDate = on(7)),
+            ).forEach { repository.createTask(it) }
+        }
+        val viewModel = TaskListViewModel(repository, com.kzhovn.todoapp.repository.ContextRepository(db.taskContextDao()))
+        viewModel.load(TaskListMode.ALL)
+        val all = com.kzhovn.todoapp.data.DateKind.entries.toSet()
+        compose.setContent { LedgerTheme { CalendarScreen(viewModel, 9, all - com.kzhovn.todoapp.data.DateKind.DONE, {}, {}, {}, {}, {}) } }
+        compose.waitForIdle()
+        draw(compose.activity.window.decorView, "calendar")
+    }
+
+    @Test
     fun drawer() {
         if (dir == null) return
         compose.setContent { LedgerTheme { AppDrawer(androidx.compose.material3.rememberDrawerState(androidx.compose.material3.DrawerValue.Open), reviewSelected = true) {} } }

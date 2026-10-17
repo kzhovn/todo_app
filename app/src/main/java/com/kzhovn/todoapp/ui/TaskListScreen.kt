@@ -231,7 +231,7 @@ internal fun NotesMark() {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TaskRow(
+internal fun TaskRow(
     task: Task,
     shownDue: ShownDue?,
     subtasks: Pair<Int, Int>?,
@@ -243,7 +243,8 @@ private fun TaskRow(
     onEdit: (Long) -> Unit,
     onSnooze: (Long, Long) -> Unit,
     notesLine: String? = null, // search: the line of the notes it matched
-    metaLine: String? = null // search: where it lives and its contexts, as the web's results show
+    metaLine: String? = null, // search: where it lives and its contexts, as the web's results show
+    tag: String? = null // the calendar: what put it on its day ("starts", "reminder 5:00 PM"), said in place of a start to come
 ) {
     var showSnoozeMenu by remember { mutableStateOf(false) }
     // Due styling tracks the *displayed* (inherited) due date, not the task's own possibly-null field,
@@ -284,7 +285,7 @@ private fun TaskRow(
                             withStyle(SpanStyle(color = color, fontWeight = FontWeight.Normal, fontSize = 12.sp, fontStyle = italic)) { append("  · ${dueText(due, now)}") }
                         }
                         // A start still to come (search shows snoozed and future tasks), or a waiting item's own line, as on the web.
-                        val later = laterText(task, now)
+                        val later = tag ?: laterText(task, now)
                         if (later != null) withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · $later") }
                         if (subtasks != null && subtasks.second > 0 && task.type != TaskType.CHECKLIST) {
                             withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · ${subtasks.first}/${subtasks.second}") }
