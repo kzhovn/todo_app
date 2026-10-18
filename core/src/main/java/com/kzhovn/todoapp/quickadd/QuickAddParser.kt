@@ -15,7 +15,10 @@ import com.kzhovn.todoapp.recurrence.RecurrenceUnit
 import com.kzhovn.todoapp.recurrence.WEEKDAYS_MASK
 import com.kzhovn.todoapp.recurrence.toTaskFields
 import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 
 // Everything a quick add asks for. `task` is null when the text only adds items to an existing
@@ -321,6 +324,16 @@ object QuickAddParser {
         }
         return day?.let(::dayStart)
     }
+
+    // Another app's "Set a reminder" as quick add text, so it can be edited before it's added:
+    // "call mom remind 2026-10-20 17:30". Quick add's field is one line, hence the flattening.
+    fun reminderText(title: String, time: Long?): String {
+        val text = title.trim().replace(SPACES, " ")
+        return if (time == null) text
+        else "$text remind " + Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()).format(REMIND_FORMAT)
+    }
+
+    private val REMIND_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd H:mm")
 
     // Null if it doesn't exist (Feb 30).
     private fun date(year: Int, month: Int, day: Int): LocalDate? = runCatching { LocalDate.of(year, month, day) }.getOrNull()

@@ -186,6 +186,14 @@ class QuickAddParserTest {
     }
 
     @Test
+    fun `another app's reminder reads back as its title and time`() {
+        val time = java.time.LocalDateTime.of(2030, 1, 2, 17, 30).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val task = QuickAddParser.parse(QuickAddParser.reminderText("call\nmom ", time))
+        assertEquals("call mom" to time, task.title to task.remindAt)
+        assertEquals("call mom", QuickAddParser.reminderText("call mom", null))
+    }
+
+    @Test
     fun `reminders, star, pin, focus, tilde durations and new checklists`() {
         // "before" is before the due date; "start" when it starts; anything else is a time of its own.
         assertEquals(30, read("call dentist due fri 3pm remind 30m before").task!!.reminderOffsetMinutes)

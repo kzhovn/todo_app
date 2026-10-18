@@ -40,12 +40,18 @@
              them returns to the home screen instead of revealing the app. -->
         <activity
             android:name=".quickadd.QuickAddActivity"
-            android:exported="false"
+            android:exported="true"
             android:screenOrientation="portrait"
             android:taskAffinity=""
             android:excludeFromRecents="true"
             android:windowSoftInputMode="adjustResize|stateAlwaysVisible"
-            android:theme="@style/Theme.TodoApp.QuickAdd" />
+            android:theme="@style/Theme.TodoApp.QuickAdd">
+            <!-- Other apps' "Set a reminder" (Android 14+), e.g. Messages on "can you remember to…". -->
+            <intent-filter>
+                <action android:name="android.intent.action.CREATE_REMINDER" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <activity
             android:name=".widget.WidgetConfigActivity"
             android:exported="true"

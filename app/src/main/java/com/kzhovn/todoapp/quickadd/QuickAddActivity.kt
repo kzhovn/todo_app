@@ -91,7 +91,7 @@ class QuickAddActivity : ComponentActivity() {
         val created = mutableListOf<Long>()
         setContent {
             LedgerTheme {
-            var title by remember { mutableStateOf(intent.getStringExtra(EXTRA_TEXT).orEmpty()) }
+            var title by remember { mutableStateOf(startText()) }
             var starred by remember { mutableStateOf(startStarred) }
             var startDate by remember { mutableStateOf<Long?>(null) }
             // The calendar's "Add to Oct 20…": due that day.
@@ -308,6 +308,14 @@ class QuickAddActivity : ComponentActivity() {
         window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         window.setGravity(Gravity.BOTTOM)
     }
+
+    // Another app's "Set a reminder" (Messages' "can you remember to…"): its title, reminding at its time.
+    private fun startText(): String =
+        if (intent.action == Intent.ACTION_CREATE_REMINDER) QuickAddParser.reminderText(
+            intent.getStringExtra(Intent.EXTRA_TITLE) ?: intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty(),
+            intent.getLongExtra(Intent.EXTRA_TIME, 0L).takeIf { it > 0L }
+        )
+        else intent.getStringExtra(EXTRA_TEXT).orEmpty()
 
     private fun typeIcon(type: TaskType) = when (type) {
         TaskType.PROJECT -> Icons.Filled.AccountTree
