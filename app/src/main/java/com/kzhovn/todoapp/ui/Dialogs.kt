@@ -28,6 +28,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import kotlinx.coroutines.launch
 import com.kzhovn.todoapp.repository.TaskRepository
 import com.kzhovn.todoapp.ui.theme.LedgerOverdue
@@ -108,12 +109,13 @@ fun UndoDelete(repository: TaskRepository, hostState: SnackbarHostState, onUndon
     // Undo clears lastDeleted, which restarts this effect; the undo and refresh run outside it so that
     // doesn't cut them short.
     val scope = rememberCoroutineScope()
+    val undone by rememberUpdatedState(onUndone) // the screen's latest, should it change during the snackbar
     LaunchedEffect(lastDeleted) {
         val deleted = lastDeleted ?: return@LaunchedEffect
         val ids = deleted.tasks.map { it.id }.toSet()
         val title = (deleted.tasks.firstOrNull { it.parentId !in ids } ?: deleted.tasks.first()).title
         val extra = deleted.tasks.size - 1
         val result = hostState.showSnackbar(Labels.deleted(title, extra), actionLabel = Labels.UNDO, duration = SnackbarDuration.Long)
-        if (result == SnackbarResult.ActionPerformed) scope.launch { repository.undoDelete(deleted); onUndone() } else repository.clearLastDeleted()
+        if (result == SnackbarResult.ActionPerformed) scope.launch { repository.undoDelete(deleted); undone() } else repository.clearLastDeleted()
     }
 }
