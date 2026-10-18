@@ -68,11 +68,22 @@ fun quickAddTargets(tasks: Collection<Task>): List<Task> = tasks.filter { it.typ
 fun chipItems(text: String, chip: Task?): QuickAdd? =
     chip?.takeIf { it.type == TaskType.CHECKLIST }?.let { QuickAdd(task = null, items = splitItems(text), intoChecklist = it.id) }
 
-// Quick add's chips (the phone's and the top bar's) over what the text says: they win, except that a folder
-// named in the text beats the Folder chip.
-fun QuickAdd.withChips(star: Boolean, start: Long?, due: Long?, todayOnly: Boolean, folder: Task?, now: Long, rolloverHour: Int): QuickAdd {
+// The type the text asks for ("wait …", "[a, b]", "a > b > c"), which quick add's Type chip shows until
+// picked by hand. Also after a "work:" prefix, as planQuickAdd reads one.
+fun typedType(text: String, now: Long): TaskType {
+    val bodies = listOfNotNull(text, prefixRegex.matchEntire(text)?.groupValues?.get(2))
+    return bodies.firstNotNullOfOrNull { body ->
+        if (STEP_ARROW.findAll(body).count() >= 2) TaskType.PROJECT
+        else QuickAddParser.read(body, now).task!!.type.takeIf { it != TaskType.TASK }
+    } ?: TaskType.TASK
+}
+
+// Quick add's chips (the phone's, the top bar's, the web's Type) over what the text says: they win, except that
+// a folder named in the text beats the Folder chip.
+fun QuickAdd.withChips(star: Boolean, start: Long?, due: Long?, todayOnly: Boolean, folder: Task?, now: Long, rolloverHour: Int, type: TaskType? = null): QuickAdd {
     val task = task ?: return this
     return copy(task = task.copy(
+        type = type ?: task.type,
         isStarred = task.isStarred || star,
         startDate = start ?: task.startDate,
         dueDate = due ?: task.dueDate,

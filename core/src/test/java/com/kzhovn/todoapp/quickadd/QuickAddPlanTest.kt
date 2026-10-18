@@ -48,4 +48,16 @@ class QuickAddPlanTest {
         assertEquals(setOf(7L), add.contextIds)
         assertEquals("fix sink" to "ask @home about parts", add.task!!.title to add.task!!.notes)
     }
+
+    @Test
+    fun `the Type chip shows the typed type, and a type picked on it wins`() {
+        assertEquals(TaskType.TASK, typedType("Renew passport", 0))
+        assertEquals(TaskType.WAITING, typedType("wait landlord on deposit", 0))
+        assertEquals(TaskType.WAITING, typedType("work: wait Sam's review", 0))
+        assertEquals(TaskType.CHECKLIST, typedType("packing [passport, charger]", 0))
+        assertEquals(TaskType.PROJECT, typedType("laundry > start wash > 50m", 0))
+        val folder = plan("Apartment hunt -d fri").withChips(false, null, null, false, null, 0, 4, type = TaskType.FOLDER).task!!
+        assertEquals(TaskType.FOLDER, folder.type)
+        assertEquals(TaskType.WAITING, plan("wait landlord").withChips(false, null, null, false, null, 0, 4).task!!.type)
+    }
 }

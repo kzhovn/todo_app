@@ -350,6 +350,17 @@ class WebTest {
     }
 
     @Test
+    fun `quick add's Type chip follows the text until picked, and the pick wins until the text's type changes`() = web {
+        // Picked Project over a plain title: kept.
+        client.submitForm("/quickadd", parameters { append("text", "Move out"); append("type", "PROJECT"); append("over", "TASK") })
+        assertEquals(TaskType.PROJECT, service.tasks().single { it.title == "Move out" }.type)
+        // Picked Project, then "wait " typed: the text's type takes over.
+        client.submitForm("/quickadd", parameters { append("text", "wait landlord"); append("type", "PROJECT"); append("over", "TASK") })
+        assertEquals(TaskType.WAITING, service.tasks().single { it.title == "landlord" }.type)
+        assertTrue(client.get("/quickadd/type?text=wait+landlord&type=TASK&over=TASK").bodyAsText().contains(">Waiting</span>"))
+    }
+
+    @Test
     fun `completing a task with open subtasks asks first, then completes or moves them out`() = web {
         val folder = service.create(Task(type = TaskType.FOLDER, title = "Personal"))
         val trip = service.create(Task(title = "Plan trip", parentId = folder.id))

@@ -4,6 +4,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonObject
 import com.kzhovn.todoapp.data.SnoozeChoice
+import com.kzhovn.todoapp.quickadd.typedType
 import com.kzhovn.todoapp.server.TaskService
 import io.ktor.http.ContentType
 import io.ktor.http.Cookie
@@ -174,11 +175,16 @@ fun Route.webRoutes(service: TaskService) {
         if (service.get(id) != null) service.addTyped(call.receiveParameters()["text"].orEmpty(), under = id)
         call.respondList(service, call.mode())
     }
+    get("/quickadd/type") {
+        val params = call.request.queryParameters
+        val html = createHTML().div { typeChip(quickAddType(params, service.now()), typedType(params["text"].orEmpty(), service.now())) }
+        call.respondText(html, ContentType.Text.Html)
+    }
     post("/quickadd") {
         val params = call.receiveParameters()
         val text = params["text"].orEmpty()
         val mode = params["mode"]?.let { runCatching { ListMode.valueOf(it) }.getOrNull() }
-        val created = service.quickAdd(text, fromDoing = mode == ListMode.DOING, folderId = call.folder())
+        val created = service.quickAdd(text, fromDoing = mode == ListMode.DOING, folderId = call.folder(), type = quickAddType(params, service.now()))
         if (mode != null) return@post call.respondList(service, mode)
         call.respondText(created?.let { t -> createHTML().div { addedToastContents(t) } }.orEmpty(), ContentType.Text.Html)
     }

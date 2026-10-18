@@ -414,7 +414,12 @@
   // Clear quick add after a successful add (here rather than in an inline hx-on handler, so the
   // Content-Security-Policy can forbid inline script).
   document.addEventListener("htmx:afterRequest", (e) => {
-    if (e.detail.successful && e.detail.elt.matches("form.quickadd")) e.detail.elt.reset();
+    // Only the add itself: the Type chip's own GET, once swapped out, is reported from the form too.
+    if (!e.detail.successful || !e.detail.elt.matches("form.quickadd") || e.detail.requestConfig.verb !== "post") return;
+    e.detail.elt.reset();
+    // The next add starts as a plain task again.
+    const type = e.detail.elt.querySelector(".qa-type");
+    if (type) htmx.ajax("GET", "/quickadd/type", { target: type, swap: "outerHTML", select: ".qa-type" });
   });
 
   // --- Task editor. Pills open popovers (one at a time); their text follows the controls inside, in

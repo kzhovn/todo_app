@@ -23,6 +23,18 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .brand img { width: 22px; height: 22px; border-radius: 6px; }
 .quickadd { margin-bottom: 10px; }
 .quickadd input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
+/* The Type chip sits inside the box's right end. */
+.quickadd:has(.qa-type) { position: relative; }
+.quickadd:has(.qa-type) input { padding-right: 40px; }
+.quickadd .qa-type { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); }
+.quickadd:has(.qa-type .pill.set) input { padding-right: 110px; }
+.qa-type > .pill { border: 0; padding: 3px 7px; border-radius: 5px; gap: 4px; }
+.qa-type > .pill.set { background: var(--accent-soft); color: var(--accent); }
+.qa-type .pop { left: auto; right: 0; min-width: 150px; flex-direction: column; align-items: stretch; gap: 2px; padding: 6px; }
+.qa-opt { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+.qa-opt input { display: none; }
+.qa-opt:hover { background: var(--tile); }
+.qa-opt:has(:checked) { color: var(--accent); font-weight: 600; }
 .nav { display: flex; flex-direction: column; gap: 1px; }
 .nav a { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 7px; color: var(--ink); text-decoration: none; font-size: 14px; }
 .nav a:hover { background: var(--tile); }

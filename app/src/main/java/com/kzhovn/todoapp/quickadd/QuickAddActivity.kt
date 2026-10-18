@@ -33,6 +33,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.AccountTree
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.outlined.HourglassEmpty
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,6 +52,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
@@ -92,6 +101,11 @@ class QuickAddActivity : ComponentActivity() {
             var folders by remember { mutableStateOf<List<Task>>(emptyList()) }
             var todayOnly by remember { mutableStateOf(false) }
             var dependsOnTitle by remember { mutableStateOf<String?>(null) }
+            // The Type chip: what the text asks for (typedType), or what was picked on it since the text last changed that.
+            var type by remember { mutableStateOf(typedType(title, System.currentTimeMillis())) }
+            var showTypeMenu by remember { mutableStateOf(false) }
+            // A checklist's (or section's) "add" makes items, which have no type to pick.
+            var underContainer by remember { mutableStateOf(false) }
             val focus = remember { FocusRequester() }
             val folderColorsOf = remember(folders) { folderColors(folders.filter { it.type == TaskType.FOLDER }) }
 
@@ -103,17 +117,18 @@ class QuickAddActivity : ComponentActivity() {
                 folder = if (initialFolderId != null) folders.firstOrNull { it.id == initialFolderId }
                 else defaultFolder(folders, AppSettings.modeFolderId(this@QuickAddActivity))
                 dependsOnTitle = dependsOnId?.let { repository.getTask(it)?.title }
+                underContainer = fixedParentId?.let { repository.getTask(it)?.type }.let { it == TaskType.CHECKLIST || it == TaskType.SECTION }
                 focus.requestFocus()
             }
 
             // Everything the text asks for (the syntax every device shares), plus what's set on the chips.
             suspend fun buildAdd(): QuickAdd {
                 // Read before suspending: "hold to add another" clears the form straight after.
-                val text = title; val star = starred; val start = startDate; val due = dueDate; val today = todayOnly; val chip = folder
+                val text = title; val star = starred; val start = startDate; val due = dueDate; val today = todayOnly; val chip = folder; val kind = type
                 val now = System.currentTimeMillis()
                 val rollover = AppSettings.rolloverHour(this@QuickAddActivity)
                 if (fixedParentId == null) chipItems(text, chip)?.let { return it }
-                val add = repository.planQuickAdd(text, rollover, now).withChips(star, start, due, today, chip, now, rollover)
+                val add = repository.planQuickAdd(text, rollover, now).withChips(star, start, due, today, chip, now, rollover, kind)
                 // Adding a subtask fixes the parent to the task it was launched from.
                 return if (fixedParentId == null) add else add.copy(task = add.task?.copy(parentId = fixedParentId))
             }
@@ -139,7 +154,7 @@ class QuickAddActivity : ComponentActivity() {
                     }
                 }
                 if (keepOpen) {
-                    title = ""; starred = startStarred; startDate = null; dueDate = null; todayOnly = false
+                    title = ""; starred = startStarred; startDate = null; dueDate = null; todayOnly = false; type = TaskType.TASK
                     focus.requestFocus()
                 }
             }
@@ -154,18 +169,44 @@ class QuickAddActivity : ComponentActivity() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextField(
                         value = title,
-                        onValueChange = { title = it },
+                        onValueChange = {
+                            val now = System.currentTimeMillis()
+                            typedType(it, now).let { typed -> if (typed != typedType(title, now)) type = typed }
+                            title = it
+                        },
                         placeholder = { Text(Labels.TITLE) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { create(keepOpen = false) }),
                         modifier = Modifier.weight(1f).focusRequester(focus)
                     )
-                    IconButton(onClick = { starred = !starred }) {
+                    if (type != TaskType.WAITING) IconButton(onClick = { starred = !starred }) {
                         StarIcon(starred)
                     }
                 }
                 Row(modifier = Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (!underContainer && folder?.type != TaskType.CHECKLIST) {
+                        Box {
+                            PropertyChip(
+                                label = Labels.TYPE,
+                                valueText = Labels.typeName(type).takeIf { type != TaskType.TASK },
+                                icon = typeIcon(type),
+                                onClick = { showTypeMenu = true },
+                                showLabelWhenSet = false,
+                                iconOnly = type == TaskType.TASK
+                            )
+                            DropdownMenu(expanded = showTypeMenu, onDismissRequest = { showTypeMenu = false }) {
+                                Labels.TYPES.forEach { (t, name) ->
+                                    DropdownMenuItem(
+                                        text = { Text(name, color = if (t == type) LedgerAccent else Color.Unspecified) },
+                                        leadingIcon = { Icon(typeIcon(t), contentDescription = null, tint = if (t == type) LedgerAccent else LedgerMuted) },
+                                        onClick = { type = t; showTypeMenu = false }
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.width(8.dp))
+                    }
                     PropertyChip(
                         label = Labels.START,
                         valueText = startDate?.let(::chipDate),
@@ -174,7 +215,8 @@ class QuickAddActivity : ComponentActivity() {
                         showLabelWhenSet = false
                     )
                     Spacer(Modifier.width(8.dp))
-                    PropertyChip(
+                    // A folder has no due date.
+                    if (type != TaskType.FOLDER) PropertyChip(
                         label = Labels.DUE,
                         valueText = dueDate?.let(::chipDate),
                         icon = Icons.Filled.Flag,
@@ -245,9 +287,10 @@ class QuickAddActivity : ComponentActivity() {
             }
 
             if (showFolderPicker) {
+                // A new folder can go at the top, but not into a checklist.
                 FolderPickerDialog(
-                    folders = folders,
-                    showNoFolderOption = false,
+                    folders = if (type == TaskType.FOLDER) folders.filter { it.type == TaskType.FOLDER } else folders,
+                    showNoFolderOption = type == TaskType.FOLDER,
                     onPick = { picked -> folder = picked; showFolderPicker = false },
                     onDismiss = { showFolderPicker = false },
                     selectedId = folder?.id
@@ -258,6 +301,14 @@ class QuickAddActivity : ComponentActivity() {
         // The dialog theme otherwise centres a narrow window; this makes it a full-width bottom sheet.
         window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         window.setGravity(Gravity.BOTTOM)
+    }
+
+    private fun typeIcon(type: TaskType) = when (type) {
+        TaskType.PROJECT -> Icons.Filled.AccountTree
+        TaskType.CHECKLIST -> Icons.Filled.Checklist
+        TaskType.FOLDER -> Icons.Filled.Folder
+        TaskType.WAITING -> Icons.Outlined.HourglassEmpty
+        else -> Icons.Outlined.RadioButtonUnchecked
     }
 
     companion object {

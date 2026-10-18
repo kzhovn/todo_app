@@ -13,6 +13,13 @@ import com.kzhovn.todoapp.repository.dimmedInTree
 import com.kzhovn.todoapp.widget.TodoWidgetPresenter
 import com.kzhovn.todoapp.data.inMode
 import com.kzhovn.todoapp.data.TaskOrder
+import com.kzhovn.todoapp.quickadd.typedType
+import io.ktor.http.Parameters
+import kotlinx.html.radioInput
+import kotlinx.html.label
+import kotlinx.html.hiddenInput
+import kotlinx.html.details
+import kotlinx.html.summary
 import kotlinx.html.h2
 import kotlinx.html.img
 import kotlinx.html.A
@@ -159,6 +166,46 @@ class ListData(
     val stalled: Task? = stalledProjects(all).firstOrNull { it.id !in later }
 }
 
+internal fun typeIcon(type: TaskType) = when (type) {
+    TaskType.PROJECT -> Icon.PROJECT
+    TaskType.CHECKLIST -> Icon.CHECKLIST
+    TaskType.FOLDER -> Icon.FOLDER
+    TaskType.WAITING -> Icon.HOURGLASS
+    else -> Icon.CIRCLE
+}
+
+// Quick add's Type: what was picked on it, until the text's own type (typedType) changes from what it was then (`over`).
+internal fun quickAddType(params: Parameters, now: Long): TaskType {
+    fun type(name: String) = Labels.TYPES.firstOrNull { it.first.name == params[name] }?.first
+    val typed = typedType(params["text"].orEmpty(), now)
+    return type("type")?.takeIf { type("over") == typed } ?: typed
+}
+
+// Quick add's Type chip and its menu, re-rendered as the text changes or a type is picked.
+internal fun FlowContent.typeChip(shown: TaskType, typed: TaskType) = details(classes = "pp qa-type") {
+    attributes["hx-get"] = "/quickadd/type"
+    attributes["hx-trigger"] = "change, input changed delay:150ms from:#quickadd"
+    attributes["hx-include"] = "closest form"
+    attributes["hx-swap"] = "outerHTML"
+    attributes["hx-select"] = ".qa-type"
+    attributes["hx-target"] = "this" // not the form's list
+    summary(classes = if (shown == TaskType.TASK) "pill" else "pill set") {
+        attributes["title"] = Labels.TYPE
+        icon(typeIcon(shown), "pill-icon")
+        if (shown != TaskType.TASK) span { +Labels.typeName(shown) }
+    }
+    hiddenInput(name = "over") { value = typed.name }
+    div(classes = "pop") {
+        Labels.TYPES.forEach { (type, name) ->
+            label(classes = "qa-opt") {
+                radioInput(name = "type") { value = type.name; checked = type == shown }
+                icon(typeIcon(type), "pill-icon")
+                +name
+            }
+        }
+    }
+}
+
 // The same colour families as the app (folderColorsArgb in :core), as CSS colours.
 internal fun folderColorsHex(tasks: Collection<Task>): Map<Long, String> = folderColorsArgb(tasks).mapValues { "#%06X".format(it.value and 0xFFFFFF) }
 
@@ -188,6 +235,7 @@ internal fun HTMLTag.hx(verb: String, url: String, target: String = "#list") {
 // The Material icons the phone uses (Icons.Filled.*), inlined so both clients look alike. The top bar's
 // copies are made from these by tools/tray_icons.py.
 internal enum class Icon(val path: String) {
+    CIRCLE("M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"), // RadioButtonUnchecked
     FOLDER("M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"),
     PROJECT("M22 11V3h-7v3H9V3H2v8h7V8h2v10h4v3h7v-8h-7v3h-2V8h2v3z"), // AccountTree
     HOURGLASS("M6 2v6h.01L6 8.01 10 12l-4 4 .01.01H6V22h12v-5.99h-.01L18 16l-4-4 4-3.99-.01-.01H18V2H6zm10 14.5V20H8v-3.5l4-4 4 4zm-4-5-4-4V4h8v3.5l-4 4z"), // HourglassEmpty (outlined)
@@ -382,6 +430,7 @@ private fun HTML.shell(
                     attributes["hx-swap"] = "none"
                 }
                 textInput(name = "text") { id = "quickadd"; placeholder = nav.mode?.let { "Add to ${it.title}… (n)" } ?: "Add a task… (n)"; attributes["autocomplete"] = "off" }
+                typeChip(TaskType.TASK, TaskType.TASK)
             }
             // The current task (pinned, or its timer running), shared with every device.
             service.pinned()?.let { now ->

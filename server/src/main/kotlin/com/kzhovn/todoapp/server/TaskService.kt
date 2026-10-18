@@ -264,9 +264,9 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     // Quick add from the web or the desktop tray: parsed like the app's, into Personal (or the folder
     // being looked at) unless it names one. Added while looking at Doing, it starts starred so it shows
     // up right there, like the Doing widget's.
-    fun quickAdd(text: String, fromDoing: Boolean, folderId: Long? = null): Task? {
+    fun quickAdd(text: String, fromDoing: Boolean, folderId: Long? = null, type: TaskType? = null): Task? {
         val folder = folderId?.takeIf { get(it)?.type == TaskType.FOLDER } ?: defaultFolderId()
-        return add(planQuickAdd(text), folder, star = fromDoing)
+        return add(planQuickAdd(text).withChips(false, null, null, false, null, clock(), rolloverHour(), type), folder, star = fromDoing)
     }
 
     fun planQuickAdd(text: String): QuickAdd = planQuickAdd(text, everything(), contexts(), clock(), rolloverHour())

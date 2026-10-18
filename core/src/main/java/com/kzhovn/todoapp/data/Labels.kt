@@ -123,6 +123,7 @@ object Labels {
     const val PIN = "Pin"
     const val UNPIN = "Unpin"
 
+    const val TYPE = "Type"
     const val TASK = "Task"
     const val PROJECT = "Project"
     const val FOLDER = "Folder"
@@ -255,6 +256,7 @@ object Labels {
     const val LATER = "Later"
 
     val TYPES = listOf(TaskType.TASK to TASK, TaskType.PROJECT to PROJECT, TaskType.CHECKLIST to CHECKLIST, TaskType.FOLDER to FOLDER, TaskType.WAITING to WAITING)
+    fun typeName(type: TaskType) = TYPES.firstOrNull { it.first == type }?.second ?: TASK
 
     // A checklist's items
     const val ITEMS = "Items"
@@ -282,7 +284,7 @@ object Labels {
     fun savedAsTemplate(title: String) = "Saved “$title” as a template"
     // "Checklist · 24 items · Personal": a template on the Templates screen and in the picker.
     fun templateSummary(type: TaskType, count: Int, folder: String?) = listOfNotNull(
-        TYPES.firstOrNull { it.first == type }?.second ?: "Task",
+        typeName(type),
         count.takeIf { it > 0 }?.let { n -> "$n " + (if (type == TaskType.CHECKLIST) "item" else if (type == TaskType.PROJECT) "step" else if (type == TaskType.FOLDER) "task" else "subtask") + if (n == 1) "" else "s" },
         folder
     ).joinToString(" · ")
