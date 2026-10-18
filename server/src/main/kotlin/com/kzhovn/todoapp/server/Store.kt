@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server
 
+import com.kzhovn.todoapp.data.CalendarData
 import com.kzhovn.todoapp.data.DEFAULT_REMINDER_HOUR
 import com.kzhovn.todoapp.sync.SyncJson
 import com.kzhovn.todoapp.sync.SyncRequest
@@ -62,6 +63,20 @@ class Store(path: String) {
     fun reminderHour(): Int = getValue(REMINDER_HOUR_KEY)?.toIntOrNull() ?: DEFAULT_REMINDER_HOUR
     fun reminderHourSetAt() = getValue(REMINDER_HOUR_SET_AT_KEY)?.toLongOrNull() ?: 0
 
+    // Google Calendar: what was last read (see TaskService.setCalendar), and the calendars hidden from view.
+    fun setHiddenCalendars(ids: List<String>, setAt: Long) = setNewer(HIDDEN_CALENDARS_KEY, HIDDEN_CALENDARS_SET_AT_KEY, SyncJson.encodeToString(ids), setAt)
+    fun hiddenCalendars(): List<String> = getValue(HIDDEN_CALENDARS_KEY)?.let { SyncJson.decodeFromString<List<String>>(it) }.orEmpty()
+    fun hiddenCalendarsSetAt() = getValue(HIDDEN_CALENDARS_SET_AT_KEY)?.toLongOrNull() ?: 0
+
+    private var calendarCache: CalendarData? = null
+    @Synchronized
+    fun calendar(): CalendarData = calendarCache ?: (getValue(CALENDAR_KEY)?.let { SyncJson.decodeFromString<CalendarData>(it) } ?: CalendarData()).also { calendarCache = it }
+    @Synchronized
+    fun setCalendar(data: CalendarData) {
+        setValue(CALENDAR_KEY, SyncJson.encodeToString(data))
+        calendarCache = data
+    }
+
     fun digestOn(): Boolean = getValue(DIGEST_ON_KEY)?.toBooleanStrictOrNull() ?: true
     fun digestSetAt() = getValue(DIGEST_SET_AT_KEY)?.toLongOrNull() ?: 0
     fun modeSetAt() = getValue(MODE_SET_AT_KEY)?.toLongOrNull() ?: 0
@@ -76,13 +91,18 @@ class Store(path: String) {
             setMode(request.modeFolderId, request.modeSetAt)
             setDigestOn(request.digestOn, request.digestSetAt)
             request.reminderHour?.let { setReminderHour(it, request.reminderHourSetAt) }
+            setHiddenCalendars(request.hiddenCalendars, request.hiddenCalendarsSetAt)
             request.changes.forEach { incoming ->
                 val before = get(incoming.table, incoming.id)
                 val after = merge(before, incoming)
                 put(after)
                 changed += before to after
             }
-            SyncResponse(maxVersion(), since(request.cursor), getValue(ROLLOVER_HOUR_KEY)?.toIntOrNull(), rolloverSetAt(), modeFolderId(), modeSetAt(), digestOn(), digestSetAt(), reminderHour(), reminderHourSetAt())
+            SyncResponse(
+                maxVersion(), since(request.cursor), getValue(ROLLOVER_HOUR_KEY)?.toIntOrNull(), rolloverSetAt(), modeFolderId(), modeSetAt(), digestOn(), digestSetAt(),
+                reminderHour(), reminderHourSetAt(), hiddenCalendars(), hiddenCalendarsSetAt(),
+                calendar().takeIf { it.version > request.calendarVersion }
+            )
         }
         changed.forEach { (before, after) ->
             onChange?.invoke(before, after)
@@ -148,6 +168,7 @@ class Store(path: String) {
         } catch (e: Throwable) {
             conn.rollback()
             allCache.clear()
+            calendarCache = null
             throw e
         } finally {
             conn.autoCommit = true
@@ -195,6 +216,9 @@ class Store(path: String) {
         const val DIGEST_SET_AT_KEY = "digestSetAt"
         const val REMINDER_HOUR_KEY = "reminderHour"
         const val REMINDER_HOUR_SET_AT_KEY = "reminderHourSetAt"
+        const val HIDDEN_CALENDARS_KEY = "hiddenCalendars"
+        const val HIDDEN_CALENDARS_SET_AT_KEY = "hiddenCalendarsSetAt"
+        const val CALENDAR_KEY = "calendar"
         private val clockSerializer = MapSerializer(String.serializer(), Long.serializer())
     }
 }

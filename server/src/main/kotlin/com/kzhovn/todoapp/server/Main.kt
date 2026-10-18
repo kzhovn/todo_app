@@ -52,9 +52,14 @@ fun main() {
         )
     }
 
-    // Hands-free adds through Google Tasks ("Hey Google, add … to my tasks"); see server/DEPLOY.md.
+    // Hands-free adds through Google Tasks ("Hey Google, add … to my tasks"), and Google Calendar's events; see
+    // server/DEPLOY.md.
     val google = listOf("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN").map { env[it] }
-    if (google.all { it != null }) GoogleTasksImport.start(service, store, GoogleTasksApi(google[0]!!, google[1]!!, google[2]!!))
+    if (google.all { it != null }) {
+        val client = GoogleClient(google[0]!!, google[1]!!, google[2]!!)
+        GoogleTasksImport.start(service, store, GoogleTasksApi(client))
+        GoogleCalendarRead.start(service, GoogleCalendarApi(client))
+    }
 
     embeddedServer(Netty, applicationEnvironment(), {
         val keystorePath = env["KEYSTORE_PATH"]

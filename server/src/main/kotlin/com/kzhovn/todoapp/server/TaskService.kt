@@ -1,6 +1,12 @@
 package com.kzhovn.todoapp.server
 
 import com.kzhovn.todoapp.data.isUnder
+import com.kzhovn.todoapp.data.CalendarData
+import com.kzhovn.todoapp.data.CalendarEvent
+import com.kzhovn.todoapp.data.linkedToEvent
+import com.kzhovn.todoapp.data.planFollowEvents
+import com.kzhovn.todoapp.data.planLinkEvent
+import com.kzhovn.todoapp.data.planRelinkEvent
 import com.kzhovn.todoapp.widget.TodoWidgetPresenter
 import com.kzhovn.todoapp.quickadd.chipItems
 import com.kzhovn.todoapp.quickadd.withChips
@@ -151,6 +157,50 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
 
     fun defaultFolderId(): Long? = defaultFolder(tasks(), store.modeFolderId())?.id
 
+    // Google Calendar (GoogleCalendar.kt): what was last read. Events contexts go by any calendar; everything
+    // else sees only the shown ones (Settings → Calendars).
+    fun calendar(): CalendarData = store.calendar()
+    fun events(): List<CalendarEvent> = calendar().events
+    fun shownEvents(): List<CalendarEvent> = calendar().shown(hiddenCalendars())
+    fun event(id: String): CalendarEvent? = events().firstOrNull { it.id == id }
+    fun hiddenCalendars(): Set<String> = store.hiddenCalendars().toSet()
+    fun setCalendarShown(id: String, shown: Boolean) {
+        val hidden = if (shown) hiddenCalendars() - id else hiddenCalendars() + id
+        if (hidden != hiddenCalendars()) store.setHiddenCalendars(hidden.sorted(), maxOf(clock(), store.hiddenCalendarsSetAt() + 1))
+    }
+
+    // A fresh read: kept (with a new version only when something changed, so phones fetch it again only then), and
+    // the Event items follow it (planFollowEvents).
+    fun setCalendar(data: CalendarData) = store.transaction {
+        val old = calendar()
+        val changed = old.calendars != data.calendars || old.events != data.events
+        store.setCalendar(data.copy(version = if (changed) maxOf(clock(), old.version + 1) else old.version))
+        apply(planFollowEvents(tasks(), dependencyEdges(), data, clock()))
+    }
+
+    // Links a task to an event, before or after it (planLinkEvent).
+    fun linkEvent(taskId: Long, eventId: String, before: Boolean) {
+        val event = event(eventId) ?: return
+        if (get(taskId) == null) return
+        apply(planLinkEvent(tasks(), taskId, event, before, clock()))
+    }
+
+    // A cancelled event's choices (Doing's Cancelled line): its tasks kept, unlinked; linked to another event; or
+    // deleted, with it (restore brings them back: one delete stamp).
+    fun keepEventTasks(itemId: Long) = eventItem(itemId)?.let { delete(it.id) }
+    fun relinkEvent(itemId: Long, eventId: String) {
+        val item = eventItem(itemId) ?: return
+        val event = event(eventId) ?: return
+        apply(planRelinkEvent(tasks(), dependencyEdges(), item.id, event, clock()))
+    }
+    fun deleteEventTasks(itemId: Long) = store.transaction {
+        val item = eventItem(itemId) ?: return@transaction
+        val now = clock()
+        (linkedToEvent(item.id, tasks(), dependencyEdges()).all.flatMap { subtreeIds(it.id) } + item.id).toSet()
+            .forEach { if (get(it) != null) tombstone(TASKS, it, now) }
+    }
+    private fun eventItem(id: Long): Task? = get(id)?.takeIf { it.type == TaskType.EVENT }
+
     // Active and Doing follow the mode unless given a folder; null means everything (the digest's).
     // `asIfOn`: a context the list is filtered by, whose tasks show whether it holds or not.
     fun active(folderId: Long? = modeFolderId(), asIfOn: Long? = null): List<Task> {
@@ -163,7 +213,8 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
             contexts = asIfOn(contextRows.map { it.toContext() }, asIfOn),
             timeWindows = contextRows.flatMap { it.timeWindows() },
             dependencies = dependencyEdges(),
-            now = clock()
+            now = clock(),
+            events = events()
         )
         return urgentFirst(active.filter { inMode(it, folderId, byId) }, clock(), dueDates())
     }
@@ -429,6 +480,11 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         val links = changes.links.groupBy({ it.taskId }, { it.dependsOnTaskId })
         changes.creates.forEach { (task, contextIds) -> store.write(TASKS, task.id, taskFields(task, contextIds, links[task.id].orEmpty()), now) }
         changes.updates.forEach { t -> update(t.id) { t } }
+        // Links from tasks already there (one linked to a new event, say).
+        val created = changes.creates.map { it.first.id }.toSet()
+        links.filterKeys { it !in created }.forEach { (id, more) ->
+            liveEntries().firstOrNull { it.task.id == id }?.let { e -> writeTask(e.task, e.contextIds, e.dependsOn + more, now) }
+        }
         changes.deletes.forEach { tombstone(TASKS, it, now) }
     }
 

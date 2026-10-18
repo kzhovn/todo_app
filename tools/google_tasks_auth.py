@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-time Google sign-in for the Google Tasks import (server/DEPLOY.md, "Hands-free adds").
+"""One-time Google sign-in for the Google Tasks import and Google Calendar (server/DEPLOY.md, sections 7 and 8).
 
 Asks for the OAuth client's id and secret, opens Google's consent page in your browser, and prints
 the refresh token to put in the server's environment as GOOGLE_REFRESH_TOKEN. Nothing is saved.
@@ -12,7 +12,8 @@ import urllib.parse
 import urllib.request
 import webbrowser
 
-SCOPE = "https://www.googleapis.com/auth/tasks"
+# Tasks to take adds from the inbox list; Calendar only to read it.
+SCOPE = "https://www.googleapis.com/auth/tasks https://www.googleapis.com/auth/calendar.readonly"
 
 client_id = input("OAuth client ID: ").strip()
 client_secret = getpass.getpass("OAuth client secret (not shown): ").strip()

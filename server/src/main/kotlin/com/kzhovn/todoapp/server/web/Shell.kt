@@ -172,7 +172,7 @@ private class SideNav(service: TaskService, list: ListData?) {
     }
     val topFolders get() = all.filter { it.type == TaskType.FOLDER && it.parentId == null }.sortedWith(TaskOrder)
     val contexts: List<ContextSummary> = (list?.contexts ?: service.contexts()).let { cs ->
-        contextSummaries(cs, cs.flatMap { list?.windows(it.id) ?: service.timeWindows(it.id) }, all, service.contextIdsByTask(), list?.now ?: service.now())
+        contextSummaries(cs, cs.flatMap { list?.windows(it.id) ?: service.timeWindows(it.id) }, all, service.contextIdsByTask(), list?.now ?: service.now(), service.events())
     }
 }
 

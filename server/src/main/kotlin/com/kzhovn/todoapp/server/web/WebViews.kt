@@ -20,7 +20,7 @@ import kotlinx.html.checkBoxInput
 import kotlinx.html.dateInput
 import kotlinx.html.select
 import kotlinx.html.option
-import com.kzhovn.todoapp.repository.contextHolds
+import com.kzhovn.todoapp.repository.ContextStates
 import kotlinx.html.radioInput
 import kotlinx.html.label
 import kotlinx.html.hiddenInput
@@ -177,7 +177,7 @@ private fun FlowContent.listSearch(data: ListData) = form(action = data.mode.pat
     }
     data.contextId?.let { id ->
         val name = if (id == SearchFilters.NO_CONTEXT) Labels.NO_CONTEXT else data.contexts.firstOrNull { it.id == id }?.name
-        val holds = data.contexts.firstOrNull { it.id == id }?.let { contextHolds(it, data.windows(it.id), data.now) } ?: true
+        val holds = ContextStates(data.contexts, data.contexts.flatMap { data.windows(it.id) }, data.events, data.now).holds(id)
         // Typed in the box, it goes with the text; picked, ✕ clears it.
         if (name != null) a(href = data.pathOf(data.mode, data.folder, data.search.copy(context = null)), classes = "pill set context-filter") {
             +(if (id == SearchFilters.NO_CONTEXT) name else Labels.contextFilter(name, holds)); if (data.search.context == id) +" ✕"

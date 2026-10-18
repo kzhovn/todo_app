@@ -184,6 +184,20 @@ It needs a one-time Google sign-in, which gives the server a lasting key to your
 Try it: "Hey Google, add call mom to my tasks". If your assistant puts it somewhere else (Keep, a
 reminder), say "…to my Google Tasks" instead.
 
+## 8. Google Calendar (optional)
+
+The same sign-in also lets the server read (never change) every calendar your Google account sees: your
+own, ones shared with it, ones it subscribes to. Events then show on the calendar screens, tasks can be
+linked before or after them, and Events contexts (@busy, @oncall) go by them. To use another account's
+calendar, share it with this one.
+
+1. In the Cloud console, **APIs & Services → Library**: enable **Google Calendar API** too.
+2. Run `python3 tools/google_tasks_auth.py` again (it now asks for Calendar as well), allow both, and put
+   the new `GOOGLE_REFRESH_TOKEN` in `/etc/todo-server.env`. Restart.
+
+The journal says `Google Calendar on`. `Google Calendar read failed: HTTP 403` means the token is the old
+one, without Calendar; `HTTP 403 … has not been used` means the API isn't enabled yet.
+
 ## Updating
 
 Build a new `server.tar`, copy it over as before, then on the VM:

@@ -74,24 +74,35 @@ class GoogleTasksImport(
     }
 }
 
-// The Google Tasks API, as the one person who set it up (a refresh token from tools/google_tasks_auth.py).
-class GoogleTasksApi(private val clientId: String, private val clientSecret: String, private val refreshToken: String, private val listId: String = "@default") {
+// The Google Tasks API, as the one person who set it up.
+class GoogleTasksApi(private val google: GoogleClient, private val listId: String = "@default") {
+    private val json = Json { ignoreUnknownKeys = true }
+
+    @Serializable private data class Tasks(val items: List<GoogleTask> = emptyList())
+
+    fun list(): List<GoogleTask> =
+        json.decodeFromString<Tasks>(google.send(HttpRequest.newBuilder(URI("$BASE/lists/$listId/tasks?showCompleted=false&maxResults=100")).GET())).items
+
+    fun delete(id: String) {
+        google.send(HttpRequest.newBuilder(URI("$BASE/lists/$listId/tasks/$id")).DELETE())
+    }
+
+    private companion object {
+        const val BASE = "https://tasks.googleapis.com/tasks/v1"
+    }
+}
+
+// Google's APIs as the one person who set them up: a refresh token from tools/google_tasks_auth.py, which signs in
+// for Tasks and (read-only) Calendar.
+class GoogleClient(private val clientId: String, private val clientSecret: String, private val refreshToken: String) {
     private val http = HttpClient.newHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
     private var accessToken: String? = null
     private var expiresAt = 0L
 
     @Serializable private data class Token(val access_token: String, val expires_in: Long)
-    @Serializable private data class Tasks(val items: List<GoogleTask> = emptyList())
 
-    fun list(): List<GoogleTask> =
-        json.decodeFromString<Tasks>(send(HttpRequest.newBuilder(URI("$BASE/lists/$listId/tasks?showCompleted=false&maxResults=100")).GET())).items
-
-    fun delete(id: String) {
-        send(HttpRequest.newBuilder(URI("$BASE/lists/$listId/tasks/$id")).DELETE())
-    }
-
-    private fun send(request: HttpRequest.Builder): String {
+    fun send(request: HttpRequest.Builder): String {
         val response = http.send(request.header("Authorization", "Bearer ${token()}").build(), HttpResponse.BodyHandlers.ofString())
         if (response.statusCode() !in 200..299) throw IllegalStateException("HTTP ${response.statusCode()}: ${response.body().take(200)}")
         return response.body()
@@ -113,9 +124,5 @@ class GoogleTasksApi(private val clientId: String, private val clientSecret: Str
         accessToken = token.access_token
         expiresAt = System.currentTimeMillis() + (token.expires_in - 60) * 1000
         return token.access_token
-    }
-
-    private companion object {
-        const val BASE = "https://tasks.googleapis.com/tasks/v1"
     }
 }
