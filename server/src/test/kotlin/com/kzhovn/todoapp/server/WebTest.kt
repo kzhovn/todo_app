@@ -529,6 +529,22 @@ class WebTest {
     }
 
     @Test
+    fun `the sidebar's Folder mode menu enters a top folder, its corner opens the syntax page and Settings`() = web {
+        val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
+        service.create(Task(type = TaskType.FOLDER, title = "Clients", parentId = work.id))
+        val doing = client.get("/doing").bodyAsText()
+        val menu = doing.substringAfter("nav-mode-pick").substringBefore("</details>")
+        assertTrue(menu.contains("hx-post=\"/mode?folder=${work.id}\""))
+        assertFalse(menu.contains("Clients")) // top folders only
+        assertTrue(doing.contains("href=\"/syntax\"") && doing.contains("href=\"/settings\""))
+        assertFalse(doing.contains(Labels.QUICK_ADD_SYNTAX.first().first)) // the cheat sheet left the sidebar
+        assertTrue(client.get("/syntax").bodyAsText().contains(Labels.QUICK_ADD_SYNTAX.first().first))
+
+        client.post("/mode?folder=${work.id}")
+        assertTrue(client.get("/doing").bodyAsText().substringAfter("nav-mode\"").contains("Work mode"))
+    }
+
+    @Test
     fun `folder mode syncs with the newest setting winning, and deleting the folder ends it`() = web {
         val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
         service.setMode(work.id)

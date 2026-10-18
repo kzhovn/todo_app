@@ -310,12 +310,18 @@ class QuickAddActivity : ComponentActivity() {
     }
 
     // Another app's "Set a reminder" (Messages' "can you remember to…"): its title, reminding at its time.
-    private fun startText(): String =
-        if (intent.action == Intent.ACTION_CREATE_REMINDER) QuickAddParser.reminderText(
+    // Shared to Raspberry: its subject or text, with the link as the note.
+    private fun startText(): String = when (intent.action) {
+        Intent.ACTION_CREATE_REMINDER -> QuickAddParser.reminderText(
             intent.getStringExtra(Intent.EXTRA_TITLE) ?: intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty(),
             intent.getLongExtra(Intent.EXTRA_TIME, 0L).takeIf { it > 0L }
         )
-        else intent.getStringExtra(EXTRA_TEXT).orEmpty()
+        Intent.ACTION_SEND -> QuickAddParser.sharedText(
+            intent.getStringExtra(Intent.EXTRA_SUBJECT),
+            intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString().orEmpty()
+        )
+        else -> intent.getStringExtra(EXTRA_TEXT).orEmpty()
+    }
 
     private fun typeIcon(type: TaskType) = when (type) {
         TaskType.PROJECT -> Icons.Filled.AccountTree

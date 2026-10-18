@@ -15,6 +15,8 @@ import kotlinx.html.label
 import kotlinx.html.hiddenInput
 import kotlinx.html.details
 import kotlinx.html.summary
+import kotlinx.html.hr
+import kotlinx.html.h1
 import kotlinx.html.img
 import kotlinx.html.A
 import kotlinx.html.ASIDE
@@ -48,6 +50,8 @@ import kotlinx.html.span
 import kotlinx.html.stream.createHTML
 import kotlinx.html.style
 import kotlinx.html.summary
+import kotlinx.html.hr
+import kotlinx.html.h1
 import kotlinx.html.textInput
 import kotlinx.html.title
 import kotlinx.html.unsafe
@@ -96,6 +100,10 @@ internal enum class Icon(val path: String) {
     REFRESH("M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"),
     CHECKLIST("M22 7h-9v2h9V7zm0 8h-9v2h9v-2zM5.54 11L2 7.46l1.41-1.41 2.12 2.12 4.24-4.24 1.41 1.41L5.54 11zm0 8L2 15.46l1.41-1.41 2.12 2.12 4.24-4.24 1.41 1.41L5.54 19z"),
     REDO("M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z"), // Redo
+    BAR_CHART("M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"),
+    CONTENT_COPY("M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"),
+    ALTERNATE_EMAIL("M12 1.95c-5.52 0-10 4.48-10 10s4.48 10 10 10h5v-2h-5c-4.34 0-8-3.66-8-8s3.66-8 8-8 8 3.66 8 8v1.43c0 .79-.71 1.57-1.5 1.57s-1.5-.78-1.5-1.57v-1.43c0-2.76-2.24-5-5-5s-5 2.24-5 5 2.24 5 5 5c1.38 0 2.64-.56 3.54-1.47.65.89 1.77 1.47 2.96 1.47 1.97 0 3.5-1.6 3.5-3.57v-1.43c0-5.52-4.48-10-10-10zm0 13c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z"),
+    SETTINGS("M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"),
     DATE_RANGE("M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z")
 }
 
@@ -162,6 +170,7 @@ private class SideNav(service: TaskService, list: ListData?) {
         val inFolder = open.groupingBy { t -> t.parentId?.let { walkParentChain(it, byId) { id -> id.takeIf { it in ids } } } }.eachCount()
         shown.map { it to (inFolder[it.id] ?: 0) }
     }
+    val topFolders get() = all.filter { it.type == TaskType.FOLDER && it.parentId == null }.sortedWith(TaskOrder)
     val contexts: List<ContextSummary> = (list?.contexts ?: service.contexts()).let { cs ->
         contextSummaries(cs, cs.flatMap { list?.windows(it.id) ?: service.timeWindows(it.id) }, all, service.contextIdsByTask(), list?.now ?: service.now())
     }
@@ -206,7 +215,7 @@ fun countsOob(service: TaskService, data: ListData): String {
     }
 }
 
-// Every page: the sidebar (quick add, the lists, folders, the other screens), then the page's own
+// Every page: the sidebar (quick add, the lists, folders, the other screens, Settings), then the page's own
 // column, then the detail panel (the task editor; empty, and hidden, elsewhere). `current`: the path
 // to highlight. `list`: the list on this page, which quick add re-renders; on pages without one,
 // quick add just confirms with a toast.
@@ -293,18 +302,37 @@ private fun HTML.shell(
                     }
                 }
             }
-            if (nav.contexts.isNotEmpty()) {
-                div(classes = "nav-label") { +Labels.CONTEXTS }
-                nav(classes = "nav context-nav") { nav.contexts.forEach { contextLink(it, list, back = list?.path ?: current) } }
+            // Then the other screens, in three groups: focusing, views over the tasks, what tasks are made with.
+            fun FlowContent.link(path: String, label: String, icon: Icon) =
+                a(href = path, classes = if (path == current.substringBefore('?')) "current" else null) { icon(icon, ""); +label }
+            hr(classes = "nav-hr")
+            nav(classes = "nav side-group") {
+                link("/focus", Labels.FOCUS, Icon.CENTER_FOCUS)
+                folderModeRow(nav)
             }
-            div(classes = "nav-label") { +"More" }
-            nav(classes = "nav") {
-                listOf("/focus" to Labels.FOCUS, "/calendar" to Labels.CALENDAR, "/templates" to Labels.TEMPLATES, "/review" to Labels.REVIEW, "/contexts" to Labels.CONTEXTS, "/settings" to Labels.SETTINGS)
-                    .forEach { (path, label) -> a(href = path, classes = if (path == current.substringBefore('?')) "current" else null) { +label } }
+            hr(classes = "nav-hr")
+            nav(classes = "nav side-group") {
+                link("/calendar", Labels.CALENDAR, Icon.CALENDAR)
+                link("/review", Labels.REVIEW, Icon.BAR_CHART)
             }
-            details(classes = "shortcuts") {
-                summary { +"Shortcuts and syntax" }
-                syntaxKey()
+            hr(classes = "nav-hr")
+            nav(classes = "nav side-group") {
+                link("/templates", Labels.TEMPLATES, Icon.CONTENT_COPY)
+                // Opens into the contexts, each filtering the list; with none yet, the page to add one.
+                if (nav.contexts.isEmpty()) link("/contexts", Labels.CONTEXTS, Icon.ALTERNATE_EMAIL)
+                else details(classes = "nav-group") {
+                    id = "nav-contexts"
+                    attributes["open"] = ""
+                    summary { icon(Icon.ALTERNATE_EMAIL, ""); +Labels.CONTEXTS; span(classes = "n") { +"▾" } }
+                    div(classes = "context-nav") { nav.contexts.forEach { contextLink(it, list, back = list?.path ?: current) } }
+                }
+            }
+            div(classes = "side-foot") {
+                a(href = "/syntax", classes = if (current == "/syntax") "current" else null) { +Labels.SYNTAX }
+                a(href = "/settings", classes = "gear" + if (current == "/settings") " current" else "") {
+                    attributes["aria-label"] = Labels.SETTINGS; attributes["title"] = Labels.SETTINGS
+                    icon(Icon.SETTINGS, "")
+                }
             }
         }
         div(classes = "workspace") {
@@ -317,6 +345,26 @@ private fun HTML.shell(
     div { id = "timer"; attributes["hidden"] = "" }
 }
 
+// Folder mode beside Focus: on, the mode (✕ leaves it); off, a menu of the top folders to enter one.
+private fun FlowContent.folderModeRow(nav: SideNav) {
+    val mode = nav.mode
+    if (mode != null) div(classes = "nav-mode") {
+        span(classes = "nav-mode-name") { icon(Icon.OPEN_IN_FULL, "", nav.colors[mode.id]); +"${mode.title} mode" }
+        button(classes = "mode-leave") { modeButton(null); attributes["aria-label"] = "Leave ${mode.title} mode"; +"✕" }
+    } else details(classes = "pp nav-mode-pick") {
+        summary { icon(Icon.OPEN_IN_FULL, ""); +Labels.FOLDER_MODE; span(classes = "n") { +"▾" } }
+        div(classes = "pop") {
+            nav.topFolders.forEach { folder ->
+                button(classes = "menu-row") {
+                    modeButton(folder.id)
+                    span(classes = "fdot") { nav.colors[folder.id]?.let { style = "background: $it" } }
+                    +folder.title
+                }
+            }
+        }
+    }
+}
+
 private val KEYS = listOf(
     "n" to "jump to quick add",
     "/" to "search the list",
@@ -325,9 +373,15 @@ private val KEYS = listOf(
     "?" to "every shortcut, including the All tree's",
 )
 
-private fun FlowContent.syntaxKey() = div(classes = "key") {
-    div(classes = "key-head") { +Labels.QUICK_ADD }
-    Labels.QUICK_ADD_SYNTAX.forEach { (syntax, meaning) -> div { span(classes = "mono") { +syntax }; +" $meaning" } }
-    div(classes = "key-head") { +"Keys (not while typing)" }
-    KEYS.forEach { (keys, meaning) -> div { span(classes = "mono") { +keys }; +" $meaning" } }
+// Quick add's syntax, Discord's, and the keys: the page the sidebar's "Quick add syntax" opens.
+fun HTML.syntaxPage(service: TaskService) = shellPage(service, "Raspberry · ${Labels.SYNTAX}", "/syntax") {
+    div(classes = "contexts key") {
+        h1 { +Labels.SYNTAX }
+        fun rows(rows: List<Pair<String, String>>) = rows.forEach { (syntax, meaning) -> div { span(classes = "mono") { +syntax }; +" $meaning" } }
+        rows(Labels.QUICK_ADD_SYNTAX)
+        div(classes = "key-head") { +"Keys (not while typing)" }
+        rows(KEYS)
+        div(classes = "key-head") { +Labels.DISCORD_SYNTAX_HEAD }
+        rows(Labels.DISCORD_SYNTAX)
+    }
 }

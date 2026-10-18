@@ -1,6 +1,6 @@
 package com.kzhovn.todoapp.data
 
-private val URL = Regex("https?://\\S+")
+internal val URL = Regex("https?://\\S+")
 
 // A note's text split into plain runs and links (trailing punctuation isn't part of a link), for each
 // client to render: (text, isLink).

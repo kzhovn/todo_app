@@ -23,7 +23,6 @@ import com.kzhovn.todoapp.data.modeFolder
 import com.kzhovn.todoapp.sync.SyncSettings
 import com.kzhovn.todoapp.sync.SyncWorker
 import com.kzhovn.todoapp.ui.theme.folderColors
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -32,7 +31,8 @@ import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalDrawerSheet
@@ -44,11 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.contexts.ContextsActivity
@@ -115,9 +111,13 @@ fun AppDrawer(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
+            // Three groups split by plain rules (focusing, views, what tasks are made with), then the
+            // cheat sheet and Settings in the bottom corner.
             ModalDrawerSheet {
+                Spacer(Modifier.height(8.dp))
+                Item(Labels.FOCUS, Icons.Filled.CenterFocusStrong, false) { context.startActivity(Intent(context, FocusActivity::class.java)) }
                 NavigationDrawerItem(
-                    label = { Text(mode?.let { "${it.title} mode" } ?: Labels.ALL_FOLDERS, fontWeight = if (mode != null) FontWeight.SemiBold else null) },
+                    label = { Text(mode?.let { "${it.title} mode" } ?: Labels.FOLDER_MODE, fontWeight = if (mode != null) FontWeight.SemiBold else null) },
                     icon = { Icon(Icons.Filled.OpenInFull, contentDescription = null, tint = mode?.let { folderColors(folders)[it.id] } ?: LedgerMuted) },
                     badge = {
                         if (mode != null) Icon(
@@ -128,22 +128,33 @@ fun AppDrawer(
                     selected = false,
                     onClick = { pickingMode = true },
                     colors = NavigationDrawerItemDefaults.colors(unselectedTextColor = LedgerInk),
-                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 4.dp)
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                 )
-                ContextsSection(drawerState.isOpen) { scope.launch { drawerState.close() } }
-                HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
-                Item(Labels.FOCUS, Icons.Filled.CenterFocusStrong, false) { context.startActivity(Intent(context, FocusActivity::class.java)) }
+                Rule()
                 Item(Labels.CALENDAR, Icons.Filled.CalendarMonth, calendarSelected) {
                     if (!calendarSelected) context.startActivity(Intent(context, CalendarActivity::class.java))
                 }
                 Item(Labels.REVIEW, Icons.Filled.BarChart, reviewSelected) {
                     if (!reviewSelected) context.startActivity(Intent(context, ReviewActivity::class.java))
                 }
+                Rule()
                 Item(Labels.TEMPLATES, Icons.Filled.ContentCopy, false) { context.startActivity(Intent(context, TemplatesActivity::class.java)) }
-                Item(Labels.SETTINGS, Icons.Filled.Sync, false) { context.startActivity(Intent(context, SyncSettingsActivity::class.java)) }
+                ContextsSection(drawerState.isOpen) { scope.launch { drawerState.close() } }
                 Spacer(Modifier.weight(1f))
-                HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(horizontal = 24.dp))
-                QuickAddKey()
+                HorizontalDivider(color = LedgerBorder)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 4.dp, bottom = 8.dp)) {
+                    Text(
+                        Labels.SYNTAX, fontSize = 13.sp, color = LedgerMuted,
+                        modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable {
+                            scope.launch { drawerState.close() }
+                            context.startActivity(Intent(context, SyntaxActivity::class.java))
+                        }.padding(12.dp)
+                    )
+                    Spacer(Modifier.weight(1f))
+                    IconButton(onClick = { scope.launch { drawerState.close() }; context.startActivity(Intent(context, SyncSettingsActivity::class.java)) }) {
+                        Icon(Icons.Filled.Settings, contentDescription = Labels.SETTINGS, tint = LedgerMuted)
+                    }
+                }
             }
         },
         content = content
@@ -239,30 +250,5 @@ fun setFolderMode(context: Context, folderId: Long?) {
     if (SyncSettings.config(context) != null) SyncWorker.requestSoon(context, delaySeconds = 0)
 }
 
-// Cheat sheet for quick-add syntax, at the bottom of the drawer.
 @Composable
-private fun QuickAddKey() {
-    val discord = listOf(
-        "-- …" to "any quick add above",
-        "reply to a todo" to "it depends on the new one",
-        "✅ ❌ ⭐" to "complete / delete / star",
-    )
-    Column(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
-        Text(Labels.QUICK_ADD, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerMuted)
-        Labels.QUICK_ADD_SYNTAX.forEach { (syntax, meaning) -> KeyRow(syntax, meaning) }
-        Spacer(Modifier.height(8.dp))
-        Text("Discord (.help for more)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = LedgerMuted)
-        discord.forEach { (syntax, meaning) -> KeyRow(syntax, meaning) }
-    }
-}
-
-@Composable
-private fun KeyRow(syntax: String, meaning: String) {
-    Text(
-        buildAnnotatedString {
-            withStyle(SpanStyle(fontFamily = FontFamily.Monospace, color = LedgerInk)) { append(syntax) }
-            append("  $meaning")
-        },
-        fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.padding(top = 2.dp)
-    )
-}
+private fun Rule() = HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))

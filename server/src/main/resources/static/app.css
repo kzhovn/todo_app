@@ -44,12 +44,30 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .nav-label { margin: 16px 10px 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .fdot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; background: var(--muted); }
 .folders a { white-space: nowrap; }
-.shortcuts { margin-top: auto; padding-top: 12px; }
-.shortcuts > summary { cursor: pointer; list-style: none; padding: 7px 10px; border-radius: 7px; font-size: 13px; color: var(--muted); }
-.shortcuts > summary::-webkit-details-marker { display: none; }
-.shortcuts > summary:hover { background: var(--tile); color: var(--ink); }
-.key { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; padding: 6px 10px 0; }
-.key-head { margin-top: 6px; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+/* The other screens, in groups split by plain rules; Contexts opens into the contexts. */
+.nav-hr { border: 0; border-top: 1px solid var(--border); margin: 10px 10px; }
+.side-group a .icon, .nav-group > summary .icon, .nav-mode .icon, .nav-mode-pick > summary .icon { width: 16px; height: 16px; color: var(--muted); }
+.nav-group > summary, .nav .nav-mode-pick > summary, .nav-mode { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 7px; font-size: 14px; cursor: pointer; list-style: none; }
+.nav-group > summary::-webkit-details-marker { display: none; }
+.nav-group > summary:hover, .nav-mode-pick > summary:hover { background: var(--tile); }
+.nav-group .context-nav a { padding-left: 35px; }
+.nav-mode { cursor: default; font-weight: 600; }
+.nav-mode-name { display: flex; align-items: center; gap: 9px; }
+.nav-mode .mode-leave { margin-left: auto; color: var(--muted); padding: 0 4px; }
+.nav-mode .mode-leave:hover { color: var(--ink); }
+.nav-mode-pick { display: block; }
+.nav-mode-pick .pop { flex-direction: column; align-items: stretch; gap: 2px; padding: 6px; min-width: 190px; }
+.nav-mode-pick .menu-row { display: flex; align-items: center; gap: 9px; padding: 6px 10px; border-radius: 6px; font-size: 14px; text-align: left; }
+.nav-mode-pick .menu-row:hover { background: var(--tile); }
+/* Pinned to the sidebar's bottom (its padding included), so the gear never scrolls away. */
+.side-foot { margin-top: auto; position: sticky; bottom: -16px; margin-bottom: -16px; background: var(--panel); border-top: 1px solid var(--border); display: flex; align-items: center; padding: 8px 4px 12px; }
+.side-foot a { color: var(--muted); text-decoration: none; font-size: 13px; padding: 5px 6px; border-radius: 6px; }
+.side-foot a:hover, .side-foot a.current { color: var(--ink); background: var(--tile); }
+.side-foot .gear { margin-left: auto; display: inline-flex; padding: 5px; }
+.side-foot .gear .icon { width: 20px; height: 20px; }
+.key { font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.key h1 { color: var(--ink); }
+.key-head { margin-top: 14px; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
 .mono { font-family: ui-monospace, Menlo, monospace; color: var(--ink); }
 .workspace { flex: 1; min-width: 0; display: flex; }
 .page { flex: 1; min-width: 0; }
@@ -138,7 +156,8 @@ label.pin-toggle { cursor: pointer; }
   .shell { flex-direction: column; }
   .sidebar { position: static; height: auto; width: auto; border-right: 0; border-bottom: 1px solid var(--border); }
   .nav { flex-direction: row; flex-wrap: wrap; }
-  .nav-label, .folders, .shortcuts { display: none; }
+  .nav-label, .folders, .nav-hr, .side-group { display: none; }
+  .side-foot { position: static; margin: 0; border-top: 0; }
   .list-head { position: static; }
 }
 

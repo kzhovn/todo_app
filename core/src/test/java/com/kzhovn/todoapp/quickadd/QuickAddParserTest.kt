@@ -194,6 +194,18 @@ class QuickAddParserTest {
     }
 
     @Test
+    fun `shared text takes the subject or the words as its title and the link as its note`() {
+        val url = "https://example.com/a?b=1"
+        assertEquals("Page title // $url", QuickAddParser.sharedText("Page title", url))
+        assertEquals("look at this // $url", QuickAddParser.sharedText(null, "look at\nthis $url"))
+        assertEquals(url, QuickAddParser.sharedText(" ", url))
+        assertEquals("Page // see this $url", QuickAddParser.sharedText("Page", "see this $url"))
+        assertEquals("buy milk", QuickAddParser.sharedText(null, "buy milk"))
+        val task = QuickAddParser.parse(QuickAddParser.sharedText("Page title", url))
+        assertEquals("Page title" to url, task.title to task.notes)
+    }
+
+    @Test
     fun `reminders, star, pin, focus, tilde durations and new checklists`() {
         // "before" is before the due date; "start" when it starts; anything else is a time of its own.
         assertEquals(30, read("call dentist due fri 3pm remind 30m before").task!!.reminderOffsetMinutes)

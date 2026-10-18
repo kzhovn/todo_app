@@ -3,6 +3,7 @@ package com.kzhovn.todoapp.quickadd
 import com.kzhovn.todoapp.data.RecurrenceType
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
+import com.kzhovn.todoapp.data.URL
 import com.kzhovn.todoapp.data.atTime
 import com.kzhovn.todoapp.data.dayStart
 import com.kzhovn.todoapp.data.localDay
@@ -331,6 +332,17 @@ object QuickAddParser {
         val text = title.trim().replace(SPACES, " ")
         return if (time == null) text
         else "$text remind " + Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()).format(REMIND_FORMAT)
+    }
+
+    // Text shared from another app: its subject (a page's title), else the text without its link, with
+    // the link (or the whole text, under a subject) as the note: "Page title // https://…".
+    fun sharedText(subject: String?, text: String): String {
+        fun flat(s: String) = s.trim().replace(SPACES, " ")
+        val link = URL.find(text)?.value
+        val rest = flat(link?.let { text.replace(it, "") } ?: text)
+        val title = subject?.let(::flat)?.ifEmpty { null } ?: rest.ifEmpty { link.orEmpty() }
+        val note = when (title) { link -> null; rest -> link; else -> flat(text) }
+        return if (note.isNullOrEmpty()) title else "$title // $note"
     }
 
     private val REMIND_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd H:mm")

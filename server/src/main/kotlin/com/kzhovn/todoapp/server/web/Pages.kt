@@ -98,6 +98,7 @@ fun Route.pageRoutes(service: TaskService) {
     }
 
     get("/settings") { call.respondHtml { settingsPage(service) } }
+    get("/syntax") { call.respondHtml { syntaxPage(service) } }
     post("/settings") {
         val p = call.receiveParameters()
         p["rolloverHour"]?.toIntOrNull()?.let(service::setRolloverHour)

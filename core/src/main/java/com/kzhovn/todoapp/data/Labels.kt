@@ -17,6 +17,7 @@ object Labels {
     const val SETTINGS = "Settings"
     const val CONTEXTS = "Contexts"
     const val ALL_FOLDERS = "All folders"
+    const val FOLDER_MODE = "Folder mode"
     fun deleted(title: String, more: Int = 0) = "Deleted “$title”" + if (more > 0) " and $more more" else ""
 
     // Review (the phone's and the web's)
@@ -204,7 +205,14 @@ object Labels {
     const val DUE_AFTER = "Due after"
     const val DUE_BEFORE = "Due before"
 
-    // Quick add's cheat sheet (the phone's drawer, the web's sidebar)
+    // Quick add's cheat sheet, its own screen on the phone and page on the web
+    const val SYNTAX = "Quick add syntax"
+    const val DISCORD_SYNTAX_HEAD = "Discord (.help for more)"
+    val DISCORD_SYNTAX = listOf(
+        "-- …" to "any quick add above",
+        "reply to a todo" to "it depends on the new one",
+        "✅ ❌ ⭐" to "complete / delete / star",
+    )
     val QUICK_ADD_SYNTAX = listOf(
         "-d fri · due 3pm" to "due date (and time)",
         "-s tomorrow · start mon 9am" to "start date",

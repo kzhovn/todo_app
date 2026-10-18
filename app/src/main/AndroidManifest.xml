@@ -31,6 +31,7 @@
         <activity android:name=".ui.TaskEditActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".sync.SyncSettingsActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".ui.TemplatesActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name=".ui.SyntaxActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".ui.ReviewActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".ui.CalendarActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".focus.FocusActivity" android:exported="false" android:screenOrientation="portrait" />
@@ -51,7 +52,22 @@
                 <action android:name="android.intent.action.CREATE_REMINDER" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
+        <service
+            android:name=".quickadd.QuickAddTile"
+            android:exported="true"
+            android:label="Quick add"
+            android:icon="@drawable/ic_tile_add"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
         <activity
             android:name=".widget.WidgetConfigActivity"
             android:exported="true"
