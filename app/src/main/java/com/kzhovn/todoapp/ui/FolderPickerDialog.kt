@@ -93,7 +93,7 @@ fun FolderPickerDialog(
 }
 
 @Composable
-private fun PickerRow(title: String, icon: ImageVector, tint: Color, depth: Int, selected: Boolean, muted: Boolean = false, onClick: () -> Unit) {
+internal fun PickerRow(title: String, icon: ImageVector, tint: Color, depth: Int, selected: Boolean, muted: Boolean = false, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth()

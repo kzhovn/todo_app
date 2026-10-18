@@ -37,10 +37,8 @@ import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.outlined.HourglassEmpty
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -52,7 +50,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +61,7 @@ import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.sync.SyncJson
 import com.kzhovn.todoapp.ui.FolderPickerDialog
+import com.kzhovn.todoapp.ui.PickerRow
 import com.kzhovn.todoapp.ui.PropertyChip
 import com.kzhovn.todoapp.ui.TaskEditActivity
 import com.kzhovn.todoapp.ui.pickDate
@@ -192,25 +190,14 @@ class QuickAddActivity : ComponentActivity() {
                 }
                 Row(modifier = Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (!addsItems && folder?.type != TaskType.CHECKLIST) {
-                        Box {
-                            PropertyChip(
-                                label = Labels.TYPE,
-                                valueText = Labels.typeName(type).takeIf { type != TaskType.TASK },
-                                icon = typeIcon(type),
-                                onClick = { showTypeMenu = true },
-                                showLabelWhenSet = false,
-                                iconOnly = type == TaskType.TASK
-                            )
-                            DropdownMenu(expanded = showTypeMenu, onDismissRequest = { showTypeMenu = false }) {
-                                Labels.TYPES.forEach { (t, name) ->
-                                    DropdownMenuItem(
-                                        text = { Text(name, color = if (t == type) LedgerAccent else Color.Unspecified) },
-                                        leadingIcon = { Icon(typeIcon(t), contentDescription = null, tint = if (t == type) LedgerAccent else LedgerMuted) },
-                                        onClick = { type = t; showTypeMenu = false }
-                                    )
-                                }
-                            }
-                        }
+                        PropertyChip(
+                            label = Labels.TYPE,
+                            valueText = Labels.typeName(type).takeIf { type != TaskType.TASK },
+                            icon = typeIcon(type),
+                            onClick = { showTypeMenu = true },
+                            showLabelWhenSet = false,
+                            iconOnly = type == TaskType.TASK
+                        )
                         Spacer(Modifier.width(8.dp))
                     }
                     PropertyChip(
@@ -292,6 +279,19 @@ class QuickAddActivity : ComponentActivity() {
                 }
             }
 
+            // A dialog like the folder picker's: a DropdownMenu took the keyboard's focus and shrank the sheet.
+            if (showTypeMenu) AlertDialog(
+                onDismissRequest = { showTypeMenu = false },
+                confirmButton = {},
+                title = { Text(Labels.TYPE) },
+                text = {
+                    Column {
+                        Labels.TYPES.forEach { (t, name) ->
+                            PickerRow(name, typeIcon(t), LedgerMuted, depth = 0, selected = t == type) { type = t; showTypeMenu = false }
+                        }
+                    }
+                }
+            )
             if (showFolderPicker) {
                 // A new folder can go at the top, but not into a checklist.
                 FolderPickerDialog(
