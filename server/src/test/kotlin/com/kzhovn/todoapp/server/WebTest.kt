@@ -293,7 +293,8 @@ class WebTest {
     @Test
     fun `review counts completions by window, steps back, and quick add off a list confirms with a toast`() = web {
         val day = 24L * 60 * 60 * 1000
-        service.create(Task(title = "Done today", isComplete = true, completedAt = service.now(), dueDate = service.now() - 3 * day))
+        val now = service.now() // read once: a ms between two reads makes it 3d - 1ms, "2d late"
+        service.create(Task(title = "Done today", isComplete = true, completedAt = now, dueDate = now - 3 * day))
         service.create(Task(title = "Still open"))
         val review = client.get("/review").bodyAsText()
         assertTrue(review.contains("Due dates"))
