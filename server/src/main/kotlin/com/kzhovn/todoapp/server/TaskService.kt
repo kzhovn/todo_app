@@ -37,7 +37,6 @@ import com.kzhovn.todoapp.quickadd.planQuickAdd
 import com.kzhovn.todoapp.data.pinnedTask
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.isLinkable
-import com.kzhovn.todoapp.data.searchTasks
 import com.kzhovn.todoapp.data.findFolder
 import com.kzhovn.todoapp.repository.blockerFor
 import com.kzhovn.todoapp.repository.applyTo
@@ -49,7 +48,6 @@ import com.kzhovn.todoapp.repository.computeActiveIgnoringContexts
 import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.DEFAULT_ROLLOVER_HOUR
-import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.canDependOn
 import com.kzhovn.todoapp.data.canMoveUnder
@@ -80,6 +78,7 @@ import com.kzhovn.todoapp.data.stalledProjects
 import com.kzhovn.todoapp.repository.BulkEdit
 import com.kzhovn.todoapp.repository.InheritedField
 import com.kzhovn.todoapp.repository.computeActiveTasks
+import com.kzhovn.todoapp.repository.asIfOn
 import com.kzhovn.todoapp.repository.filterDoing
 import com.kzhovn.todoapp.sync.CONTEXTS
 import com.kzhovn.todoapp.sync.DELETED_AT
@@ -153,14 +152,15 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
     fun defaultFolderId(): Long? = defaultFolder(tasks(), store.modeFolderId())?.id
 
     // Active and Doing follow the mode unless given a folder; null means everything (the digest's).
-    fun active(folderId: Long? = modeFolderId()): List<Task> {
+    // `asIfOn`: a context the list is filtered by, whose tasks show whether it holds or not.
+    fun active(folderId: Long? = modeFolderId(), asIfOn: Long? = null): List<Task> {
         val all = tasks()
         val byId = all.associateBy { it.id }
         val contextRows = store.all(CONTEXTS).filterNot { it.isDeleted }
         val active = computeActiveTasks(
             all = all,
             contextsByTaskId = contextIdsByTask(),
-            contexts = contextRows.map { it.toContext() },
+            contexts = asIfOn(contextRows.map { it.toContext() }, asIfOn),
             timeWindows = contextRows.flatMap { it.timeWindows() },
             dependencies = dependencyEdges(),
             now = clock()
@@ -343,7 +343,6 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         tombstone(CONTEXTS, id, now)
     }
 
-    fun search(query: String, filters: SearchFilters): List<Task> = searchTasks(tasks(), contextIdsByTask(), query, filters)
 
     fun dependsOn(id: Long): Set<Long> = store.get(TASKS, id)?.dependsOn().orEmpty()
 

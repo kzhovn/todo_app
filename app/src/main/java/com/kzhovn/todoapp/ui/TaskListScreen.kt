@@ -134,8 +134,6 @@ fun TaskListScreen(
     val subtaskCounts by viewModel.subtaskCounts.collectAsState()
     val allById by viewModel.allById.collectAsState()
     val dues by viewModel.dues.collectAsState()
-    val contextsByTaskId by viewModel.contextsByTaskId.collectAsState()
-    val allContexts by viewModel.allContexts.collectAsState()
     val colors = remember(allById) { folderColors(allById.values) }
     val context = LocalContext.current
     val prefs = remember { OutlinerPreferences(context) }
@@ -148,12 +146,7 @@ fun TaskListScreen(
         // The bar shows the nearest folder ancestor's color, even for a subtask of a task.
         val barColor = nearestFolder(task, allById)?.let { colors[it.id] } ?: LedgerBorder
         val notesLine = viewModel.searchQuery?.let { notesMatch(task, it) }
-        // Search results come from anywhere, so they say where: the folder, then the contexts.
-        val metaLine = viewModel.searchQuery?.let {
-            listOfNotNull(nearestFolder(task, allById)?.title) +
-                contextsByTaskId[task.id].orEmpty().mapNotNull { id -> allContexts[id]?.name?.let { "@$it" } }.sorted()
-        }?.joinToString(" · ")?.ifEmpty { null }
-        val row = @Composable { TaskRow(task, dues.of(task), subtaskCounts[task.id], barColor, task.id in selectedIds, subtaskParentTitle(task, allById), onCheck, onStar, onEdit, onSnooze, notesLine, metaLine, inOrderStep = allById[task.parentId]?.sequential == true) }
+        val row = @Composable { TaskRow(task, dues.of(task), subtaskCounts[task.id], barColor, task.id in selectedIds, subtaskParentTitle(task, allById), onCheck, onStar, onEdit, onSnooze, notesLine, inOrderStep = allById[task.parentId]?.sequential == true) }
         // Swipe right to add a subtask (a checklist's are items), as in the All tree.
         SwipeToAddSubtask({ onAddSubtask(task.id) }, row)
         if (!last) HorizontalDivider(color = LedgerBorder)
@@ -245,7 +238,6 @@ internal fun TaskRow(
     onEdit: (Long) -> Unit,
     onSnooze: (Long, Long) -> Unit,
     notesLine: String? = null, // search: the line of the notes it matched
-    metaLine: String? = null, // search: where it lives and its contexts, as the web's results show
     tag: String? = null, // the calendar: what put it on its day ("starts", "reminder 5:00 PM"), said in place of a start to come
     inOrderStep: Boolean = false // a step of an in-order parent: its menu can free the next step, and ↷ shows it has
 ) {
@@ -288,13 +280,12 @@ internal fun TaskRow(
                             val italic = if (due.forTask != null) FontStyle.Italic else null
                             withStyle(SpanStyle(color = color, fontWeight = FontWeight.Normal, fontSize = 12.sp, fontStyle = italic)) { append("  · ${dueText(due, now)}") }
                         }
-                        // A start still to come (search shows snoozed and future tasks), or a waiting item's own line, as on the web.
+                        // A start still to come (the All tree shows snoozed and future tasks), or a waiting item's own line, as on the web.
                         val later = tag ?: laterText(task, now)
                         if (later != null) withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · $later") }
                         if (subtasks != null && subtasks.second > 0 && task.type != TaskType.CHECKLIST) {
                             withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("  · ${subtasks.first}/${subtasks.second}") }
                         }
-                        if (metaLine != null) withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 12.sp)) { append("\n$metaLine") }
                         if (notesLine != null) withStyle(SpanStyle(color = LedgerMuted, fontWeight = FontWeight.Normal, fontSize = 13.sp)) { append("\n$notesLine") }
                     },
                     fontWeight = FontWeight.Medium,

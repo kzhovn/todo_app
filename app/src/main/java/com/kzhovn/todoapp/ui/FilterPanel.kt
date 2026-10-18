@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Folder
@@ -27,7 +26,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
-import com.kzhovn.todoapp.data.TaskContext
 
 // One wrapping row of compact chips. Folder and context are dropdowns rather than a pill per option,
 // so the panel stays a couple of lines tall however many folders/contexts exist.
@@ -36,7 +34,8 @@ import com.kzhovn.todoapp.data.TaskContext
 fun FilterPanel(
     filters: SearchFilters,
     folders: List<Task>,
-    contexts: List<TaskContext>,
+    // Only All holds completed tasks. (The context filter is the top bar's @.)
+    showCompleted: Boolean,
     onFiltersChange: (SearchFilters) -> Unit
 ) {
     val activity = LocalContext.current as android.app.Activity
@@ -48,7 +47,7 @@ fun FilterPanel(
         SelectablePill(label = Labels.STARRED, selected = filters.starredOnly, fontSize = 13.sp, horizontalPadding = 8.dp, verticalPadding = 4.dp) {
             onFiltersChange(filters.copy(starredOnly = !filters.starredOnly))
         }
-        SelectablePill(label = Labels.COMPLETED, selected = filters.includeCompleted, fontSize = 13.sp, horizontalPadding = 8.dp, verticalPadding = 4.dp) {
+        if (showCompleted) SelectablePill(label = Labels.COMPLETED, selected = filters.includeCompleted, fontSize = 13.sp, horizontalPadding = 8.dp, verticalPadding = 4.dp) {
             onFiltersChange(filters.copy(includeCompleted = !filters.includeCompleted))
         }
         DropdownChip(
@@ -57,13 +56,6 @@ fun FilterPanel(
             selected = folders.firstOrNull { it.id == filters.folderId }?.title,
             options = folders.sortedBy { it.title.lowercase() }.map { it.id to it.title },
             onPick = { onFiltersChange(filters.copy(folderId = it)) }
-        )
-        DropdownChip(
-            label = Labels.CONTEXT,
-            icon = Icons.Filled.AlternateEmail,
-            selected = contexts.firstOrNull { it.id == filters.contextId }?.name,
-            options = contexts.sortedBy { it.name.lowercase() }.map { it.id to it.name },
-            onPick = { onFiltersChange(filters.copy(contextId = it)) }
         )
         PropertyChip(
             label = Labels.DUE_AFTER,

@@ -1,15 +1,11 @@
 package com.kzhovn.todoapp.server.web
 
-import com.kzhovn.todoapp.data.notesMatch
 import kotlinx.html.noScript
 import com.kzhovn.todoapp.data.clockTime
-import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.isLinkable
 import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.ContextType
-import com.kzhovn.todoapp.data.SearchFilters
-import com.kzhovn.todoapp.data.subtaskParentTitle
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
@@ -17,11 +13,11 @@ import com.kzhovn.todoapp.data.contextProblem
 import com.kzhovn.todoapp.data.describeContext
 import com.kzhovn.todoapp.data.deleteContextQuestion
 import com.kzhovn.todoapp.data.folderTree
+import com.kzhovn.todoapp.data.forcedChoices
+import com.kzhovn.todoapp.data.forcedShown
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.sectionsByTopFolder
 import com.kzhovn.todoapp.data.nearestFolder
-import com.kzhovn.todoapp.data.dueStatus
-import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.repository.BulkEdit
 import com.kzhovn.todoapp.repository.DateChange
 import com.kzhovn.todoapp.repository.FolderChange
@@ -34,7 +30,6 @@ import com.kzhovn.todoapp.repository.bucketCounts
 import com.kzhovn.todoapp.repository.review
 import com.kzhovn.todoapp.repository.shortAge
 import com.kzhovn.todoapp.server.TaskService
-import io.ktor.http.ContentType
 import io.ktor.http.Parameters
 import io.ktor.server.html.respondHtml
 import io.ktor.server.request.receiveParameters
@@ -44,15 +39,11 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
-import kotlinx.html.BUTTON
 import kotlinx.html.ButtonType
-import kotlinx.html.DIV
 import kotlinx.html.FlowContent
 import kotlinx.html.FormMethod
 import kotlinx.html.HTML
-import kotlinx.html.InputType
 import kotlinx.html.a
-import kotlinx.html.b
 import kotlinx.html.button
 import kotlinx.html.checkBoxInput
 import kotlinx.html.classes
@@ -70,7 +61,6 @@ import kotlinx.html.p
 import kotlinx.html.radioInput
 import kotlinx.html.select
 import kotlinx.html.span
-import kotlinx.html.stream.createHTML
 import kotlinx.html.style
 import kotlinx.html.textInput
 import kotlinx.html.timeInput
@@ -79,31 +69,9 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-// Search, Review and Contexts: the phone's secondary screens.
-
-private const val MAX_RESULTS = 200 // ponytail: a cap, not paging; narrow the search past it
+// Review and Contexts: the phone's secondary screens.
 
 fun Route.pageRoutes(service: TaskService) {
-    get("/search") { call.respondHtml { searchPage(service, call.request.queryParameters) } }
-    get("/search/results") { call.respondResults(service, call.request.queryParameters) }
-    // Completing or reopening from the results. The search form's fields come along, so the
-    // refreshed results still match it; open subtasks are asked about, as in the lists.
-    post("/search/toggle/{id}") {
-        val p = call.receiveParameters()
-        val id = call.taskId() ?: return@post
-        val task = service.get(id) ?: return@post call.respondResults(service, p)
-        val choice = call.request.queryParameters["subtasks"]
-        val open = service.activeDescendantCount(id)
-        when {
-            task.isComplete -> service.uncomplete(id)
-            open > 0 && choice == null -> return@post call.respondResults(service, p, extra = createHTML().div {
-                askSubtasksToast(task, open, "/search/toggle/$id", target = "#results", include = "form.search")
-            })
-            else -> service.completeOrDecide(id, choice)
-        }
-        call.respondResults(service, p)
-    }
-
     // Bulk edit, like the phone's: the list's selected tasks, and only what makes sense in bulk.
     get("/bulk") {
         val ids = call.request.queryParameters["ids"].orEmpty().split(',').mapNotNull { it.toLongOrNull() }
@@ -150,114 +118,17 @@ fun Route.pageRoutes(service: TaskService) {
         service.saveContext(form.context, form.windows)
         call.respondRedirect("/contexts")
     }
+    // From the contexts page, or a context's ⋯ in the sidebar (?back: the page it was on).
     post("/contexts/{id}/forced") {
         val forced = call.receiveParameters()["forced"]?.toBooleanStrictOrNull() // "auto": null
         call.parameters["id"]?.toLongOrNull()?.let { service.setContextForced(it, forced) }
-        call.respondRedirect("/contexts")
+        call.respondRedirect(call.request.queryParameters["back"]?.takeIf { it.startsWith("/") && !it.startsWith("//") } ?: "/contexts")
     }
     // Confirmed in the browser (hx-confirm), like the phone: there's no undo for this one.
     post("/contexts/{id}/delete") {
         call.parameters["id"]?.toLongOrNull()?.let(service::deleteContext)
         call.response.header("HX-Redirect", "/contexts")
         call.respondText("")
-    }
-}
-
-// --- Search
-
-private suspend fun io.ktor.server.application.ApplicationCall.respondResults(service: TaskService, p: Parameters, extra: String = "") =
-    respondText(createHTML().div { searchResults(service, p) } + extra, ContentType.Text.Html)
-
-private fun Parameters.searchFilters() = SearchFilters(
-    folderId = this["folder"]?.toLongOrNull(),
-    contextId = this["context"]?.toLongOrNull(),
-    starredOnly = this["starred"] != null,
-    includeCompleted = this["completed"] != null,
-    dueAfter = dateTime(this["after"], null),
-    dueBefore = dateTime(this["before"], null)
-)
-
-private fun HTML.searchPage(service: TaskService, p: Parameters) = shellPage(service, "Raspberry · Search", "/search") {
-    // Works as a plain GET form; htmx re-runs it as you type.
-    form(action = "/search", method = FormMethod.get, classes = "search") {
-        attributes["hx-get"] = "/search/results"
-        attributes["hx-trigger"] = "input delay:250ms, change"
-        attributes["hx-target"] = "#results"
-        attributes["hx-swap"] = "outerHTML"
-        input(type = InputType.search, name = "q", classes = "search-q") {
-            value = p["q"].orEmpty(); placeholder = service.modeFolder()?.let { "Search ${it.title}…" } ?: "Search tasks…"; attributes["autofocus"] = ""; attributes["autocomplete"] = "off"
-        }
-        div(classes = "pills") {
-            if (service.modeFolder() != null) label(classes = "pill") { checkBoxInput(name = "everywhere") { checked = p["everywhere"] != null }; +"Everywhere" }
-            label(classes = "pill") { checkBoxInput(name = "starred") { checked = p["starred"] != null }; +Labels.STARRED }
-            label(classes = "pill") { checkBoxInput(name = "completed") { checked = p["completed"] != null }; +Labels.COMPLETED }
-            select {
-                name = "folder"
-                option { value = ""; +"Any ${Labels.FOLDER.lowercase()}" }
-                folderTree(service.folders()).forEach { (f, depth) ->
-                    option { value = f.id.toString(); selected = p["folder"] == f.id.toString(); +(INDENT.repeat(depth) + f.title) }
-                }
-            }
-            select {
-                name = "context"
-                option { value = ""; +"Any ${Labels.CONTEXT.lowercase()}" }
-                service.contexts().sortedBy { it.name.lowercase() }.forEach { c ->
-                    option { value = c.id.toString(); selected = p["context"] == c.id.toString(); +"@${c.name}" }
-                }
-            }
-            span(classes = "date-filter") {
-                +"Due "
-                dateInput(name = "after") { value = p["after"].orEmpty(); attributes["aria-label"] = Labels.DUE_AFTER }
-                +"–"
-                dateInput(name = "before") { value = p["before"].orEmpty(); attributes["aria-label"] = Labels.DUE_BEFORE }
-            }
-        }
-    }
-    div { searchResults(service, p) }
-}
-
-private fun DIV.searchResults(service: TaskService, p: Parameters) {
-    id = "results"
-    classes = setOf("results")
-    // In folder mode, within the mode's folder unless another folder or Everywhere is picked.
-    val filters = p.searchFilters().let { f -> if (f.folderId == null && p["everywhere"] == null) f.copy(folderId = service.modeFolderId()) else f }
-    val results = service.search(p["q"].orEmpty(), filters)
-    val all = service.tasks()
-    val byId = all.associateBy { it.id }
-    val dues = service.dueDates()
-    val counts = subtaskCounts(all)
-    val contextNames = service.contexts().associate { it.id to it.name }
-    val contextIds = service.contextIdsByTask()
-    val now = service.now()
-    val colors = folderColorsHex(all)
-    val shown = if (results.size > MAX_RESULTS) ", showing the first $MAX_RESULTS" else ""
-    p(classes = "hint") { +"${results.size} task${if (results.size == 1) "" else "s"}$shown" }
-    results.take(MAX_RESULTS).forEach { task ->
-        // One line, like a list row: its folder's colour bar, the title, then where it lives and when it's due.
-        div(classes = "result") {
-            nearestFolder(task, byId)?.let { colors[it.id] }?.let { style = "border-left-color: $it" }
-            taskMark(task, counts[task.id], "ALL") {
-                if (task.isComplete) classes = classes + "done"
-                attributes["hx-post"] = "/search/toggle/${task.id}"
-                attributes["hx-include"] = "form.search"
-                attributes["hx-target"] = "#results"
-                attributes["hx-swap"] = "outerHTML"
-                attributes["aria-label"] = if (task.isComplete) "Mark not done" else "Complete"
-                if (task.isComplete) icon(Icon.CHECK, "")
-            }
-            a(href = "/tasks/${task.id}?mode=ALL", classes = if (task.isComplete) "done" else null) { +task.title }
-            if (!task.notes.isNullOrBlank()) span(classes = "has-notes") { attributes["title"] = Labels.HAS_NOTES; icon(Icon.NOTES, "") }
-            div(classes = "meta") {
-                dues.of(task)?.takeUnless { task.isComplete }?.let { span(classes = "due " + dueStatus(it.at, now).name.lowercase() + if (it.forTask != null) " for" else "") { +dueText(it, now) } }
-                // As on the phone: the folder it's in (however deep), and the task it's a subtask of.
-                nearestFolder(task, byId)?.let { span { +it.title } }
-                subtaskParentTitle(task, byId)?.let { span { +"↳ $it" } }
-                contextIds[task.id].orEmpty().mapNotNull(contextNames::get).forEach { span { +"@$it" } }
-                if (task.isStarred) span(classes = "starred") { +"★" }
-            }
-            // Found by its notes: the line that matched, under the title.
-            notesMatch(task, p["q"].orEmpty())?.let { div(classes = "notes-line") { +it } }
-        }
     }
 }
 
@@ -563,14 +434,14 @@ private fun HTML.settingsPage(service: TaskService) = shellPage(service, "Raspbe
 private fun HTML.contextsPage(service: TaskService, form: ContextForm) = shellPage(service, "Raspberry · Contexts", "/contexts") {
     div(classes = "contexts") {
         h1 { +"Contexts" }
-        p(classes = "hint") { +"Tasks with a context are active only while it holds: on a wifi network (the phone checks), or within a time window. A filter-only one just groups tasks to search by. On or Off holds a context that way until it's set back to Auto." }
+        p(classes = "hint") { +"Tasks with a context are active only while it holds: on a wifi network (the phone checks), or within a time window. A filter-only one just groups tasks to filter by, unless switched Off. On or Off holds a context that way until it's set back to Auto." }
         service.contexts().sortedBy { it.name.lowercase() }.forEach { c ->
             div(classes = "context-row") {
                 span(classes = "context-name") { +"@${c.name}" }
                 span(classes = "hint") { +describeContext(c, service.timeWindows(c.id)) }
                 form(action = "/contexts/${c.id}/forced", method = FormMethod.post, classes = "pills context-forced") {
-                    Labels.CONTEXT_FORCED.forEach { (value, label) ->
-                        button(type = ButtonType.submit, name = "forced", classes = if (c.forced == value) "pill set" else "pill") {
+                    forcedChoices(c).forEach { (value, label) ->
+                        button(type = ButtonType.submit, name = "forced", classes = if (forcedShown(c) == value) "pill set" else "pill") {
                             this.value = value?.toString() ?: "auto"; +label
                         }
                     }
@@ -624,4 +495,4 @@ private fun HTML.contextsPage(service: TaskService, form: ContextForm) = shellPa
 }
 
 // A dropdown can't hold a real tree, so subfolders are indented under their parent, in the tree's order.
-private const val INDENT = "\u00A0\u00A0\u00A0"
+internal const val INDENT = "\u00A0\u00A0\u00A0"

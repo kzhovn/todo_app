@@ -27,6 +27,8 @@ class ContextRepository(
 
     suspend fun getTimeWindows(contextId: Long): List<ContextTimeWindow> = contextDao.getTimeWindows(contextId)
 
+    suspend fun getAllTimeWindows(): List<ContextTimeWindow> = contextDao.getAllTimeWindows()
+
     suspend fun addTimeWindow(window: ContextTimeWindow): Long = contextDao.insertTimeWindow(window)
 
     suspend fun updateContext(context: TaskContext) = contextDao.update(context)

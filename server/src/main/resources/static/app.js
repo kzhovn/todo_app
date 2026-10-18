@@ -4,11 +4,12 @@
 (() => {
   let pendingG = false;
   const go = { d: "/doing", a: "/active", t: "/all" };
-  const help = "n  jump to quick add\ng, then d / a / t  go to Doing / Active / All\nEsc  leave a text box, close the task panel, or leave focus\n\n" +
+  const help = "n  jump to quick add\n/  search the list\ng, then d / a / t  go to Doing / Active / All\nEsc  leave a text box, close the task panel, or leave focus\n\n" +
     "All tree (click a row first):\n↑ ↓  move between rows    ← →  fold / unfold\nEnter  new task below    Tab / Shift-Tab  indent / outdent\n" +
     "Space  complete    Alt-↑ / Alt-↓  move up / down\ne  edit    s  star    f  focus\nDrag a row: top or bottom edge to reorder, middle to nest\n\n" +
     "Review:\n← →  earlier / later    − / +  zoom out / in\n\n" +
     "z  zoom into the folder on screen (folder mode), or out of the mode";
+  if (location.hash === "#search") document.querySelector(".search-q")?.focus();
   document.addEventListener("keydown", (e) => {
     const typing = e.target.closest("input, textarea, select");
     if (e.key === "Escape" && typing) { e.target.blur(); return; }
@@ -26,6 +27,8 @@
     if (pendingG && go[e.key]) { location.href = go[e.key]; pendingG = false; return; }
     pendingG = e.key === "g";
     if (e.key === "n") { e.preventDefault(); document.getElementById("quickadd")?.focus(); }
+    // The list's search box; off a list, Doing's.
+    if (e.key === "/") { e.preventDefault(); const box = document.querySelector(".search-q"); if (box) box.focus(); else location.href = "/doing#search"; }
     if (e.key === "?") alert(help);
   });
 

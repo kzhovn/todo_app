@@ -38,6 +38,10 @@ object AppSettings {
     fun setCalendarKinds(context: Context, kinds: Set<DateKind>) =
         prefs(context).edit().putStringSet("calendarKinds", kinds.map { it.name }.toSet()).apply()
 
+    // The side menu's Contexts, left open or closed.
+    fun drawerContextsOpen(context: Context): Boolean = prefs(context).getBoolean("drawerContextsOpen", true)
+    fun setDrawerContextsOpen(context: Context, open: Boolean) = prefs(context).edit().putBoolean("drawerContextsOpen", open).apply()
+
     // Folder mode (FolderMode.kt): the folder every device is zoomed into (null: none), synced like the
     // rollover hour. modeChanges ticks on every change, so the lists and widgets redraw.
     fun modeFolderId(context: Context): Long? = prefs(context).getLong("modeFolderId", 0L).takeIf { it != 0L }

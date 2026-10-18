@@ -3,12 +3,10 @@ package com.kzhovn.todoapp.repository
 import com.kzhovn.todoapp.data.CurrentTask
 import com.kzhovn.todoapp.data.stillWaiting
 import com.kzhovn.todoapp.data.isDoable
-import com.kzhovn.todoapp.data.searchTasks
 import com.kzhovn.todoapp.data.planMoveNextTo
 import com.kzhovn.todoapp.data.planMoveItem
 import com.kzhovn.todoapp.data.splitItems
 import com.kzhovn.todoapp.data.folderColorAssignments
-import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.CompleteQuestion
 import com.kzhovn.todoapp.data.completeQuestion
@@ -204,14 +202,16 @@ class TaskRepository(
     suspend fun getActiveTasks(now: Long, currentMinuteOfDay: Int = minuteOfDay(now), todayMask: Int = dayOfWeekMask(now)): List<Task> =
         getActiveTasksFrom(taskDao.getListedOnce(), getAllTaskContexts(), now, currentMinuteOfDay, todayMask)
 
+    // `asIfOn`: a context the list is filtered by, whose tasks show whether it holds or not.
     suspend fun getActiveTasksFrom(
         all: List<Task>,
         contextsByTaskId: Map<Long, Set<Long>>,
         now: Long,
         currentMinuteOfDay: Int = minuteOfDay(now),
-        todayMask: Int = dayOfWeekMask(now)
+        todayMask: Int = dayOfWeekMask(now),
+        asIfOn: Long? = null
     ): List<Task> = computeActiveTasks(
-        all, contextsByTaskId, taskContextDao.getAll(), taskContextDao.getAllTimeWindows(),
+        all, contextsByTaskId, asIfOn(taskContextDao.getAll(), asIfOn), taskContextDao.getAllTimeWindows(),
         taskDao.getAllDependencies(), now, currentMinuteOfDay, todayMask
     )
 
@@ -307,9 +307,6 @@ class TaskRepository(
         (wanted - current).forEach { taskDao.insertDependency(TaskDependency(taskId, it)) }
         (current - wanted).forEach { taskDao.removeDependency(taskId, it) }
     }
-
-    suspend fun search(query: String, filters: SearchFilters = SearchFilters()): List<Task> =
-        searchTasks(taskDao.getListedOnce(), getAllTaskContexts(), query, filters)
 
     suspend fun getAllDependencyEdges(): List<TaskDependency> = taskDao.getAllDependencies()
 

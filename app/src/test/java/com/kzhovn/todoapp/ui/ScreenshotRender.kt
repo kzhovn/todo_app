@@ -13,6 +13,10 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.unit.dp
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
@@ -100,6 +104,60 @@ class ScreenshotRender {
         if (dir == null) return
         compose.setContent { LedgerTheme { AppDrawer(androidx.compose.material3.rememberDrawerState(androidx.compose.material3.DrawerValue.Open), reviewSelected = true) {} } }
         draw(compose.activity.window.decorView, "drawer")
+    }
+
+    // The side menu's Contexts, open, with Errands' long-press menu; then a list filtered by Errands.
+    @Test
+    fun contextFilter() {
+        if (dir == null) return
+        val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<com.kzhovn.todoapp.TodoApp>()
+        val viewModel = TaskListViewModel(app.repository, app.contextRepository)
+        kotlinx.coroutines.runBlocking {
+            val errands = app.contextRepository.createContext(com.kzhovn.todoapp.data.TaskContext(name = "Errands", type = com.kzhovn.todoapp.data.ContextType.LABEL, forced = false))
+            app.contextRepository.createContext(com.kzhovn.todoapp.data.TaskContext(name = "Phone", type = com.kzhovn.todoapp.data.ContextType.LABEL))
+            app.contextRepository.createContext(com.kzhovn.todoapp.data.TaskContext(name = "Home", type = com.kzhovn.todoapp.data.ContextType.PLACE, wifiSsid = "Raspberry", isCurrentlySatisfied = true))
+            listOf("Renew passport", "Buy stamps").forEach { app.contextRepository.setTaskContexts(app.repository.createTask(Task(title = it)), setOf(errands)) }
+            app.repository.createTask(Task(title = "Pay rent", isStarred = true))
+            ContextFilter.id.value = errands
+            viewModel.load(TaskListMode.ACTIVE, filters = com.kzhovn.todoapp.data.SearchFilters(contextId = errands))
+        }
+        compose.setContent { LedgerTheme { AppDrawer(androidx.compose.material3.rememberDrawerState(androidx.compose.material3.DrawerValue.Open)) {} } }
+        compose.waitForIdle()
+        draw(compose.activity.window.decorView, "drawer_contexts")
+        compose.onNodeWithText("Phone").performTouchInput { longClick() }
+        compose.waitForIdle()
+        val global = Class.forName("android.view.WindowManagerGlobal").let { it.getMethod("getInstance").invoke(null) }
+        val views = global.javaClass.getDeclaredField("mViews").apply { isAccessible = true }.get(global) as List<*>
+        draw(views.last() as android.view.View, "drawer_context_menu")
+    }
+
+    @Test
+    fun filteredList() {
+        if (dir == null) return
+        val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<com.kzhovn.todoapp.TodoApp>()
+        val viewModel = TaskListViewModel(app.repository, app.contextRepository)
+        val errands = kotlinx.coroutines.runBlocking {
+            val errands = app.contextRepository.createContext(com.kzhovn.todoapp.data.TaskContext(name = "Errands", type = com.kzhovn.todoapp.data.ContextType.LABEL, forced = false))
+            listOf("Renew passport", "Buy stamps").forEach { app.contextRepository.setTaskContexts(app.repository.createTask(Task(title = it)), setOf(errands)) }
+            app.repository.createTask(Task(title = "Pay rent", isStarred = true))
+            errands
+        }
+        viewModel.load(TaskListMode.ACTIVE, "stamps", com.kzhovn.todoapp.data.SearchFilters(contextId = errands))
+        compose.setContent {
+            LedgerTheme {
+                Column {
+                    androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        SearchBar("stamps", searching = true, onStart = {}, onChange = {}, Modifier.weight(1f).padding(8.dp))
+                        ContextButton(viewModel.contextSummaries.collectAsState().value, errands, onPick = {})
+                    }
+                    ContextFilterBar(errands, viewModel.contextSummaries.collectAsState().value, picked = true) {}
+                    TaskListScreen(viewModel, {}, {}, {}, { _, _ -> }, {}, sectioned = true)
+                }
+            }
+        }
+        // The view model's loads hop back to the main looper, which nothing else idles here.
+        compose.waitUntil(5000) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); viewModel.tasks.value.isNotEmpty() && viewModel.contextSummaries.value.isNotEmpty() }
+        draw(compose.activity.window.decorView, "filtered_list")
     }
 
     @Test

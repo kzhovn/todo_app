@@ -15,6 +15,10 @@ import com.kzhovn.todoapp.data.stalledProjects
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kzhovn.todoapp.data.SearchFilters
+import com.kzhovn.todoapp.data.parseSearch
+import com.kzhovn.todoapp.data.searchMatcher
+import com.kzhovn.todoapp.repository.ContextSummary
+import com.kzhovn.todoapp.repository.contextSummaries
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.repository.ContextRepository
@@ -30,7 +34,14 @@ import kotlinx.coroutines.launch
 
 enum class TaskListMode { DOING, ACTIVE, ALL }
 
-// What the list shows: a tab, or search results. It reloads itself on any data change (`changes`,
+// The lists' context filter, picked from the @ button or the side menu: kept across tabs and screens until
+// cleared, and until the app is closed.
+object ContextFilter {
+    val id = MutableStateFlow<Long?>(null)
+}
+
+// What the list shows: a tab, narrowed in place by a search and the context filter (Doing and Active keep
+// their sections, the All tree the matches' parents). It reloads itself on any data change (`changes`,
 // from TodoApp.listInputChanges), so actions here and edits elsewhere (another screen, the widget, a
 // sync) all show up without each caller reloading.
 class TaskListViewModel(
@@ -41,14 +52,12 @@ class TaskListViewModel(
     // Folder mode's folder id (AppSettings); Doing and Active keep to it.
     private val modeFolderId: () -> Long? = { null }
 ) : ViewModel() {
-    private sealed interface Shown {
-        data class Tab(val mode: TaskListMode) : Shown
-        data class Search(val query: String, val filters: SearchFilters) : Shown
-    }
-    private var shown: Shown = Shown.Tab(TaskListMode.DOING)
+    private data class Shown(val mode: TaskListMode, val query: String, val filters: SearchFilters)
+    private var shown = Shown(TaskListMode.DOING, "", SearchFilters())
 
-    // While searching, what for (the rows show the line of notes a task matched on).
-    val searchQuery: String? get() = (shown as? Shown.Search)?.query
+    // While searching, what for (the rows show the line of notes a task matched on): the text, less any "@home".
+    var searchQuery: String? = null
+        private set
     private var reloading: Job? = null
 
     init {
@@ -101,49 +110,66 @@ class TaskListViewModel(
     // without that feed, as in the tests, current.)
     private fun act(block: suspend () -> Unit) = viewModelScope.launch { block(); reload() }
 
-    fun load(mode: TaskListMode) {
-        shown = Shown.Tab(mode)
-        reload()
-    }
-
-    fun search(query: String, filters: SearchFilters = SearchFilters()) {
-        shown = Shown.Search(query, filters)
+    // `filters.contextId`: the context filter; an "@home" typed in `query` goes over it.
+    fun load(mode: TaskListMode, query: String = "", filters: SearchFilters = SearchFilters()) {
+        shown = Shown(mode, query, filters)
         reload()
     }
 
     // A newer reload replaces one still running, so a slow load can't land after a newer one.
     fun reload() {
         reloading?.cancel()
-        reloading = viewModelScope.launch {
-            when (val s = shown) {
-                is Shown.Tab -> loadTab(s.mode)
-                is Shown.Search -> { refreshSubtaskCounts(repository.listedTasks(clock())); _tasks.value = repository.search(s.query, s.filters) }
-            }
-        }
+        reloading = viewModelScope.launch { loadTab(shown) }
     }
 
-    private suspend fun active(all: List<Task>, now: Long) = repository.getActiveTasksFrom(all, _contextsByTaskId.value, now)
+    // The All tree's matches while filtering (it shows them and their parents); null: the whole tree.
+    private val _keep = MutableStateFlow<Set<Long>?>(null)
+    val keep: StateFlow<Set<Long>?> = _keep
+    // Searching Doing or Active: the matches that list doesn't show (not doable yet, or done), which All has.
+    private val _moreInAll = MutableStateFlow(0)
+    val moreInAll: StateFlow<Int> = _moreInAll
+    // The context the list is filtered by, picked or typed.
+    private val _shownContext = MutableStateFlow<Long?>(null)
+    val shownContext: StateFlow<Long?> = _shownContext
+    // The contexts as the @ menu shows them.
+    private val _contextSummaries = MutableStateFlow<List<ContextSummary>>(emptyList())
+    val contextSummaries: StateFlow<List<ContextSummary>> = _contextSummaries
 
-    private suspend fun loadTab(mode: TaskListMode) {
+    private suspend fun loadTab(s: Shown) {
+        val (mode, query, picked) = s
         val now = clock()
         val all = refreshSubtaskCounts(repository.listedTasks(now))
         val byId = _allById.value
         val folder = _mode.value?.id
+        val (text, typed) = parseSearch(query, _allContexts.value.values)
+        val filters = picked.copy(contextId = typed ?: picked.contextId)
+        val filtering = text.isNotBlank() || filters != SearchFilters()
+        val matches = searchMatcher(all, _contextsByTaskId.value, text, filters)
+        fun <T> List<T>.matching(task: (T) -> Task) = if (filtering) filter { matches(task(it)) } else this
+        searchQuery = text.ifBlank { null }
+        _shownContext.value = filters.contextId
+        // Filtered by a context, its tasks show as if it held: they're what was asked for.
+        val asIfOn = filters.contextId?.takeIf { it != SearchFilters.NO_CONTEXT }
         _dueOutside.value = emptyList()
-        _waiting.value = if (mode == TaskListMode.DOING) waitingToCheck(all, now).filter { inMode(it, folder, byId) } else emptyList()
-        _running.value = if (mode == TaskListMode.DOING) runningWaits(all, now).filter { inMode(it.wait, folder, byId) } else emptyList()
+        _waiting.value = (if (mode == TaskListMode.DOING) waitingToCheck(all, now).filter { inMode(it, folder, byId) } else emptyList()).matching { it }
+        _running.value = (if (mode == TaskListMode.DOING) runningWaits(all, now).filter { inMode(it.wait, folder, byId) } else emptyList()).matching { it.wait }
         if (_waiting.value.isNotEmpty()) _waitingBlocks.value = waitingBlocks(_waiting.value, repository.getAllDependencyEdges(), byId)
+        suspend fun active() = repository.getActiveTasksFrom(all, _contextsByTaskId.value, now, asIfOn = asIfOn)
         _tasks.value = when (mode) {
-            // The tree roots itself at the mode's folder (OutlinerScreen's rootId).
+            // The tree roots itself at the mode's folder (OutlinerScreen's rootId), and cuts itself down to `keep`.
             TaskListMode.ALL -> all
             // Overdue and due today first, like Doing (each folder section keeps that order).
-            TaskListMode.ACTIVE -> urgentFirst(active(all, now).filter { inMode(it, folder, byId) }, now, _dues.value)
+            TaskListMode.ACTIVE -> urgentFirst(active().filter { inMode(it, folder, byId) }, now, _dues.value).matching { it }
             TaskListMode.DOING -> {
-                val doing = filterDoing(active(all, now), now, _dues.value)
-                _dueOutside.value = dueOutsideMode(doing, folder, byId, now, _dues.value)
-                doing.filter { inMode(it, folder, byId) }
+                val doing = filterDoing(active(), now, _dues.value)
+                _dueOutside.value = dueOutsideMode(doing, folder, byId, now, _dues.value).matching { it }
+                doing.filter { inMode(it, folder, byId) }.matching { it }
             }
         }
+        _keep.value = if (filtering && mode == TaskListMode.ALL) all.filter(matches).map { it.id }.toSet() else null
+        val searching = query.isNotBlank() || picked.copy(contextId = null) != SearchFilters()
+        _moreInAll.value = if (!searching || mode == TaskListMode.ALL) 0
+            else _tasks.value.map { it.id }.toSet().let { shownIds -> all.count { matches(it) && inMode(it, folder, byId) && it.id !in shownIds } }
     }
 
     // Projects whose subtasks are all done, waiting on "complete it or add the next step".
@@ -163,7 +189,9 @@ class TaskListViewModel(
         _workable.value = computeActiveIgnoringContexts(all, edges, clock()).map { it.id }.toSet()
         _mode.value = modeFolder(modeFolderId(), _allById.value)
         _contextsByTaskId.value = repository.getAllTaskContexts()
-        _allContexts.value = contextRepository.getAllContexts().associateBy { it.id }
+        val contexts = contextRepository.getAllContexts()
+        _allContexts.value = contexts.associateBy { it.id }
+        _contextSummaries.value = contextSummaries(contexts, contextRepository.getAllTimeWindows(), all, _contextsByTaskId.value, clock())
         return all
     }
 

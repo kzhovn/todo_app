@@ -15,6 +15,30 @@ import com.kzhovn.todoapp.data.inMode
 import com.kzhovn.todoapp.data.TaskOrder
 import com.kzhovn.todoapp.quickadd.typedType
 import io.ktor.http.Parameters
+import io.ktor.http.encodeURLParameter
+import com.kzhovn.todoapp.data.TaskContext
+import com.kzhovn.todoapp.data.SearchFilters
+import com.kzhovn.todoapp.data.parseSearch
+import com.kzhovn.todoapp.data.notesMatch
+import com.kzhovn.todoapp.data.folderTree
+import com.kzhovn.todoapp.data.ContextType
+import com.kzhovn.todoapp.data.forcedChoices
+import com.kzhovn.todoapp.data.forcedShown
+import com.kzhovn.todoapp.repository.ContextSummary
+import com.kzhovn.todoapp.repository.contextSummaries
+import kotlinx.html.FormMethod
+import kotlinx.html.InputType
+import kotlinx.html.form
+import kotlinx.html.input
+import kotlinx.html.checkBoxInput
+import kotlinx.html.dateInput
+import kotlinx.html.select
+import kotlinx.html.option
+import com.kzhovn.todoapp.repository.contextHolds
+import com.kzhovn.todoapp.data.searchMatcher
+import com.kzhovn.todoapp.data.pruneTree
+import java.time.LocalTime
+import com.kzhovn.todoapp.data.atTimeMillis
 import kotlinx.html.radioInput
 import kotlinx.html.label
 import kotlinx.html.hiddenInput
@@ -91,13 +115,41 @@ val LISTS = ListMode.entries - ListMode.CALENDAR
 // The calendar's month on screen, the day picked in it (null: the agenda runs on), and the kinds of date shown.
 data class CalendarView(val month: YearMonth, val day: LocalDate?, val kinds: Set<DateKind>)
 
-// Where a list is: its mode, a folder's view of the All tree, the calendar's month and day.
-class ListPlace(val mode: ListMode, val folder: Long?, val calendar: CalendarView?) {
+// A list's search box and filters, and its context filter (`context`, kept when the box is cleared). The search
+// narrows the list in place: Doing and Active keep their sections, the All tree keeps the matches' parents.
+data class ListSearch(
+    val text: String = "",
+    val context: Long? = null,
+    val starred: Boolean = false,
+    val completed: Boolean = false,
+    val after: LocalDate? = null,
+    val before: LocalDate? = null
+) {
+    val params: List<String> get() = listOfNotNull(
+        text.takeIf { it.isNotBlank() }?.let { "q=" + it.encodeURLParameter() }, context?.let { "context=$it" },
+        "starred=1".takeIf { starred }, "completed=1".takeIf { completed }, after?.let { "after=$it" }, before?.let { "before=$it" }
+    )
+    // The box or its filters, not just the context.
+    val searching: Boolean get() = copy(context = null) != ListSearch()
+}
+
+internal fun Parameters.listSearch() = ListSearch(
+    text = this["q"].orEmpty(),
+    context = this["context"]?.toLongOrNull(),
+    starred = this["starred"] != null,
+    completed = this["completed"] != null,
+    after = this["after"]?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+    before = this["before"]?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+)
+
+// Where a list is: its mode, a folder's view of the All tree (a folder filter on Doing and Active), the calendar's
+// month and day, the search.
+class ListPlace(val mode: ListMode, val folder: Long?, val calendar: CalendarView?, val search: ListSearch = ListSearch()) {
     // In a URL's query ("mode=ALL&folder=12" goes in as `?mode=$q`), so an action on a row re-renders the same
     // view; `path` is the page itself.
     val q: String get() = mode.name + extra("&")
     val path: String get() = mode.path + extra("?")
-    private fun extra(first: String) = listOfNotNull(folder?.let { "folder=$it" }, calendar?.let { "month=${it.month}" }, calendar?.day?.let { "day=$it" })
+    private fun extra(first: String) = (listOfNotNull(folder?.let { "folder=$it" }, calendar?.let { "month=${it.month}" }, calendar?.day?.let { "day=$it" }) + search.params)
         .joinToString("&").let { if (it.isEmpty()) "" else first + it }
 }
 
@@ -115,25 +167,46 @@ class ListData(
     val now: Long = service.now(),
     val folder: Long? = null,
     val selected: Long? = null,
-    val calendar: CalendarView? = null
+    val calendar: CalendarView? = null,
+    val search: ListSearch = ListSearch()
 ) {
-    private val place = ListPlace(mode, folder, calendar)
+    private val place = ListPlace(mode, folder, calendar, search)
     val q: String get() = place.q
     val path: String get() = place.path
-    val title: String get() = folder?.let { byId[it]?.title } ?: mode.label
+    // This list's own URL (what re-renders it), with `param` ("toggle=12") added.
+    fun listUrl(param: String) = "/list/${mode.name.lowercase()}" + path.removePrefix(mode.path).let { if (it.isEmpty()) "?$param" else "$it&$param" }
+    // The same search on another list (the sidebar's, "3 more in All").
+    fun pathOf(other: ListMode, folder: Long? = null, search: ListSearch = this.search) = ListPlace(other, folder, null, search).path
+    val title: String get() = folder?.takeIf { mode == ListMode.ALL }?.let { byId[it]?.title } ?: mode.label
 
     val all: List<Task> = service.tasks()
     val byId = all.associateBy { it.id }
+    val contexts: List<TaskContext> by lazy { service.contexts() }
+    private val windowsByContext by lazy { contexts.associate { it.id to service.timeWindows(it.id) } }
+    fun windows(contextId: Long) = windowsByContext[contextId].orEmpty()
+    // The search's text, an "@home" typed in it read as the context filter (over the one picked).
+    private val parsed by lazy { parseSearch(search.text, contexts) }
+    val searchText: String get() = parsed.first
+    val contextId: Long? by lazy { parsed.second ?: search.context }
+    val filtering: Boolean get() = search.searching || contextId != null || (folder != null && mode != ListMode.ALL)
+    private val matches: (Task) -> Boolean by lazy {
+        val filters = SearchFilters(
+            folderId = folder.takeIf { mode != ListMode.ALL }, contextId = contextId, starredOnly = search.starred, includeCompleted = search.completed,
+            dueAfter = search.after?.atTimeMillis(LocalTime.MIDNIGHT), dueBefore = search.before?.atTimeMillis(LocalTime.MIDNIGHT)
+        )
+        searchMatcher(all, service.contextIdsByTask(), searchText, filters)
+    }
+    private fun <T> List<T>.matching(task: (T) -> Task) = if (filtering) filter { matches(task(it)) } else this
     // Folder mode: the folder every device is zoomed into (null: none). Doing and Active follow it
     // (TaskService), and the All tree is rooted at it.
     val modeFolder: Task? = service.modeFolder()
     // Doing in a mode: what's due today or overdue outside it, in one line under the list.
-    val dueOutside: List<Task> = if (mode == ListMode.DOING && modeFolder != null) service.dueOutsideMode() else emptyList()
+    val dueOutside: List<Task> = (if (mode == ListMode.DOING && modeFolder != null) service.dueOutsideMode() else emptyList()).matching { it }
     // Doing's quiet Waiting section: waiting items due a check-in, and how many open tasks each blocks.
-    val waiting: List<Task> = if (mode == ListMode.DOING) service.waitingToCheck() else emptyList()
+    val waiting: List<Task> = (if (mode == ListMode.DOING) service.waitingToCheck() else emptyList()).matching { it }
     val waitingBlocks: Map<Long, Int> = if (waiting.isEmpty()) emptyMap() else waitingBlocks(waiting, service.dependencyEdges(), byId)
     // Doing's Running line: waits counting down, each with the step that comes after it.
-    val running: List<RunningWait> = if (mode == ListMode.DOING) service.runningWaits() else emptyList()
+    val running: List<RunningWait> = (if (mode == ListMode.DOING) service.runningWaits() else emptyList()).matching { it.wait }
     val folderColors = folderColorsHex(all)
     // New ▾'s "From template…" (see Templates.kt).
     val templates: List<Task> by lazy { service.templates() }
@@ -143,11 +216,20 @@ class ListData(
     // The All tree dims what isn't workable for a reason other than contexts (dimmedInTree).
     val workable: Set<Long> by lazy { service.activeIgnoringContexts().map { it.id }.toSet() }
     val doing: List<Task> by lazy { service.doing(active) }
+    // Filtered by a context, its tasks show as if it held (they're what was asked for); the sidebar's counts don't.
+    private val shownActive: List<Task> by lazy { contextId?.let { service.active(asIfOn = it) } ?: active }
     val tasks: List<Task> = when (mode) {
-        ListMode.DOING -> doing
-        ListMode.ACTIVE -> active
+        ListMode.DOING -> if (contextId == null) doing else service.doing(shownActive)
+        ListMode.ACTIVE -> shownActive
         ListMode.ALL, ListMode.CALENDAR -> emptyList() // the tree is rendered from `roots`, the calendar from `agenda`
+    }.matching { it }
+    // Searching Doing or Active: the matches that list doesn't show (not doable yet, or done), which All has.
+    val moreInAll: Int by lazy {
+        if (!search.searching || mode !in setOf(ListMode.DOING, ListMode.ACTIVE)) 0
+        else tasks.map { it.id }.toSet().let { shown -> all.count { matches(it) && inMode(it, modeFolder?.id, byId) && it.id !in shown } }
     }
+    // The All tree, searched: a match's parents are there to place it, muted.
+    fun onlyAParent(task: Task) = filtering && mode == ListMode.ALL && !matches(task)
     val agenda: List<AgendaDay> by lazy {
         calendar?.let { agenda(all, it.month, it.day, it.kinds, now, service.reminderHour(), modeFolder?.id) }.orEmpty()
     }
@@ -160,7 +242,10 @@ class ListData(
     fun subtaskCounts(task: Task): Pair<Int, Int>? = counts[task.id]
     // The tree's top level for this view: a folder's contents, the mode's, or everything. As the phone's:
     // completed tasks and projects drop out (their open subtasks move up); completed checklists stay, struck through.
-    val roots: List<OutlinerNode> by lazy { buildOutlinerTree(all, hideCompleted = true, rootId = folder ?: modeFolder?.id) }
+    val roots: List<OutlinerNode> by lazy {
+        val tree = buildOutlinerTree(all, hideCompleted = !search.completed, rootId = folder ?: modeFolder?.id)
+        if (filtering) pruneTree(tree, all.filter(matches).map { it.id }.toSet()) else tree
+    }
 
     // One open project whose steps are all done, to ask about (the phone asks the same, one at a time).
     val stalled: Task? = stalledProjects(all).firstOrNull { it.id !in later }
@@ -211,12 +296,11 @@ internal fun folderColorsHex(tasks: Collection<Task>): Map<Long, String> = folde
 
 // What leads a task's row, by type: a project's icon (ticked like a checkbox; done, it looks like one), a
 // waiting item's hourglass in a checkbox's ring (ticked like one: Resolved), a checklist's "3/8"
-// (ticked item by item, inside it; opens it), or a folder's icon (search only), or a task's checkbox, which
+// (ticked item by item, inside it; opens it), or a task's checkbox, which
 // `check` sets up (what ticking it does differs by list).
 internal fun FlowContent.taskMark(task: Task, counts: Pair<Int, Int>?, mode: String, check: BUTTON.() -> Unit) = when (task.type) {
     TaskType.PROJECT -> button(classes = "project") { check(); attributes["title"] = Labels.PROJECT; if (!task.isComplete) icon(Icon.PROJECT, "") }
     TaskType.WAITING -> button(classes = "project waiting-mark") { check(); attributes["title"] = Labels.RESOLVED; icon(Icon.HOURGLASS, "") }
-    TaskType.FOLDER -> span(classes = "project") { icon(Icon.FOLDER, "") } // search results only
     TaskType.SECTION -> span(classes = "project") {} // a checklist's section: nothing to tick
     TaskType.CHECKLIST -> {
         val (done, total) = counts ?: (0 to 0)
@@ -341,7 +425,53 @@ fun FlowContent.listColumn(data: ListData) {
             }
         }
     }
+    if (data.mode != ListMode.CALENDAR) listSearch(data)
     div { listContents(data) }
+}
+
+// The list's search box (/ jumps to it) and its filters, narrowing the list below as you type. The context filter
+// is picked in the sidebar; here it's a pill that clears it.
+private fun FlowContent.listSearch(data: ListData) = form(action = data.mode.path, method = FormMethod.get, classes = "list-search") {
+    attributes["hx-get"] = "/list/${data.mode.name.lowercase()}"
+    attributes["hx-trigger"] = "input changed delay:250ms, search, change"
+    attributes["hx-target"] = "#list"
+    attributes["hx-swap"] = "outerHTML"
+    hiddenInput(name = "search") { value = "1" }
+    data.folder?.takeIf { data.mode == ListMode.ALL }?.let { hiddenInput(name = "folder") { value = it.toString() } }
+    data.search.context?.let { hiddenInput(name = "context") { value = it.toString() } }
+    input(type = InputType.search, name = "q", classes = "search-q") {
+        value = data.search.text; placeholder = "${Labels.SEARCH} ${data.title}… (/)"; attributes["autocomplete"] = "off"
+    }
+    data.contextId?.let { id ->
+        val name = if (id == SearchFilters.NO_CONTEXT) Labels.NO_CONTEXT else data.contexts.firstOrNull { it.id == id }?.name
+        val holds = data.contexts.firstOrNull { it.id == id }?.let { contextHolds(it, data.windows(it.id), data.now) } ?: true
+        // Typed in the box, it goes with the text; picked, ✕ clears it.
+        if (name != null) a(href = data.pathOf(data.mode, data.folder, data.search.copy(context = null)), classes = "pill set context-filter") {
+            +(if (id == SearchFilters.NO_CONTEXT) name else Labels.contextFilter(name, holds)); if (data.search.context == id) +" ✕"
+        }
+    }
+    val filtersSet = data.search.copy(text = "", context = null) != ListSearch() || (data.folder != null && data.mode != ListMode.ALL)
+    details(classes = if (filtersSet) "pp filters set" else "pp filters") {
+        summary(classes = "pill") { +"Filters ▾" }
+        div(classes = "pop") {
+            label { checkBoxInput(name = "starred") { checked = data.search.starred }; +" ${Labels.STARRED}" }
+            // Doing and Active never hold completed tasks.
+            if (data.mode == ListMode.ALL) label { checkBoxInput(name = "completed") { checked = data.search.completed }; +" ${Labels.COMPLETED}" }
+            else select {
+                name = "folder"
+                option { value = ""; +"Any ${Labels.FOLDER.lowercase()}" }
+                folderTree(data.all.filter { it.type == TaskType.FOLDER }).forEach { (f, depth) ->
+                    option { value = f.id.toString(); selected = data.folder == f.id; +(INDENT.repeat(depth) + f.title) }
+                }
+            }
+            span(classes = "date-filter") {
+                +"Due "
+                dateInput(name = "after") { value = data.search.after?.toString().orEmpty(); attributes["aria-label"] = Labels.DUE_AFTER }
+                +"–"
+                dateInput(name = "before") { value = data.search.before?.toString().orEmpty(); attributes["aria-label"] = Labels.DUE_BEFORE }
+            }
+        }
+    }
 }
 
 val ListMode.path get() = "/${name.lowercase()}"
@@ -365,6 +495,36 @@ private class SideNav(service: TaskService, list: ListData?) {
         val ids = shown.map { it.id }.toSet()
         val inFolder = open.groupingBy { t -> t.parentId?.let { walkParentChain(it, byId) { id -> id.takeIf { it in ids } } } }.eachCount()
         shown.map { it to (inFolder[it.id] ?: 0) }
+    }
+    val contexts: List<ContextSummary> = (list?.contexts ?: service.contexts()).let { cs ->
+        contextSummaries(cs, cs.flatMap { list?.windows(it.id) ?: service.timeWindows(it.id) }, all, service.contextIdsByTask(), list?.now ?: service.now())
+    }
+}
+
+// A context in the sidebar: it filters the list on the page (Doing, off a list page), and again clears it.
+// ⋯ holds its Auto/On/Off and its editor. Its dot: green while it holds, grey while it doesn't, a ring for a
+// filter-only one.
+private fun FlowContent.contextLink(summary: ContextSummary, list: ListData?, back: String) = div(classes = "nav-context") {
+    val (c, _, holds) = summary
+    val on = list?.search?.context == c.id
+    val search = (list?.search ?: ListSearch()).copy(context = c.id.takeUnless { on })
+    val href = list?.takeIf { it.mode in LISTS }?.let { it.pathOf(it.mode, it.folder, search) } ?: ListPlace(ListMode.DOING, null, null, search).path
+    a(href = href, classes = if (on) "current" else null) {
+        span(classes = "cdot" + when { !holds -> " off"; c.type == ContextType.LABEL -> " label"; else -> "" }) {}
+        +c.name
+        span(classes = "n") { +(if (on) "✕" else summary.countText) }
+    }
+    details(classes = "pp context-menu") {
+        summary { attributes["aria-label"] = c.name; +"⋯" }
+        div(classes = "pop") {
+            form(action = "/contexts/${c.id}/forced?back=${back.encodeURLParameter()}", method = FormMethod.post, classes = "pills context-forced") {
+                forcedChoices(c).forEach { (value, label) ->
+                    button(type = ButtonType.submit, name = "forced", classes = if (forcedShown(c) == value) "pill set" else "pill") { this.value = value?.toString() ?: "auto"; +label }
+                }
+            }
+            a(href = "/contexts?edit=${c.id}") { +Labels.editContext(c.name) }
+            a(href = "/contexts") { +Labels.MANAGE_CONTEXTS }
+        }
     }
 }
 
@@ -441,9 +601,14 @@ private fun HTML.shell(
                     pinControl(now, pinned = true, refresh = true)
                 }
             }
+            // What to highlight: a list page by its list (not its search), else the page's path.
+            val here = list?.let { ListPlace(it.mode, it.folder?.takeIf { _ -> it.mode == ListMode.ALL }, null).path } ?: current
+            // The context filter goes along between lists, until cleared.
+            val context = list?.search?.context
+            fun carried(path: String) = context?.let { path + (if ('?' in path) "&" else "?") + "context=$it" } ?: path
             nav(classes = "nav") {
                 LISTS.forEach { m ->
-                    a(href = m.path, classes = if (m.path == current) "current" else null) { +m.label; span(classes = "n") { id = "n-${m.name.lowercase()}"; +nav.counts.getValue(m).toString() } }
+                    a(href = carried(m.path), classes = if (m.path == here) "current" else null) { +m.label; span(classes = "n") { id = "n-${m.name.lowercase()}"; +nav.counts.getValue(m).toString() } }
                 }
             }
             if (nav.folders.isNotEmpty()) {
@@ -452,7 +617,7 @@ private fun HTML.shell(
                     nav.folders.forEach { (folder, open) ->
                         val path = "/all?folder=${folder.id}"
                         div(classes = "nav-folder") {
-                            a(href = path, classes = if (path == current) "current" else null) {
+                            a(href = carried(path), classes = if (path == here) "current" else null) {
                                 span(classes = "fdot") { nav.colors[folder.id]?.let { style = "background: $it" } }
                                 +folder.title
                                 span(classes = "n") { id = "n-${folder.id}"; +open.toString() }
@@ -462,9 +627,13 @@ private fun HTML.shell(
                     }
                 }
             }
+            if (nav.contexts.isNotEmpty()) {
+                div(classes = "nav-label") { +Labels.CONTEXTS }
+                nav(classes = "nav context-nav") { nav.contexts.forEach { contextLink(it, list, back = list?.path ?: current) } }
+            }
             div(classes = "nav-label") { +"More" }
             nav(classes = "nav") {
-                listOf("/focus" to Labels.FOCUS, "/calendar" to Labels.CALENDAR, "/search" to Labels.SEARCH, "/templates" to Labels.TEMPLATES, "/review" to Labels.REVIEW, "/contexts" to Labels.CONTEXTS, "/settings" to Labels.SETTINGS)
+                listOf("/focus" to Labels.FOCUS, "/calendar" to Labels.CALENDAR, "/templates" to Labels.TEMPLATES, "/review" to Labels.REVIEW, "/contexts" to Labels.CONTEXTS, "/settings" to Labels.SETTINGS)
                     .forEach { (path, label) -> a(href = path, classes = if (path == current.substringBefore('?')) "current" else null) { +label } }
             }
             details(classes = "shortcuts") {
@@ -484,6 +653,7 @@ private fun HTML.shell(
 
 private val KEYS = listOf(
     "n" to "jump to quick add",
+    "/" to "search the list",
     "g, then d / a / t" to "go to Doing / Active / All",
     "Esc" to "leave a text box, close the task panel, or leave focus",
     "?" to "every shortcut, including the All tree's",
@@ -507,7 +677,7 @@ fun DIV.listContents(data: ListData) {
     data.calendar?.let { attributes["data-month"] = it.month.toString(); attributes["data-day"] = it.day?.toString().orEmpty() }
     attributes["hx-trigger"] = "every 60s, visibilitychange from:document, refresh from:body"
     attributes["hx-swap"] = "outerHTML"
-    data.stalled?.let { stalledPrompt(it, data.mode, data.q) }
+    data.stalled?.let { stalledPrompt(it, data) }
     runningSection(data)
     if (data.mode == ListMode.ALL) {
         if (data.roots.isEmpty()) p(classes = "empty") { +Labels.NOTHING_HERE }
@@ -523,7 +693,7 @@ fun DIV.listContents(data: ListData) {
             val folded = sectionId in data.folded
             div(classes = "section") {
                 button(classes = "section-toggle") {
-                    hx("get", "/list/active?fold=$sectionId")
+                    hx("get", data.listUrl("fold=$sectionId"))
                     attributes["aria-expanded"] = (!folded).toString()
                     // A divider: "Work · 5" centered between two rules in the folder's colour.
                     folder?.let { data.ownColor(it) }?.let { style = "--rule: $it" }
@@ -538,6 +708,7 @@ fun DIV.listContents(data: ListData) {
     } else {
         data.tasks.forEach { taskRow(data, it, depth = 0) }
     }
+    if (data.moreInAll > 0) a(href = data.pathOf(ListMode.ALL), classes = "more-in-all") { +Labels.moreInAll(data.moreInAll) }
     // Folder mode hides the rest; this keeps it from hiding something due today.
     if (data.dueOutside.isNotEmpty()) details(classes = "due-outside") {
         summary { +"${data.dueOutside.size} due today outside ${data.modeFolder!!.title} · "; span(classes = "show") { +"show" } }
@@ -610,7 +781,8 @@ private fun FlowContent.tree(data: ListData, nodes: List<OutlinerNode>, parentId
         val item = node.task
         val hasChildren = node.children.isNotEmpty()
         // Checklists start folded; the cookie holds the ones flipped, so for a checklist it means unfolded.
-        val collapsed = hasChildren && ((item.id in data.collapsed) != (item.type == TaskType.CHECKLIST))
+        // A search unfolds everything, to show what it found.
+        val collapsed = hasChildren && !data.filtering && ((item.id in data.collapsed) != (item.type == TaskType.CHECKLIST))
         val outline: DIV.() -> Unit = {
             classes = classes + "node"
             attributes["tabindex"] = "0"
@@ -620,7 +792,7 @@ private fun FlowContent.tree(data: ListData, nodes: List<OutlinerNode>, parentId
             attributes["data-depth"] = depth.toString()
             attributes["data-kind"] = item.type.name.lowercase()
             if (hasChildren) attributes["data-collapsed"] = collapsed.toString()
-            chevron(item.id, hasChildren, collapsed, data.folder)
+            chevron(item.id, hasChildren, collapsed, data)
         }
         if (item.type == TaskType.FOLDER) {
             div(classes = if (item.id == data.selected) "folder current" else "folder") {
@@ -646,10 +818,10 @@ private fun FlowContent.tree(data: ListData, nodes: List<OutlinerNode>, parentId
     }
 }
 
-private fun FlowContent.chevron(id: Long, hasChildren: Boolean, collapsed: Boolean, folder: Long?) {
+private fun FlowContent.chevron(id: Long, hasChildren: Boolean, collapsed: Boolean, data: ListData) {
     if (!hasChildren) return span(classes = "chevron") {}
     button(classes = "chevron") {
-        hx("get", "/list/all?toggle=$id" + (folder?.let { "&folder=$it" } ?: ""))
+        hx("get", data.listUrl("toggle=$id"))
         attributes["tabindex"] = "-1"
         attributes["aria-label"] = if (collapsed) "Expand" else "Collapse"
         icon(if (collapsed) Icon.CHEVRON_RIGHT else Icon.EXPAND_MORE, "")
@@ -667,6 +839,7 @@ internal fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outline
         if (task.isBackburner(data.now) || (data.mode == ListMode.CALENDAR && task.isMaybe)) classes = classes + "dim"
         else if (data.mode == ListMode.ALL && dimmedInTree(task, data.workable, data.byId, data.now)) classes = classes + "later"
         if (task.isComplete) classes = classes + "done"
+        if (data.onlyAParent(task)) classes = classes + "parent-only"
         style = "padding-left: ${depth * 18}px; border-left-color: ${data.folderColor(task) ?: "var(--border)"}"
         outlineNode?.invoke(this)
         // A timed wait's end shows as its own tail ("32m left"), not as a due date.
@@ -675,8 +848,9 @@ internal fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outline
         taskMark(task, data.subtaskCounts(task), mode) {
             // Due today: an orange ring; overdue: rust. Each with a pale fill of its own colour.
             when (status) { DueStatus.OVERDUE -> classes = classes + "overdue"; DueStatus.TODAY -> classes = classes + "today"; else -> {} }
-            hx("post", "/tasks/${task.id}/complete?mode=$mode")
-            attributes["aria-label"] = "Complete"
+            // A search for completed ones shows them in All, to reopen.
+            hx("post", "/tasks/${task.id}/${if (task.isComplete) "uncomplete" else "complete"}?mode=$mode")
+            attributes["aria-label"] = if (task.isComplete) "Mark not done" else "Complete"
         }
         div(classes = "main") {
             div(classes = "title") {
@@ -694,6 +868,8 @@ internal fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outline
                 if (task.recurrenceType != null) span(classes = "badge") { attributes["title"] = "Recurring"; icon(Icon.REPEAT, "") }
                 if (!task.notes.isNullOrBlank()) span(classes = "has-notes") { attributes["title"] = Labels.HAS_NOTES; icon(Icon.NOTES, "") }
             }
+            // Found by its notes: the line that matched, under the title.
+            notesMatch(task, data.searchText)?.let { div(classes = "notes-line") { +it } }
         }
         // A timed task's play button, "▶ 1h"; app.js runs the countdown (one at a time, per browser)
         // and shows the time left on it. A wait's timer runs by itself (Workflows.kt).
@@ -809,20 +985,20 @@ fun DIV.deletedToastContents(task: Task, q: String) {
 }
 
 // The phone's "all subtasks done" prompt: complete the project, add its next step, or not now.
-private fun FlowContent.stalledPrompt(project: Task, mode: ListMode, q: String) = div(classes = "stalled") {
-    val m = q
+private fun FlowContent.stalledPrompt(project: Task, data: ListData) = div(classes = "stalled") {
+    val m = data.q
     span { +"${Labels.allSubtasksDone(project.title)}. ${Labels.IS_PROJECT_COMPLETE}" }
     button(classes = "primary") { hx("post", "/tasks/${project.id}/complete?mode=$m"); +Labels.COMPLETE_PROJECT }
     form(classes = "inline") {
         hx("post", "/tasks/${project.id}/next?mode=$m")
         textInput(name = "text") { placeholder = "${Labels.ADD_NEXT}…"; attributes["autocomplete"] = "off" }
     }
-    button { hx("get", "/list/${mode.name.lowercase()}?later=${project.id}"); +Labels.LATER }
+    button { hx("get", data.listUrl("later=${project.id}")); +Labels.LATER }
 }
 
 // Asks what to do with a task's open subtasks before completing it. `url` is the completing
-// request; the choice is added to it. `include`: a form whose fields must go along (search's).
-fun DIV.askSubtasksToast(task: Task, open: Int, url: String, target: String, include: String? = null) {
+// request; the choice is added to it.
+fun DIV.askSubtasksToast(task: Task, open: Int, url: String, target: String) {
     id = "toast"
     attributes["hx-swap-oob"] = "true"
     val question = completeQuestion(task, open) ?: return
@@ -832,7 +1008,6 @@ fun DIV.askSubtasksToast(task: Task, open: Int, url: String, target: String, inc
     listOf("complete" to question.completeAll, "promote" to question.moveOut).forEach { (choice, label) ->
         button {
             hx("post", "$url${sep}subtasks=$choice", target)
-            include?.let { attributes["hx-include"] = it }
             +label
         }
     }

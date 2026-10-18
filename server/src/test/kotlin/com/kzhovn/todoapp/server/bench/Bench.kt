@@ -60,7 +60,7 @@ private fun runAll(size: Int) {
         time("GET /all (full page)") { get("/all") }
         time("GET /list/doing (60s htmx refresh)") { get("/list/doing") }
         time("GET /tasks/{id} (editor)") { get("/tasks/${data.openTask}") }
-        time("GET /search/results?q=a") { get("/search/results?q=a") }
+        time("GET /list/all?q=a") { get("/list/all?q=a") }
         time("GET /review") { get("/review") }
         time("GET /api/tray?list=none (60s poll)") { get("/api/tray?list=none") }
         time("GET /api/tray?list=all") { get("/api/tray?list=all") }

@@ -8,6 +8,7 @@ import com.kzhovn.todoapp.data.Labels
 import androidx.compose.material.icons.filled.OpenInFull
 import com.kzhovn.todoapp.data.OutlinerNode
 import com.kzhovn.todoapp.data.buildOutlinerTree
+import com.kzhovn.todoapp.data.pruneTree
 import com.kzhovn.todoapp.data.subtaskCounts
 import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.data.isTimedWait
@@ -101,7 +102,9 @@ fun OutlinerScreen(
     rootId: Long? = null,
     onZoom: ((Long) -> Unit)? = null,
     // What isn't held back other than by contexts (computeActiveIgnoringContexts): the rest is dimmed.
-    workable: Set<Long> = emptySet()
+    workable: Set<Long> = emptySet(),
+    // A search's matches: the tree shows just them and their parents (muted), all unfolded.
+    keep: Set<Long>? = null
 ) {
     val context = LocalContext.current
     val prefs = remember { OutlinerPreferences(context) }
@@ -112,7 +115,10 @@ fun OutlinerScreen(
         collapsed = prefs.collapsedIds()
     }
 
-    val tree = remember(tasks, rootId) { buildOutlinerTree(tasks, hideCompleted = true, rootId = rootId) }
+    val tree = remember(tasks, rootId, keep) {
+        // A search for completed tasks keeps them.
+        buildOutlinerTree(tasks, hideCompleted = keep == null, rootId = rootId).let { if (keep == null) it else pruneTree(it, keep) }
+    }
     val allById = remember(tasks) { tasks.associateBy { it.id } }
     val counts = remember(tasks) { subtaskCounts(tasks) }
     val colors = remember(tasks) { folderColors(tasks) }
@@ -147,7 +153,7 @@ fun OutlinerScreen(
 
     val actions = OutlinerActions(::toggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, onZoom, onSnooze, onStillWaiting)
     LazyColumn(state = listState, modifier = Modifier.onGloballyPositioned { listBounds = it.boundsInRoot() }) {
-        renderNodes(tree, depth = 0, collapsed = collapsed, actions = actions, allById = allById, counts = counts, colors = colors, selectedIds = selectedIds, workable = workable)
+        renderNodes(tree, depth = 0, collapsed = collapsed, actions = actions, allById = allById, counts = counts, colors = colors, selectedIds = selectedIds, workable = workable, keep = keep)
     }
 }
 
@@ -160,14 +166,16 @@ private fun LazyListScope.renderNodes(
     counts: Map<Long, Pair<Int, Int>>,
     colors: Map<Long, Color>,
     selectedIds: Set<Long>,
-    workable: Set<Long>
+    workable: Set<Long>,
+    keep: Set<Long>?
 ) {
     nodes.forEach { node ->
+        val folded = keep == null && isFolded(node.task, collapsed)
         item(key = node.task.id) {
-            OutlinerRow(node, depth, isFolded(node.task, collapsed), actions, allById, counts[node.task.id], colors[node.task.id], node.task.id in selectedIds, workable)
+            OutlinerRow(node, depth, folded, actions, allById, counts[node.task.id], colors[node.task.id], node.task.id in selectedIds, workable, muted = keep != null && node.task.id !in keep)
         }
-        if (node.children.isNotEmpty() && !isFolded(node.task, collapsed)) {
-            renderNodes(node.children, depth + 1, collapsed, actions, allById, counts, colors, selectedIds, workable)
+        if (node.children.isNotEmpty() && !folded) {
+            renderNodes(node.children, depth + 1, collapsed, actions, allById, counts, colors, selectedIds, workable, keep)
         }
     }
 }
@@ -199,7 +207,8 @@ private fun OutlinerRow(
     itemCounts: Pair<Int, Int>?,
     folderColor: Color?,
     selected: Boolean,
-    workable: Set<Long>
+    workable: Set<Long>,
+    muted: Boolean = false // a search's match's parent, there to place it
 ) {
     val (onToggle, onCheck, onEdit, onStar, onReparent, onAddSubtask, onMove, onDragAt, onZoom, onSnooze, onStillWaiting) = actions
     var menuOpen by remember { mutableStateOf(false) }
@@ -260,7 +269,7 @@ private fun OutlinerRow(
                 .fillMaxWidth()
                 .onGloballyPositioned { rowBounds = it.boundsInRoot() }
                 .background(if (dropZone == DropZone.INTO || selected) LedgerAccentSoft else LedgerBackground)
-                .alpha(System.currentTimeMillis().let { now -> if (task.isBackburner(now)) BACKBURNER_ALPHA else if (dimmedInTree(task, workable, allById, now)) LATER_ALPHA else 1f })
+                .alpha(System.currentTimeMillis().let { now -> if (task.isBackburner(now)) BACKBURNER_ALPHA else if (muted || dimmedInTree(task, workable, allById, now)) LATER_ALPHA else 1f })
                 .drawWithContent {
                     drawContent()
                     val line = 3.dp.toPx()

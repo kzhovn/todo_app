@@ -3,6 +3,9 @@ package com.kzhovn.todoapp.ui
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.TaskContext
+import com.kzhovn.todoapp.data.ContextType
+import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.TodoDatabase
 import com.kzhovn.todoapp.notifications.ReminderScheduler
 import com.kzhovn.todoapp.repository.ContextRepository
@@ -16,6 +19,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -118,14 +122,42 @@ class TaskListViewModelTest {
     }
 
     @Test
-    fun `search matches title case-insensitively regardless of active status`() = runTest {
+    fun `a search narrows the tab in place, and counts what only All has`() = runTest {
         repository.createTask(Task(title = "Buy milk"))
-        repository.createTask(Task(title = "Walk the dog", startDate = now + 1_000))
+        repository.createTask(Task(title = "Milk the report", startDate = now + 1_000))
+        val dog = repository.createTask(Task(title = "Walk the dog"))
 
-        viewModel.search("milk")
+        viewModel.load(TaskListMode.ACTIVE, "MILK")
         advanceUntilIdle()
-
         assertEquals(listOf("Buy milk"), viewModel.tasks.value.map { it.title })
+        assertEquals(1, viewModel.moreInAll.value)
+
+        viewModel.load(TaskListMode.ALL, "milk")
+        advanceUntilIdle()
+        assertEquals(2, viewModel.keep.value!!.size)
+        assertFalse(dog in viewModel.keep.value!!)
+    }
+
+    @Test
+    fun `filtered by a context, its tasks show as if it held, picked or typed`() = runTest {
+        val contexts = ContextRepository(db.taskContextDao())
+        val errands = contexts.createContext(TaskContext(name = "Errands", type = ContextType.LABEL, forced = false))
+        val stamps = repository.createTask(Task(title = "Buy stamps"))
+        contexts.setTaskContexts(stamps, setOf(errands))
+        repository.createTask(Task(title = "Buy milk"))
+
+        viewModel.load(TaskListMode.ACTIVE)
+        advanceUntilIdle()
+        assertEquals(listOf("Buy milk"), viewModel.tasks.value.map { it.title })
+
+        viewModel.load(TaskListMode.ACTIVE, filters = SearchFilters(contextId = errands))
+        advanceUntilIdle()
+        assertEquals(listOf("Buy stamps"), viewModel.tasks.value.map { it.title })
+        assertEquals(errands, viewModel.shownContext.value)
+
+        viewModel.load(TaskListMode.ACTIVE, "@errands")
+        advanceUntilIdle()
+        assertEquals(listOf("Buy stamps"), viewModel.tasks.value.map { it.title })
     }
 
     @Test

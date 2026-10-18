@@ -2,6 +2,9 @@ package com.kzhovn.todoapp.server
 
 import com.kzhovn.todoapp.sync.SyncRequest
 import com.kzhovn.todoapp.data.Labels
+import com.kzhovn.todoapp.data.TaskContext
+import com.kzhovn.todoapp.data.ContextType
+import com.kzhovn.todoapp.data.DAY_MS
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.checklistItems
 import com.kzhovn.todoapp.data.TaskType
@@ -285,17 +288,47 @@ class WebTest {
     }
 
     @Test
-    fun `search filters like the phone's`() = web {
+    fun `a list's search narrows it in place, and the All tree keeps the matches' parents`() = web {
         val work = service.create(Task(type = TaskType.FOLDER, title = "Work"))
         service.create(Task(title = "Fix bug", parentId = work.id, isStarred = true))
-        service.create(Task(title = "Old bug", isComplete = true))
+        service.create(Task(title = "Old bug", isComplete = true, completedAt = 1))
+        service.create(Task(title = "Bug next week", startDate = service.now() + 7 * DAY_MS))
         service.create(Task(title = "Buy milk"))
-        suspend fun titles(query: String) = Regex("mode=ALL\"[^>]*>([^<]+)</a>").findAll(client.get("/search/results?$query").bodyAsText()).map { it.groupValues[1] }.toList()
 
-        assertEquals(listOf("Fix bug"), titles("q=BUG"))
-        assertEquals(listOf("Fix bug", "Old bug"), titles("q=bug&completed=on"))
-        assertEquals(listOf("Fix bug"), titles("folder=${work.id}"))
-        assertEquals(listOf("Fix bug"), titles("starred=on"))
+        val all = client.get("/list/all?q=BUG").bodyAsText()
+        assertTrue(all.contains(">Fix bug<") && all.contains(">Work<") && all.contains(">Bug next week<"))
+        assertFalse(all.contains(">Buy milk<") || all.contains(">Old bug<"))
+        assertTrue(client.get("/list/all?q=bug&completed=1").bodyAsText().contains(">Old bug<"))
+        val active = client.get("/list/active?q=bug").bodyAsText()
+        assertTrue(active.contains(">Fix bug<") && active.contains(Labels.moreInAll(1)))
+        assertFalse(active.contains(">Bug next week<"))
+        assertFalse(client.get("/list/active?folder=${work.id}").bodyAsText().contains(">Buy milk<"))
+        assertFalse(client.get("/list/active?starred=1").bodyAsText().contains(">Buy milk<"))
+        // Typing keeps the address in step, so a reload keeps the search.
+        assertEquals("/active?q=bug", client.get("/list/active?q=bug&search=1").headers["HX-Replace-Url"])
+    }
+
+    @Test
+    fun `a context filter shows its tasks as if it held, from the sidebar or typed in the search`() = web {
+        val errands = service.saveContext(TaskContext(name = "Errands", type = ContextType.LABEL), emptyList())
+        service.setContextForced(errands.id, false)
+        service.create(Task(title = "Buy stamps"), contextIds = setOf(errands.id))
+        service.create(Task(title = "Buy milk"))
+
+        val page = client.get("/active").bodyAsText()
+        assertFalse(page.contains(">Buy stamps<"))
+        assertTrue(page.contains("href=\"/active?context=${errands.id}\"")) // the sidebar's Errands
+        val filtered = client.get("/active?context=${errands.id}").bodyAsText()
+        assertTrue(filtered.contains(">Buy stamps<") && filtered.contains(Labels.contextFilter("Errands", holds = false)))
+        assertFalse(filtered.contains(">Buy milk<"))
+        assertTrue(filtered.contains("href=\"/doing?context=${errands.id}\"")) // kept going to another list
+        assertTrue(client.get("/list/active?q=@errands").bodyAsText().contains(">Buy stamps<"))
+
+        // Switched back On from the sidebar's ⋯, back to the page it was on.
+        val noRedirects = createClient { followRedirects = false }
+        val back = noRedirects.submitForm("/contexts/${errands.id}/forced?back=%2Factive", parameters { append("forced", "auto") })
+        assertEquals("/active", back.headers["Location"])
+        assertTrue(client.get("/active").bodyAsText().contains(">Buy stamps<"))
     }
 
     @Test
@@ -442,10 +475,9 @@ class WebTest {
     }
 
     @Test
-    fun `search results complete and reopen tasks, and quick add in Doing stars`() = web {
+    fun `a search for completed tasks reopens them, and quick add in Doing stars`() = web {
         val done = service.create(Task(title = "Old bug", isComplete = true, completedAt = 1))
-        client.submitForm("/search/toggle/${done.id}", parameters { append("q", "bug"); append("completed", "on") })
-        assertFalse(service.get(done.id)!!.isComplete)
+        assertTrue(client.get("/list/all?q=bug&completed=1").bodyAsText().contains("/tasks/${done.id}/uncomplete"))
 
         client.submitForm("/quickadd", parameters { append("text", "call mom"); append("mode", "DOING") })
         client.submitForm("/quickadd", parameters { append("text", "call dad"); append("mode", "ACTIVE") })
@@ -539,7 +571,7 @@ class WebTest {
         val editor = client.get("/tasks/${task.id}?mode=DOING").bodyAsText()
         assertTrue(editor.contains("<a href=\"https://bank.example/help\" target=\"_blank\" rel=\"noopener\">"))
         assertTrue(client.get("/doing").bodyAsText().contains("has-notes"))
-        assertTrue(client.get("/search/results?q=4417").bodyAsText().contains("notes-line\">Ref 4417"))
+        assertTrue(client.get("/list/doing?q=4417").bodyAsText().contains("notes-line\">Ref 4417"))
         // Cleared: gone, not an empty string.
         client.submitForm("/tasks/${task.id}/autosave", parameters {
             append("base", taskFields(service.get(task.id)!!, emptySet(), emptySet()).toString())
@@ -755,8 +787,7 @@ class WebTest {
 
         client.submitForm("/quickadd", parameters { append("text", "book the offsite") })
         assertEquals(work.id, service.tasks().single { it.title == "book the offsite" }.parentId)
-        assertFalse(client.get("/search/results?q=the").bodyAsText().contains("Water the plants"))
-        assertTrue(client.get("/search/results?q=the&everywhere=on").bodyAsText().contains("Water the plants"))
+        assertFalse(client.get("/list/all?q=the").bodyAsText().contains("Water the plants")) // a search keeps to the mode
         assertTrue(client.get("/review").bodyAsText().contains("See all folders"))
 
         client.post("/mode")

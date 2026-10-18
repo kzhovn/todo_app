@@ -1,6 +1,8 @@
 package com.kzhovn.todoapp.contexts
 
 import com.kzhovn.todoapp.data.Labels
+import com.kzhovn.todoapp.data.forcedChoices
+import com.kzhovn.todoapp.data.forcedShown
 import com.kzhovn.todoapp.data.clockTime
 import androidx.core.content.ContextCompat
 import androidx.compose.material3.TextButton
@@ -66,6 +68,10 @@ import com.kzhovn.todoapp.ui.theme.LedgerTheme
 import kotlinx.coroutines.launch
 
 class ContextsActivity : ComponentActivity() {
+    companion object {
+        const val EXTRA_CONTEXT_ID = "context_id"
+    }
+
     // "Allow all the time" location, so place contexts update while the app is in the background.
     private val backgroundGranted = mutableStateOf(true)
     private val locationLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -128,6 +134,12 @@ class ContextsActivity : ComponentActivity() {
                 }
             }
 
+            // The side menu's "Edit Work…": that one, open in the form.
+            LaunchedEffect(contexts) {
+                val id = intent.getLongExtra(EXTRA_CONTEXT_ID, 0L)
+                contexts.firstOrNull { it.id == id }?.let { loadForEdit(it); intent.removeExtra(EXTRA_CONTEXT_ID) }
+            }
+
             Column(modifier = Modifier.fillMaxSize().background(LedgerBackground).padding(16.dp)) {
                 Text("Contexts", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk)
                 Spacer(Modifier.height(12.dp))
@@ -156,8 +168,8 @@ class ContextsActivity : ComponentActivity() {
                                     fontSize = 14.sp, color = LedgerInk
                                 )
                                 Row(modifier = Modifier.padding(top = 4.dp)) {
-                                    Labels.CONTEXT_FORCED.forEach { (value, label) ->
-                                        SelectablePill(label = label, selected = ctx.forced == value, fontSize = 12.sp, verticalPadding = 3.dp, onClick = {
+                                    forcedChoices(ctx).forEach { (value, label) ->
+                                        SelectablePill(label = label, selected = forcedShown(ctx) == value, fontSize = 12.sp, verticalPadding = 3.dp, onClick = {
                                             scope.launch { contextRepository.setForced(ctx.id, value); refresh() }
                                         })
                                         Spacer(Modifier.width(6.dp))

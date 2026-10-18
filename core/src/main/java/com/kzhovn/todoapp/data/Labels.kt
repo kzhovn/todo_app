@@ -173,6 +173,15 @@ object Labels {
     const val NO_FOLDER = "No folder"
     const val CONTEXT = "Context"
     const val MANAGE_CONTEXTS = "Manage contexts…"
+    // The context filter (the lists' @ menu, the side menu's Contexts).
+    const val ANY_CONTEXT = "Any context"
+    const val NO_CONTEXT = "No context"
+    const val OFF = "off"
+    fun editContext(name: String) = "Edit $name…"
+    // The bar under the tabs while filtering: a context that doesn't hold now is shown as if it did.
+    fun contextFilter(name: String, holds: Boolean) = "@$name" + if (holds) "" else " · off now, shown as if on"
+    // Under a searched Doing or Active: matches that list doesn't show (not doable yet, or done).
+    fun moreInAll(count: Int) = "$count more in All →"
 
     const val RELATED = "Related"
     const val SUBTASK = "Subtask"

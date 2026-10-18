@@ -15,7 +15,7 @@ class SearchTest {
         Task(id = 14, title = "Milk Projects", type = TaskType.FOLDER)
     )
     private fun search(query: String, filters: SearchFilters = SearchFilters(), contexts: Map<Long, Set<Long>> = emptyMap()) =
-        searchTasks(all, contexts, query, filters).map { it.title }
+        all.filter(searchMatcher(all, contexts, query, filters)).map { it.title }
 
     @Test
     fun `matches any case, ignores surrounding spaces, skips folders and completed tasks`() {
@@ -40,9 +40,33 @@ class SearchTest {
     }
 
     @Test
+    fun `a context filter goes by inherited contexts too, and No context keeps tasks without any`() {
+        val contexts = mapOf(1L to setOf(7L)) // the folder Work has @7
+        assertEquals(listOf("Milk the report", "Walk the dog"), search("", SearchFilters(contextId = 7), contexts))
+        assertEquals(listOf("Buy Milk"), search("", SearchFilters(contextId = SearchFilters.NO_CONTEXT), contexts))
+    }
+
+    @Test
+    fun `typed @names come out of the search as a context, other @words stay`() {
+        val home = TaskContext(id = 3, name = "Home", type = ContextType.LABEL)
+        val phone = TaskContext(id = 4, name = "Phone call", type = ContextType.LABEL)
+        assertEquals("milk @Sam" to 3L, parseSearch("@home  milk @Sam", listOf(home, phone)))
+        assertEquals("" to 4L, parseSearch("@phonecall", listOf(home, phone)))
+        assertEquals("milk" to null, parseSearch("milk", listOf(home)))
+    }
+
+    @Test
+    fun `the pruned tree keeps matches and what's above them`() {
+        val tree = pruneTree(buildOutlinerTree(all, hideCompleted = true), keep = setOf(11L))
+        assertEquals(listOf("Work"), tree.map { it.task.title })
+        assertEquals(listOf("Clients"), tree[0].children.map { it.task.title })
+        assertEquals(listOf("Milk the report"), tree[0].children[0].children.map { it.task.title })
+    }
+
+    @Test
     fun `notes match too, and the matching line is shown only when the title didn't match`() {
         val bank = Task(id = 20, title = "Call the bank", notes = "Ask about the fee\nRef 4417-22")
-        assertEquals(listOf(bank), searchTasks(listOf(bank), emptyMap(), "4417", SearchFilters()))
+        assert(searchMatcher(listOf(bank), emptyMap(), "4417", SearchFilters())(bank))
         assertEquals("Ref 4417-22", notesMatch(bank, "4417"))
         assertEquals(null, notesMatch(bank, "bank"))
         val long = Task(id = 21, title = "Trip", notes = "word ".repeat(30) + "passport " + "more ".repeat(30))

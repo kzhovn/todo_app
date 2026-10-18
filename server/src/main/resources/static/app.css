@@ -232,27 +232,32 @@ form.inline button { padding: 6px 10px; border: 1px solid var(--border); border-
 .node[data-drop="into"] { background: var(--accent-soft); }
 .outline-new { display: block; width: calc(100% - 60px); margin: 4px 0; padding: 6px 8px; border: 1px solid var(--accent); border-radius: 6px; background: var(--panel); color: var(--ink); font: inherit; }
 
-/* Search */
-.search { padding: 16px 20px 6px; display: flex; flex-direction: column; gap: 8px; }
-.search-q { width: 100%; padding: 8px 12px; font: inherit; font-size: 15px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--ink); }
-/* The filters: one row of chips, all the same height. */
-.search .pills { align-items: center; gap: 6px; }
-.search .pill, .search select, .search input[type=date] { height: 28px; box-sizing: border-box; padding: 0 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); color: var(--muted); font: inherit; font-size: 13px; display: inline-flex; align-items: center; }
-.search select { max-width: 160px; }
-.search input[type=date] { padding: 0 6px; width: 128px; }
+/* A list's search box, narrowing the list in place; its filters behind Filters ▾. */
+.list-search { display: flex; align-items: center; gap: 8px; padding: 10px 20px 4px; }
+.search-q { flex: 1; min-width: 0; padding: 7px 12px; font: inherit; font-size: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--ink); }
+.list-search .pill { white-space: nowrap; }
+.list-search .context-filter { text-decoration: none; }
+.filters .pop { left: auto; right: 0; flex-direction: column; align-items: flex-start; font-size: 13px; }
+.filters select, .filters input[type=date] { font: inherit; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); padding: 3px 6px; }
 .date-filter { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
-.results { padding: 0 20px 24px; }
-.results > .hint { margin: 0 0 4px; font-size: 12px; }
-/* A result is one line, like a list row; a matched notes line goes under the title. */
-.result { display: flex; align-items: center; flex-wrap: wrap; gap: 0 8px; min-height: 38px; padding: 3px 8px 3px 6px; border-left: 4px solid var(--border); border-bottom: 1px solid var(--border); }
-.result .check, .result .project { margin-left: 0; display: flex; align-items: center; justify-content: center; }
-.result > a { flex: 1; min-width: 0; color: var(--ink); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.result > a:hover { text-decoration: underline; }
-.result > a.count { flex: none; }
-.result .meta { margin: 0 0 0 auto; gap: 8px; white-space: nowrap; flex-shrink: 0; }
-.result .notes-line { flex-basis: 100%; padding: 0 0 4px 30px; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.result a.done { color: var(--muted); text-decoration: line-through; }
-.starred { color: var(--star); }
+.row .notes-line { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Searched All tree: a match's parents, there only to place it. */
+.row.parent-only .edit { color: var(--muted); }
+.more-in-all { display: block; padding: 10px 20px; font-size: 13px; color: var(--accent); text-decoration: none; }
+.more-in-all:hover { text-decoration: underline; }
+/* The sidebar's contexts: a dot (green holds, grey doesn't, a ring for filter-only), ⋯ on hover. */
+.nav-context { position: relative; }
+.cdot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--good); }
+.cdot.label { background: transparent; border: 1.5px solid var(--check); box-sizing: border-box; }
+.cdot.off { background: var(--check); }
+.nav-context .context-menu { position: absolute; right: 30px; top: 50%; transform: translateY(-50%); display: none; }
+.nav-context:hover .context-menu, .nav-context .context-menu[open], .nav-context .context-menu:focus-within { display: inline-block; }
+.nav-context .context-menu[open] { z-index: 20; }
+.context-menu > summary { padding: 0 6px; border-radius: 5px; color: var(--muted); cursor: pointer; }
+/* Kept inside the sidebar, which clips what spills over. */
+.context-menu .pop { left: auto; right: -24px; flex-direction: column; align-items: stretch; min-width: 180px; padding: 8px; gap: 4px; }
+.context-menu .pop a { padding: 5px 8px; border-radius: 5px; color: var(--ink); text-decoration: none; font-size: 13px; }
+.context-menu .pop a:hover { background: var(--tile); }
 
 /* Review */
 .review, .contexts { padding: 20px 24px; }

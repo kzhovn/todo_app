@@ -37,6 +37,14 @@ class UrgentContextsTest {
         assertEquals(listOf("Buy stamps"), active.map { it.title })
     }
 
+    @Test fun `a filter-only context switched Off holds its tasks back, and a filter shows them as if on`() {
+        val errands = TaskContext(id = 3, name = "errands", type = ContextType.LABEL, forced = false)
+        val stamps = Task(id = 14, title = "Buy stamps", dueDate = now)
+        val contexts = mapOf(14L to setOf(3L))
+        assertEquals(emptyList<Task>(), computeActiveTasks(listOf(stamps), contexts, listOf(errands), emptyList(), emptyList(), now))
+        assertEquals(listOf(stamps), computeActiveTasks(listOf(stamps), contexts, asIfOn(listOf(errands), 3L), emptyList(), emptyList(), now))
+    }
+
     @Test fun `a context set by hand overrides its wifi and clock, and off holds back even a task due today`() {
         val tasks = listOf(Task(id = 15, title = "Water plants"), Task(id = 16, title = "Submit report", dueDate = now))
         val contexts = mapOf(15L to setOf(2L), 16L to setOf(1L))

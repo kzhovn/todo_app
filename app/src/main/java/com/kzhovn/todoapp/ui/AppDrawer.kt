@@ -57,6 +57,31 @@ import com.kzhovn.todoapp.sync.SyncSettingsActivity
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import com.kzhovn.todoapp.MainActivity
+import com.kzhovn.todoapp.data.ContextType
+import com.kzhovn.todoapp.data.forcedChoices
+import com.kzhovn.todoapp.data.forcedShown
+import com.kzhovn.todoapp.repository.ContextSummary
+import com.kzhovn.todoapp.repository.contextSummaries
+import com.kzhovn.todoapp.ui.theme.LedgerAccent
+import com.kzhovn.todoapp.ui.theme.LedgerAccentSoft
+import com.kzhovn.todoapp.ui.theme.LedgerCheckBorder
+import com.kzhovn.todoapp.ui.theme.LedgerGood
 
 // The side panel, swiped open from the list screens and Review alike.
 @Composable
@@ -105,6 +130,7 @@ fun AppDrawer(
                     colors = NavigationDrawerItemDefaults.colors(unselectedTextColor = LedgerInk),
                     modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 4.dp)
                 )
+                ContextsSection(drawerState.isOpen) { scope.launch { drawerState.close() } }
                 HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
                 Item(Labels.FOCUS, Icons.Filled.CenterFocusStrong, false) { context.startActivity(Intent(context, FocusActivity::class.java)) }
                 Item(Labels.CALENDAR, Icons.Filled.CalendarMonth, calendarSelected) {
@@ -115,13 +141,95 @@ fun AppDrawer(
                 }
                 Item(Labels.TEMPLATES, Icons.Filled.ContentCopy, false) { context.startActivity(Intent(context, TemplatesActivity::class.java)) }
                 Item(Labels.SETTINGS, Icons.Filled.Sync, false) { context.startActivity(Intent(context, SyncSettingsActivity::class.java)) }
-                Item("Contexts", Icons.Filled.AlternateEmail, false) { context.startActivity(Intent(context, ContextsActivity::class.java)) }
                 Spacer(Modifier.weight(1f))
                 HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(horizontal = 24.dp))
                 QuickAddKey()
             }
         },
         content = content
+    )
+}
+
+// Contexts, opening in place: tapping one filters the lists by it (again, or ✕, clears it), going to them from
+// another screen; a long press holds its Auto/On/Off, its editor and the contexts screen.
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ContextsSection(drawerOpen: Boolean, onClose: () -> Unit) {
+    val context = LocalContext.current
+    val app = context.applicationContext as TodoApp
+    val scope = rememberCoroutineScope()
+    var open by remember { mutableStateOf(AppSettings.drawerContextsOpen(context)) }
+    var summaries by remember { mutableStateOf<List<ContextSummary>>(emptyList()) }
+    var tick by remember { mutableStateOf(0) }
+    LaunchedEffect(drawerOpen, tick) {
+        val now = System.currentTimeMillis()
+        summaries = contextSummaries(app.contextRepository.getAllContexts(), app.contextRepository.getAllTimeWindows(), app.repository.listedTasks(now), app.repository.getAllTaskContexts(), now)
+    }
+    val picked by ContextFilter.id.collectAsState()
+    val manage = { context.startActivity(Intent(context, ContextsActivity::class.java)) }
+    NavigationDrawerItem(
+        label = { Text(Labels.CONTEXTS) },
+        icon = { Icon(Icons.Filled.AlternateEmail, contentDescription = null) },
+        badge = { if (summaries.isNotEmpty()) Text(if (open) "▾" else "▸", color = LedgerMuted) },
+        selected = false,
+        // With none yet, there's nothing to open: the screen to add one.
+        onClick = { if (summaries.isEmpty()) manage() else { open = !open; AppSettings.setDrawerContextsOpen(context, open) } },
+        colors = NavigationDrawerItemDefaults.colors(unselectedTextColor = LedgerInk, unselectedIconColor = LedgerMuted),
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+    )
+    if (open) summaries.forEach { summary ->
+        val c = summary.context
+        val on = picked == c.id
+        var menu by remember { mutableStateOf(false) }
+        Box {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).clip(RoundedCornerShape(24.dp))
+                    .background(if (on) LedgerAccentSoft else Color.Transparent)
+                    .combinedClickable(
+                        onClick = {
+                            ContextFilter.id.value = c.id.takeUnless { on }
+                            onClose()
+                            if (context !is MainActivity) context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                        },
+                        onLongClick = { menu = true }
+                    )
+                    .padding(start = 52.dp, end = 20.dp, top = 10.dp, bottom = 10.dp)
+            ) {
+                ContextDot(summary)
+                Text(c.name, fontSize = 14.sp, color = if (on) LedgerAccent else LedgerInk, fontWeight = if (on) FontWeight.SemiBold else null, modifier = Modifier.padding(start = 10.dp).weight(1f))
+                Text(if (on) "✕" else summary.countText, fontSize = 12.sp, color = if (on) LedgerAccent else LedgerMuted)
+            }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    forcedChoices(c).forEach { (value, label) ->
+                        SelectablePill(label = label, selected = forcedShown(c) == value, fontSize = 13.sp, onClick = {
+                            scope.launch { app.contextRepository.setForced(c.id, value); tick++ }
+                        })
+                        Spacer(Modifier.width(6.dp))
+                    }
+                }
+                DropdownMenuItem(text = { Text(Labels.editContext(c.name)) }, onClick = {
+                    menu = false
+                    context.startActivity(Intent(context, ContextsActivity::class.java).putExtra(ContextsActivity.EXTRA_CONTEXT_ID, c.id))
+                })
+                DropdownMenuItem(text = { Text(Labels.MANAGE_CONTEXTS) }, onClick = { menu = false; manage() })
+            }
+        }
+    }
+}
+
+// A context's dot: green while it holds, grey while it doesn't, a ring for a filter-only one (as on the web).
+@Composable
+internal fun ContextDot(summary: ContextSummary) {
+    val shape = CircleShape
+    val m = Modifier.size(8.dp)
+    Box(
+        when {
+            !summary.holds -> m.background(LedgerCheckBorder, shape)
+            summary.context.type == ContextType.LABEL -> m.border(1.5.dp, LedgerCheckBorder, shape)
+            else -> m.background(LedgerGood, shape)
+        }
     )
 }
 

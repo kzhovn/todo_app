@@ -69,6 +69,8 @@ fun Route.webRoutes(service: TaskService) {
             call.request.queryParameters["toggle"]?.toLongOrNull()?.let { call.toggleIn(COLLAPSED, it) }
             call.request.queryParameters["later"]?.toLongOrNull()?.let { call.toggleIn(LATER, it) }
             call.request.queryParameters["fold"]?.toLongOrNull()?.let { call.toggleIn(SECTIONS, it) }
+            // Typing in the list's search box: the address follows, so a reload keeps the search.
+            if (call.request.queryParameters["search"] != null) call.response.header("HX-Replace-Url", ListPlace(mode, call.folder(), null, call.request.queryParameters.listSearch()).path)
             call.respondList(service, mode)
         }
     }
@@ -214,11 +216,11 @@ internal fun ApplicationCall.listPath() = listData(mode()).path
 
 internal fun ApplicationCall.listData(service: TaskService, mode: ListMode, selected: Long? = null): ListData {
     service.ensureFolderColors()
-    return ListData(service, mode, ids(COLLAPSED), ids(LATER), ids(SECTIONS), folder = folder(), selected = selected, calendar = calendarView(mode, service.now()))
+    return ListData(service, mode, ids(COLLAPSED), ids(LATER), ids(SECTIONS), folder = folder(), selected = selected, calendar = calendarView(mode, service.now()), search = request.queryParameters.listSearch())
 }
 
 // Just the list's query and path, without working out the list.
-private fun ApplicationCall.listData(mode: ListMode) = ListPlace(mode, folder(), calendarView(mode, System.currentTimeMillis()))
+private fun ApplicationCall.listData(mode: ListMode) = ListPlace(mode, folder(), calendarView(mode, System.currentTimeMillis()), request.queryParameters.listSearch())
 
 // The calendar's month (?month=2026-10, else this one) and picked day (?day=2026-10-20), which every action on
 // it carries along, and the kinds of date shown: the default's, with those flipped by this browser's chips.

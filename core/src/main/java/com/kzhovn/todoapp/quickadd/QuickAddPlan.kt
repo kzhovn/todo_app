@@ -39,13 +39,19 @@ fun planQuickAdd(input: String, tasks: Collection<Task>, contexts: Collection<Ta
     val steps = if (parts.size >= 3) parts.drop(1).zip(alongside) else emptyList()
     // Contexts only come from the title's part, not the note's.
     val (titlePart, notes) = QuickAddParser.splitNotes(if (steps.isEmpty()) body else parts[0])
-    val byName = contexts.associateBy { it.name.lowercase().replace(" ", "") }
-    val contextIds = mutableSetOf<Long>()
-    val text = contextRegex.replace(titlePart) { m -> byName[m.groupValues[1].lowercase()]?.let { contextIds += it.id; "" } ?: m.value }
+    val (text, contextIds) = takeContexts(titlePart, contexts)
     val parsed = QuickAddParser.read(text, now)
     val task = parsed.task!!.copy(parentId = target?.id, expiresAt = if (todayOnly) nextRollover(now, rolloverHour) else null, notes = notes)
         .let { if (steps.isEmpty()) it else it.copy(type = TaskType.PROJECT, sequential = true) }
     return parsed.copy(task = task, contextIds = contextIds, steps = steps)
+}
+
+// "@home" naming a context comes out of the text as that context; any other "@word" stays ("Re: @Sam").
+// Quick add's, and search's (parseSearch).
+fun takeContexts(text: String, contexts: Collection<TaskContext>): Pair<String, Set<Long>> {
+    val byName = contexts.associateBy { it.name.lowercase().replace(" ", "") }
+    val ids = linkedSetOf<Long>()
+    return contextRegex.replace(text) { m -> byName[m.groupValues[1].lowercase()]?.let { ids += it.id; "" } ?: m.value } to ids
 }
 
 private fun fromTemplate(input: String, tasks: Collection<Task>, now: Long): QuickAdd? {

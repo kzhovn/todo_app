@@ -17,6 +17,8 @@ import com.kzhovn.todoapp.data.isUnder
 import com.kzhovn.todoapp.data.resolveEffective
 import com.kzhovn.todoapp.data.walkParentChain
 import com.kzhovn.todoapp.data.zoned
+import com.kzhovn.todoapp.data.Labels
+import com.kzhovn.todoapp.data.openByContext
 
 // Shared by every Active/Doing caller (app, widget, server) so all agree on "now" in the default timezone.
 fun minuteOfDay(epochMillis: Long): Int = zoned(epochMillis).let { it.hour * 60 + it.minute }
@@ -69,22 +71,8 @@ fun computeActiveTasks(
         }
     }
 
-    fun isContextSatisfied(contextId: Long): Boolean {
-        val ctx = allContexts[contextId] ?: return true
-        ctx.forced?.let { return it }
-        return when (ctx.type) {
-            ContextType.PLACE -> ctx.isCurrentlySatisfied
-            ContextType.LABEL -> true
-            ContextType.TIME -> windowsByContext[contextId].orEmpty().any { w ->
-                (w.daysMask and todayMask) != 0 &&
-                    if (w.windowStartMinute <= w.windowEndMinute) {
-                        currentMinuteOfDay in w.windowStartMinute..w.windowEndMinute
-                    } else { // window spans midnight
-                        currentMinuteOfDay >= w.windowStartMinute || currentMinuteOfDay <= w.windowEndMinute
-                    }
-            }
-        }
-    }
+    fun isContextSatisfied(contextId: Long): Boolean =
+        allContexts[contextId]?.let { contextHolds(it, windowsByContext[contextId].orEmpty(), currentMinuteOfDay, todayMask) } ?: true
 
     return all.filter { task ->
         // A checklist is workable like a task (its open items never block it); its items aren't listed.
@@ -102,6 +90,43 @@ fun computeActiveTasks(
             effective.effectiveContextIds.all { isContextSatisfied(it) || (urgent && allContexts[it]?.let { c -> c.type == ContextType.TIME && c.forced == null } == true) }
     }
 }
+
+// Whether a context holds now: as set by hand, else by its wifi or its time windows. A filter-only one
+// always does, unless switched Off.
+fun contextHolds(ctx: TaskContext, windows: List<ContextTimeWindow>, currentMinuteOfDay: Int, todayMask: Int): Boolean {
+    ctx.forced?.let { return it }
+    return when (ctx.type) {
+        ContextType.PLACE -> ctx.isCurrentlySatisfied
+        ContextType.LABEL -> true
+        ContextType.TIME -> windows.any { w ->
+            (w.daysMask and todayMask) != 0 &&
+                if (w.windowStartMinute <= w.windowEndMinute) {
+                    currentMinuteOfDay in w.windowStartMinute..w.windowEndMinute
+                } else { // window spans midnight
+                    currentMinuteOfDay >= w.windowStartMinute || currentMinuteOfDay <= w.windowEndMinute
+                }
+        }
+    }
+}
+
+fun contextHolds(ctx: TaskContext, windows: List<ContextTimeWindow>, now: Long): Boolean = contextHolds(ctx, windows, minuteOfDay(now), dayOfWeekMask(now))
+
+// A context as its menus show it (the phone's @ menu and side menu, the web's sidebar): its open tasks, and
+// whether it holds now.
+data class ContextSummary(val context: TaskContext, val open: Int, val holds: Boolean) {
+    // A filter-only one switched Off says so; a place or time one's grey dot does.
+    val countText: String get() = if (!holds && context.type == ContextType.LABEL) "$open ${Labels.OFF}" else "$open"
+}
+
+fun contextSummaries(contexts: Collection<TaskContext>, windows: List<ContextTimeWindow>, all: Collection<Task>, contextsByTaskId: Map<Long, Set<Long>>, now: Long): List<ContextSummary> {
+    val open = openByContext(all, contextsByTaskId)
+    val byContext = windows.groupBy { it.contextId }
+    return contexts.sortedBy { it.name.lowercase() }.map { ContextSummary(it, open[it.id] ?: 0, contextHolds(it, byContext[it.id].orEmpty(), now)) }
+}
+
+// A list filtered by a context shows its tasks as if it held, whatever it's doing now; never saved.
+fun asIfOn(contexts: List<TaskContext>, contextId: Long?): List<TaskContext> =
+    contexts.map { if (it.id == contextId) it.copy(forced = true) else it }
 
 // Active as if every context held: held back only by its own state (a start to come, a prerequisite, an
 // earlier step, open subtasks, a maybe), not by where or when you are. The nudges' Doing goes by it.

@@ -13,7 +13,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.FilterChip
 import com.kzhovn.todoapp.ui.setFolderMode
 import com.kzhovn.todoapp.ui.TaskCheckbox
 import com.kzhovn.todoapp.ui.CompleteSubtasksDialog
@@ -24,6 +23,11 @@ import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.SearchBar
+import com.kzhovn.todoapp.ui.ContextButton
+import com.kzhovn.todoapp.ui.theme.LedgerSearchBackground
+import com.kzhovn.todoapp.ui.ContextFilter
+import com.kzhovn.todoapp.ui.ContextFilterBar
+import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.lifecycle.lifecycleScope
@@ -166,8 +170,6 @@ class MainActivity : ComponentActivity() {
             // Folder mode: switched in the side menu, or zoomed into from the All tree.
             val setMode: (Long?) -> Unit = { id -> setFolderMode(app, id) }
             val mode by viewModel.mode.collectAsState()
-            // Searching in a mode keeps to its folder, unless this is on.
-            var everywhere by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
             val snackbarHostState = remember { SnackbarHostState() }
             var selectedMode by remember { mutableStateOf(requestedMode.value ?: TaskListMode.DOING) }
@@ -177,25 +179,27 @@ class MainActivity : ComponentActivity() {
             var query by remember { mutableStateOf("") }
             var showFilters by remember { mutableStateOf(false) }
             var filters by remember { mutableStateOf(SearchFilters()) }
+            val pickedContext by ContextFilter.id.collectAsState()
             // Non-null while "From template…" is open: the templates, and everything (for their folders).
             var templatePicker by remember { mutableStateOf<Pair<List<Task>, Map<Long, Task>>?>(null) }
             // Non-null while in multi-select mode: the ids picked for a bulk edit.
             var selection by remember { mutableStateOf<Set<Long>?>(null) }
             BackHandler(enabled = selection != null) { selection = null }
             val focusManager = LocalFocusManager.current
+            // The search goes, with its filters; the context filter stays until cleared.
             val closeSearch = {
                 searchMode = false
                 query = ""
                 showFilters = false
+                filters = SearchFilters()
                 focusManager.clearFocus()
             }
             BackHandler(enabled = searchMode && selection == null) { closeSearch() }
             // What the list shows; it reloads itself on data changes (see TaskListViewModel). Resuming
             // reloads too, since time passing (a start date arriving) changes Doing/Active without any write.
-            // In search mode the filters apply even with an empty query (every task matching them).
-            LifecycleResumeEffect(selectedMode, searchMode, query, filters, everywhere, mode?.id) {
-                if (searchMode) viewModel.search(query, filters.takeIf { it.folderId != null || everywhere } ?: filters.copy(folderId = mode?.id))
-                else viewModel.load(selectedMode)
+            // A search (and the context filter) narrows the tab in place.
+            LifecycleResumeEffect(selectedMode, query, filters, pickedContext, mode?.id) {
+                viewModel.load(selectedMode, query, filters.copy(contextId = pickedContext))
                 onPauseOrDispose { }
             }
 
@@ -206,29 +210,37 @@ class MainActivity : ComponentActivity() {
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 floatingActionButton = {
                     var showFabMenu by remember { mutableStateOf(false) }
-                    Box {
-                        QuickAddFab(
-                            onClick = { startActivity(Intent(this@MainActivity, QuickAddActivity::class.java)) },
-                            onLongClick = { showFabMenu = true }
-                        )
-                        DropdownMenu(expanded = showFabMenu, onDismissRequest = { showFabMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("+ Contexts") },
-                                leadingIcon = { Icon(Icons.Filled.AlternateEmail, contentDescription = null) },
-                                onClick = {
-                                    showFabMenu = false
-                                    startActivity(Intent(this@MainActivity, ContextsActivity::class.java))
-                                }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        // Select (bulk edit), small over quick add.
+                        if (selection == null) SmallFloatingActionButton(
+                            onClick = { selection = emptySet() },
+                            containerColor = LedgerSearchBackground, contentColor = LedgerAccent,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        ) { Icon(Icons.Filled.Checklist, contentDescription = "Select tasks") }
+                        Box {
+                            QuickAddFab(
+                                onClick = { startActivity(Intent(this@MainActivity, QuickAddActivity::class.java)) },
+                                onLongClick = { showFabMenu = true }
                             )
-                            // A list from a template (see Templates.kt): pick one, and it opens in the editor.
-                            DropdownMenuItem(
-                                text = { Text("+ " + Labels.FROM_TEMPLATE) },
-                                leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
-                                onClick = {
-                                    showFabMenu = false
-                                    scope.launch { templatePicker = repository.getTemplates() to repository.getEverything().associateBy { it.id } }
-                                }
-                            )
+                            DropdownMenu(expanded = showFabMenu, onDismissRequest = { showFabMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("+ Contexts") },
+                                    leadingIcon = { Icon(Icons.Filled.AlternateEmail, contentDescription = null) },
+                                    onClick = {
+                                        showFabMenu = false
+                                        startActivity(Intent(this@MainActivity, ContextsActivity::class.java))
+                                    }
+                                )
+                                // A list from a template (see Templates.kt): pick one, and it opens in the editor.
+                                DropdownMenuItem(
+                                    text = { Text("+ " + Labels.FROM_TEMPLATE) },
+                                    leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
+                                    onClick = {
+                                        showFabMenu = false
+                                        scope.launch { templatePicker = repository.getTemplates() to repository.getEverything().associateBy { it.id } }
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -249,8 +261,8 @@ class MainActivity : ComponentActivity() {
                             }) { Text("Edit") }
                         }
                     }
-                    // The search bar sits in the top bar; typing in it searches right there. While searching,
-                    // the menu makes way for a back arrow and Select for the filters.
+                    // The search bar sits in the top bar; typing in it narrows the list below. While searching,
+                    // the menu makes way for a back arrow, and the filters' button comes in. @ is the context filter.
                     if (selection == null) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
                         if (searchMode) {
                             IconButton(onClick = closeSearch) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close search") }
@@ -259,7 +271,7 @@ class MainActivity : ComponentActivity() {
                         }
                         SearchBar(
                             query, searching = searchMode, onStart = { searchMode = true }, onChange = { query = it }, modifier = Modifier.weight(1f),
-                            placeholder = mode?.takeUnless { everywhere }?.let { "Search ${it.title}" } ?: "Search tasks"
+                            placeholder = "${Labels.SEARCH} " + (mode?.title ?: when (selectedMode) { TaskListMode.DOING -> Labels.DOING; TaskListMode.ACTIVE -> Labels.ACTIVE; TaskListMode.ALL -> Labels.ALL })
                         )
                         if (searchMode) {
                             IconButton(onClick = { showFilters = !showFilters }) {
@@ -269,23 +281,17 @@ class MainActivity : ComponentActivity() {
                                     tint = if (filters != SearchFilters()) LedgerAccent else LedgerMuted
                                 )
                             }
-                        } else {
-                            IconButton(onClick = { selection = emptySet() }) {
-                                Icon(Icons.Filled.Checklist, contentDescription = "Select tasks")
-                            }
                         }
+                        val summaries by viewModel.contextSummaries.collectAsState()
+                        ContextButton(summaries, pickedContext, onPick = { ContextFilter.id.value = it })
                     }
                     if (showFilters) {
                         // The list's own data (it reloads on any change), for the filters' choices.
                         val allById by viewModel.allById.collectAsState()
-                        val allContexts by viewModel.allContexts.collectAsState()
-                        FilterPanel(filters = filters, folders = allById.values.filter { it.type == TaskType.FOLDER }, contexts = allContexts.values.toList(), onFiltersChange = { filters = it })
-                    }
-                    if (searchMode && mode != null) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp)) {
-                        FilterChip(selected = everywhere, onClick = { everywhere = !everywhere }, label = { Text("Everywhere, not just ${mode!!.title}") })
+                        FilterPanel(filters = filters, folders = allById.values.filter { it.type == TaskType.FOLDER }, showCompleted = selectedMode == TaskListMode.ALL, onFiltersChange = { filters = it })
                     }
 
-                    if (!searchMode) TabRow(selectedTabIndex = TaskListMode.entries.indexOf(selectedMode)) {
+                    TabRow(selectedTabIndex = TaskListMode.entries.indexOf(selectedMode)) {
                         TaskListMode.entries.forEach { mode ->
                             Tab(
                                 selected = mode == selectedMode,
@@ -314,11 +320,14 @@ class MainActivity : ComponentActivity() {
                         if (selection != null) toggleSelected(id) else viewModel.toggleStar(id)
                     }
                     val selectedIds = selection.orEmpty()
-                    if (selectedMode == TaskListMode.ALL && !searchMode) {
+                    val shownContext by viewModel.shownContext.collectAsState()
+                    shownContext?.let { id -> ContextFilterBar(id, viewModel.contextSummaries.collectAsState().value, picked = id == pickedContext) { ContextFilter.id.value = null } }
+                    if (selectedMode == TaskListMode.ALL) {
                         val tasks by viewModel.tasks.collectAsState()
                         OutlinerScreen(
                             tasks = tasks,
                             workable = viewModel.workable.collectAsState().value,
+                            keep = viewModel.keep.collectAsState().value,
                             rootId = mode?.id,
                             onZoom = setMode,
                             onCheck = onCheck,
@@ -338,7 +347,7 @@ class MainActivity : ComponentActivity() {
                         )
                     } else Column {
                         val running by viewModel.running.collectAsState()
-                        if (!searchMode && selectedMode == TaskListMode.DOING && running.isNotEmpty()) RunningSection(
+                        if (selectedMode == TaskListMode.DOING && running.isNotEmpty()) RunningSection(
                             running, onOpen = onEdit, onDone = onCheck, onMoreWait = viewModel::moreWait, onEnded = viewModel::reload
                         )
                         Box(Modifier.weight(1f, fill = false)) { TaskListScreen(
@@ -358,14 +367,19 @@ class MainActivity : ComponentActivity() {
                                         .putExtra(QuickAddActivity.EXTRA_STARRED, starred)
                                 )
                             },
-                            sectioned = selectedMode == TaskListMode.ACTIVE && !searchMode
+                            sectioned = selectedMode == TaskListMode.ACTIVE
                         ) }
+                        val moreInAll by viewModel.moreInAll.collectAsState()
+                        if (moreInAll > 0) Text(
+                            Labels.moreInAll(moreInAll), color = LedgerAccent, fontSize = 13.sp,
+                            modifier = Modifier.fillMaxWidth().clickable { selectedMode = TaskListMode.ALL }.padding(horizontal = 16.dp, vertical = 12.dp)
+                        )
                         // Folder mode hides the rest; this keeps it from hiding something due today.
                         val dueOutside by viewModel.dueOutside.collectAsState()
-                        if (!searchMode && dueOutside.isNotEmpty()) DueOutsideLine(dueOutside, mode?.title.orEmpty(), dueOf = { viewModel.dues.value.at(it) }, onOpen = onEdit, onCheck = onCheck)
+                        if (dueOutside.isNotEmpty()) DueOutsideLine(dueOutside, mode?.title.orEmpty(), dueOf = { viewModel.dues.value.at(it) }, onOpen = onEdit, onCheck = onCheck)
                         val waiting by viewModel.waiting.collectAsState()
                         val waitingBlocks by viewModel.waitingBlocks.collectAsState()
-                        if (!searchMode && selectedMode == TaskListMode.DOING && waiting.isNotEmpty()) WaitingSection(
+                        if (selectedMode == TaskListMode.DOING && waiting.isNotEmpty()) WaitingSection(
                             waiting, waitingBlocks, onOpen = onEdit, onResolved = onCheck, onStillWaiting = viewModel::stillWaiting
                         )
                     }
