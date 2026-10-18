@@ -13,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.fillMaxWidth
+import com.kzhovn.todoapp.ui.EventLines
 import com.kzhovn.todoapp.ui.setFolderMode
 import com.kzhovn.todoapp.ui.TaskCheckbox
 import com.kzhovn.todoapp.ui.CompleteSubtasksDialog
@@ -347,6 +348,7 @@ class MainActivity : ComponentActivity() {
                         )
                     } else Column {
                         val running by viewModel.running.collectAsState()
+                        if (selectedMode == TaskListMode.DOING) EventLines(viewModel.allById.collectAsState().value.values, viewModel.edges.collectAsState().value)
                         if (selectedMode == TaskListMode.DOING && running.isNotEmpty()) RunningSection(
                             running, onOpen = onEdit, onDone = onCheck, onMoreWait = viewModel::moreWait, onEnded = viewModel::reload
                         )

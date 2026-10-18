@@ -20,6 +20,7 @@ import com.kzhovn.todoapp.data.searchMatcher
 import com.kzhovn.todoapp.repository.ContextSummary
 import com.kzhovn.todoapp.repository.contextSummaries
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.repository.ContextRepository
 import com.kzhovn.todoapp.repository.TaskRepository
@@ -72,6 +73,8 @@ class TaskListViewModel(
 
     private val _allById = MutableStateFlow<Map<Long, Task>>(emptyMap())
     val allById: StateFlow<Map<Long, Task>> = _allById
+    private val _edges = MutableStateFlow<List<TaskDependency>>(emptyList())
+    val edges: StateFlow<List<TaskDependency>> = _edges // Doing's Cancelled line (EventLines)
     private val _dues = MutableStateFlow(DueDates(emptyList(), emptyList()))
     val dues: StateFlow<DueDates> = _dues
     private val _workable = MutableStateFlow<Set<Long>>(emptySet())
@@ -185,6 +188,7 @@ class TaskListViewModel(
         _subtaskCounts.value = subtaskCounts(all)
         _allById.value = all.associateBy { it.id }
         val edges = repository.getAllDependencyEdges()
+        _edges.value = edges
         _dues.value = DueDates(all, edges)
         _workable.value = computeActiveIgnoringContexts(all, edges, clock()).map { it.id }.toSet()
         _mode.value = modeFolder(modeFolderId(), _allById.value)

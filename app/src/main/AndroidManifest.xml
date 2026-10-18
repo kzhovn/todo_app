@@ -34,6 +34,7 @@
         <activity android:name=".ui.SyntaxActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".ui.ReviewActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".ui.CalendarActivity" android:exported="false" android:screenOrientation="portrait" />
+        <activity android:name=".ui.EventActivity" android:exported="false" android:theme="@style/Theme.TodoApp.Translucent" />
         <activity android:name=".focus.FocusActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".ui.BulkEditActivity" android:exported="false" android:screenOrientation="portrait" />
         <activity android:name=".contexts.ContextsActivity" android:exported="false" android:screenOrientation="portrait" />

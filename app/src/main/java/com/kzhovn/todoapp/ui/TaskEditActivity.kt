@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.kzhovn.todoapp.CalendarCache
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.contexts.ContextsActivity
 import com.kzhovn.todoapp.data.Labels
@@ -286,6 +287,9 @@ class TaskEditActivity : ComponentActivity() {
                         close()
                         vm.addDependent(picked) { Toast.makeText(this, "“${picked.title}” now depends on this", Toast.LENGTH_SHORT).show() }
                     },
+                    // An event as the dependent: this task is due when it starts.
+                    events = upcomingEvents(),
+                    onPickEvent = { close(); vm.linkEvent(it, before = true) },
                     onCreateNew = {
                         close()
                         if (vm.isNew) quickAddLinked(vm.folderId()) { ids -> vm.pendingDependentIds = vm.pendingDependentIds + ids }
@@ -313,6 +317,9 @@ class TaskEditActivity : ComponentActivity() {
                     lists = remember(candidates) { nearbyFirst(task, candidates, vm.allTasks, System.currentTimeMillis()) },
                     allById = vm.allById,
                     onPick = { picked -> vm.dependencyIds = vm.dependencyIds + picked.id; close() },
+                    // An event as the prerequisite: this waits till it's over.
+                    events = upcomingEvents(),
+                    onPickEvent = { close(); vm.linkEvent(it, before = false) },
                     // Linked when the task saves, like a picked one.
                     onCreateNew = { close(); quickAddLinked(vm.folderId()) { ids -> vm.dependencyIds = vm.dependencyIds + ids } },
                     onDismiss = close
@@ -358,6 +365,9 @@ class TaskEditActivity : ComponentActivity() {
             }
         }
     }
+
+    // What Related's pickers offer to link: events not over yet, soonest first.
+    private fun upcomingEvents() = System.currentTimeMillis().let { now -> CalendarCache.shownEvents(this).filter { it.end > now }.sortedBy { it.start } }
 
     companion object {
         const val EXTRA_TASK_ID = "task_id"

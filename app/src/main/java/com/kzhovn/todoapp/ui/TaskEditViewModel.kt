@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.CalendarEvent
 import com.kzhovn.todoapp.data.mergeEdit
 import com.kzhovn.todoapp.data.TaskContext
 import com.kzhovn.todoapp.data.TaskDependency
@@ -249,6 +250,17 @@ class TaskEditViewModel(
     }
 
     fun removeDependent(dependentId: Long) = act { repository.removeDependency(dependentId, taskId) }
+
+    // An event picked in Related (its item made the first time): after it, it's waited on like a prerequisite (saved
+    // with the task); before it, the event waits on this task, as a picked dependent does.
+    fun linkEvent(event: CalendarEvent, before: Boolean) = act {
+        val item = repository.eventItem(event, System.currentTimeMillis())
+        when {
+            !before -> dependencyIds = dependencyIds + item.id
+            isNew -> pendingDependentIds = pendingDependentIds + item.id
+            else -> repository.addDependency(item.id, taskId)
+        }
+    }
 
     // A subtask's "move out": straight to the folder this task is in.
     fun moveOut(subtaskId: Long) = act { repository.reparent(subtaskId, moveOutFolderId(task, allById)) }

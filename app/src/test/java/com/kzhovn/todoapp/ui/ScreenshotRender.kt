@@ -112,12 +112,34 @@ class ScreenshotRender {
                 Task(title = "Try a pottery class", dueDate = on(8), isMaybe = true), Task(title = "Car registration", dueDate = on(7)),
             ).forEach { repository.createTask(it) }
         }
+        sampleCalendar(context)
         val viewModel = TaskListViewModel(repository, com.kzhovn.todoapp.repository.ContextRepository(db.taskContextDao()))
         viewModel.load(TaskListMode.ALL)
         val all = com.kzhovn.todoapp.data.DateKind.entries.toSet()
         compose.setContent { LedgerTheme { CalendarScreen(viewModel, 9, all - com.kzhovn.todoapp.data.DateKind.DONE, {}, {}, {}, {}, {}, weekAtStart = week) } }
         compose.waitForIdle()
         draw(compose.activity.window.decorView, if (week) "calendar-week" else "calendar")
+    }
+
+    // Google Calendar events around now on two calendars, for the calendar and Doing.
+    private fun sampleCalendar(context: android.content.Context) {
+        val start = com.kzhovn.todoapp.data.dayStart(java.time.LocalDate.now())
+        val hour = 3_600_000L
+        val now = System.currentTimeMillis()
+        fun ev(id: String, cal: String, title: String, from: Long, hours: Double, location: String? = null) =
+            com.kzhovn.todoapp.data.CalendarEvent(id, cal, title, from, from + (hours * hour).toLong(), location = location)
+        com.kzhovn.todoapp.CalendarCache.set(context, com.kzhovn.todoapp.data.CalendarData(
+            listOf(com.kzhovn.todoapp.data.CalendarInfo("p", "Personal", "#7986CB"), com.kzhovn.todoapp.data.CalendarInfo("e", "Events", "#33B679")),
+            listOf(ev("p/1", "p", "Meeting", now - hour, 2.0), ev("p/2", "p", "Dentist", now + 2 * hour, 1.0, "12 Elm St"), ev("e/1", "e", "Maya's party", start + 4 * 24 * hour + 19 * hour, 4.0, "Lou's place"))
+        ))
+    }
+
+    @Test
+    fun eventLines() {
+        if (dir == null) return
+        sampleCalendar(androidx.test.core.app.ApplicationProvider.getApplicationContext())
+        compose.setContent { LedgerTheme { Column(Modifier.width(400.dp)) { EventLines(emptyList(), emptyList()) } } }
+        draw(compose.activity.window.decorView, "event_lines")
     }
 
     @Test

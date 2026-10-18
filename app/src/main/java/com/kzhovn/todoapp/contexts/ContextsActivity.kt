@@ -1,5 +1,11 @@
 package com.kzhovn.todoapp.contexts
 
+import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import com.kzhovn.todoapp.repository.ContextStates
+import com.kzhovn.todoapp.CalendarCache
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.forcedChoices
 import com.kzhovn.todoapp.data.forcedShown
@@ -67,6 +73,7 @@ import com.kzhovn.todoapp.ui.theme.LedgerOverdue
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalLayoutApi::class)
 class ContextsActivity : ComponentActivity() {
     companion object {
         const val EXTRA_CONTEXT_ID = "context_id"
@@ -102,6 +109,12 @@ class ContextsActivity : ComponentActivity() {
             var wifiSsid by remember { mutableStateOf<String?>(null) }
             var wifiSsidError by remember { mutableStateOf<String?>(null) }
             var windows by remember { mutableStateOf<List<ContextTimeWindow>>(emptyList()) }
+            // An Events context's calendars, title words and Busy only; any context's "off while" Events contexts.
+            var calendarIds by remember { mutableStateOf<List<String>>(emptyList()) }
+            var titleWords by remember { mutableStateOf("") }
+            var busyOnly by remember { mutableStateOf(true) }
+            var offWhile by remember { mutableStateOf<List<Long>>(emptyList()) }
+            val calendars = remember { CalendarCache.data(this@ContextsActivity).calendars }
             // Preserves the stored satisfaction state while editing a PLACE context, since
             // wifiSsid gets prefilled from the saved row (not freshly captured) and may not
             // reflect the network the device is on right now.
@@ -116,10 +129,13 @@ class ContextsActivity : ComponentActivity() {
                 windowsOf = contexts.associate { it.id to contextRepository.getTimeWindows(it.id) }
             }
             LaunchedEffect(Unit) { refresh() }
+            // "Off until 3:00 PM (Dentist)": the events deciding a context now.
+            val states = remember(contexts, windowsOf) { ContextStates(contexts, windowsOf.values.flatten(), CalendarCache.events(this@ContextsActivity), System.currentTimeMillis()) }
 
             fun resetForm() {
                 editingContextId = null; name = ""; type = ContextType.PLACE
                 wifiSsid = null; windows = emptyList(); wifiSsidError = null
+                calendarIds = emptyList(); titleWords = ""; busyOnly = true; offWhile = emptyList()
             }
 
             fun loadForEdit(ctx: TaskContext) {
@@ -130,6 +146,7 @@ class ContextsActivity : ComponentActivity() {
                     wifiSsid = ctx.wifiSsid
                     wifiSsidError = null
                     editingIsCurrentlySatisfied = ctx.isCurrentlySatisfied
+                    calendarIds = ctx.calendarIds; titleWords = ctx.titleWords.orEmpty(); busyOnly = ctx.busyOnly; offWhile = ctx.offWhile
                     windows = if (ctx.type == ContextType.TIME) contextRepository.getTimeWindows(ctx.id) else emptyList()
                 }
             }
@@ -164,7 +181,7 @@ class ContextsActivity : ComponentActivity() {
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "${ctx.name} — ${describeContext(ctx, windowsOf[ctx.id].orEmpty())}",
+                                    text = "${ctx.name} — " + listOfNotNull(describeContext(ctx, windowsOf[ctx.id].orEmpty(), calendars, contexts), states.eventStateText(ctx.id)).joinToString(" · "),
                                     fontSize = 14.sp, color = LedgerInk
                                 )
                                 Row(modifier = Modifier.padding(top = 4.dp)) {
@@ -194,12 +211,11 @@ class ContextsActivity : ComponentActivity() {
                 Spacer(Modifier.height(4.dp))
                 OutlinedTextField(value = name, onValueChange = { name = it }, placeholder = { Text("Name") }, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
-                Row {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     SelectablePill(label = Labels.PLACE_CONTEXT, selected = type == ContextType.PLACE, onClick = { type = ContextType.PLACE })
-                    Spacer(Modifier.width(12.dp))
                     SelectablePill(label = Labels.TIME_CONTEXT, selected = type == ContextType.TIME, onClick = { type = ContextType.TIME })
-                    Spacer(Modifier.width(12.dp))
                     SelectablePill(label = Labels.LABEL_CONTEXT, selected = type == ContextType.LABEL, onClick = { type = ContextType.LABEL })
+                    SelectablePill(label = Labels.EVENTS_CONTEXT, selected = type == ContextType.EVENTS, onClick = { type = ContextType.EVENTS })
                 }
                 Spacer(Modifier.height(8.dp))
                 if (type == ContextType.PLACE) {
@@ -228,6 +244,21 @@ class ContextsActivity : ComponentActivity() {
                             )
                         }
                     }
+                } else if (type == ContextType.EVENTS) {
+                    Column {
+                        Text(Labels.DURING_EVENTS_ON, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = LedgerInk)
+                        if (calendars.isEmpty()) Text(Labels.NO_CALENDAR, fontSize = 13.sp, color = LedgerMuted)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 4.dp)) {
+                            calendars.forEach { cal ->
+                                SelectablePill(label = cal.name, selected = cal.id in calendarIds, onClick = { calendarIds = if (cal.id in calendarIds) calendarIds - cal.id else calendarIds + cal.id })
+                            }
+                        }
+                        OutlinedTextField(value = titleWords, onValueChange = { titleWords = it }, placeholder = { Text(Labels.TITLED_WITH) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = busyOnly, onCheckedChange = { busyOnly = it })
+                            Text(Labels.ONLY_BUSY_EVENTS, fontSize = 14.sp, color = LedgerInk)
+                        }
+                    }
                 } else if (type == ContextType.TIME) {
                     Column {
                         windows.forEachIndexed { index, window ->
@@ -250,6 +281,16 @@ class ContextsActivity : ComponentActivity() {
                         )
                     }
                 }
+                // Only Events contexts turn others off (one level: see ContextStates).
+                val eventsContexts = contexts.filter { it.type == ContextType.EVENTS && it.id != editingContextId }
+                if (eventsContexts.isNotEmpty()) {
+                    Text(Labels.OFF_WHILE, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = LedgerInk, modifier = Modifier.padding(top = 8.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 4.dp)) {
+                        eventsContexts.forEach { e ->
+                            SelectablePill(label = "@${e.name}", selected = e.id in offWhile, onClick = { offWhile = if (e.id in offWhile) offWhile - e.id else offWhile + e.id })
+                        }
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
                 Row {
                     Button(
@@ -260,6 +301,10 @@ class ContextsActivity : ComponentActivity() {
                                     name = name,
                                     type = type,
                                     wifiSsid = if (type == ContextType.PLACE) wifiSsid else null,
+                                    calendarIds = if (type == ContextType.EVENTS) calendarIds else emptyList(),
+                                    titleWords = titleWords.trim().takeIf { it.isNotEmpty() && type == ContextType.EVENTS },
+                                    busyOnly = type != ContextType.EVENTS || busyOnly,
+                                    offWhile = offWhile,
                                     isCurrentlySatisfied = if (editingContextId != null) {
                                         editingIsCurrentlySatisfied
                                     } else {
@@ -271,7 +316,7 @@ class ContextsActivity : ComponentActivity() {
                                 resetForm()
                             }
                         },
-                        enabled = contextProblem(TaskContext(name = name, type = type, wifiSsid = wifiSsid), windows) == null,
+                        enabled = contextProblem(TaskContext(name = name, type = type, wifiSsid = wifiSsid, calendarIds = calendarIds), windows) == null,
                         colors = ButtonDefaults.buttonColors(containerColor = LedgerAccent, contentColor = LedgerAccentInk)
                     ) {
                         Text(if (editingContextId == null) Labels.CREATE else Labels.SAVE)

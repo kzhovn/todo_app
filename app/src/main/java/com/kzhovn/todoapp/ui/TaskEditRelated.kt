@@ -1,5 +1,7 @@
 package com.kzhovn.todoapp.ui
 
+import com.kzhovn.todoapp.data.eventWhen
+import com.kzhovn.todoapp.CalendarCache
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.unit.Dp
@@ -211,18 +213,27 @@ internal fun RelatedSection(vm: TaskEditViewModel, openTask: (Long) -> Unit, onA
     }
     val subtaskIds = subtasks.map { it.id }.toSet()
     if (task.type != TaskType.FOLDER) {
+        // An event (Google Calendar's): its calendar's dot and its time, and it opens its sheet, not the editor.
+        val context = androidx.compose.ui.platform.LocalContext.current
+        @Composable
+        fun Linked(t: Task, note: RelatedKind, done: Boolean, check: Boolean, remove: () -> Unit) {
+            if (t.type == TaskType.EVENT) {
+                val event = t.eventId?.let { id -> CalendarCache.events(context).firstOrNull { it.id == id } }
+                RelatedRow(
+                    t.title + (event?.let { " · " + eventWhen(it, System.currentTimeMillis()) } ?: ""), done = t.isComplete, note = note,
+                    onOpen = { event?.let { context.startActivity(EventActivity.intent(context, it.id)) } },
+                    leading = { Box(Modifier.width(34.dp), contentAlignment = Alignment.Center) { event?.let { CalendarDot(calendarColor(context, it.calendarId)) } } }
+                ) { RemoveButton(remove) }
+            } else RelatedRow(t.title, done = done, onOpen = { openTask(t.id) }, note = note, leading = { if (check) RelatedCheck(vm, t) else Spacer(Modifier.width(34.dp)) }) { RemoveButton(remove) }
+        }
         (vm.dependencyIds - subtaskIds).mapNotNull(vm.allById::get).sortedBy { it.title.lowercase() }.forEach { prereq ->
-            RelatedRow(prereq.title, done = prereq.isComplete, onOpen = { openTask(prereq.id) }, note = RelatedKind.PREREQUISITE, leading = { RelatedCheck(vm, prereq) }) {
-                RemoveButton { vm.dependencyIds = vm.dependencyIds - prereq.id }
-            }
+            Linked(prereq, RelatedKind.PREREQUISITE, prereq.isComplete, check = true) { vm.dependencyIds = vm.dependencyIds - prereq.id }
         }
         vm.pendingDependentIds.mapNotNull(vm.allById::get).forEach { dependent ->
-            RelatedRow(dependent.title, onOpen = { openTask(dependent.id) }, note = RelatedKind.DEPENDENT) { RemoveButton { vm.pendingDependentIds = vm.pendingDependentIds - dependent.id } }
+            Linked(dependent, RelatedKind.DEPENDENT, false, check = false) { vm.pendingDependentIds = vm.pendingDependentIds - dependent.id }
         }
         (dependentIds - subtaskIds).mapNotNull(vm.allById::get).forEach { dependent ->
-            RelatedRow(dependent.title, done = dependent.isComplete, onOpen = { openTask(dependent.id) }, note = RelatedKind.DEPENDENT, leading = { RelatedCheck(vm, dependent) }) {
-                RemoveButton { vm.removeDependent(dependent.id) }
-            }
+            Linked(dependent, RelatedKind.DEPENDENT, dependent.isComplete, check = true) { vm.removeDependent(dependent.id) }
         }
     }
     Spacer(Modifier.height(6.dp))

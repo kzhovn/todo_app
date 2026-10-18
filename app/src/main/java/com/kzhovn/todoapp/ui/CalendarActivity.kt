@@ -59,6 +59,13 @@ import com.kizitonwose.calendar.compose.rememberCalendarState
 import com.kizitonwose.calendar.compose.weekcalendar.rememberWeekCalendarState
 import com.kizitonwose.calendar.core.DayPosition
 import com.kzhovn.todoapp.AppSettings
+import androidx.compose.foundation.layout.widthIn
+import com.kzhovn.todoapp.data.timeText
+import com.kzhovn.todoapp.data.rows
+import com.kzhovn.todoapp.data.eventDays
+import com.kzhovn.todoapp.data.CalendarEvent
+import com.kzhovn.todoapp.data.AgendaRow
+import com.kzhovn.todoapp.CalendarCache
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.CalendarEntry
 import com.kzhovn.todoapp.data.CompleteQuestion
@@ -188,12 +195,17 @@ internal fun CalendarScreen(
     // Another month or week: its own agenda, from its start.
     LaunchedEffect(shown) { if (picked?.let { it in shown } == false) picked = null }
     // The dots for what's shown and either side of it, so a swipe doesn't land on a bare grid.
-    val dots = remember(tasks, kinds, shown, mode) {
+    // Google Calendar's events, in their calendars' colours (a dot each calendar), when the Events chip is on.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val calendarVersion by CalendarCache.changes.collectAsState()
+    val events = remember(calendarVersion, kinds) { if (DateKind.EVENT in kinds) CalendarCache.shownEvents(context) else emptyList() }
+    val dots = remember(tasks, kinds, shown, mode, events) {
         val (from, to) = if (week) shown.start.minusDays(7) to shown.endInclusive.plusDays(7) else gridRange(month.minusMonths(1)).first to gridRange(month.plusMonths(1)).second
-        calendarEntries(tasks, from, to, kinds, now, reminderHour, mode?.id)
-            .groupBy({ it.day }, { kindColor(it.kind, it.overdue) to (it.kind == DateKind.REPEAT) }).mapValues { it.value.distinct() }
+        val taskDots = calendarEntries(tasks, from, to, kinds, now, reminderHour, mode?.id).groupBy({ it.day }, { kindColor(it.kind, it.overdue) to (it.kind == DateKind.REPEAT) })
+        val eventDots = eventDays(events, from, to).mapValues { (_, es) -> es.map { calendarColor(context, it.calendarId) to false } }
+        (taskDots.keys + eventDots.keys).associateWith { (eventDots[it].orEmpty() + taskDots[it].orEmpty()).distinct() }
     }
-    val days = remember(tasks, kinds, shown, picked, mode) { agenda(tasks, shown, picked, kinds, now, reminderHour, mode?.id) }
+    val days = remember(tasks, kinds, shown, picked, mode, events) { agenda(tasks, shown, picked, kinds, now, reminderHour, mode?.id, events) }
     // Switching keeps the place: the week of the picked day (else today's, if in the month, else the month's first), or that week's month.
     fun switchTo(toWeek: Boolean) {
         week = toWeek
@@ -259,10 +271,17 @@ internal fun CalendarScreen(
                         if (i == 0 && picked != null) Text(Labels.ALL_UPCOMING, fontSize = 13.sp, color = LedgerAccent, modifier = Modifier.clickable { picked = null }.padding(4.dp))
                     }
                 }
-                if (day.entries.isEmpty()) item(key = "empty-${day.day}") {
+                if (day.entries.isEmpty() && day.events.isEmpty()) item(key = "empty-${day.day}") {
                     Text(Labels.NOTHING_THAT_DAY, fontSize = 14.sp, color = LedgerMuted, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 }
-                items(day.entries, key = { "${day.day}-${it.task.id}" }) { e ->
+                // Events and tasks by the clock (rows()); an event opens its sheet.
+                items(day.rows(), key = { row -> "${day.day}-" + when (row) { is AgendaRow.Event -> "e-" + row.event.id; is AgendaRow.Entry -> row.entry.task.id.toString() } }) { row ->
+                    if (row is AgendaRow.Event) {
+                        EventRow(row.event, calendarColor(context, row.event.calendarId), now) { context.startActivity(EventActivity.intent(context, row.event.id)) }
+                        HorizontalDivider(color = LedgerBorder)
+                        return@items
+                    }
+                    val e = (row as AgendaRow.Entry).entry
                     val barColor = nearestFolder(e.task, allById)?.let { colors[it.id] } ?: LedgerBorder
                     // A repeat still to come isn't a task yet, and a done one stays done: plain rows that open the task.
                     if (e.kind == DateKind.REPEAT || e.task.isComplete) QuietRow(e, barColor) { onOpen(e.task.id) }
@@ -339,6 +358,17 @@ private fun DayCell(date: LocalDate, dots: List<Pair<Color, Boolean>>, faint: Bo
             Text(date.dayOfMonth.toString(), fontSize = 13.sp, color = if (isToday) LedgerAccentInk else LedgerInk, fontWeight = if (isToday) FontWeight.SemiBold else null)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(top = 3.dp)) { dots.take(4).forEach { (color, hollow) -> Dot(color, hollow) } }
+    }
+}
+
+// An event in the agenda: its time, a bar in its calendar's colour, its title and place; faded once it's over.
+@Composable
+private fun EventRow(event: CalendarEvent, color: Color, now: Long, onClick: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min).alpha(if (event.end <= now) 0.55f else 1f).clickable(onClick = onClick)) {
+        Box(Modifier.width(4.dp).height(44.dp).background(color))
+        Text(if (event.allDay) Labels.ALL_DAY else timeText(event.start), fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.width(64.dp).padding(start = 12.dp))
+        Text(event.title, fontSize = 16.sp, color = LedgerInk, modifier = Modifier.weight(1f))
+        event.location?.let { Text(it, fontSize = 12.sp, color = LedgerMuted, maxLines = 1, modifier = Modifier.padding(end = 14.dp).widthIn(max = 120.dp)) }
     }
 }
 

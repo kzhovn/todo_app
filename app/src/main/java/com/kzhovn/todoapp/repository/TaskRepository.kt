@@ -9,6 +9,12 @@ import com.kzhovn.todoapp.data.splitItems
 import com.kzhovn.todoapp.data.folderColorAssignments
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.CalendarEvent
+import com.kzhovn.todoapp.data.EventLinks
+import com.kzhovn.todoapp.data.newId
+import com.kzhovn.todoapp.data.asEvent
+import com.kzhovn.todoapp.data.linkedToEvent
+import com.kzhovn.todoapp.data.planLinkEvent
+import com.kzhovn.todoapp.data.planRelinkEvent
 import com.kzhovn.todoapp.data.CompleteQuestion
 import com.kzhovn.todoapp.data.completeQuestion
 import com.kzhovn.todoapp.data.DEFAULT_ROLLOVER_HOUR
@@ -76,6 +82,32 @@ class TaskRepository(
         val (moved, kept) = templatesKeptFrom(going, taskDao.getAllOnce())
         moved.forEach { write(it) }
         offerUndo(remove(going.filter { it.id !in kept }))
+    }
+
+    // Google Calendar (CalendarEvents.kt in :core): a task linked before or after an event; a cancelled event's
+    // choices, its tasks kept (just its item goes), linked to another event, or deleted with it (with undo).
+    suspend fun linkEvent(taskId: Long, event: CalendarEvent, before: Boolean, now: Long) = atomically {
+        if (taskDao.getById(taskId) != null) apply(planLinkEvent(taskDao.getAllOnce(), taskId, event, before, now), now)
+    }
+    // An event's item, made the first time it's linked (the editor links it itself, so it saves with the task).
+    suspend fun eventItem(event: CalendarEvent, now: Long): Task = atomically {
+        taskDao.getAllOnce().firstOrNull { it.type == TaskType.EVENT && it.eventId == event.id }
+            ?: Task(id = newId(), title = event.title).asEvent(event).also { apply(TaskChanges(creates = listOf(it to emptySet())), now) }
+    }
+    suspend fun relinkEvent(itemId: Long, event: CalendarEvent, now: Long) = atomically {
+        apply(planRelinkEvent(taskDao.getAllOnce(), taskDao.getAllDependencies(), itemId, event, now), now)
+    }
+    suspend fun keepEventTasks(itemId: Long) = atomically { taskDao.getById(itemId)?.let { remove(listOf(it)) } }
+    suspend fun deleteEventTasks(itemId: Long) = atomically {
+        val item = taskDao.getById(itemId) ?: return@atomically
+        val linked = linkedToEvent(itemId, taskDao.getAllOnce(), taskDao.getAllDependencies()).all
+        offerUndo(remove((linked.flatMap { taskDao.getDescendants(it.id) + it } + item).distinctBy { it.id }))
+    }
+    // Inside an event's sheet: what's linked to it.
+    suspend fun eventLinks(eventId: String): EventLinks? {
+        val all = taskDao.getAllOnce()
+        val item = all.firstOrNull { it.type == TaskType.EVENT && it.eventId == eventId } ?: return null
+        return linkedToEvent(item.id, all, taskDao.getAllDependencies())
     }
 
     // Puts a delete back with the original ids, so the subtree's parent links hold as they were.

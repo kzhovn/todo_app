@@ -52,6 +52,10 @@ import androidx.compose.material.icons.filled.AccountTree
 import com.kzhovn.todoapp.notifications.PinnedTask
 import androidx.compose.ui.platform.LocalContext
 import com.kzhovn.todoapp.AppSettings
+import androidx.compose.material.icons.filled.Event
+import com.kzhovn.todoapp.data.timeText
+import com.kzhovn.todoapp.data.snoozeEvents
+import com.kzhovn.todoapp.CalendarCache
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -339,10 +343,22 @@ internal fun TaskRowMenu(task: Task, expanded: Boolean, onDismiss: () -> Unit, o
         if (task.type == TaskType.WAITING) MenuRow(Labels.FOLLOW_UP, Icons.Filled.Add) {
             onDismiss()
             context.startActivity(Intent(context, QuickAddActivity::class.java).putExtra(QuickAddActivity.EXTRA_TEXT, Labels.followUp(task.title)))
-        } else Column(Modifier.width(236.dp)) {
+        } else Column(Modifier.width(276.dp)) {
             Text(Labels.SNOOZE, fontSize = 11.sp, color = LedgerMuted, letterSpacing = 0.4.sp, modifier = Modifier.padding(start = 14.dp, top = 4.dp, bottom = 6.dp))
-            // Three equal tiles lined up with the rows' icons below.
-            DateTiles(snoozeChoices(AppSettings.rolloverHour(context))) { until -> snooze { until } }
+            // Equal tiles lined up with the rows' icons below; "After…" lists today's and tomorrow's events under them.
+            val events = remember(expanded) { snoozeEvents(CalendarCache.shownEvents(context), System.currentTimeMillis()) }
+            var picking by remember(expanded) { mutableStateOf(false) }
+            DateTiles(snoozeChoices(AppSettings.rolloverHour(context)), after = { picking = !picking }.takeIf { events.isNotEmpty() }) { until -> snooze { until } }
+            if (picking) events.forEach { e ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().height(40.dp).clickable { snooze { e.end } }.padding(horizontal = 14.dp)
+                ) {
+                    CalendarDot(calendarColor(context, e.calendarId))
+                    Text(e.title, fontSize = 13.sp, color = LedgerInk, maxLines = 1, modifier = Modifier.weight(1f).padding(start = 10.dp))
+                    Text("until ${timeText(e.end)}", fontSize = 11.sp, color = LedgerMuted)
+                }
+            }
             HorizontalDivider(color = LedgerBorder)
             MenuRow(Labels.PIN, Icons.Filled.PushPin) { onDismiss(); scope.launch { PinnedTask.pin(context, task.id) } }
             MenuRow(Labels.FOCUS, Icons.Filled.CenterFocusStrong) {
@@ -382,10 +398,12 @@ fun snoozeChoices(rolloverHour: Int) = SnoozeChoice.entries.map { c ->
     DateChoice(c.label, when (c) { SnoozeChoice.HOUR -> Icons.Filled.Schedule; SnoozeChoice.TOMORROW -> Icons.Filled.Bedtime; SnoozeChoice.WEEK -> Icons.Filled.DateRange }) { c.at(it, rolloverHour) }
 }
 
+// `after`: the snooze menu's "After…" tile (an event to snooze till), when there's one to pick.
 @Composable
-fun DateTiles(choices: List<DateChoice>, onPick: (Long) -> Unit) {
+fun DateTiles(choices: List<DateChoice>, after: (() -> Unit)? = null, onPick: (Long) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 10.dp)) {
         choices.forEach { c -> SnoozeTile(c.label, c.icon) { onPick(c.at(System.currentTimeMillis())) } }
+        after?.let { SnoozeTile(Labels.SNOOZE_AFTER, Icons.Filled.Event, it) }
     }
 }
 

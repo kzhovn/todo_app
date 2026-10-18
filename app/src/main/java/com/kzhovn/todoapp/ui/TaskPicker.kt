@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -45,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kzhovn.todoapp.data.DueStatus
 import com.kzhovn.todoapp.data.Labels
+import com.kzhovn.todoapp.data.eventWhen
+import com.kzhovn.todoapp.data.CalendarEvent
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.data.dueText
@@ -75,7 +78,10 @@ fun TaskPickerDialog(
     onCreateNew: (() -> Unit)?,
     onDismiss: () -> Unit,
     chips: Boolean = false,
-    searchAll: ((String) -> List<Task>)? = null
+    searchAll: ((String) -> List<Task>)? = null,
+    // Upcoming Google Calendar events to link to, listed under the tasks (and searched with them).
+    events: List<CalendarEvent> = emptyList(),
+    onPickEvent: (CalendarEvent) -> Unit = {}
 ) {
     var query by remember { mutableStateOf("") }
     var chosen by remember(lists) { mutableStateOf(lists.indexOfFirst { it.second.isNotEmpty() }.coerceAtLeast(0)) }
@@ -118,7 +124,17 @@ fun TaskPickerDialog(
                         PickerRow(task, allById, colors[nearestFolder(task, allById)?.id], now) { onPick(task) }
                     }
                 }
-                if (shown.all { it.second.isEmpty() }) item { Text(if (results != null) "No task matches" else Labels.NOTHING_HERE, color = LedgerMuted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 12.dp)) }
+                val shownEvents = query.trim().let { q -> events.filter { q.isEmpty() || it.title.contains(q, ignoreCase = true) } }.take(8)
+                if (shownEvents.isNotEmpty()) item { Text(Labels.EVENTS.uppercase(), fontSize = 11.sp, color = LedgerMuted, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)) }
+                items(shownEvents, key = { "event-" + it.id }) { e ->
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { onPickEvent(e) }.padding(vertical = 10.dp)) {
+                        CalendarDot(calendarColor(context, e.calendarId))
+                        Text(e.title, fontSize = 15.sp, color = LedgerInk, modifier = Modifier.weight(1f).padding(start = 10.dp))
+                        Text(eventWhen(e, now), fontSize = 11.sp, color = LedgerMuted)
+                    }
+                }
+                if (shown.all { it.second.isEmpty() } && shownEvents.isEmpty()) item { Text(if (results != null) "No task matches" else Labels.NOTHING_HERE, color = LedgerMuted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 12.dp)) }
             }
             OutlinedTextField(
                 value = query, onValueChange = { query = it }, singleLine = true,

@@ -9,6 +9,9 @@ import android.app.TimePickerDialog
 import android.os.Bundle
 import androidx.compose.foundation.clickable
 import com.kzhovn.todoapp.AppSettings
+import com.kzhovn.todoapp.CalendarCache
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -51,7 +54,7 @@ class SyncSettingsActivity : ComponentActivity() {
                 var syncing by remember { mutableStateOf(false) }
                 val scope = rememberCoroutineScope()
 
-                Column(Modifier.fillMaxSize().background(LedgerBackground).padding(16.dp)) {
+                Column(Modifier.fillMaxSize().background(LedgerBackground).verticalScroll(rememberScrollState()).padding(16.dp)) {
                     Text(Labels.SETTINGS, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = LedgerInk)
                     Spacer(Modifier.height(12.dp))
                     var rolloverHour by remember { mutableStateOf(AppSettings.rolloverHour(app)) }
@@ -98,6 +101,23 @@ class SyncSettingsActivity : ComponentActivity() {
                             AppSettings.setDigestOn(app, it)
                             if (SyncSettings.config(app) != null) SyncWorker.requestSoon(app)
                         })
+                    }
+                    // Google Calendar's calendars (as the server last read them), each shown or hidden on every device.
+                    val calendars = remember { CalendarCache.data(app).calendars }
+                    var hidden by remember { mutableStateOf(CalendarCache.hidden(app)) }
+                    Spacer(Modifier.height(20.dp))
+                    Text(Labels.CALENDARS, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = LedgerInk)
+                    Text(if (calendars.isEmpty()) Labels.NO_CALENDAR else Labels.SHOW_CALENDARS, color = LedgerMuted, fontSize = 12.sp)
+                    calendars.forEach { cal ->
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                            com.kzhovn.todoapp.ui.CalendarDot(com.kzhovn.todoapp.ui.calendarColor(app, cal.id), 10)
+                            Text(cal.name, color = LedgerInk, fontSize = 15.sp, modifier = Modifier.weight(1f).padding(start = 10.dp))
+                            Switch(checked = cal.id !in hidden, onCheckedChange = { shown ->
+                                CalendarCache.setShown(app, cal.id, shown)
+                                hidden = CalendarCache.hidden(app)
+                                if (SyncSettings.config(app) != null) SyncWorker.requestSoon(app)
+                            })
+                        }
                     }
                     Spacer(Modifier.height(20.dp))
                     Text("Sync", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = LedgerInk)
