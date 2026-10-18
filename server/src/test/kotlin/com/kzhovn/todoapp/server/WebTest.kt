@@ -352,8 +352,12 @@ class WebTest {
     @Test
     fun `quick add's Type chip follows the text until picked, and the pick wins until the text's type changes`() = web {
         // Picked Project over a plain title: kept.
-        client.submitForm("/quickadd", parameters { append("text", "Move out"); append("type", "PROJECT"); append("over", "TASK") })
-        assertEquals(TaskType.PROJECT, service.tasks().single { it.title == "Move out" }.type)
+        val made = client.submitForm("/quickadd", parameters { append("text", "Move out"); append("type", "PROJECT"); append("over", "TASK") })
+        val move = service.tasks().single { it.title == "Move out" }
+        assertEquals(TaskType.PROJECT, move.type)
+        // An empty project opens in the editor, on adding its subtasks; one with steps doesn't.
+        assertTrue(made.headers["HX-Trigger"]!!.contains("/tasks/${move.id}?mode=ALL&add=1"))
+        assertNull(client.submitForm("/quickadd", parameters { append("text", "laundry > wash > dry") }).headers["HX-Trigger"])
         // Picked Project, then "wait " typed: the text's type takes over.
         client.submitForm("/quickadd", parameters { append("text", "wait landlord"); append("type", "PROJECT"); append("over", "TASK") })
         assertEquals(TaskType.WAITING, service.tasks().single { it.title == "landlord" }.type)

@@ -4,6 +4,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.buildJsonObject
 import com.kzhovn.todoapp.data.SnoozeChoice
+import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.quickadd.typedType
 import com.kzhovn.todoapp.server.TaskService
 import io.ktor.http.ContentType
@@ -185,6 +186,9 @@ fun Route.webRoutes(service: TaskService) {
         val text = params["text"].orEmpty()
         val mode = params["mode"]?.let { runCatching { ListMode.valueOf(it) }.getOrNull() }
         val created = service.quickAdd(text, fromDoing = mode == ListMode.DOING, folderId = call.folder(), type = quickAddType(params, service.now()))
+        // A project needs a first step, as in the editor: it opens there, on adding its subtasks (app.js).
+        if (created?.type == TaskType.PROJECT && service.tasks().none { it.parentId == created.id })
+            call.response.header("HX-Trigger", """{"openTask": "/tasks/${created.id}?mode=${(mode ?: ListMode.ALL).name}&add=1"}""")
         if (mode != null) return@post call.respondList(service, mode)
         call.respondText(created?.let { t -> createHTML().div { addedToastContents(t) } }.orEmpty(), ContentType.Text.Html)
     }

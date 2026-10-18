@@ -143,7 +143,8 @@ private data class EditorView(
     val newSubtasks: String = "", // a new task's subtasks, one per line, created with it
     val newDep: String = "", // a new task this one depends on
     val newDependent: String = "", // a new task that depends on this one
-    val pin: Boolean = false // a new task's pin, applied when it's saved
+    val pin: Boolean = false, // a new task's pin, applied when it's saved
+    val focusAdd: Boolean = false // ?add=1: straight to adding a subtask (a project quick add just made)
 )
 
 fun Route.editorRoutes(service: TaskService) {
@@ -156,7 +157,8 @@ fun Route.editorRoutes(service: TaskService) {
     get("/tasks/{id}") {
         val state = call.taskId()?.let(service::editState) ?: return@get call.respond(HttpStatusCode.NotFound)
         val recurrence = recurrenceSelectionFromTask(state.task.recurrenceType, state.task.recurrenceRule)
-        call.respondHtml { editorPage(service, EditorView(call.mode(), call.listData(service, call.mode(), selected = state.task.id), state, recurrence, state.encode())) }
+        val focusAdd = call.request.queryParameters["add"] != null
+        call.respondHtml { editorPage(service, EditorView(call.mode(), call.listData(service, call.mode(), selected = state.task.id), state, recurrence, state.encode(), focusAdd = focusAdd)) }
     }
 
     // A blank editor, like the phone's "+ Project" / "+ Folder". Made from a folder's view, it goes in
@@ -858,7 +860,7 @@ private fun FlowContent.editorPanel(service: TaskService, v: EditorView) {
         }
     }
     if (!isNew && !t.isTemplate) t.fromTemplateId?.let(service::get)?.takeIf { it.isTemplate }?.let { fromTemplateLine(t.id, it) }
-    if (!isNew) div { relatedSection(service, t.id, v.mode, folded = v.list.collapsed) }
+    if (!isNew) div { relatedSection(service, t.id, v.mode, focusAddItem = v.focusAdd, folded = v.list.collapsed) }
     // Outside the form (so Related tasks can sit above them), tied to it by the form attribute.
     div(classes = "editor-foot") {
         // Subtask options (none for a checklist, via CSS).

@@ -422,6 +422,9 @@
     if (type) htmx.ajax("GET", "/quickadd/type", { target: type, swap: "outerHTML", select: ".qa-type" });
   });
 
+  // The server asks for a task's editor in the side panel (a project quick add just made, for its subtasks).
+  document.body.addEventListener("openTask", (e) => htmx.ajax("GET", e.detail.value, { target: "#detail", select: "#detail", swap: "outerHTML" }));
+
   // --- Task editor. Pills open popovers (one at a time); their text follows the controls inside, in
   // the same words as the phone's chips (Labels / chipDate / formatDuration in Kotlin).
   // A local date as a date input's value and the server's ?month= / ?day= read it: "2026-10" / "2026-10-07".
@@ -636,6 +639,10 @@
       const i = e.target === input ? -1 : suggs.indexOf(e.target);
       const to = e.key === "ArrowDown" ? suggs[i + 1] : i <= 0 ? input : suggs[i - 1];
       if (to) { e.preventDefault(); to.focus(); }
+    } else if (e.target === input && e.key === "Enter") {
+      // What's typed, never the first suggestion (Enter's default): they refresh only after a pause in typing.
+      e.preventDefault();
+      if (input.value.trim()) form.requestSubmit();
     } else if (e.key === "Escape") {
       input.value = "";
       form.querySelector(".suggest").replaceChildren();

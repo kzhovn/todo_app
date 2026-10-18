@@ -104,8 +104,8 @@ class QuickAddActivity : ComponentActivity() {
             // The Type chip: what the text asks for (typedType), or what was picked on it since the text last changed that.
             var type by remember { mutableStateOf(typedType(title, System.currentTimeMillis())) }
             var showTypeMenu by remember { mutableStateOf(false) }
-            // A checklist's (or section's) "add" makes items, which have no type to pick.
-            var underContainer by remember { mutableStateOf(false) }
+            // Adding a subtask: the task it goes under.
+            var parent by remember { mutableStateOf<Task?>(null) }
             val focus = remember { FocusRequester() }
             val folderColorsOf = remember(folders) { folderColors(folders.filter { it.type == TaskType.FOLDER }) }
 
@@ -117,7 +117,7 @@ class QuickAddActivity : ComponentActivity() {
                 folder = if (initialFolderId != null) folders.firstOrNull { it.id == initialFolderId }
                 else defaultFolder(folders, AppSettings.modeFolderId(this@QuickAddActivity))
                 dependsOnTitle = dependsOnId?.let { repository.getTask(it)?.title }
-                underContainer = fixedParentId?.let { repository.getTask(it)?.type }.let { it == TaskType.CHECKLIST || it == TaskType.SECTION }
+                parent = fixedParentId?.let { repository.getTask(it) }
                 focus.requestFocus()
             }
 
@@ -147,6 +147,9 @@ class QuickAddActivity : ComponentActivity() {
                     }
                     // "-f": every device goes into focus on it, this one included.
                     if (add.focus) startActivity(Intent(this@QuickAddActivity, FocusActivity::class.java))
+                    // A project needs a first step, as in the editor: straight on to its subtasks.
+                    else if (!keepOpen && !returnIds && add.task?.type == TaskType.PROJECT && add.steps.isEmpty())
+                        startActivity(Intent(this@QuickAddActivity, QuickAddActivity::class.java).putExtra(EXTRA_PARENT_ID, id))
                     if (keepOpen) {
                         Toast.makeText(this@QuickAddActivity, add.task?.let { "Added “${it.title}”" } ?: "Added ${add.items.size} items", Toast.LENGTH_SHORT).show()
                     } else {
@@ -166,6 +169,9 @@ class QuickAddActivity : ComponentActivity() {
                     .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 dependsOnTitle?.let { Text("Depends on: $it", color = LedgerMuted, fontSize = 12.sp) }
+                // A checklist's (or section's) "add" makes items, which have no type to pick.
+                val addsItems = parent?.type == TaskType.CHECKLIST || parent?.type == TaskType.SECTION
+                if (!addsItems) parent?.let { Text(Labels.subtasksOf(it.title), color = LedgerMuted, fontSize = 12.sp) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextField(
                         value = title,
@@ -185,7 +191,7 @@ class QuickAddActivity : ComponentActivity() {
                     }
                 }
                 Row(modifier = Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (!underContainer && folder?.type != TaskType.CHECKLIST) {
+                    if (!addsItems && folder?.type != TaskType.CHECKLIST) {
                         Box {
                             PropertyChip(
                                 label = Labels.TYPE,

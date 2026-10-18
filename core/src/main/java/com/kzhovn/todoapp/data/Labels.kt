@@ -185,6 +185,7 @@ object Labels {
     const val MOVE_OUT_AND_UNLINK = "Both"
     const val DELETE_TASK = "Delete task…"
     const val ADD_SUBTASK = "+ Subtask"
+    fun subtasksOf(title: String) = "Subtasks of “$title”"
     const val ADD_PREREQUISITE = "+ Prerequisite"
     const val ADD_DEPENDENT = "+ Dependent task"
 
