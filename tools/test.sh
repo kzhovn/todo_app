@@ -14,12 +14,20 @@ run() {
     ./gradlew -q "${tasks[@]}" --continue >build/test.log 2>&1
 }
 
+# A passing run stamps build/test-pass-<module> with the time it started, for tools/check_tested.py.
 mkdir -p build
-if run; then echo "All tests pass (${modules[*]})."; exit 0; fi
+start=$(mktemp build/test-start.XXXX)
+trap 'rm -f "$start"' EXIT
+passed() {
+    for m in "${modules[@]}"; do touch -r "$start" "build/test-pass-$m"; done
+    echo "All tests pass (${modules[*]})."
+    exit 0
+}
+if run; then passed; fi
 if grep -qE "EOFException|NoClassDefFoundError|Incremental compilation failed" build/test.log; then
     echo "Stale build; cleaning and running again."
     for m in "${modules[@]}"; do ./gradlew -q ":$m:clean" >/dev/null 2>&1; done
-    if run; then echo "All tests pass (${modules[*]})."; exit 0; fi
+    if run; then passed; fi
 fi
 
 # Compile errors come out of Gradle itself; test failures from the JUnit reports.
