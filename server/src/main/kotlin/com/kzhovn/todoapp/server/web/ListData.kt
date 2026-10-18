@@ -30,6 +30,8 @@ import kotlinx.html.title
 import com.kzhovn.todoapp.data.AgendaDay
 import com.kzhovn.todoapp.data.DateKind
 import com.kzhovn.todoapp.data.agenda
+import com.kzhovn.todoapp.data.monthRange
+import com.kzhovn.todoapp.data.weekRange
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -38,8 +40,11 @@ import java.time.YearMonth
 enum class ListMode(val label: String) { DOING(Labels.DOING), ACTIVE(Labels.ACTIVE), ALL(Labels.ALL), CALENDAR(Labels.CALENDAR) }
 val LISTS = ListMode.entries - ListMode.CALENDAR
 
-// The calendar's month on screen, the day picked in it (null: the agenda runs on), and the kinds of date shown.
-data class CalendarView(val month: YearMonth, val day: LocalDate?, val kinds: Set<DateKind>)
+// The calendar's month on screen (or its week, by its Monday, in Week), the day picked in it (null: the agenda
+// runs on), and the kinds of date shown.
+data class CalendarView(val month: YearMonth, val day: LocalDate?, val kinds: Set<DateKind>, val week: LocalDate? = null) {
+    val shown: ClosedRange<LocalDate> get() = week?.let(::weekRange) ?: monthRange(month)
+}
 
 // A list's search box and filters, and its context filter (`context`, kept when the box is cleared). The search
 // narrows the list in place: Doing and Active keep their sections, the All tree keeps the matches' parents.
@@ -75,7 +80,7 @@ class ListPlace(val mode: ListMode, val folder: Long?, val calendar: CalendarVie
     // view; `path` is the page itself.
     val q: String get() = mode.name + extra("&")
     val path: String get() = mode.path + extra("?")
-    private fun extra(first: String) = (listOfNotNull(folder?.let { "folder=$it" }, calendar?.let { "month=${it.month}" }, calendar?.day?.let { "day=$it" }) + search.params)
+    private fun extra(first: String) = (listOfNotNull(folder?.let { "folder=$it" }, calendar?.let { "month=${it.month}" }, calendar?.week?.let { "week=$it" }, calendar?.day?.let { "day=$it" }) + search.params)
         .joinToString("&").let { if (it.isEmpty()) "" else first + it }
 }
 
@@ -156,7 +161,7 @@ class ListData(
     // The All tree, searched: a match's parents are there to place it, muted.
     fun onlyAParent(task: Task) = filtering && mode == ListMode.ALL && !matches(task)
     val agenda: List<AgendaDay> by lazy {
-        calendar?.let { agenda(all, it.month, it.day, it.kinds, now, service.reminderHour(), modeFolder?.id) }.orEmpty()
+        calendar?.let { agenda(all, it.shown, it.day, it.kinds, now, service.reminderHour(), modeFolder?.id) }.orEmpty()
     }
 
     private val dues = service.dueDates()

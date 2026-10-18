@@ -44,6 +44,12 @@ object Labels {
     const val OVERDUE = "Overdue"
     const val ALL_UPCOMING = "All upcoming"
     const val NOTHING_THAT_DAY = "Nothing that day."
+    const val MONTH = "Month"
+    const val WEEK = "Week"
+    // A week's title: "Oct 19–25", or "Oct 26 – Nov 1" across two months.
+    fun weekTitle(week: ClosedRange<java.time.LocalDate>): String =
+        if (week.start.month == week.endInclusive.month) "${dayName(week.start, "MMM d")}–${week.endInclusive.dayOfMonth}"
+        else "${dayName(week.start, "MMM d")} – ${dayName(week.endInclusive, "MMM d")}"
     fun dateKind(kind: DateKind) = when (kind) {
         DateKind.DUE -> "Due"; DateKind.START -> "Starts"; DateKind.REPEAT -> "Repeats"
         DateKind.WAITING -> WAITING; DateKind.REMINDER -> "Reminders"; DateKind.DONE -> "Done"

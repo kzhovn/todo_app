@@ -214,8 +214,10 @@ fun DIV.listContents(data: ListData) {
     classes = if (data.mode == ListMode.ALL) setOf("list", "outline") else setOf("list")
     id = "list"
     attributes["hx-get"] = "/list/${data.mode.name.lowercase()}" + data.path.removePrefix(data.mode.path)
-    // app.js keeps the calendar's grid on the agenda's month and day.
-    data.calendar?.let { attributes["data-month"] = it.month.toString(); attributes["data-day"] = it.day?.toString().orEmpty() }
+    // app.js keeps the calendar's grid on the agenda's month (or week) and day.
+    data.calendar?.let {
+        attributes["data-month"] = it.month.toString(); attributes["data-week"] = it.week?.toString().orEmpty(); attributes["data-day"] = it.day?.toString().orEmpty()
+    }
     attributes["hx-trigger"] = "every 60s, visibilitychange from:document, refresh from:body"
     attributes["hx-swap"] = "outerHTML"
     data.stalled?.let { stalledPrompt(it, data) }

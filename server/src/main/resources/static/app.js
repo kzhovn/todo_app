@@ -690,42 +690,59 @@
     e.preventDefault();
     htmx.ajax("POST", form.getAttribute("hx-post"), { target: "#related", swap: "outerHTML", values: { kind: "subtask", text: lines.join("\n") } });
   });
-  // The calendar's month grid (FullCalendar), its dates from /calendar/events. Picking a day (again: back to all)
-  // or turning to another month reloads the agenda under it with ?day= / ?month=; whatever changes the agenda
-  // (a chip, a tick, its minute refresh) refetches the grid's dates.
+  // The calendar's month or week grid (FullCalendar), its dates from /calendar/events. Picking a day (again: back
+  // to all) or turning to another month or week reloads the agenda under it with ?day= / ?month= / ?week=; whatever
+  // changes the agenda (a chip, a tick, its minute refresh) refetches the grid's dates. Month or Week is per browser.
   document.addEventListener("DOMContentLoaded", () => {
     const el = document.getElementById("calendar");
     if (!el || !window.FullCalendar) return;
     const agenda = () => document.getElementById("list").dataset;
-    const load = (month, day) => htmx.ajax("GET", `/list/calendar?month=${month}` + (day ? `&day=${day}` : ""), { target: "#list", swap: "outerHTML" });
+    const place = (month, week, day) => `month=${month}` + (week ? `&week=${week}` : "") + (day ? `&day=${day}` : "");
+    const load = (month, week, day) => htmx.ajax("GET", `/list/calendar?${place(month, week, day)}`, { target: "#list", swap: "outerHTML" });
+    // The view's own month, or its Monday in Week.
+    const shown = (view) => view.type === "dayGridWeek" ? [monthOf(view.currentStart), dayOf(view.currentStart)] : [monthOf(view.currentStart), ""];
+    const [monthLabel, weekLabel] = el.dataset.labels.split("|");
+    let savedView = null;
+    try { savedView = localStorage.getItem("calendarView"); } catch {}
     const calendar = new FullCalendar.Calendar(el, {
-      initialView: "dayGridMonth",
-      initialDate: `${el.dataset.month}-01`,
+      initialView: savedView === "dayGridWeek" ? "dayGridWeek" : "dayGridMonth",
+      initialDate: el.dataset.week || `${el.dataset.month}-01`,
       firstDay: 1,
       height: "auto",
       fixedWeekCount: false,
       dayMaxEvents: 3,
-      headerToolbar: { left: "title", center: "", right: "now prev,next" },
+      views: { dayGridWeek: { dayMaxEvents: false } },
+      headerToolbar: { left: "title", center: "", right: "dayGridMonth,dayGridWeek now prev,next" },
       // Its arrows are an icon font from a data: URL, which the page's CSP doesn't load.
       buttonIcons: false,
-      buttonText: { prev: "‹", next: "›" },
+      buttonText: { prev: "‹", next: "›", month: monthLabel, week: weekLabel },
       customButtons: {
         now: { text: "Today", click: () => {
-          const month = monthOf(new Date());
-          if (monthOf(calendar.view.currentStart) === month) load(month, null); else calendar.today();
+          const now = new Date();
+          if (now >= calendar.view.currentStart && now < calendar.view.currentEnd) load(...shown(calendar.view), null); else calendar.today();
         } },
       },
       events: "/calendar/events",
       dayCellClassNames: (arg) => (dayOf(arg.date) === agenda().day ? ["picked"] : []),
-      dateClick: (info) => load(agenda().month, agenda().day === info.dateStr ? null : info.dateStr),
+      dateClick: (info) => load(agenda().month, agenda().week, agenda().day === info.dateStr ? null : info.dateStr),
       eventClick: (info) => {
         const a = agenda();
-        const q = `CALENDAR&month=${a.month}` + (a.day ? `&day=${a.day}` : "");
+        const q = `CALENDAR&${place(a.month, a.week, a.day)}`;
         htmx.ajax("GET", `/tasks/${info.event.extendedProps.taskId}?mode=${q}`, { target: "#detail", select: "#detail", swap: "outerHTML" });
       },
-      datesSet: (info) => { const month = monthOf(info.view.currentStart); if (agenda().month !== month) load(month, null); },
+      datesSet: (info) => {
+        try { localStorage.setItem("calendarView", info.view.type); } catch {}
+        const [month, week] = shown(info.view);
+        if (agenda().month !== month || agenda().week !== week) load(month, week, null);
+      },
     });
     calendar.render();
+    // Into Week: the picked day's week, else today's if it's in the month shown, else the month's first.
+    el.addEventListener("click", (e) => {
+      if (!e.target.closest(".fc-dayGridWeek-button") || calendar.view.type === "dayGridWeek") return;
+      const now = new Date();
+      calendar.gotoDate(agenda().day || (now >= calendar.view.currentStart && now < calendar.view.currentEnd ? now : calendar.view.currentStart));
+    }, true);
     document.addEventListener("htmx:afterSettle", (e) => {
       if (e.target.id !== "list" || !document.getElementById("calendar")) return;
       calendar.refetchEvents();

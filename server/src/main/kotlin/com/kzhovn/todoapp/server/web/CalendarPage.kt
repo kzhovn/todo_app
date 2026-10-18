@@ -37,21 +37,28 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import java.time.LocalDate
 
-// The calendar (docs/superpowers/specs/2026-10-16-calendar-mockups.html): FullCalendar's month grid, which
-// app.js sets up and feeds from /calendar/events, over the agenda, a list like Doing (ListMode.CALENDAR).
+// The calendar (docs/superpowers/specs/2026-10-16-calendar-mockups.html): FullCalendar's month or week grid, which
+// app.js sets up and feeds from /calendar/events, pinned over the agenda, a list like Doing (ListMode.CALENDAR).
 // Picking a day in the grid reloads the agenda with ?day=; the chips pick the kinds of date shown.
 
 fun FlowContent.calendarColumn(data: ListData) {
     val cal = data.calendar!!
-    div(classes = "list-head") {
-        h2 {
-            +Labels.CALENDAR
-            data.modeFolder?.let { span(classes = "mode-name") { +it.title } }
+    div(classes = "calendar-pin") {
+        div(classes = "list-head") {
+            h2 {
+                +Labels.CALENDAR
+                data.modeFolder?.let { span(classes = "mode-name") { +it.title } }
+            }
+        }
+        div { kindChips(cal, data.q) }
+        script(src = asset(FULLCALENDAR)) {}
+        div(classes = "calendar") {
+            id = "calendar"
+            attributes["data-month"] = cal.month.toString()
+            attributes["data-week"] = cal.week?.toString().orEmpty()
+            attributes["data-labels"] = "${Labels.MONTH}|${Labels.WEEK}"
         }
     }
-    div { kindChips(cal, data.q) }
-    script(src = asset(FULLCALENDAR)) {}
-    div(classes = "calendar") { id = "calendar"; attributes["data-month"] = cal.month.toString() }
     div { listContents(data) }
 }
 
@@ -77,7 +84,7 @@ internal fun DIV.agendaContents(data: ListData) {
     data.agenda.forEachIndexed { i, day ->
         div(classes = "agenda-day" + when (day.day) { null -> " overdue"; today -> " today"; else -> "" }) {
             span { +Labels.agendaHeading(day.day, today) }
-            if (i == 0 && cal.day != null) button(classes = "pill all-upcoming") { hx("get", "/list/calendar?month=${cal.month}"); +Labels.ALL_UPCOMING }
+            if (i == 0 && cal.day != null) button(classes = "pill all-upcoming") { hx("get", "/list/calendar?month=${cal.month}" + cal.week?.let { "&week=$it" }.orEmpty()); +Labels.ALL_UPCOMING }
         }
         if (day.entries.isEmpty()) p(classes = "empty") { +Labels.NOTHING_THAT_DAY }
         // A repeat still to come isn't a task yet, and a done one stays done: plain rows that open the task.

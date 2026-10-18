@@ -29,6 +29,7 @@ import kotlinx.html.stream.createHTML
 import com.kzhovn.todoapp.data.DEFAULT_DATE_KINDS
 import com.kzhovn.todoapp.data.DateKind
 import com.kzhovn.todoapp.data.localDay
+import com.kzhovn.todoapp.data.weekRange
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -222,14 +223,16 @@ internal fun ApplicationCall.listData(service: TaskService, mode: ListMode, sele
 // Just the list's query and path, without working out the list.
 private fun ApplicationCall.listData(mode: ListMode) = ListPlace(mode, folder(), calendarView(mode, System.currentTimeMillis()), request.queryParameters.listSearch())
 
-// The calendar's month (?month=2026-10, else this one) and picked day (?day=2026-10-20), which every action on
+// The calendar's month (?month=2026-10, else this one), week in Week (?week=2026-10-19, its Monday) and picked day
+// (?day=2026-10-20), which every action on
 // it carries along, and the kinds of date shown: the default's, with those flipped by this browser's chips.
 internal fun ApplicationCall.calendarView(mode: ListMode, now: Long): CalendarView? {
     if (mode != ListMode.CALENDAR) return null
     val q = request.queryParameters
-    val month = q["month"]?.let { runCatching { YearMonth.parse(it) }.getOrNull() } ?: YearMonth.from(localDay(now))
+    val week = q["week"]?.let { runCatching { weekRange(LocalDate.parse(it)).start }.getOrNull() }
+    val month = week?.let(YearMonth::from) ?: q["month"]?.let { runCatching { YearMonth.parse(it) }.getOrNull() } ?: YearMonth.from(localDay(now))
     val flipped = ids(KINDS).mapNotNull { DateKind.entries.getOrNull(it.toInt()) }.toSet()
-    return CalendarView(month, q["day"]?.let { runCatching { LocalDate.parse(it) }.getOrNull() }, (DEFAULT_DATE_KINDS - flipped) + (flipped - DEFAULT_DATE_KINDS))
+    return CalendarView(month, q["day"]?.let { runCatching { LocalDate.parse(it) }.getOrNull() }, (DEFAULT_DATE_KINDS - flipped) + (flipped - DEFAULT_DATE_KINDS), week)
 }
 internal fun ApplicationCall.flipKind(kind: DateKind) = toggleIn(KINDS, kind.ordinal.toLong())
 

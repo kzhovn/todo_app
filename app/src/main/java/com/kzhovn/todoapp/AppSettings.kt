@@ -38,6 +38,10 @@ object AppSettings {
     fun setCalendarKinds(context: Context, kinds: Set<DateKind>) =
         prefs(context).edit().putStringSet("calendarKinds", kinds.map { it.name }.toSet()).apply()
 
+    // The calendar's Month | Week, on this device only.
+    fun calendarWeek(context: Context): Boolean = prefs(context).getBoolean("calendarWeek", false)
+    fun setCalendarWeek(context: Context, week: Boolean) = prefs(context).edit().putBoolean("calendarWeek", week).apply()
+
     // The side menu's Contexts, left open or closed.
     fun drawerContextsOpen(context: Context): Boolean = prefs(context).getBoolean("drawerContextsOpen", true)
     fun setDrawerContextsOpen(context: Context, open: Boolean) = prefs(context).edit().putBoolean("drawerContextsOpen", open).apply()

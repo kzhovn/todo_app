@@ -90,7 +90,12 @@ class ScreenshotRender {
     }
 
     @Test
-    fun calendar() {
+    fun calendar() = drawCalendar(week = false)
+
+    @Test
+    fun calendarWeek() = drawCalendar(week = true)
+
+    private fun drawCalendar(week: Boolean) {
         if (dir == null) return
         val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val db = androidx.room.Room.inMemoryDatabaseBuilder(context, com.kzhovn.todoapp.data.TodoDatabase::class.java).allowMainThreadQueries()
@@ -110,9 +115,9 @@ class ScreenshotRender {
         val viewModel = TaskListViewModel(repository, com.kzhovn.todoapp.repository.ContextRepository(db.taskContextDao()))
         viewModel.load(TaskListMode.ALL)
         val all = com.kzhovn.todoapp.data.DateKind.entries.toSet()
-        compose.setContent { LedgerTheme { CalendarScreen(viewModel, 9, all - com.kzhovn.todoapp.data.DateKind.DONE, {}, {}, {}, {}, {}) } }
+        compose.setContent { LedgerTheme { CalendarScreen(viewModel, 9, all - com.kzhovn.todoapp.data.DateKind.DONE, {}, {}, {}, {}, {}, weekAtStart = week) } }
         compose.waitForIdle()
-        draw(compose.activity.window.decorView, "calendar")
+        draw(compose.activity.window.decorView, if (week) "calendar-week" else "calendar")
     }
 
     @Test

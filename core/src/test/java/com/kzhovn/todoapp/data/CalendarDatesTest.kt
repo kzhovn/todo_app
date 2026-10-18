@@ -43,19 +43,26 @@ class CalendarDatesTest {
     }
 
     @Test fun thisMonthsAgendaRunsFromTodayWithOverdueFirst() {
-        val days = agenda(tasks, october, null, DEFAULT_DATE_KINDS, now, 9)
+        val days = agenda(tasks, monthRange(october), null, DEFAULT_DATE_KINDS, now, 9)
         assertEquals(listOf(null, LocalDate.of(2026, 10, 20)), days.map { it.day })
         assertEquals(listOf("Call dentist"), days[0].entries.map { it.task.title })
     }
 
     @Test fun anotherMonthStartsOnItsFirstAndASelectedDayShowsAlone() {
         assertEquals(LocalDate.of(2026, 9, 28), gridRange(october).first)
-        val past = agenda(tasks, october, LocalDate.of(2026, 10, 14), DEFAULT_DATE_KINDS, now, 9)
+        val past = agenda(tasks, monthRange(october), LocalDate.of(2026, 10, 14), DEFAULT_DATE_KINDS, now, 9)
         assertEquals(listOf(AgendaDay(LocalDate.of(2026, 10, 14), listOf(CalendarEntry(dentist, LocalDate.of(2026, 10, 14), DateKind.DUE, on(14), overdue = true)))), past)
-        val empty = agenda(tasks, october, LocalDate.of(2026, 10, 15), DEFAULT_DATE_KINDS, now, 9)
+        val empty = agenda(tasks, monthRange(october), LocalDate.of(2026, 10, 15), DEFAULT_DATE_KINDS, now, 9)
         assertEquals(listOf(AgendaDay(LocalDate.of(2026, 10, 15), emptyList())), empty)
-        val november = agenda(tasks + passport.copy(id = 7, dueDate = dayStart(LocalDate.of(2026, 11, 3))), YearMonth.of(2026, 11), null, DEFAULT_DATE_KINDS, now, 9)
+        val november = agenda(tasks + passport.copy(id = 7, dueDate = dayStart(LocalDate.of(2026, 11, 3))), monthRange(YearMonth.of(2026, 11)), null, DEFAULT_DATE_KINDS, now, 9)
         assertEquals(listOf(LocalDate.of(2026, 11, 3)), november.map { it.day })
+    }
+
+    @Test fun aWeeksAgendaRunsMondayToSundayFromToday() {
+        assertEquals(LocalDate.of(2026, 10, 19)..LocalDate.of(2026, 10, 25), weekRange(LocalDate.of(2026, 10, 22)))
+        assertEquals(listOf("Oct 19–25", "Oct 26 – Nov 1"), listOf(19L, 26L).map { Labels.weekTitle(weekRange(LocalDate.of(2026, 10, it.toInt()))) })
+        assertEquals(listOf<LocalDate?>(null), agenda(tasks, weekRange(today), null, DEFAULT_DATE_KINDS, now, 9).map { it.day })
+        assertEquals(listOf<LocalDate?>(LocalDate.of(2026, 10, 20)), agenda(tasks, weekRange(today.plusDays(7)), null, DEFAULT_DATE_KINDS, now, 9).map { it.day })
     }
 
     @Test fun headingsNameTheNearDays() {

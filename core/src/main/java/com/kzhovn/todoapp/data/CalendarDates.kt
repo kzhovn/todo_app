@@ -50,12 +50,12 @@ fun calendarEntries(tasks: List<Task>, from: LocalDate, to: LocalDate, kinds: Se
     }.sortedWith(compareBy({ it.day }, { it.kind }, { it.at }))
 }
 
-// Under the grid: one day (`selected`), or the month shown, from today on if it's this month. Whichever takes
-// in today starts with everything overdue, wherever it was due. A task shows once a day, by its first kind.
-fun agenda(tasks: List<Task>, month: YearMonth, selected: LocalDate?, kinds: Set<DateKind>, now: Long, reminderHour: Int, modeFolderId: Long? = null): List<AgendaDay> {
+// Under the grid: one day (`selected`), or the range shown (a month or a week), from today on if it takes in today.
+// Whichever takes in today starts with everything overdue, wherever it was due. A task shows once a day, by its first kind.
+fun agenda(tasks: List<Task>, shown: ClosedRange<LocalDate>, selected: LocalDate?, kinds: Set<DateKind>, now: Long, reminderHour: Int, modeFolderId: Long? = null): List<AgendaDay> {
     val today = localDay(now)
-    val from = selected ?: if (YearMonth.from(today) == month) today else month.atDay(1)
-    val to = selected ?: month.atEndOfMonth()
+    val from = selected ?: if (today in shown) today else shown.start
+    val to = selected ?: shown.endInclusive
     val withOverdue = DateKind.DUE in kinds && today in from..to
     val overdue = if (!withOverdue) emptyList() else {
         val byId = tasks.associateBy { it.id }
@@ -71,6 +71,11 @@ fun agenda(tasks: List<Task>, month: YearMonth, selected: LocalDate?, kinds: Set
     return listOfNotNull(AgendaDay(null, overdue).takeIf { overdue.isNotEmpty() }) +
         days.ifEmpty { listOfNotNull(selected?.let { AgendaDay(it, emptyList()) }) }
 }
+
+fun monthRange(month: YearMonth): ClosedRange<LocalDate> = month.atDay(1)..month.atEndOfMonth()
+
+// Monday to Sunday, around `day`.
+fun weekRange(day: LocalDate): ClosedRange<LocalDate> = day.minusDays((day.dayOfWeek.value - 1).toLong()).let { it..it.plusDays(6) }
 
 // The six weeks a month grid shows (Monday first), to fetch dots or titles for.
 fun gridRange(month: YearMonth): Pair<LocalDate, LocalDate> {

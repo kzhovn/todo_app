@@ -683,6 +683,8 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .kind { display: inline-flex; align-items: center; gap: 6px; }
 .kind .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
 .kind.k-repeat .dot { background: none; border: 1.5px solid var(--c); }
+/* The grid stays put while the agenda scrolls under it, when the window is tall enough to leave the agenda room. */
+@media (min-height: 760px) { .calendar-pin { position: sticky; top: 0; z-index: 4; background: var(--bg); border-bottom: 1px solid var(--border); } }
 .calendar { margin: 10px 20px 4px; font-size: 13px;
   --fc-border-color: var(--border); --fc-page-bg-color: var(--bg); --fc-neutral-bg-color: var(--tile); --fc-today-bg-color: transparent;
   --fc-button-text-color: var(--ink); --fc-button-bg-color: var(--panel); --fc-button-border-color: var(--border);
