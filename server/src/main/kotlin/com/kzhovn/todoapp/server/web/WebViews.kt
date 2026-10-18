@@ -95,7 +95,8 @@ internal fun FlowContent.typeChip(shown: TaskType, typed: TaskType) = details(cl
     summary(classes = if (shown == TaskType.TASK) "pill" else "pill set") {
         attributes["title"] = Labels.TYPE
         icon(typeIcon(shown), "pill-icon")
-        if (shown != TaskType.TASK) span { +Labels.typeName(shown) }
+        span { +Labels.typeName(shown) }
+        span(classes = "caret") { +"▾" }
     }
     hiddenInput(name = "over") { value = typed.name }
     div(classes = "pop") {

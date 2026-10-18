@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.foundation.border
+import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -53,13 +56,16 @@ fun PropertyChip(
     // A set chip's colour, e.g. a folder's own; its fill is a pale version of it.
     tint: Color = LedgerAccent,
     iconOnly: Boolean = false,
-    onLongClick: (() -> Unit)? = null
+    onLongClick: (() -> Unit)? = null,
+    // A picker that always holds a value (quick add's Type): bordered at its default, with a ▾.
+    picker: Boolean = false
 ) {
     val set = valueText != null
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(5.dp))
             .background(if (!set) Color.Transparent else if (tint == LedgerAccent) LedgerAccentSoft else tint.copy(alpha = 0.14f))
+            .then(if (picker && !set) Modifier.border(1.dp, LedgerBorder, RoundedCornerShape(5.dp)) else Modifier)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -78,6 +84,7 @@ fun PropertyChip(
                 color = if (set) tint else LedgerMuted
             )
         }
+        if (picker) Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = if (set) tint else LedgerMuted, modifier = Modifier.size(16.dp))
         if (set && onClear != null) {
             Spacer(Modifier.width(4.dp))
             Box(

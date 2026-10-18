@@ -191,12 +191,12 @@ class QuickAddActivity : ComponentActivity() {
                 Row(modifier = Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (!addsItems && folder?.type != TaskType.CHECKLIST) {
                         PropertyChip(
-                            label = Labels.TYPE,
+                            label = Labels.typeName(type),
                             valueText = Labels.typeName(type).takeIf { type != TaskType.TASK },
                             icon = typeIcon(type),
                             onClick = { showTypeMenu = true },
                             showLabelWhenSet = false,
-                            iconOnly = type == TaskType.TASK
+                            picker = true
                         )
                         Spacer(Modifier.width(8.dp))
                     }

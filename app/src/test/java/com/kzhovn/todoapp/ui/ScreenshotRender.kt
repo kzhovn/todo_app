@@ -18,6 +18,8 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.AccountTree
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
@@ -64,6 +66,20 @@ class ScreenshotRender {
         )
         compose.setContent { LedgerTheme { FolderPickerDialog(folders, showNoFolderOption = true, onPick = {}, onDismiss = {}, onCreateNew = {}, selectedId = 2) } }
         draw(org.robolectric.shadows.ShadowDialog.getLatestDialog().window!!.decorView, "folder_picker")
+    }
+
+    @Test
+    fun typeChip() {
+        if (dir == null) return
+        compose.setContent {
+            LedgerTheme {
+                Column(Modifier.width(400.dp).padding(8.dp)) {
+                    PropertyChip("Task", null, androidx.compose.material.icons.Icons.Outlined.RadioButtonUnchecked, {}, showLabelWhenSet = false, picker = true)
+                    PropertyChip("Project", "Project", androidx.compose.material.icons.Icons.Filled.AccountTree, {}, showLabelWhenSet = false, picker = true)
+                }
+            }
+        }
+        draw(compose.activity.window.decorView, "type_chip")
     }
 
     @Test
