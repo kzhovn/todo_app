@@ -48,7 +48,7 @@ class TodoApp : Application() {
         ReminderScheduler(this, getSystemService(ALARM_SERVICE) as AlarmManager)
     }
     val repository: TaskRepository by lazy {
-        TaskRepository(database.taskDao(), reminderScheduler, database.taskContextDao(), rolloverHour = { AppSettings.rolloverHour(this) }, transaction = ::inTransaction)
+        TaskRepository(database.taskDao(), reminderScheduler, database.taskContextDao(), rolloverHour = { AppSettings.rolloverHour(this) }, transaction = ::inTransaction, calendarEvents = { CalendarCache.events(this) })
     }
     val contextRepository: ContextRepository by lazy { ContextRepository(database.taskContextDao(), ::inTransaction) }
     private suspend fun inTransaction(block: suspend () -> Unit) = database.withTransaction { block() }
@@ -65,7 +65,7 @@ class TodoApp : Application() {
 
     // Fires on any change to what decides a list: tasks, and also contexts (a place turning on at
     // home), their time windows, and dependencies, which don't touch the tasks table.
-    // Folder mode switching (here or synced from elsewhere) changes every list too.
+    // Folder mode switching (here or synced from elsewhere) changes every list too, as does a new calendar read.
     fun listInputChanges(): Flow<Unit> = merge(
         callbackFlow {
             val observer = object : InvalidationTracker.Observer(TRACKED_TABLES) {
@@ -74,7 +74,8 @@ class TodoApp : Application() {
             database.invalidationTracker.addObserver(observer)
             awaitClose { database.invalidationTracker.removeObserver(observer) }
         },
-        AppSettings.modeChanges.drop(1).map { }
+        AppSettings.modeChanges.drop(1).map { },
+        CalendarCache.changes.drop(1).map { }
     ).conflate()
 
     override fun onCreate() {

@@ -191,7 +191,7 @@ class TaskListViewModel(
         _contextsByTaskId.value = repository.getAllTaskContexts()
         val contexts = contextRepository.getAllContexts()
         _allContexts.value = contexts.associateBy { it.id }
-        _contextSummaries.value = contextSummaries(contexts, contextRepository.getAllTimeWindows(), all, _contextsByTaskId.value, clock())
+        _contextSummaries.value = contextSummaries(contexts, contextRepository.getAllTimeWindows(), all, _contextsByTaskId.value, clock(), repository.calendarEvents())
         return all
     }
 

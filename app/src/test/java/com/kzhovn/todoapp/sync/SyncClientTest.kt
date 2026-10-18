@@ -57,6 +57,34 @@ class SyncClientTest {
     fun tearDown() = db.close()
 
     @Test
+    fun `the calendar comes down once per change, an events context and links work on the phone, and hidden calendars sync`() = runBlocking {
+        val cache = com.kzhovn.todoapp.CalendarCache
+        val now = System.currentTimeMillis()
+        val party = com.kzhovn.todoapp.data.CalendarEvent("e/party", "e", "Party", now - 60_000, now + 3_600_000)
+        server.setCalendar(com.kzhovn.todoapp.data.CalendarData(listOf(com.kzhovn.todoapp.data.CalendarInfo("e", "Events")), listOf(party), from = now - 86_400_000, to = now + 86_400_000))
+        val gift = server.create(Task(title = "Thank-you note"))
+        server.linkEvent(gift.id, "e/party", before = false)
+        val busy = server.saveContext(TaskContext(name = "busy", type = ContextType.EVENTS, calendarIds = listOf("e")), emptyList())
+        val calls = server.create(Task(title = "Call mom"), setOf(server.saveContext(TaskContext(name = "calls", type = ContextType.LABEL, offWhile = listOf(busy.id)), emptyList()).id))
+        client.sync(config)
+        assertEquals(listOf("Party"), cache.events(context).map { it.title })
+        val phone = TaskRepository(db.taskDao(), ReminderScheduler(context, context.getSystemService(Context.ALARM_SERVICE) as AlarmManager), db.taskContextDao(), calendarEvents = { cache.events(context) })
+        // On during the party: the note waits for its end, and calls are off while busy.
+        assertEquals(emptyList<String>(), phone.getActiveTasks(now).map { it.title })
+        assertEquals(listOf("Call mom", "Thank-you note"), phone.getActiveTasks(now + 3_700_000).map { it.title }.sorted())
+        assertEquals(calls.id, db.taskDao().getById(calls.id)?.id)
+
+        val version = cache.data(context).version
+        val again = store.sync(SyncRequest(0, emptyList(), calendarVersion = version))
+        assertNull(again.calendar)
+
+        cache.setHidden(context, setOf("e"), setAt = now + 5)
+        client.sync(config.copy(hiddenCalendars = setOf("e"), hiddenCalendarsSetAt = now + 5, calendarVersion = version))
+        assertEquals(setOf("e"), server.hiddenCalendars())
+        assertEquals(emptyList<String>(), cache.shownEvents(context).map { it.title })
+    }
+
+    @Test
     fun `the day rollover hour set more recently wins, the phone's or the web's`() = runBlocking {
         com.kzhovn.todoapp.AppSettings.setRolloverHour(context, 5, setAt = 100)
         client.sync(config.copy(rolloverHour = 5, rolloverSetAt = 100))

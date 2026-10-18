@@ -8,6 +8,7 @@ import com.kzhovn.todoapp.data.planMoveItem
 import com.kzhovn.todoapp.data.splitItems
 import com.kzhovn.todoapp.data.folderColorAssignments
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.CalendarEvent
 import com.kzhovn.todoapp.data.CompleteQuestion
 import com.kzhovn.todoapp.data.completeQuestion
 import com.kzhovn.todoapp.data.DEFAULT_ROLLOVER_HOUR
@@ -38,7 +39,9 @@ class TaskRepository(
     private val rolloverHour: () -> Int = { DEFAULT_ROLLOVER_HOUR },
     // Runs a change as one database transaction (TodoApp passes Room's withTransaction), so a crash or a
     // sync in the middle never sees half of it.
-    private val transaction: suspend (suspend () -> Unit) -> Unit = { it() }
+    private val transaction: suspend (suspend () -> Unit) -> Unit = { it() },
+    // Google Calendar's events (CalendarCache), which Events contexts go by.
+    val calendarEvents: () -> List<CalendarEvent> = { emptyList() }
 ) {
 
     // What a delete removed, so Undo can put it all back: the tasks and their own contexts and prerequisites.
@@ -212,7 +215,7 @@ class TaskRepository(
         asIfOn: Long? = null
     ): List<Task> = computeActiveTasks(
         all, contextsByTaskId, asIfOn(taskContextDao.getAll(), asIfOn), taskContextDao.getAllTimeWindows(),
-        taskDao.getAllDependencies(), now, currentMinuteOfDay, todayMask
+        taskDao.getAllDependencies(), now, currentMinuteOfDay, todayMask, calendarEvents()
     )
 
     // What the lists see: every task but templates (see Templates.kt in :core).

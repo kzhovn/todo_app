@@ -1,6 +1,7 @@
 package com.kzhovn.todoapp.sync
 
 import com.kzhovn.todoapp.AppSettings
+import com.kzhovn.todoapp.CalendarCache
 import android.content.Context
 import androidx.room.withTransaction
 import com.kzhovn.todoapp.data.Task
@@ -22,7 +23,8 @@ data class SyncConfig(
     val url: String, val token: String, val rolloverHour: Int? = null, val rolloverSetAt: Long = 0,
     val modeFolderId: Long? = null, val modeSetAt: Long = 0,
     val digestOn: Boolean = true, val digestSetAt: Long = 0,
-    val reminderHour: Int? = null, val reminderHourSetAt: Long = 0
+    val reminderHour: Int? = null, val reminderHourSetAt: Long = 0,
+    val hiddenCalendars: Set<String> = emptySet(), val hiddenCalendarsSetAt: Long = 0, val calendarVersion: Long = 0
 )
 
 class SyncClient(
@@ -44,7 +46,8 @@ class SyncClient(
     suspend fun sync(config: SyncConfig): Int = mutex.withLock {
         val (request, pushedTs) = db.withTransaction {
             val dirty = readDirty()
-            SyncRequest(cursor(), dirty.mapNotNull { (key, ts) -> changeFor(key, ts) }, config.rolloverHour, config.rolloverSetAt, config.modeFolderId, config.modeSetAt, config.digestOn, config.digestSetAt, config.reminderHour, config.reminderHourSetAt) to dirty
+            SyncRequest(cursor(), dirty.mapNotNull { (key, ts) -> changeFor(key, ts) }, config.rolloverHour, config.rolloverSetAt, config.modeFolderId, config.modeSetAt, config.digestOn, config.digestSetAt, config.reminderHour, config.reminderHourSetAt,
+                config.hiddenCalendars.sorted(), config.hiddenCalendarsSetAt, config.calendarVersion) to dirty
         }
         val response = withContext(Dispatchers.IO) { (transport ?: ::post)(config, request) }
         val result = db.withTransaction { apply(response, pushedTs) }
@@ -52,6 +55,8 @@ class SyncClient(
         response.rolloverHour?.takeIf { response.rolloverSetAt > config.rolloverSetAt }?.let { AppSettings.setRolloverHour(context, it, response.rolloverSetAt) }
         if (response.modeSetAt > config.modeSetAt) AppSettings.setMode(context, response.modeFolderId, response.modeSetAt)
         if (response.digestSetAt > config.digestSetAt) AppSettings.setDigestOn(context, response.digestOn, response.digestSetAt)
+        if (response.hiddenCalendarsSetAt > config.hiddenCalendarsSetAt) CalendarCache.setHidden(context, response.hiddenCalendars.toSet(), response.hiddenCalendarsSetAt)
+        response.calendar?.let { CalendarCache.set(context, it) }
         // A new reminder hour (set on the web) moves every date-only reminder.
         response.reminderHour?.takeIf { response.reminderHourSetAt > config.reminderHourSetAt }?.let {
             AppSettings.setReminderHour(context, it, response.reminderHourSetAt)

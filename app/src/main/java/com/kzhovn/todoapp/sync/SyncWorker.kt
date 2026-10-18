@@ -11,6 +11,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.kzhovn.todoapp.AppSettings
+import com.kzhovn.todoapp.CalendarCache
 import com.kzhovn.todoapp.TodoApp
 import java.util.concurrent.TimeUnit
 
@@ -64,7 +65,8 @@ object SyncSettings {
             url, token, AppSettings.rolloverHour(context), AppSettings.rolloverSetAt(context),
             AppSettings.modeFolderId(context), AppSettings.modeSetAt(context),
             AppSettings.digestOn(context), AppSettings.digestSetAt(context),
-            AppSettings.reminderHour(context), AppSettings.reminderHourSetAt(context)
+            AppSettings.reminderHour(context), AppSettings.reminderHourSetAt(context),
+            CalendarCache.hidden(context), CalendarCache.hiddenSetAt(context), CalendarCache.data(context).version
         )
     }
 

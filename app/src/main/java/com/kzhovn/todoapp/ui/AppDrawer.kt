@@ -174,7 +174,7 @@ private fun ContextsSection(drawerOpen: Boolean, onClose: () -> Unit) {
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(drawerOpen, tick) {
         val now = System.currentTimeMillis()
-        summaries = contextSummaries(app.contextRepository.getAllContexts(), app.contextRepository.getAllTimeWindows(), app.repository.listedTasks(now), app.repository.getAllTaskContexts(), now)
+        summaries = contextSummaries(app.contextRepository.getAllContexts(), app.contextRepository.getAllTimeWindows(), app.repository.listedTasks(now), app.repository.getAllTaskContexts(), now, app.repository.calendarEvents())
     }
     val picked by ContextFilter.id.collectAsState()
     val manage = { context.startActivity(Intent(context, ContextsActivity::class.java)) }
