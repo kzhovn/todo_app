@@ -100,12 +100,7 @@ class TaskEditActivity : ComponentActivity() {
         val app = application as TodoApp
         val taskId = intent.getLongExtra(EXTRA_TASK_ID, 0L)
         val asTemplate = intent.getBooleanExtra(EXTRA_CREATE_AS_TEMPLATE, false)
-        val initialType = when {
-            intent.getBooleanExtra(EXTRA_CREATE_AS_FOLDER, false) -> TaskType.FOLDER
-            intent.getBooleanExtra(EXTRA_CREATE_AS_PROJECT, false) -> TaskType.PROJECT
-            asTemplate -> TaskType.CHECKLIST // most templates are lists (packing)
-            else -> TaskType.TASK
-        }
+        val initialType = if (asTemplate) TaskType.CHECKLIST else TaskType.TASK // most templates are lists (packing)
         setContent {
             LedgerTheme {
                 val vm = remember { TaskEditViewModel(app.repository, app.contextRepository, taskId, initialType, asTemplate) }
@@ -366,8 +361,6 @@ class TaskEditActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_TASK_ID = "task_id"
-        const val EXTRA_CREATE_AS_FOLDER = "create_as_folder"
-        const val EXTRA_CREATE_AS_PROJECT = "create_as_project"
         const val EXTRA_CREATE_AS_TEMPLATE = "create_as_template"
         // An unsaved new task (Task JSON) to start from, e.g. quick add's "Edit all details".
         const val EXTRA_DRAFT = "draft"

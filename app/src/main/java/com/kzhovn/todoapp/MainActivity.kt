@@ -30,7 +30,6 @@ import androidx.lifecycle.lifecycleScope
 import com.kzhovn.todoapp.focus.FocusActivity
 import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.Labels
-import androidx.compose.material.icons.filled.AccountTree
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -64,7 +63,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AlternateEmail
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -229,28 +227,6 @@ class MainActivity : ComponentActivity() {
                                 onClick = {
                                     showFabMenu = false
                                     scope.launch { templatePicker = repository.getTemplates() to repository.getEverything().associateBy { it.id } }
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("+ Project") },
-                                leadingIcon = { Icon(Icons.Filled.AccountTree, contentDescription = null) },
-                                onClick = {
-                                    showFabMenu = false
-                                    startActivity(
-                                        Intent(this@MainActivity, TaskEditActivity::class.java)
-                                            .putExtra(TaskEditActivity.EXTRA_CREATE_AS_PROJECT, true)
-                                    )
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("+ Folder") },
-                                leadingIcon = { Icon(Icons.Filled.Folder, contentDescription = null) },
-                                onClick = {
-                                    showFabMenu = false
-                                    startActivity(
-                                        Intent(this@MainActivity, TaskEditActivity::class.java)
-                                            .putExtra(TaskEditActivity.EXTRA_CREATE_AS_FOLDER, true)
-                                    )
                                 }
                             )
                         }
