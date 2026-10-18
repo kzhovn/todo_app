@@ -700,19 +700,23 @@
     const place = (month, week, day) => `month=${month}` + (week ? `&week=${week}` : "") + (day ? `&day=${day}` : "");
     const load = (month, week, day) => htmx.ajax("GET", `/list/calendar?${place(month, week, day)}`, { target: "#list", swap: "outerHTML" });
     // The view's own month, or its Monday in Week.
-    const shown = (view) => view.type === "dayGridWeek" ? [monthOf(view.currentStart), dayOf(view.currentStart)] : [monthOf(view.currentStart), ""];
+    const shown = (view) => view.type === "timeGridWeek" ? [monthOf(view.currentStart), dayOf(view.currentStart)] : [monthOf(view.currentStart), ""];
     const [monthLabel, weekLabel] = el.dataset.labels.split("|");
     let savedView = null;
     try { savedView = localStorage.getItem("calendarView"); } catch {}
+    // Week's hours sit in a box of their own (opened at the morning), so the agenda still has room under them.
+    const heightOf = (type) => type === "timeGridWeek" ? 460 : "auto";
+    const firstView = savedView === "timeGridWeek" ? "timeGridWeek" : "dayGridMonth";
     const calendar = new FullCalendar.Calendar(el, {
-      initialView: savedView === "dayGridWeek" ? "dayGridWeek" : "dayGridMonth",
-      initialDate: el.dataset.week || `${el.dataset.month}-01`,
+      initialView: firstView,
+      height: heightOf(firstView),
+      // This month's grid opens on today, so Week does too.
+      initialDate: el.dataset.week || (el.dataset.month === monthOf(new Date()) ? new Date() : `${el.dataset.month}-01`),
       firstDay: 1,
-      height: "auto",
       fixedWeekCount: false,
       dayMaxEvents: 3,
-      views: { dayGridWeek: { dayMaxEvents: false } },
-      headerToolbar: { left: "title", center: "", right: "dayGridMonth,dayGridWeek now prev,next" },
+      views: { timeGridWeek: { dayMaxEvents: false, scrollTime: "08:00:00", nowIndicator: true, allDayText: "" } },
+      headerToolbar: { left: "title", center: "", right: "dayGridMonth,timeGridWeek now prev,next" },
       // Its arrows are an icon font from a data: URL, which the page's CSP doesn't load.
       buttonIcons: false,
       buttonText: { prev: "‹", next: "›", month: monthLabel, week: weekLabel },
@@ -725,13 +729,17 @@
       events: "/calendar/events",
       dayCellClassNames: (arg) => (dayOf(arg.date) === agenda().day ? ["picked"] : []),
       dateClick: (info) => load(agenda().month, agenda().week, agenda().day === info.dateStr ? null : info.dateStr),
+      // A task opens its editor; a Google event, its sheet.
       eventClick: (info) => {
         const a = agenda();
         const q = `CALENDAR&${place(a.month, a.week, a.day)}`;
-        htmx.ajax("GET", `/tasks/${info.event.extendedProps.taskId}?mode=${q}`, { target: "#detail", select: "#detail", swap: "outerHTML" });
+        const p = info.event.extendedProps;
+        const url = p.eventId ? `/event?id=${encodeURIComponent(p.eventId)}&mode=${q}` : `/tasks/${p.taskId}?mode=${q}`;
+        htmx.ajax("GET", url, { target: "#detail", select: "#detail", swap: "outerHTML" });
       },
       datesSet: (info) => {
         try { localStorage.setItem("calendarView", info.view.type); } catch {}
+        if (calendar.getOption("height") !== heightOf(info.view.type)) calendar.setOption("height", heightOf(info.view.type));
         const [month, week] = shown(info.view);
         if (agenda().month !== month || agenda().week !== week) load(month, week, null);
       },
@@ -739,7 +747,7 @@
     calendar.render();
     // Into Week: the picked day's week, else today's if it's in the month shown, else the month's first.
     el.addEventListener("click", (e) => {
-      if (!e.target.closest(".fc-dayGridWeek-button") || calendar.view.type === "dayGridWeek") return;
+      if (!e.target.closest(".fc-timeGridWeek-button") || calendar.view.type === "timeGridWeek") return;
       const now = new Date();
       calendar.gotoDate(agenda().day || (now >= calendar.view.currentStart && now < calendar.view.currentEnd ? now : calendar.view.currentStart));
     }, true);

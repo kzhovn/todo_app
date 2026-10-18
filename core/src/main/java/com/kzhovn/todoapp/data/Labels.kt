@@ -93,6 +93,7 @@ object Labels {
     const val ONLY_BUSY_EVENTS = "Only busy events"
     const val OFF_WHILE = "Off while"
     fun offWhile(names: List<String>) = "Off while ${names.joinToString(", ")}"
+    fun untilEvent(on: Boolean, until: String, title: String) = "${if (on) "On" else "Off"} until $until ($title)"
     // An Events context, as the contexts lists show it: "“oncall for” on Work", "Busy events on Personal, Work".
     fun eventsContext(words: String?, calendars: List<String>, busyOnly: Boolean): String {
         val on = calendars.joinToString(", ").ifEmpty { "no calendar" }
@@ -309,6 +310,7 @@ object Labels {
     const val SNOOZE_AFTER = "After…"
     const val AN_EVENT = "an event"
     const val CANCELLED = "Cancelled"
+    const val NOW_ON = "now"
     const val KEEP_THEM = "Keep them"
     const val LINK_TO_ANOTHER_EVENT = "Link to another event…"
     const val DELETE_THEM = "Delete them"

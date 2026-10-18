@@ -5,6 +5,7 @@ import com.kzhovn.todoapp.data.isDoable
 import com.kzhovn.todoapp.data.CalendarEvent
 import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.matchingEvents
+import com.kzhovn.todoapp.data.timeText
 import com.kzhovn.todoapp.data.resolvesBy
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.dueStatus
@@ -112,6 +113,11 @@ class ContextStates(
     private fun ownHolds(ctx: TaskContext): Boolean =
         if (ctx.type == ContextType.EVENTS) matchingEvents(ctx, events).any { it.isOn(now) }
         else contextHolds(ctx.copy(forced = null), windowsByContext[ctx.id].orEmpty(), minute, mask)
+
+    // "Off until 3:00 PM (Dentist)", "On until 5:00 PM (oncall for Payments)": why it's as it is now, when an event
+    // decides it (not when set by hand).
+    fun eventStateText(id: Long): String? = byId[id]?.takeIf { it.forced == null }?.let { eventNow(id) }
+        ?.let { e -> Labels.untilEvent(holds(id), timeText(e.end), e.title) }
 
     // The event that has it held, or off, now: "Off until 15:00 (Dentist)".
     fun eventNow(id: Long): CalendarEvent? {

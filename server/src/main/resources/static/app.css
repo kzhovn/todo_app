@@ -343,6 +343,11 @@ form.inline button { padding: 6px 10px; border: 1px solid var(--border); border-
 .context-form:has(input[name=type][value=PLACE]:checked) .time-only,
 .context-form:has(input[name=type][value=TIME]:checked) .place-only,
 .context-form:has(input[name=type][value=LABEL]:checked) :is(.place-only, .time-only) { display: none; }
+.context-form:not(:has(input[name=type][value=EVENTS]:checked)) .events-only,
+.context-form:has(input[name=type][value=EVENTS]:checked) :is(.place-only, .time-only) { display: none; }
+.calendar-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.calendar-row .cal-name { flex: 1; }
+.cal-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; display: inline-block; }
 
 /* Parity: bulk selection, the stalled-project prompt, the subtasks question, new-item links */
 .list-tools { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 8px 12px 0; font-size: 13px; color: var(--muted); }
@@ -714,3 +719,21 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .quiet-mark { width: 16px; height: 16px; margin: 0 4px 0 9px; color: var(--muted); flex-shrink: 0; }
 .day-add { margin: 10px 20px; }
 .day-add input { width: 100%; }
+/* Google Calendar: event rows in the agenda (a time, the calendar's colour as the bar), the event sheet, Doing's
+   Today and Cancelled lines, the snooze menu's events. */
+.event-row { display: flex; align-items: center; gap: 10px; border-left: 4px solid var(--border); padding-left: 10px; }
+.event-row .event-time { width: 48px; flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.event-row.past { opacity: .55; }
+.event-sheet { padding: 18px 20px; }
+.event-sheet h2 { margin: 18px 0 4px; font-size: 19px; display: flex; align-items: center; gap: 6px; }
+.event-sheet .hint { margin: 2px 0; }
+.event-sheet .event-add { display: flex; gap: 8px; align-items: center; margin: 14px 0 10px; }
+.event-sheet .event-add input[type=text] { flex: 1; }
+.today-events .running-label { color: var(--muted); }
+.today-events .running-row, .today-events.running-section .running-row { background: var(--tile); }
+.today-events .left, .cancelled-events .left { color: var(--muted); font-weight: 400; }
+.cancelled-events .running-label { color: var(--overdue); }
+.snooze-events:not(:empty) { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 4px; }
+.snooze-events .menu-row .cal-dot { margin-right: 4px; }
+.calendar .fc-event.gcal { border: 0; }
+.calendar .fc-event.gcal .fc-event-title, .calendar .fc-event.gcal .fc-event-time { color: #fff; }

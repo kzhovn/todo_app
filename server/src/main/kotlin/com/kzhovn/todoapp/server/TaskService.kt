@@ -193,11 +193,16 @@ class TaskService(private val store: Store, private val clock: () -> Long = Syst
         val event = event(eventId) ?: return
         apply(planRelinkEvent(tasks(), dependencyEdges(), item.id, event, clock()))
     }
-    fun deleteEventTasks(itemId: Long) = store.transaction {
-        val item = eventItem(itemId) ?: return@transaction
+    // Returns the deletes' shared stamp, for restoreDeletedAt.
+    fun deleteEventTasks(itemId: Long): Long? = store.transaction {
+        val item = eventItem(itemId) ?: return@transaction null
         val now = clock()
         (linkedToEvent(item.id, tasks(), dependencyEdges()).all.flatMap { subtreeIds(it.id) } + item.id).toSet()
             .forEach { if (get(it) != null) tombstone(TASKS, it, now) }
+        now
+    }
+    fun restoreDeletedAt(deletedAt: Long) = store.transaction {
+        store.all(TASKS).filter { it.deletedAt == deletedAt }.forEach { store.write(TASKS, it.id, JsonObject(mapOf(DELETED_AT to JsonNull)), clock()) }
     }
     private fun eventItem(id: Long): Task? = get(id)?.takeIf { it.type == TaskType.EVENT }
 

@@ -221,6 +221,7 @@ fun DIV.listContents(data: ListData) {
     attributes["hx-trigger"] = "every 60s, visibilitychange from:document, refresh from:body"
     attributes["hx-swap"] = "outerHTML"
     data.stalled?.let { stalledPrompt(it, data) }
+    if (data.mode == ListMode.DOING) eventLines(data.service, data)
     runningSection(data)
     if (data.mode == ListMode.ALL) {
         if (data.roots.isEmpty()) p(classes = "empty") { +Labels.NOTHING_HERE }
@@ -443,7 +444,16 @@ internal fun FlowContent.taskRow(data: ListData, task: Task, depth: Int, outline
                             span { +c.label }
                         }
                     }
+                    // "After…" an event: today's and tomorrow's, fetched when it's tapped (the menus are big enough).
+                    if (data.shownEvents.isNotEmpty()) button(classes = "tile") {
+                        attributes["hx-get"] = "/tasks/${task.id}/snooze-events?mode=$mode"
+                        attributes["hx-target"] = "next .snooze-events"
+                        attributes["hx-swap"] = "outerHTML"
+                        icon(Icon.CALENDAR, "")
+                        span { +Labels.SNOOZE_AFTER }
+                    }
                 }
+                div(classes = "snooze-events") {}
                 // Pinned on every device: the phone's notification and the desktop's top bar.
                 button(classes = "menu-row") {
                     hx("post", "/tasks/${task.id}/pin?mode=$mode")

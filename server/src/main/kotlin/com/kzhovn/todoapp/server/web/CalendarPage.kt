@@ -1,6 +1,11 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.data.AgendaRow
 import com.kzhovn.todoapp.data.CalendarEntry
+import com.kzhovn.todoapp.data.CalendarEvent
+import com.kzhovn.todoapp.data.dayStart
+import com.kzhovn.todoapp.data.rows
+import com.kzhovn.todoapp.data.timeText
 import com.kzhovn.todoapp.data.DateKind
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.calendarEntries
@@ -86,14 +91,32 @@ internal fun DIV.agendaContents(data: ListData) {
             span { +Labels.agendaHeading(day.day, today) }
             if (i == 0 && cal.day != null) button(classes = "pill all-upcoming") { hx("get", "/list/calendar?month=${cal.month}" + cal.week?.let { "&week=$it" }.orEmpty()); +Labels.ALL_UPCOMING }
         }
-        if (day.entries.isEmpty()) p(classes = "empty") { +Labels.NOTHING_THAT_DAY }
-        // A repeat still to come isn't a task yet, and a done one stays done: plain rows that open the task.
-        day.entries.forEach { e -> if (e.kind == DateKind.REPEAT || e.task.isComplete) quietRow(data, e) else taskRow(data, e.task, depth = 0, tag = Labels.dateTag(e)) }
+        if (day.entries.isEmpty() && day.events.isEmpty()) p(classes = "empty") { +Labels.NOTHING_THAT_DAY }
+        // Events and tasks by the clock (rows()). A repeat still to come isn't a task yet, and a done one stays
+        // done: plain rows that open the task.
+        day.rows().forEach { row ->
+            when (row) {
+                is AgendaRow.Event -> eventRow(data, row.event)
+                is AgendaRow.Entry -> row.entry.let { e -> if (e.kind == DateKind.REPEAT || e.task.isComplete) quietRow(data, e) else taskRow(data, e.task, depth = 0, tag = Labels.dateTag(e)) }
+            }
+        }
     }
     cal.day?.let { day ->
         form(classes = "inline day-add") {
             hx("post", "/calendar/add?day=$day&mode=${data.q}")
             textInput(name = "text") { placeholder = Labels.addTo(day); attributes["autocomplete"] = "off" }
+        }
+    }
+}
+
+// An event: its time, a bar in its calendar's colour, and it opens its sheet.
+private fun FlowContent.eventRow(data: ListData, event: CalendarEvent) = div(classes = "row event-row" + if (event.end <= data.now) " past" else "") {
+    style = "border-left-color: ${calendarColor(data.service, event.calendarId)}"
+    span(classes = "event-time") { +(if (event.allDay) Labels.ALL_DAY else timeText(event.start)) }
+    div(classes = "main") {
+        div(classes = "title") {
+            a(href = eventHref(event.id, data.q), classes = "edit") { openInPanel(); +event.title }
+            event.location?.let { span(classes = "tail") { +" · $it" } }
         }
     }
 }
@@ -119,7 +142,21 @@ fun Route.calendarRoutes(service: TaskService) {
         val kinds = call.calendarView(ListMode.CALENDAR, service.now())!!.kinds
         // A task once a day, by its first kind, as in the agenda.
         val entries = calendarEntries(service.tasks(), from, to, kinds, service.now(), service.reminderHour(), service.modeFolderId()).distinctBy { it.task.id to it.day }
+        val calendarEvents = if (DateKind.EVENT in kinds) service.shownEvents().filter { it.end > dayStart(from) && it.start < dayStart(to.plusDays(1)) } else emptyList()
         val events = buildJsonArray {
+            // Google's: at their times (all-day ones over their days), solid in their calendar's colour.
+            calendarEvents.forEach { e ->
+                addJsonObject {
+                    put("title", e.title)
+                    put("start", if (e.allDay) localDay(e.start).toString() else java.time.Instant.ofEpochMilli(e.start).atZone(java.time.ZoneId.systemDefault()).toOffsetDateTime().toString())
+                    put("end", if (e.allDay) localDay(e.end).toString() else java.time.Instant.ofEpochMilli(e.end).atZone(java.time.ZoneId.systemDefault()).toOffsetDateTime().toString())
+                    put("allDay", e.allDay)
+                    put("eventId", e.id)
+                    put("color", calendarColor(service, e.calendarId))
+                    put("display", "block")
+                    putJsonArray("classNames") { add("gcal") }
+                }
+            }
             entries.forEach { e ->
                 addJsonObject {
                     put("title", (if (e.task.isMaybe) "? " else "") + e.task.title)

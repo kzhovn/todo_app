@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.server.web
 
+import com.kzhovn.todoapp.repository.ContextStates
 import kotlinx.html.noScript
 import com.kzhovn.todoapp.data.clockTime
 import com.kzhovn.todoapp.data.isDoable
@@ -105,6 +106,12 @@ fun Route.pageRoutes(service: TaskService) {
         p["reminderHour"]?.toIntOrNull()?.takeIf { it in 0..23 }?.let(service::setReminderHour)
         service.setDigestOn(p["digest"] != null) // an unticked box sends nothing
         call.respondRedirect("/settings")
+    }
+    // Settings → Calendars: a calendar shown or hidden (?id=, since Google's ids have / and @ in them).
+    post("/settings/calendar") {
+        val p = call.receiveParameters()
+        p["id"]?.let { service.setCalendarShown(it, p["shown"] == "true") }
+        call.respondRedirect("/settings#calendars")
     }
     get("/contexts") {
         val editing = call.request.queryParameters["edit"]?.toLongOrNull()?.let { id -> service.contexts().firstOrNull { it.id == id } }
@@ -394,7 +401,11 @@ private fun parseContextForm(p: Parameters): ContextForm {
         id = p["id"]?.toLongOrNull() ?: 0,
         name = p["name"].orEmpty().trim(),
         type = type,
-        wifiSsid = p["ssid"]?.trim()?.takeIf { it.isNotEmpty() }
+        wifiSsid = p["ssid"]?.trim()?.takeIf { it.isNotEmpty() },
+        calendarIds = if (type == ContextType.EVENTS) p.getAll("calendar").orEmpty() else emptyList(),
+        titleWords = p["words"]?.trim()?.takeIf { it.isNotEmpty() && type == ContextType.EVENTS },
+        busyOnly = type != ContextType.EVENTS || p["busyOnly"] != null,
+        offWhile = p.getAll("offWhile").orEmpty().mapNotNull { it.toLongOrNull() }
     )
     return ContextForm(context, windows)
 }
@@ -429,17 +440,38 @@ private fun HTML.settingsPage(service: TaskService) = shellPage(service, "Raspbe
             p(classes = "hint") { +Labels.DIGEST_CAPTION }
             noScript { button(type = ButtonType.submit) { +Labels.SAVE } }
         }
+        calendarSettings(service)
+    }
+}
+
+// Every calendar the Google account sees, each shown or hidden.
+private fun FlowContent.calendarSettings(service: TaskService) {
+    h2 { id = "calendars"; +Labels.CALENDARS }
+    val calendars = service.calendar().calendars
+    if (calendars.isEmpty()) return p(classes = "hint") { +Labels.NO_CALENDAR }
+    p(classes = "hint") { +Labels.SHOW_CALENDARS }
+    val hidden = service.hiddenCalendars()
+    calendars.forEach { cal ->
+        form(action = "/settings/calendar", method = FormMethod.post, classes = "calendar-row") {
+            hiddenInput(name = "id") { value = cal.id }
+            hiddenInput(name = "shown") { value = (cal.id in hidden).toString() }
+            span(classes = "cal-dot") { style = "background: ${cal.color ?: "var(--muted)"}" }
+            span(classes = "cal-name") { +cal.name }
+            button(type = ButtonType.submit, classes = if (cal.id in hidden) "pill" else "pill set") { +(if (cal.id in hidden) "Hidden" else "Shown") }
+        }
     }
 }
 
 private fun HTML.contextsPage(service: TaskService, form: ContextForm) = shellPage(service, "Raspberry · Contexts", "/contexts") {
     div(classes = "contexts") {
         h1 { +"Contexts" }
-        p(classes = "hint") { +"Tasks with a context are active only while it holds: on a wifi network (the phone checks), or within a time window. A filter-only one just groups tasks to filter by, unless switched Off. On or Off holds a context that way until it's set back to Auto." }
-        service.contexts().sortedBy { it.name.lowercase() }.forEach { c ->
+        p(classes = "hint") { +"Tasks with a context are active only while it holds: on a wifi network (the phone checks), within a time window, or during matching Google Calendar events. A filter-only one just groups tasks to filter by, unless switched Off. Any context can be Off while an events one holds (@errands while @busy). On or Off holds a context that way until it's set back to Auto." }
+        val contexts = service.contexts()
+        val states = ContextStates(contexts, contexts.flatMap { service.timeWindows(it.id) }, service.events(), service.now())
+        contexts.sortedBy { it.name.lowercase() }.forEach { c ->
             div(classes = "context-row") {
                 span(classes = "context-name") { +"@${c.name}" }
-                span(classes = "hint") { +describeContext(c, service.timeWindows(c.id)) }
+                span(classes = "hint") { +listOfNotNull(describeContext(c, service.timeWindows(c.id), service.calendar().calendars, contexts), states.eventStateText(c.id)).joinToString(" · ") }
                 form(action = "/contexts/${c.id}/forced", method = FormMethod.post, classes = "pills context-forced") {
                     forcedChoices(c).forEach { (value, label) ->
                         button(type = ButtonType.submit, name = "forced", classes = if (forcedShown(c) == value) "pill set" else "pill") {
@@ -466,6 +498,30 @@ private fun HTML.contextsPage(service: TaskService, form: ContextForm) = shellPa
                 label(classes = "pill") { radioInput(name = "type") { value = ContextType.PLACE.name; checked = c.type == ContextType.PLACE }; +Labels.PLACE_CONTEXT }
                 label(classes = "pill") { radioInput(name = "type") { value = ContextType.TIME.name; checked = c.type == ContextType.TIME }; +Labels.TIME_CONTEXT }
                 label(classes = "pill") { radioInput(name = "type") { value = ContextType.LABEL.name; checked = c.type == ContextType.LABEL }; +Labels.LABEL_CONTEXT }
+                label(classes = "pill") { radioInput(name = "type") { value = ContextType.EVENTS.name; checked = c.type == ContextType.EVENTS }; +Labels.EVENTS_CONTEXT }
+            }
+            div(classes = "field events-only") {
+                span(classes = "field-label") { +Labels.DURING_EVENTS_ON }
+                val calendars = service.calendar().calendars
+                if (calendars.isEmpty()) p(classes = "hint") { +Labels.NO_CALENDAR }
+                div(classes = "pills") {
+                    calendars.forEach { cal ->
+                        label(classes = "pill") { checkBoxInput(name = "calendar") { value = cal.id; checked = cal.id in c.calendarIds }; +cal.name }
+                    }
+                }
+                span(classes = "field-label") { +Labels.TITLED_WITH }
+                textInput(name = "words") { value = c.titleWords.orEmpty(); placeholder = "e.g. oncall for" }
+                label { checkBoxInput(name = "busyOnly") { checked = c.busyOnly }; +" ${Labels.ONLY_BUSY_EVENTS}" }
+            }
+            // Only Events contexts turn others off (one level: see ContextStates).
+            val eventsContexts = service.contexts().filter { it.type == ContextType.EVENTS && it.id != c.id }
+            if (eventsContexts.isNotEmpty()) div(classes = "field") {
+                span(classes = "field-label") { +Labels.OFF_WHILE }
+                div(classes = "pills") {
+                    eventsContexts.forEach { e ->
+                        label(classes = "pill") { checkBoxInput(name = "offWhile") { value = e.id.toString(); checked = e.id in c.offWhile }; +"@${e.name}" }
+                    }
+                }
             }
             div(classes = "field place-only") {
                 span(classes = "field-label") { +"Wifi network name (SSID)" }

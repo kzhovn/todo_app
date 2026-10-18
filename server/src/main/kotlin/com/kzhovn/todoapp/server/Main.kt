@@ -60,6 +60,8 @@ fun main() {
         GoogleTasksImport.start(service, store, GoogleTasksApi(client))
         GoogleCalendarRead.start(service, GoogleCalendarApi(client))
     }
+    // Sample events instead of Google's (tools/web_preview.sh): a CalendarData as JSON, read once.
+    env["CALENDAR_FILE"]?.let { service.setCalendar(SyncJson.decodeFromString(com.kzhovn.todoapp.data.CalendarData.serializer(), File(it).readText())) }
 
     embeddedServer(Netty, applicationEnvironment(), {
         val keystorePath = env["KEYSTORE_PATH"]

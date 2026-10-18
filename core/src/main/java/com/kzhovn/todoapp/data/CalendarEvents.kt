@@ -119,3 +119,17 @@ fun nowAndNext(events: List<CalendarEvent>, now: Long): List<CalendarEvent> {
 
 // "14:00–15:00" (each in the device's own clock format), or "All day".
 fun eventTimes(e: CalendarEvent): String = if (e.allDay) Labels.ALL_DAY else "${timeText(e.start)}–${timeText(e.end)}"
+
+// "Today · Oct 20, 14:00–15:00 · in 40m": when an event is, for its sheet.
+fun eventWhen(e: CalendarEvent, now: Long): String {
+    val day = Labels.agendaHeading(localDay(e.start), localDay(now)) + ", " + eventTimes(e)
+    return when {
+        e.isOn(now) -> "$day · ${Labels.NOW_ON}"
+        e.start > now && localDay(e.start) == localDay(now) -> "$day · ${Labels.inMinutes(((e.start - now) / 60_000).toInt())}"
+        else -> day
+    }
+}
+
+// The Now/Next line's tail: "now, until 15:00", "in 40m".
+fun nowNextTail(e: CalendarEvent, now: Long): String =
+    if (e.isOn(now)) "${Labels.NOW_ON}, until ${timeText(e.end)}" else Labels.inMinutes(((e.start - now) / 60_000).toInt())

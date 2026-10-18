@@ -90,7 +90,7 @@ class ListPlace(val mode: ListMode, val folder: Long?, val calendar: CalendarVie
 // All tree shows just this folder's contents (a folder in the sidebar). `selected`: the task open in
 // the detail panel, highlighted in the list.
 class ListData(
-    service: TaskService,
+    val service: TaskService,
     val mode: ListMode,
     val collapsed: Set<Long> = emptySet(),
     later: Set<Long> = emptySet(),
@@ -165,7 +165,7 @@ class ListData(
     // The All tree, searched: a match's parents are there to place it, muted.
     fun onlyAParent(task: Task) = filtering && mode == ListMode.ALL && !matches(task)
     val agenda: List<AgendaDay> by lazy {
-        calendar?.let { agenda(all, it.shown, it.day, it.kinds, now, service.reminderHour(), modeFolder?.id) }.orEmpty()
+        calendar?.let { agenda(all, it.shown, it.day, it.kinds, now, service.reminderHour(), modeFolder?.id, shownEvents) }.orEmpty()
     }
 
     private val dues = service.dueDates()

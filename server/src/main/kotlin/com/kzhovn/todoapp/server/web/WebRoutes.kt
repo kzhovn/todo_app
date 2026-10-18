@@ -81,6 +81,7 @@ fun Route.webRoutes(service: TaskService) {
     focusRoutes(service)
     templateRoutes(service)
     calendarRoutes(service)
+    eventRoutes(service)
     timerRoutes(service)
 
     // The All tree's outliner actions (app.js sends them from keys and drag).
@@ -169,7 +170,8 @@ fun Route.webRoutes(service: TaskService) {
     post("/tasks/{id}/star") { call.taskId()?.let(service::toggleStar); call.respondList(service, call.mode()) }
     post("/tasks/{id}/snooze") {
         val choice = SnoozeChoice.entries.firstOrNull { it.name.equals(call.request.queryParameters["until"], ignoreCase = true) } ?: SnoozeChoice.HOUR
-        val until = choice.at(service.now(), service.rolloverHour())
+        // ?event=: "After…" an event, till it ends (a plain date: it doesn't follow the event).
+        val until = call.request.queryParameters["event"]?.let(service::event)?.end ?: choice.at(service.now(), service.rolloverHour())
         call.taskId()?.let { service.snooze(it, until) }
         call.respondList(service, call.mode())
     }

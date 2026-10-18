@@ -10,6 +10,7 @@ import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.mergeEdit
 import kotlinx.html.details
 import com.kzhovn.todoapp.data.Labels
+import com.kzhovn.todoapp.data.eventWhen
 import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.hasTime
 import com.kzhovn.todoapp.data.atTimeMillis
@@ -150,7 +151,10 @@ fun Route.editorRoutes(service: TaskService) {
         val text = p["text"].orEmpty()
         val task = service.get(id)
         val kind = p["kind"] ?: "subtask"
-        if (task != null) when (kind) {
+        // An event picked: as a prerequisite this waits till it's over; as a dependent this is due when it starts.
+        val event = p["event"]
+        if (task != null && event != null && kind != "subtask") service.linkEvent(id, event, before = kind == "dependent")
+        else if (task != null) when (kind) {
             "prerequisite" -> existing?.let { service.addDependency(id, it) } ?: service.addTyped(text, folder = folderOf(task, service.tasks().associateBy { it.id }))?.let { service.addDependency(id, it.id) }
             "dependent" -> existing?.let { service.addDependency(it, id) } ?: service.addTyped(text, folder = folderOf(task, service.tasks().associateBy { it.id }))?.let { service.addDependency(it.id, id) }
             else -> existing?.let { service.reparent(it, id) } ?: text.lines().filter { it.isNotBlank() }.forEach { service.addTyped(it, under = id) }
@@ -169,6 +173,8 @@ fun Route.editorRoutes(service: TaskService) {
         // Typed: what matches. Empty (the field just focused): the nearest few first, as the phone's picker.
         val sections = if (q.isEmpty()) nearbyFirst(task, candidates, all, service.now()).filter { it.first != Labels.EVERYTHING_ELSE }.map { (label, ts) -> label to ts.take(5) }
             else listOf(null to candidates.filter { it.title.contains(q, ignoreCase = true) }.take(8))
+        // Linking, upcoming events too (soonest first), under the tasks.
+        val events = if (kind == "subtask") emptyList() else service.shownEvents().filter { it.end > service.now() && it.title.contains(q, ignoreCase = true) }.sortedBy { it.start }.take(5)
         call.respondText(createHTML().div(classes = "suggest") {
             if (q.isNotEmpty()) button(type = ButtonType.submit, classes = "sugg new") { +"↵ New ${KIND_NOUNS[kind] ?: "subtask"} “$q”" }
             sections.forEach { (label, matches) ->
@@ -179,6 +185,14 @@ fun Route.editorRoutes(service: TaskService) {
                         span { +t.title }
                         span(classes = "where") { +ancestors(t, byId).joinToString(" › ") { it.title } }
                     }
+                }
+            }
+            if (events.isNotEmpty()) div(classes = "sugg-head") { +Labels.EVENTS }
+            events.forEach { e ->
+                button(type = ButtonType.submit, classes = "sugg") {
+                    name = "event"; value = e.id
+                    span { calDot(calendarColor(service, e.calendarId)); +" ${e.title}" }
+                    span(classes = "where") { +eventWhen(e, service.now()) }
                 }
             }
         }, ContentType.Text.Html)

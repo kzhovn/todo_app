@@ -1,6 +1,7 @@
 package com.kzhovn.todoapp.server.web
 
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.eventWhen
 import kotlinx.html.summary
 import kotlinx.html.details
 import com.kzhovn.todoapp.data.Labels
@@ -53,8 +54,19 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
     fun kotlinx.html.HTMLTag.htmx(url: String) = hx("post", url, "#related")
     // A subtask's checkbox goes in front of its title, as every checkbox does; other rows keep its space.
     fun FlowContent.row(kind: String, t: Task, leading: FlowContent.() -> Unit = { span(classes = "check-space") {} }, trailing: FlowContent.() -> Unit) = div(classes = "rel-row") {
-        leading()
-        a(href = "/tasks/${t.id}?mode=$m", classes = if (t.isComplete) "done" else null) { +t.title; kindTag(kind) }
+        // An event: its calendar's dot and its time, and it opens its sheet, not the editor.
+        if (t.type == TaskType.EVENT) {
+            val event = t.eventId?.let(service::event)
+            span(classes = "check-space") { event?.let { calDot(calendarColor(service, it.calendarId)) } }
+            a(href = event?.let { eventHref(it.id, m) } ?: "#", classes = if (t.isComplete) "done" else null) {
+                +t.title
+                span(classes = "tail") { +" · ${event?.let { eventWhen(it, service.now()) } ?: Labels.EVENT}" }
+                kindTag(kind)
+            }
+        } else {
+            leading()
+            a(href = "/tasks/${t.id}?mode=$m", classes = if (t.isComplete) "done" else null) { +t.title; kindTag(kind) }
+        }
         trailing()
     }
     fun FlowContent.unlink(url: String) = button(classes = "unlink") { htmx(url); attributes["aria-label"] = "Remove"; +"✕" }
