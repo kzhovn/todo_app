@@ -52,7 +52,7 @@ object Labels {
         else "${dayName(week.start, "MMM d")} – ${dayName(week.endInclusive, "MMM d")}"
     fun dateKind(kind: DateKind) = when (kind) {
         DateKind.DUE -> "Due"; DateKind.START -> "Starts"; DateKind.REPEAT -> "Repeats"
-        DateKind.WAITING -> WAITING; DateKind.REMINDER -> "Reminders"; DateKind.DONE -> "Done"
+        DateKind.WAITING -> WAITING; DateKind.REMINDER -> "Reminders"; DateKind.DONE -> "Done"; DateKind.EVENT -> EVENTS
     }
     fun addTo(day: java.time.LocalDate) = "Add to ${dayName(day, "MMM d")}…"
     // An agenda heading: "Overdue", "Today · Oct 16", "Tomorrow · Oct 17", "Mon · Oct 19".
@@ -71,6 +71,7 @@ object Labels {
         DateKind.WAITING -> if (entry.task.dueDate != null) "resolves" else "check in"
         DateKind.REMINDER -> "reminder " + timeText(entry.at)
         DateKind.DONE -> "done"
+        DateKind.EVENT -> null
     }
 
     // Focus mode
@@ -86,6 +87,17 @@ object Labels {
     const val PLACE_CONTEXT = "Place (wifi)"
     const val TIME_CONTEXT = "Time window"
     const val LABEL_CONTEXT = "Filter only"
+    const val EVENTS_CONTEXT = "Events"
+    const val DURING_EVENTS_ON = "During events on"
+    const val TITLED_WITH = "Titled with (any of, comma-separated)"
+    const val ONLY_BUSY_EVENTS = "Only busy events"
+    const val OFF_WHILE = "Off while"
+    fun offWhile(names: List<String>) = "Off while ${names.joinToString(", ")}"
+    // An Events context, as the contexts lists show it: "“oncall for” on Work", "Busy events on Personal, Work".
+    fun eventsContext(words: String?, calendars: List<String>, busyOnly: Boolean): String {
+        val on = calendars.joinToString(", ").ifEmpty { "no calendar" }
+        return words?.takeIf { it.isNotBlank() }?.let { "“${it.trim()}” on $on" } ?: ((if (busyOnly) "Busy events" else "Events") + " on $on")
+    }
     // TaskContext.forced's choices: on its own (wifi, the clock), or held on or off by hand.
     val CONTEXT_FORCED = listOf(null to "Auto", true to "On", false to "Off")
 
@@ -280,7 +292,32 @@ object Labels {
     const val LATER = "Later"
 
     val TYPES = listOf(TaskType.TASK to TASK, TaskType.PROJECT to PROJECT, TaskType.CHECKLIST to CHECKLIST, TaskType.FOLDER to FOLDER, TaskType.WAITING to WAITING)
-    fun typeName(type: TaskType) = TYPES.firstOrNull { it.first == type }?.second ?: TASK
+    fun typeName(type: TaskType) = if (type == TaskType.EVENT) EVENT else TYPES.firstOrNull { it.first == type }?.second ?: TASK
+
+    // Google Calendar (see CalendarEvents.kt). An event isn't a type you pick; it comes from linking one.
+    const val EVENT = "Event"
+    const val EVENTS = "Events"
+    const val CALENDARS = "Calendars"
+    const val ALL_DAY = "All day"
+    const val BEFORE = "Before"
+    const val AFTER = "After"
+    const val BEFORE_IT = "Before it"
+    const val AFTER_IT = "After it"
+    const val ADD_FOR_EVENT = "Add a task…"
+    const val OPEN_IN_GOOGLE = "Open in Google Calendar"
+    const val TODAY_EVENTS = "Today"
+    const val SNOOZE_AFTER = "After…"
+    const val AN_EVENT = "an event"
+    const val CANCELLED = "Cancelled"
+    const val KEEP_THEM = "Keep them"
+    const val LINK_TO_ANOTHER_EVENT = "Link to another event…"
+    const val DELETE_THEM = "Delete them"
+    const val NO_CALENDAR = "Not connected to Google Calendar."
+    const val SHOW_CALENDARS = "Shown on the calendar, in Doing and when linking."
+    fun afterEvent(title: String) = "After $title"
+    fun eventLinks(count: Int) = if (count == 1) "1 task" else "$count tasks"
+    fun wasCancelled(title: String) = "$title was cancelled"
+    fun inMinutes(minutes: Int) = "in " + formatDuration(minutes.coerceAtLeast(1))
 
     // A checklist's items
     const val ITEMS = "Items"

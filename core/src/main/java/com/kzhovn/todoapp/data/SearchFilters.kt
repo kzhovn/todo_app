@@ -39,7 +39,7 @@ fun searchMatcher(all: Collection<Task>, contextsByTaskId: Map<Long, Set<Long>>,
     val byId = all.associateBy { it.id }
     val q = query.trim()
     return { t ->
-        !t.type.isContainer && (t.title.contains(q, ignoreCase = true) || notesMatch(t, query) != null) &&
+        !t.type.isContainer && t.type != TaskType.EVENT && (t.title.contains(q, ignoreCase = true) || notesMatch(t, query) != null) &&
             (filters.includeCompleted || !t.isComplete) &&
             filters.folderId.let { it == null || isUnder(t, it, byId) } &&
             (!filters.starredOnly || t.isStarred) &&

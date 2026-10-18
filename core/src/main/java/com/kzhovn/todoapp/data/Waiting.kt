@@ -45,8 +45,12 @@ fun stillWaiting(task: Task, now: Long): Task = task.copy(startDate = now + task
 // A new interval counts from now, so a shorter one brings the next check-in closer.
 fun Task.withCheckInEvery(days: Int, now: Long): Task = stillWaiting(copy(checkInDays = days.coerceIn(1, MAX_CHECK_IN_DAYS)), now)
 
-// A dated waiting item whose day has come: it resolves itself (see purgeExpired on each side).
-fun Task.resolvesBy(now: Long): Boolean = type == TaskType.WAITING && !isComplete && dueDate != null && dueDate <= now
+// A dated waiting item whose day has come, or an event that's over: it resolves itself (see purgeExpired on each side).
+fun Task.resolvesBy(now: Long): Boolean = !isComplete && when (type) {
+    TaskType.WAITING -> dueDate != null && dueDate <= now
+    TaskType.EVENT -> eventEnd()?.let { it <= now } == true
+    else -> false
+}
 
 // "9 days", for how long it's been waiting (nothing on its first day).
 fun waitingFor(task: Task, now: Long): String? = createdAt(task)?.let { ((now - it) / DAY_MS).toInt() }?.takeIf { it > 0 }?.let { if (it == 1) "1 day" else "$it days" }

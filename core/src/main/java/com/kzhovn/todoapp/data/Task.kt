@@ -8,8 +8,9 @@ import kotlinx.serialization.Serializable
 // A PROJECT is completed as a whole once its subtasks are done; it has no checkbox of its own and
 // never shows in Active/Doing (its subtasks do). A WAITING item is something you're blocked on but
 // don't do yourself (someone getting back to you, a date): see Waiting.kt. A SECTION groups a checklist's
-// items (Clothes, Winter in a packing list): a folder inside the checklist, see Checklist.kt.
-enum class TaskType { TASK, FOLDER, PROJECT, CHECKLIST, WAITING, SECTION }
+// items (Clothes, Winter in a packing list): a folder inside the checklist, see Checklist.kt. An EVENT is a Google
+// Calendar event a task is linked to, kept in step with it by the server: see CalendarEvents.kt.
+enum class TaskType { TASK, FOLDER, PROJECT, CHECKLIST, WAITING, SECTION, EVENT }
 
 // Something you do and tick off: a task or a checklist. Not a folder, nor a project (which completes
 // by its steps). What lists, pickers and bulk edit deal in.
@@ -86,7 +87,10 @@ data class Task(
     val fromTemplateId: Long? = null,
     // A step of an in-order parent that doesn't hold up the step after it ("Hang the rest" beside "Start dryer"):
     // it comes up with that step, which doesn't wait for it. See stepsUpNow.
-    @ColumnInfo(defaultValue = "0") val alongsideNext: Boolean = false
+    @ColumnInfo(defaultValue = "0") val alongsideNext: Boolean = false,
+    // Events: which one (CalendarEvent.id), and whether it was cancelled in Google (see eventCancelled).
+    val eventId: String? = null,
+    @ColumnInfo(defaultValue = "0") val eventCancelled: Boolean = false
 ) {
     fun isExpired(now: Long): Boolean = expiresAt != null && expiresAt <= now
 
@@ -113,6 +117,11 @@ data class Task(
             durationMinutes = null, isStarred = false, isHighPriority = false, isMaybe = false, pinnedAt = null, expiresAt = null
         )
         TaskType.WAITING -> copy(isStarred = false, isHighPriority = false, isMaybe = false)
+        // Google's, not ours: just its title and times (dueDate its start, durationMinutes its length).
+        TaskType.EVENT -> copy(
+            parentId = null, startDate = null, recurrenceType = null, recurrenceRule = null, reminderOffsetMinutes = null, remindAtStart = false, remindAt = null,
+            isStarred = false, isHighPriority = false, isMaybe = false, pinnedAt = null, expiresAt = null
+        )
         else -> this
     }
 

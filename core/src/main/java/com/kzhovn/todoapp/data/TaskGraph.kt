@@ -54,7 +54,8 @@ enum class LinkKind { SUBTASK, PREREQUISITE, DEPENDENT }
 // The open tasks that could be linked to `task` as `kind` and aren't already, by title.
 fun linkCandidates(task: Task, kind: LinkKind, all: List<Task>, edges: List<TaskDependency>): List<Task> {
     val byId = all.associateBy { it.id }
-    val open = all.filter { it.id != task.id && !it.isComplete }
+    // Events are offered from the calendar instead (see planLinkEvent).
+    val open = all.filter { it.id != task.id && !it.isComplete && it.type != TaskType.EVENT }
     val adjacency by lazy { dependsOnMap(edges) }
     return when (kind) {
         LinkKind.SUBTASK -> open.filter { !it.type.isContainer && (task.id == 0L || it.parentId != task.id) && canMoveUnder(it.id, task.id, byId) }

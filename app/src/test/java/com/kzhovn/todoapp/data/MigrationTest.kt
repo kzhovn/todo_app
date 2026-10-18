@@ -57,5 +57,9 @@ class MigrationTest {
         assertEquals(null, task.fromTemplateId)
         assertFalse(task.alongsideNext)
         assertEquals(null, ctx.forced)
+        assertEquals(null, task.eventId)
+        assertEquals(emptyList<String>(), ctx.calendarIds)
+        assertTrue(ctx.busyOnly)
+        assertEquals(emptyList<Long>(), ctx.offWhile)
     }
 }

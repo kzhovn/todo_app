@@ -146,6 +146,7 @@ private fun kindColor(kind: DateKind, overdue: Boolean = false): Color = when (k
     DateKind.WAITING -> LedgerUp
     DateKind.REMINDER -> LedgerStar
     DateKind.DONE -> LedgerCheckBorder
+    DateKind.EVENT -> LedgerAccent
 }
 
 @OptIn(ExperimentalLayoutApi::class)

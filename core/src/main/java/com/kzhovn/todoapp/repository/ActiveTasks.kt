@@ -2,7 +2,10 @@ package com.kzhovn.todoapp.repository
 
 import com.kzhovn.todoapp.data.isContainer
 import com.kzhovn.todoapp.data.isDoable
+import com.kzhovn.todoapp.data.CalendarEvent
 import com.kzhovn.todoapp.data.ContextTimeWindow
+import com.kzhovn.todoapp.data.matchingEvents
+import com.kzhovn.todoapp.data.resolvesBy
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.dueStatus
 import com.kzhovn.todoapp.data.DueStatus
@@ -37,16 +40,17 @@ fun computeActiveTasks(
     dependencies: List<TaskDependency>,
     now: Long,
     currentMinuteOfDay: Int = minuteOfDay(now),
-    todayMask: Int = dayOfWeekMask(now)
+    todayMask: Int = dayOfWeekMask(now),
+    events: List<CalendarEvent> = emptyList()
 ): List<Task> {
     val allById = all.associateBy { it.id }
     val allContexts = contexts.associateBy { it.id }
-    val windowsByContext = timeWindows.groupBy { it.contextId }
+    val states = ContextStates(contexts, timeWindows, events, now, currentMinuteOfDay, todayMask)
     val dues = DueDates(all, dependencies)
 
-    // Each task's open prerequisites.
+    // Each task's open prerequisites. An event that's over no longer holds anything back, even before it's resolved.
     val waitingOn = dependencies
-        .filter { edge -> allById[edge.dependsOnTaskId]?.isComplete == false }
+        .filter { edge -> allById[edge.dependsOnTaskId]?.let { !it.isComplete && !it.resolvesBy(now) } == true }
         .groupBy({ it.taskId }, { it.dependsOnTaskId })
     val blockedByDependency = waitingOn.keys
 
@@ -71,8 +75,7 @@ fun computeActiveTasks(
         }
     }
 
-    fun isContextSatisfied(contextId: Long): Boolean =
-        allContexts[contextId]?.let { contextHolds(it, windowsByContext[contextId].orEmpty(), currentMinuteOfDay, todayMask) } ?: true
+    fun isContextSatisfied(contextId: Long): Boolean = states.holds(contextId)
 
     return all.filter { task ->
         // A checklist is workable like a task (its open items never block it); its items aren't listed.
@@ -91,13 +94,42 @@ fun computeActiveTasks(
     }
 }
 
-// Whether a context holds now: as set by hand, else by its wifi or its time windows. A filter-only one
-// always does, unless switched Off.
+// Whether each context holds now: as set by hand, else by its wifi, its time windows or its events, and not while a
+// context it's off while holds by itself (as set by hand, else by its own rule; no chains, so no loops). A filter-only
+// one always does, unless switched Off. Unknown ids hold.
+class ContextStates(
+    contexts: List<TaskContext>, windows: List<ContextTimeWindow>, private val events: List<CalendarEvent>, private val now: Long,
+    private val minute: Int = minuteOfDay(now), private val mask: Int = dayOfWeekMask(now)
+) {
+    private val byId = contexts.associateBy { it.id }
+    private val windowsByContext = windows.groupBy { it.contextId }
+
+    fun holds(id: Long): Boolean {
+        val ctx = byId[id] ?: return true
+        return ctx.forced ?: (ownHolds(ctx) && ctx.offWhile.none { other -> other != id && byId[other]?.let { it.forced ?: ownHolds(it) } == true })
+    }
+
+    private fun ownHolds(ctx: TaskContext): Boolean =
+        if (ctx.type == ContextType.EVENTS) matchingEvents(ctx, events).any { it.isOn(now) }
+        else contextHolds(ctx.copy(forced = null), windowsByContext[ctx.id].orEmpty(), minute, mask)
+
+    // The event that has it held, or off, now: "Off until 15:00 (Dentist)".
+    fun eventNow(id: Long): CalendarEvent? {
+        val ctx = byId[id] ?: return null
+        val events = if (ctx.type == ContextType.EVENTS) matchingEvents(ctx, events)
+            else ctx.offWhile.mapNotNull { byId[it] }.filter { it.type == ContextType.EVENTS }.flatMap { matchingEvents(it, events) }
+        return events.filter { it.isOn(now) }.maxByOrNull { it.end }
+    }
+}
+
+// Whether a context holds now by itself: as set by hand, else by its wifi or its time windows. A filter-only one
+// always does, unless switched Off. Events and "off while" need the others: see ContextStates.
 fun contextHolds(ctx: TaskContext, windows: List<ContextTimeWindow>, currentMinuteOfDay: Int, todayMask: Int): Boolean {
     ctx.forced?.let { return it }
     return when (ctx.type) {
         ContextType.PLACE -> ctx.isCurrentlySatisfied
         ContextType.LABEL -> true
+        ContextType.EVENTS -> false
         ContextType.TIME -> windows.any { w ->
             (w.daysMask and todayMask) != 0 &&
                 if (w.windowStartMinute <= w.windowEndMinute) {
@@ -118,10 +150,10 @@ data class ContextSummary(val context: TaskContext, val open: Int, val holds: Bo
     val countText: String get() = if (!holds && context.type == ContextType.LABEL) "$open ${Labels.OFF}" else "$open"
 }
 
-fun contextSummaries(contexts: Collection<TaskContext>, windows: List<ContextTimeWindow>, all: Collection<Task>, contextsByTaskId: Map<Long, Set<Long>>, now: Long): List<ContextSummary> {
+fun contextSummaries(contexts: Collection<TaskContext>, windows: List<ContextTimeWindow>, all: Collection<Task>, contextsByTaskId: Map<Long, Set<Long>>, now: Long, events: List<CalendarEvent> = emptyList()): List<ContextSummary> {
     val open = openByContext(all, contextsByTaskId)
-    val byContext = windows.groupBy { it.contextId }
-    return contexts.sortedBy { it.name.lowercase() }.map { ContextSummary(it, open[it.id] ?: 0, contextHolds(it, byContext[it.id].orEmpty(), now)) }
+    val states = ContextStates(contexts.toList(), windows, events, now)
+    return contexts.sortedBy { it.name.lowercase() }.map { ContextSummary(it, open[it.id] ?: 0, states.holds(it.id)) }
 }
 
 // A list filtered by a context shows its tasks as if it held, whatever it's doing now; never saved.

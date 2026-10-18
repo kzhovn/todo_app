@@ -335,6 +335,7 @@ private fun OutlinerRow(
                 }
                 // A checklist's section: a plain heading over its items (renamed in the checklist's editor).
                 TaskType.SECTION -> Text(task.title, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = LedgerMuted, modifier = Modifier.weight(1f).padding(vertical = 8.dp))
+                TaskType.EVENT -> {} // never in the tree (buildOutlinerTree leaves events out)
                 TaskType.TASK, TaskType.PROJECT, TaskType.CHECKLIST, TaskType.WAITING -> {
                     TaskMark(
                         task, itemCounts, task.dueDate?.takeUnless { task.isComplete }?.let { dueStatus(it, System.currentTimeMillis()) }, checkboxSize = 20.dp,

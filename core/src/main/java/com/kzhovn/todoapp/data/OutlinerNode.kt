@@ -17,7 +17,8 @@ fun buildOutlinerTree(tasks: List<Task>, hideCompleted: Boolean, rootId: Long?):
 }
 
 fun buildOutlinerTree(tasks: List<Task>, hideCompleted: Boolean = false): List<OutlinerNode> {
-    val byParent: Map<Long?, List<Task>> = tasks.groupBy { it.parentId }
+    // Events are never in the tree: they're seen through what's linked to them.
+    val byParent: Map<Long?, List<Task>> = tasks.filter { it.type != TaskType.EVENT }.groupBy { it.parentId }
     val seen = mutableSetOf<Long>() // a duplicate id in the input would otherwise recurse forever; place each task at most once
     fun build(parentId: Long?): List<OutlinerNode> =
         byParent[parentId].orEmpty()

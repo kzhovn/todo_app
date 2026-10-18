@@ -1,5 +1,6 @@
 package com.kzhovn.todoapp.sync
 
+import com.kzhovn.todoapp.data.CalendarData
 import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskContext
@@ -42,12 +43,16 @@ data class SyncRow(
 // Folder mode (the folder every device is zoomed into; null: none) and whether Discord posts the
 // morning digest sync the same way, by modeSetAt and digestSetAt, as does the hour a date-only
 // reminder goes off (reminderHour).
+// The calendars hidden in Settings → Calendars sync the same way (hiddenCalendarsSetAt). The calendars' events only
+// come down: sent when the server's are newer than the version the phone has (calendarVersion), else null.
 @Serializable
 data class SyncRequest(
     val cursor: Long, val changes: List<SyncRow>, val rolloverHour: Int? = null, val rolloverSetAt: Long = 0,
     val modeFolderId: Long? = null, val modeSetAt: Long = 0,
     val digestOn: Boolean = true, val digestSetAt: Long = 0,
-    val reminderHour: Int? = null, val reminderHourSetAt: Long = 0
+    val reminderHour: Int? = null, val reminderHourSetAt: Long = 0,
+    val hiddenCalendars: List<String> = emptyList(), val hiddenCalendarsSetAt: Long = 0,
+    val calendarVersion: Long = 0
 )
 
 @Serializable
@@ -55,7 +60,9 @@ data class SyncResponse(
     val cursor: Long, val rows: List<SyncRow>, val rolloverHour: Int? = null, val rolloverSetAt: Long = 0,
     val modeFolderId: Long? = null, val modeSetAt: Long = 0,
     val digestOn: Boolean = true, val digestSetAt: Long = 0,
-    val reminderHour: Int? = null, val reminderHourSetAt: Long = 0
+    val reminderHour: Int? = null, val reminderHourSetAt: Long = 0,
+    val hiddenCalendars: List<String> = emptyList(), val hiddenCalendarsSetAt: Long = 0,
+    val calendar: CalendarData? = null
 )
 
 // Per-field last-write-wins. Ties keep `current`, so on the server, the server wins ties.
