@@ -41,12 +41,20 @@ fun main() {
     // the pages don't exist (fail closed) and only the token-protected /sync is served.
     val webEnabled = env["HOST"] in setOf("127.0.0.1", "localhost", "::1")
 
+    // Everyone listed shares the one task list; the data model is single-user.
+    val allowedUserIds = env["ALLOWED_USER_IDS"]?.split(',')?.map { it.trim().toLong() }?.toSet().orEmpty()
+    // Dev notes (DMs to the bot) for Claude's backlog worker; DEV_PROJECTS names projects besides raspberry.
+    val dev = DevNotes(
+        store,
+        projects = env["DEV_PROJECTS"]?.split(',')?.map { it.trim().lowercase() }?.filter { it.isNotEmpty() }?.toSet().orEmpty(),
+        attachmentsDir = File(env["DEV_ATTACHMENTS"] ?: "dev-attachments"),
+        defaultUserId = allowedUserIds.firstOrNull()
+    )
+
     env["BOT_TOKEN"]?.let { botToken ->
         Bot.start(
-            botToken, service, store,
-            // Everyone listed shares the one task list; the data model is single-user.
-            allowedUserIds = env["ALLOWED_USER_IDS"]?.split(',')?.map { it.trim().toLong() }?.toSet()
-                ?: error("ALLOWED_USER_IDS (comma-separated Discord user ids) is required with BOT_TOKEN"),
+            botToken, service, store, dev,
+            allowedUserIds = allowedUserIds.ifEmpty { error("ALLOWED_USER_IDS (comma-separated Discord user ids) is required with BOT_TOKEN") },
             digestChannelId = env["DIGEST_CHANNEL_ID"]?.toLong(),
             digestTime = env["DIGEST_TIME"]
         )
@@ -79,10 +87,10 @@ fun main() {
                 this.keyStorePath = File(keystorePath)
             }
         }
-    }) { api(store, apiToken, service, webEnabled) }.start(wait = true)
+    }) { api(store, apiToken, service, webEnabled, dev) }.start(wait = true)
 }
 
-fun Application.api(store: Store, apiToken: String, service: TaskService = TaskService(store), webEnabled: Boolean = false) {
+fun Application.api(store: Store, apiToken: String, service: TaskService = TaskService(store), webEnabled: Boolean = false, dev: DevNotes = DevNotes(store)) {
     install(ContentNegotiation) { json(SyncJson) }
     // Only this site's own scripts may run (no inline script), it can't be framed by other sites, and
     // browsers are told to stay on https.
@@ -111,5 +119,6 @@ fun Application.api(store: Store, apiToken: String, service: TaskService = TaskS
             call.respond(store.sync(call.receive<SyncRequest>()))
         }
         trayRoutes(service, hasToken)
+        devRoutes(dev, hasToken)
     }
 }

@@ -15,6 +15,7 @@ import net.dv8tion.jda.api.events.message.react.MessageReactionAddEvent
 import net.dv8tion.jda.api.events.message.react.MessageReactionRemoveEvent
 import net.dv8tion.jda.api.hooks.ListenerAdapter
 import net.dv8tion.jda.api.requests.GatewayIntent
+import java.io.File
 import java.time.Duration
 import java.time.LocalTime
 import java.time.ZonedDateTime
@@ -22,14 +23,26 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-// Thin JDA adapter: translates Discord events into BotLogic calls. Everything from anyone but the
+// Thin JDA adapter: translates Discord events into BotLogic calls (DMs into DevNotes). Everything from anyone but the
 // allowlisted users is ignored. JDA runs listeners on one event thread, so BotLogic never sees concurrent
 // events; list refreshes only read, from their own thread (Store serialises access).
-class Bot private constructor(val logic: BotLogic, private val allowedUserIds: Set<Long>) : ListenerAdapter() {
+class Bot private constructor(val logic: BotLogic, private val dev: DevNotes, private val allowedUserIds: Set<Long>) : ListenerAdapter() {
 
     override fun onMessageReceived(event: MessageReceivedEvent) {
         if (event.author.idLong !in allowedUserIds) return
         val message = event.message
+        // Every DM is a dev note for Claude's backlog worker; tasks and commands come from server channels.
+        if (!event.isFromGuild) {
+            val id = dev.onDm(event.author.idLong, message.idLong, message.contentRaw.trim(), message.messageReference?.messageIdLong)
+            message.attachments.forEachIndexed { i, attachment ->
+                // Discord's attachment links expire, so the file is kept. Prefixed: two can share a name.
+                val name = "${message.idLong}-$i-" + attachment.fileName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                val file = File(File(dev.attachmentsDir, id.toString()).apply { mkdirs() }, name)
+                attachment.proxy.downloadToFile(file).thenRun { dev.addAttachment(id, name) }
+                    .exceptionally { it.printStackTrace(); null }
+            }
+            return
+        }
         val content = message.contentRaw.trim()
         if (logic.onAdd(message.idLong, message.jumpUrl, content, message.messageReference?.messageIdLong)) return
         if (content.equals(".help", ignoreCase = true)) return event.channel.sendMessage(HELP).queue()
@@ -41,10 +54,13 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
     }
 
     override fun onMessageUpdate(event: MessageUpdateEvent) {
-        if (event.author.idLong in allowedUserIds) logic.onEdit(event.messageIdLong, event.message.contentRaw.trim())
+        if (event.author.idLong !in allowedUserIds) return
+        if (event.isFromGuild) logic.onEdit(event.messageIdLong, event.message.contentRaw.trim())
+        else dev.onEdit(event.messageIdLong, event.message.contentRaw.trim())
     }
 
-    override fun onMessageDelete(event: MessageDeleteEvent) = logic.onDelete(event.messageIdLong)
+    override fun onMessageDelete(event: MessageDeleteEvent) =
+        if (event.isFromGuild) logic.onDelete(event.messageIdLong) else dev.onDelete(event.messageIdLong)
 
     override fun onMessageReactionAdd(event: MessageReactionAddEvent) = react(event, added = true)
 
@@ -52,6 +68,7 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
 
     private fun react(event: GenericMessageReactionEvent, added: Boolean) {
         if (event.userIdLong !in allowedUserIds) return
+        if (!event.isFromGuild) return dev.onReaction(event.messageIdLong, event.emoji.name, added)
         when (val outcome = logic.onReaction(event.messageIdLong, event.emoji.name, added)) {
             is ReactionOutcome.EditList ->
                 event.channel.editMessageById(event.messageIdLong, outcome.content).setSuppressEmbeds(true).queue()
@@ -96,8 +113,8 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
     companion object {
         const val EMPTY_DIGEST = "Nothing on the list - add something?"
 
-        fun start(token: String, service: TaskService, store: Store, allowedUserIds: Set<Long>, digestChannelId: Long?, digestTime: String?): JDA {
-            val bot = Bot(BotLogic(service, store), allowedUserIds)
+        fun start(token: String, service: TaskService, store: Store, dev: DevNotes, allowedUserIds: Set<Long>, digestChannelId: Long?, digestTime: String?): JDA {
+            val bot = Bot(BotLogic(service, store), dev, allowedUserIds)
             // The bot reposts task titles; one with "@everyone" or a role in it mustn't ping anyone.
             MessageRequest.setDefaultMentions(EnumSet.noneOf(Message.MentionType::class.java))
             val jda = JDABuilder.createLight(
@@ -105,6 +122,21 @@ class Bot private constructor(val logic: BotLogic, private val allowedUserIds: S
                 GatewayIntent.GUILD_MESSAGES, GatewayIntent.DIRECT_MESSAGES, GatewayIntent.MESSAGE_CONTENT,
                 GatewayIntent.GUILD_MESSAGE_REACTIONS, GatewayIntent.DIRECT_MESSAGE_REACTIONS
             ).addEventListeners(bot).build()
+            // DM channels aren't cached by createLight, so each change opens the user's DM channel.
+            dev.discord = object : DevDiscord {
+                override fun react(userId: Long, messageId: Long, add: String?, remove: Collection<String>) {
+                    jda.retrieveUserById(userId).flatMap { it.openPrivateChannel() }.queue({ channel ->
+                        remove.forEach { channel.removeReactionById(messageId, Emoji.fromUnicode(it)).queue(null) { } }
+                        add?.let { channel.addReactionById(messageId, Emoji.fromUnicode(it)).queue() }
+                    }, Throwable::printStackTrace)
+                }
+
+                override fun send(userId: Long, replyTo: Long?, text: String, sent: (Long) -> Unit) {
+                    jda.retrieveUserById(userId).flatMap { it.openPrivateChannel() }
+                        .flatMap { channel -> channel.sendMessage(text).setSuppressEmbeds(true).apply { replyTo?.let { setMessageReference(it).failOnInvalidReply(false) } } }
+                        .queue({ sent(it.idLong) }, Throwable::printStackTrace)
+                }
+            }
             // ponytail: DM channels aren't cached by createLight, so this only mirrors onto server channels.
             store.onChange = { before, after ->
                 (bot.logic.sourceReactions(before, after) + bot.logic.listReactions(before, after)).forEach { r ->
