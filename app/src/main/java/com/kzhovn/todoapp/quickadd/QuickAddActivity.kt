@@ -21,11 +21,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -75,7 +75,7 @@ import kotlinx.coroutines.launch
 // A bottom-sheet overlay (MLO-style). Launched from the widget it runs in its own task
 // (manifest: empty taskAffinity), so closing it returns to the home screen, not the app.
 class QuickAddActivity : ComponentActivity() {
-    @OptIn(ExperimentalFoundationApi::class)
+    @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val repository = (application as TodoApp).repository
@@ -188,7 +188,12 @@ class QuickAddActivity : ComponentActivity() {
                         StarIcon(starred)
                     }
                 }
-                Row(modifier = Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Wraps: a set date and a folder name don't fit one line, and a Row squeezed the last chip.
+                FlowRow(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     if (!addsItems && folder?.type != TaskType.CHECKLIST) {
                         PropertyChip(
                             label = Labels.typeName(type),
@@ -198,7 +203,6 @@ class QuickAddActivity : ComponentActivity() {
                             showLabelWhenSet = false,
                             picker = true
                         )
-                        Spacer(Modifier.width(8.dp))
                     }
                     PropertyChip(
                         label = Labels.START,
@@ -207,7 +211,6 @@ class QuickAddActivity : ComponentActivity() {
                         onClick = { pickDate(this@QuickAddActivity, startDate, title = Labels.START) { startDate = it } },
                         showLabelWhenSet = false
                     )
-                    Spacer(Modifier.width(8.dp))
                     // A folder has no due date.
                     if (type != TaskType.FOLDER) PropertyChip(
                         label = Labels.DUE,
@@ -216,7 +219,6 @@ class QuickAddActivity : ComponentActivity() {
                         onClick = { pickDate(this@QuickAddActivity, dueDate, title = Labels.DUE) { dueDate = it } },
                         showLabelWhenSet = false
                     )
-                    Spacer(Modifier.width(8.dp))
                     PropertyChip(
                         label = Labels.TODAY_ONLY,
                         valueText = Labels.TODAY_ONLY.takeIf { todayOnly },
@@ -225,7 +227,6 @@ class QuickAddActivity : ComponentActivity() {
                         iconOnly = true
                     )
                     if (fixedParentId == null) {
-                        Spacer(Modifier.width(8.dp))
                         PropertyChip(
                             label = Labels.FOLDER,
                             valueText = folder?.title,
