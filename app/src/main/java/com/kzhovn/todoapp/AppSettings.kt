@@ -43,7 +43,7 @@ object AppSettings {
     fun setCalendarWeek(context: Context, week: Boolean) = prefs(context).edit().putBoolean("calendarWeek", week).apply()
 
     // The side menu's Contexts, left open or closed.
-    fun drawerContextsOpen(context: Context): Boolean = prefs(context).getBoolean("drawerContextsOpen", true)
+    fun drawerContextsOpen(context: Context): Boolean = prefs(context).getBoolean("drawerContextsOpen", false)
     fun setDrawerContextsOpen(context: Context, open: Boolean) = prefs(context).edit().putBoolean("drawerContextsOpen", open).apply()
 
     // Folder mode (FolderMode.kt): the folder every device is zoomed into (null: none), synced like the

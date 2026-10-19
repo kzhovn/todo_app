@@ -322,7 +322,6 @@ private fun HTML.shell(
                 if (nav.contexts.isEmpty()) link("/contexts", Labels.CONTEXTS, Icon.ALTERNATE_EMAIL)
                 else details(classes = "nav-group") {
                     id = "nav-contexts"
-                    attributes["open"] = ""
                     summary { icon(Icon.ALTERNATE_EMAIL, ""); +Labels.CONTEXTS; span(classes = "n") { +"▾" } }
                     div(classes = "context-nav") { nav.contexts.forEach { contextLink(it, list, back = list?.path ?: current) } }
                 }
