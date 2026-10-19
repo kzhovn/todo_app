@@ -1,5 +1,6 @@
-# Weekly update PRs for the Gradle dependencies (Ktor and JDA face the internet), grouped into one PR
-# so there's a single thing to review and merge.
+# Weekly update PRs for the Gradle dependencies (Ktor and JDA face the internet). Patches come as one PR the Friday
+# run can test and take; minors as another, since some (Kotlin, AGP, the Compose BOM) act like majors; each major on
+# its own, as they need real work.
 version: 2
 updates:
   - package-ecosystem: gradle
@@ -7,5 +8,7 @@ updates:
     schedule:
       interval: weekly
     groups:
-      all:
-        patterns: ["*"]
+      patch:
+        update-types: ["patch"]
+      minor:
+        update-types: ["minor"]
