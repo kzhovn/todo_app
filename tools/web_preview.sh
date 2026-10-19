@@ -26,7 +26,8 @@ day = 86400000; start = int(datetime.datetime.combine(datetime.date.today(), dat
 def ev(i, cal, title, d, h, hours, **kw): return dict(id=f"{cal}/{i}", calendarId=cal, title=title, start=start + d * day + int(h * 3600000), end=start + d * day + int((h + hours) * 3600000), **kw)
 nowh = datetime.datetime.now().hour  # one event on now, one next, whenever the preview runs
 events = [ev(1, "p", "Dentist", 0, nowh + 1, 1, location="12 Elm St"), ev(2, "p", "Meeting", 0, nowh - 1, 2), ev(3, "w", "oncall for Payments", 1, 9, 8),
-          ev(4, "e", "Maya's party", 4, 19, 4, location="Lou's place"), ev(5, "p", "Book club", 0, 19.5, 2), ev(6, "e", "Trip", 9, 0, 48, allDay=True, busy=False)]
+          ev(4, "e", "Maya's party", 4, 19, 4, location="Lou's place"), ev(5, "p", "Book club", 0, 19.5, 2), ev(6, "e", "Trip", 9, 0, 48, allDay=True, busy=False),
+          ev(7, "w", "Offsite", -2, 0, 24, allDay=True), ev(8, "p", "Haircut", -1, 11, 1)]
 cals = [dict(id="p", name="Personal", color="#7986CB"), dict(id="w", name="Work", color="#E67C73"), dict(id="e", name="Events", color="#33B679")]
 json.dump(dict(calendars=cals, events=events), open(sys.argv[1], "w"))
 PY

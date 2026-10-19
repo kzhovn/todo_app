@@ -113,7 +113,8 @@ class CalendarEventsTest {
         val days = agenda(listOf(rent, bank), today..today.plusDays(1), null, DEFAULT_DATE_KINDS, now, 9, events = listOf(dentist, allDay))
         assertEquals(listOf(today, today.plusDays(1)), days.map { it.day })
         val titles = days[0].rows().map { when (it) { is AgendaRow.Event -> it.event.title; is AgendaRow.Entry -> it.entry.task.title } }
-        assertEquals(listOf("Trip", "Dentist", "Call bank", "Pay rent"), titles)
+        assertEquals(listOf("Dentist", "Call bank", "Pay rent"), titles)
+        assertEquals(listOf("Trip"), days[0].allDayEvents().map { it.title })
         assertEquals(listOf("Trip"), days[1].events.map { it.title })
         assertNull(agenda(listOf(rent), today..today, null, setOf(DateKind.DUE), now, 9, events = listOf(dentist)).single().events.firstOrNull())
     }

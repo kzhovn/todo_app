@@ -61,6 +61,9 @@ import com.kizitonwose.calendar.core.DayPosition
 import com.kzhovn.todoapp.AppSettings
 import com.kzhovn.todoapp.data.timeText
 import com.kzhovn.todoapp.data.rows
+import com.kzhovn.todoapp.data.allDayEvents
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.text.style.TextOverflow
 import com.kzhovn.todoapp.data.eventDays
 import com.kzhovn.todoapp.data.CalendarEvent
 import com.kzhovn.todoapp.data.AgendaRow
@@ -200,8 +203,8 @@ internal fun CalendarScreen(
     val events = remember(calendarVersion, kinds) { if (DateKind.EVENT in kinds) CalendarCache.shownEvents(context) else emptyList() }
     val dots = remember(tasks, kinds, shown, mode, events) {
         val (from, to) = if (week) shown.start.minusDays(7) to shown.endInclusive.plusDays(7) else gridRange(month.minusMonths(1)).first to gridRange(month.plusMonths(1)).second
-        val taskDots = calendarEntries(tasks, from, to, kinds, now, reminderHour, mode?.id).groupBy({ it.day }, { kindColor(it.kind, it.overdue) to (it.kind == DateKind.REPEAT) })
-        val eventDots = eventDays(events, from, to).mapValues { (_, es) -> es.map { calendarColor(context, it.calendarId) to false } }
+        val taskDots = calendarEntries(tasks, from, to, kinds, now, reminderHour, mode?.id).groupBy({ it.day }, { Mark(kindColor(it.kind, it.overdue), hollow = it.kind == DateKind.REPEAT) })
+        val eventDots = eventDays(events, from, to).mapValues { (_, es) -> es.map { Mark(eventEdge(calendarColor(context, it.calendarId), 0.6f), square = true) } }
         (taskDots.keys + eventDots.keys).associateWith { (eventDots[it].orEmpty() + taskDots[it].orEmpty()).distinct() }
     }
     val days = remember(tasks, kinds, shown, picked, mode, events) { agenda(tasks, shown, picked, kinds, now, reminderHour, mode?.id, events) }
@@ -262,11 +265,22 @@ internal fun CalendarScreen(
         LazyColumn(Modifier.weight(1f)) {
             days.forEachIndexed { i, day ->
                 item(key = "head-${day.day}") {
+                    // The day's all-day events follow its date, outlined as events are.
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 14.dp, bottom = 4.dp)) {
-                        Text(
-                            Labels.agendaHeading(day.day, today), fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                            color = when (day.day) { null -> LedgerOverdue; today -> LedgerInk; else -> LedgerMuted }, modifier = Modifier.weight(1f)
-                        )
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+                            Text(
+                                Labels.agendaHeading(day.day, today), fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                                color = when (day.day) { null -> LedgerOverdue; today -> LedgerInk; else -> LedgerMuted }
+                            )
+                            day.allDayEvents().forEach { e ->
+                                Text(
+                                    e.title, fontSize = 12.sp, color = LedgerInk, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.alpha(if (e.end <= now) 0.55f else 1f).clip(RoundedCornerShape(6.dp))
+                                        .border(1.dp, eventEdge(calendarColor(context, e.calendarId)), RoundedCornerShape(6.dp))
+                                        .clickable { context.startActivity(EventActivity.intent(context, e.id)) }.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                         if (i == 0 && picked != null) Text(Labels.ALL_UPCOMING, fontSize = 13.sp, color = LedgerAccent, modifier = Modifier.clickable { picked = null }.padding(4.dp))
                     }
                 }
@@ -277,7 +291,6 @@ internal fun CalendarScreen(
                 items(day.rows(), key = { row -> "${day.day}-" + when (row) { is AgendaRow.Event -> "e-" + row.event.id; is AgendaRow.Entry -> row.entry.task.id.toString() } }) { row ->
                     if (row is AgendaRow.Event) {
                         EventRow(row.event, calendarColor(context, row.event.calendarId), now) { context.startActivity(EventActivity.intent(context, row.event.id)) }
-                        HorizontalDivider(color = LedgerBorder)
                         return@items
                     }
                     val e = (row as AgendaRow.Entry).entry
@@ -335,15 +348,18 @@ private fun KindChip(kind: DateKind, on: Boolean, onClick: () -> Unit) {
     }
 }
 
+// A day's dot: a task's kind (a repeat's hollow), or an event's square.
+private data class Mark(val color: Color, val hollow: Boolean = false, val square: Boolean = false)
+
 @Composable
-private fun Dot(color: Color, hollow: Boolean = false) = Box(
-    Modifier.size(6.dp).clip(CircleShape).then(if (hollow) Modifier.border(1.5.dp, color, CircleShape) else Modifier.background(color))
-)
+private fun Dot(color: Color, hollow: Boolean = false, square: Boolean = false) = (if (square) RoundedCornerShape(1.dp) else CircleShape).let { shape ->
+    Box(Modifier.size(6.dp).clip(shape).then(if (hollow) Modifier.border(1.5.dp, color, shape) else Modifier.background(color)))
+}
 
 // A day: its number (today's in a filled circle), and a dot per kind of date on it (a repeat's hollow), dimmed once
-// it's past. Days of the months either side are fainter, and still tappable.
+// it's past (overdue aside). Days of the months either side are fainter, and still tappable.
 @Composable
-private fun DayCell(date: LocalDate, dots: List<Pair<Color, Boolean>>, faint: Boolean, isToday: Boolean, isPicked: Boolean, past: Boolean, onClick: () -> Unit) {
+private fun DayCell(date: LocalDate, dots: List<Mark>, faint: Boolean, isToday: Boolean, isPicked: Boolean, past: Boolean, onClick: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.aspectRatio(1.3f).padding(1.dp).clip(RoundedCornerShape(6.dp))
@@ -356,16 +372,27 @@ private fun DayCell(date: LocalDate, dots: List<Pair<Color, Boolean>>, faint: Bo
         ) {
             Text(date.dayOfMonth.toString(), fontSize = 13.sp, color = if (isToday) LedgerAccentInk else LedgerInk, fontWeight = if (isToday) FontWeight.SemiBold else null)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(top = 3.dp).alpha(if (past) 0.45f else 1f)) { dots.take(4).forEach { (color, hollow) -> Dot(color, hollow) } }
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(top = 3.dp)) {
+            // Past days' dots dim, but an overdue one stays loud.
+            dots.take(4).forEach { Box(Modifier.alpha(if (past && it.color != LedgerOverdue) 0.45f else 1f)) { Dot(it.color, it.hollow, it.square) } }
+        }
     }
 }
 
-// An event in the agenda: its time, a bar in its calendar's colour and its title; faded once it's over.
+// An event's outline: its calendar's colour faded most of the way into the border, so events stand apart from
+// todos without a wall of Google's colours (docs/superpowers/specs/2026-10-18-calendar-colours-mockups.html, E2).
+private fun eventEdge(color: Color, strength: Float = 0.45f) = lerp(LedgerBorder, color, strength)
+
+// An event in the agenda: its time and title, outlined; faded once it's over.
 @Composable
 private fun EventRow(event: CalendarEvent, color: Color, now: Long, onClick: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min).alpha(if (event.end <= now) 0.55f else 1f).clickable(onClick = onClick)) {
-        Box(Modifier.width(4.dp).height(44.dp).background(color))
-        Text(if (event.allDay) Labels.ALL_DAY else timeText(event.start), fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.width(64.dp).padding(start = 12.dp))
+    val shape = RoundedCornerShape(8.dp)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp).alpha(if (event.end <= now) 0.55f else 1f)
+            .clip(shape).border(1.dp, eventEdge(color), shape).clickable(onClick = onClick).height(44.dp)
+    ) {
+        Text(timeText(event.start), fontSize = 12.sp, color = LedgerMuted, maxLines = 1, softWrap = false, modifier = Modifier.width(76.dp).padding(start = 10.dp))
         Text(event.title, fontSize = 16.sp, color = LedgerInk, modifier = Modifier.weight(1f).padding(end = 14.dp))
     }
 }

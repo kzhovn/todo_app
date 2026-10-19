@@ -711,7 +711,7 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 /* Over and done (FullCalendar marks it); overdue stays loud. */
 .calendar .fc-event-past:not(.k-overdue) { opacity: .45; }
 .calendar .fc-popover { background: var(--panel); border-color: var(--border); }
-.agenda-day { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: var(--muted); padding: 14px 20px 4px; }
+.agenda-day { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; font-weight: 700; color: var(--muted); padding: 14px 20px 4px; }
 .agenda-day.today { color: var(--ink); }
 .agenda-day.overdue { color: var(--overdue); }
 .agenda-day .all-upcoming { margin-left: auto; font-weight: 400; }
@@ -723,7 +723,11 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .day-add input { width: 100%; }
 /* Google Calendar: event rows in the agenda (a time, the calendar's colour as the bar), the event sheet, Doing's
    Today and Cancelled lines, the snooze menu's events. */
-.event-row { display: flex; align-items: center; gap: 10px; border-left: 4px solid var(--border); padding-left: 10px; }
+/* Events are outlined, never filled: the calendar's colour faded most of the way into the border. */
+.event-row, .agenda-day .allday { --event-edge: color-mix(in srgb, var(--cal, var(--accent)) 45%, var(--border)); }
+.event-row { display: flex; align-items: center; gap: 10px; border: 1px solid var(--event-edge); border-radius: 8px; margin: 3px 12px; padding-left: 10px; }
+.agenda-day .allday { font-weight: 400; font-size: 12px; color: var(--ink); text-decoration: none; border: 1px solid var(--event-edge); border-radius: 6px; padding: 1px 7px; }
+.agenda-day .allday.past { opacity: .55; }
 .event-row .event-time { width: 48px; flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .event-row.past { opacity: .55; }
 .event-sheet { padding: 18px 20px; }
@@ -735,5 +739,5 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .cancelled-events .running-label { color: var(--overdue); }
 .snooze-events:not(:empty) { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 4px; }
 .snooze-events .menu-row .cal-dot { margin-right: 4px; }
-.calendar .fc-event.gcal { border: 0; }
-.calendar .fc-event.gcal .fc-event-title, .calendar .fc-event.gcal .fc-event-time { color: #fff; }
+.calendar .fc-event.gcal { border-width: 1px; border-style: solid; }
+.calendar .fc-event.gcal .fc-event-title, .calendar .fc-event.gcal .fc-event-time { color: var(--ink); }

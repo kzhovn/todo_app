@@ -5,6 +5,7 @@ import com.kzhovn.todoapp.data.CalendarEntry
 import com.kzhovn.todoapp.data.CalendarEvent
 import com.kzhovn.todoapp.data.dayStart
 import com.kzhovn.todoapp.data.rows
+import com.kzhovn.todoapp.data.allDayEvents
 import com.kzhovn.todoapp.data.timeText
 import com.kzhovn.todoapp.data.DateKind
 import com.kzhovn.todoapp.data.Labels
@@ -89,6 +90,12 @@ internal fun DIV.agendaContents(data: ListData) {
     data.agenda.forEachIndexed { i, day ->
         div(classes = "agenda-day" + when (day.day) { null -> " overdue"; today -> " today"; else -> "" }) {
             span { +Labels.agendaHeading(day.day, today) }
+            // The day's all-day events follow its date, outlined as events are.
+            day.allDayEvents().forEach { e ->
+                a(href = eventHref(e.id, data.q), classes = "allday" + if (e.end <= data.now) " past" else "") {
+                    style = "--cal: ${calendarColor(data.service, e.calendarId)}"; openInPanel(); +e.title
+                }
+            }
             if (i == 0 && cal.day != null) button(classes = "pill all-upcoming") { hx("get", "/list/calendar?month=${cal.month}" + cal.week?.let { "&week=$it" }.orEmpty()); +Labels.ALL_UPCOMING }
         }
         if (day.entries.isEmpty() && day.events.isEmpty()) p(classes = "empty") { +Labels.NOTHING_THAT_DAY }
@@ -109,10 +116,10 @@ internal fun DIV.agendaContents(data: ListData) {
     }
 }
 
-// An event: its time, a bar in its calendar's colour, and it opens its sheet.
+// An event: its time and title, outlined in a faded calendar colour (app.css), and it opens its sheet.
 private fun FlowContent.eventRow(data: ListData, event: CalendarEvent) = div(classes = "row event-row" + if (event.end <= data.now) " past" else "") {
-    style = "border-left-color: ${calendarColor(data.service, event.calendarId)}"
-    span(classes = "event-time") { +(if (event.allDay) Labels.ALL_DAY else timeText(event.start)) }
+    style = "--cal: ${calendarColor(data.service, event.calendarId)}"
+    span(classes = "event-time") { +timeText(event.start) }
     div(classes = "main") {
         div(classes = "title") {
             a(href = eventHref(event.id, data.q), classes = "edit") { openInPanel(); +event.title }
@@ -143,7 +150,7 @@ fun Route.calendarRoutes(service: TaskService) {
         val entries = calendarEntries(service.tasks(), from, to, kinds, service.now(), service.reminderHour(), service.modeFolderId()).distinctBy { it.task.id to it.day }
         val calendarEvents = if (DateKind.EVENT in kinds) service.shownEvents().filter { it.end > dayStart(from) && it.start < dayStart(to.plusDays(1)) } else emptyList()
         val events = buildJsonArray {
-            // Google's: at their times (all-day ones over their days), solid in their calendar's colour.
+            // Google's: at their times (all-day ones over their days).
             calendarEvents.forEach { e ->
                 addJsonObject {
                     put("title", e.title)
@@ -151,7 +158,9 @@ fun Route.calendarRoutes(service: TaskService) {
                     put("end", if (e.allDay) localDay(e.end).toString() else java.time.Instant.ofEpochMilli(e.end).atZone(java.time.ZoneId.systemDefault()).toOffsetDateTime().toString())
                     put("allDay", e.allDay)
                     put("eventId", e.id)
-                    put("color", calendarColor(service, e.calendarId))
+                    // Outlined, not filled: the calendar's colour faded into the border (app.css's --event-edge).
+                    put("borderColor", "color-mix(in srgb, ${calendarColor(service, e.calendarId)} 45%, var(--border))")
+                    put("backgroundColor", "transparent")
                     put("display", "block")
                     putJsonArray("classNames") { add("gcal") }
                 }

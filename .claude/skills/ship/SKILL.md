@@ -22,3 +22,6 @@ description: Wrap up a Raspberry change - test, commit, build, and tell Kira wha
    - `desktop/raspberry@kzhovn/` changed: it's installed; she logs out and back in (GNOME Shell only reloads
      an extension then).
    - Pushed or not, and anything she still has to decide.
+7. **Stop Gradle** to free its memory (the Gradle and Kotlin daemons hold several GB):
+   `./gradlew --stop`. It stops every Gradle daemon, including another session's build, so skip it if
+   `pgrep -f GradleWrapperMain` shows a build still running.

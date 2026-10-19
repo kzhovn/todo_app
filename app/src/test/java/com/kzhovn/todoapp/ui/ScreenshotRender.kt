@@ -130,7 +130,8 @@ class ScreenshotRender {
             com.kzhovn.todoapp.data.CalendarEvent(id, cal, title, from, from + (hours * hour).toLong(), location = location)
         com.kzhovn.todoapp.CalendarCache.set(context, com.kzhovn.todoapp.data.CalendarData(
             listOf(com.kzhovn.todoapp.data.CalendarInfo("p", "Personal", "#7986CB"), com.kzhovn.todoapp.data.CalendarInfo("e", "Events", "#33B679")),
-            listOf(ev("p/1", "p", "Meeting", now - hour, 2.0), ev("p/2", "p", "Dentist", now + 2 * hour, 1.0, "12 Elm St"), ev("e/1", "e", "Maya's party", start + 4 * 24 * hour + 19 * hour, 4.0, "Lou's place"))
+            listOf(ev("p/1", "p", "Meeting", now - hour, 2.0), ev("p/2", "p", "Dentist", now + 2 * hour, 1.0, "12 Elm St"), ev("e/1", "e", "Maya's party", start + 4 * 24 * hour + 19 * hour, 4.0, "Lou's place"),
+                com.kzhovn.todoapp.data.CalendarEvent("e/2", "e", "Primary oncall", start, start + 24 * hour, allDay = true))
         ))
     }
 

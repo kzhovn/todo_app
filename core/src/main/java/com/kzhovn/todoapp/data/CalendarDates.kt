@@ -89,7 +89,8 @@ fun eventDays(events: List<CalendarEvent>, from: LocalDate, to: LocalDate): Map<
         generateSequence(maxOf(first, from)) { it.plusDays(1) }.takeWhile { it <= minOf(last, to) }.map { it to e }.toList()
     }.groupBy({ it.first }, { it.second }).mapValues { (_, es) -> es.sortedWith(compareBy({ !it.allDay }, { it.start })) }
 
-// A day's agenda in order: all-day events, then timed events and tasks with a time by the clock, then the rest.
+// A day's agenda in order: timed events and tasks with a time by the clock, then the rest. All-day events go in
+// the day's heading instead (allDayEvents).
 sealed class AgendaRow {
     data class Event(val event: CalendarEvent) : AgendaRow()
     data class Entry(val entry: CalendarEntry) : AgendaRow()
@@ -98,10 +99,11 @@ sealed class AgendaRow {
 fun AgendaDay.rows(): List<AgendaRow> {
     val timed = events.filter { !it.allDay }.map { it.start to AgendaRow.Event(it) } +
         entries.filter { hasTime(it.at) }.map { it.at to AgendaRow.Entry(it) }
-    return events.filter { it.allDay }.map { AgendaRow.Event(it) } +
-        timed.sortedBy { it.first }.map { it.second } +
+    return timed.sortedBy { it.first }.map { it.second } +
         entries.filter { !hasTime(it.at) }.map { AgendaRow.Entry(it) }
 }
+
+fun AgendaDay.allDayEvents(): List<CalendarEvent> = events.filter { it.allDay }
 
 fun monthRange(month: YearMonth): ClosedRange<LocalDate> = month.atDay(1)..month.atEndOfMonth()
 
