@@ -10,11 +10,11 @@
     "Review:\n← →  earlier / later    − / +  zoom out / in\n\n" +
     "z  zoom into the folder on screen (folder mode), or out of the mode";
   if (location.hash === "#search") document.querySelector(".search-q")?.focus();
-  // The sidebar's Contexts start shut and stay open or shut from page to page.
+  // The sidebar's Contexts start shut and stay open or shut from page to page, until the window closes.
   const contexts = document.getElementById("nav-contexts");
   if (contexts) {
-    try { if (localStorage.getItem("navContexts") === "open") contexts.open = true; } catch {}
-    contexts.addEventListener("toggle", () => { try { localStorage.setItem("navContexts", contexts.open ? "open" : "shut"); } catch {} });
+    try { if (sessionStorage.getItem("navContexts") === "open") contexts.open = true; } catch {}
+    contexts.addEventListener("toggle", () => { try { sessionStorage.setItem("navContexts", contexts.open ? "open" : "shut"); } catch {} });
   }
   document.addEventListener("keydown", (e) => {
     const typing = e.target.closest("input, textarea, select");

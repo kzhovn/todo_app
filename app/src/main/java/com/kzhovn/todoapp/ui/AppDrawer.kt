@@ -161,6 +161,9 @@ fun AppDrawer(
     )
 }
 
+// Kept in memory, not settings: each screen's drawer shares it, and it starts folded again with the app.
+private var contextsOpen = false
+
 // Contexts, opening in place: tapping one filters the lists by it (again, or ✕, clears it), going to them from
 // another screen; a long press holds its Auto/On/Off, its editor and the contexts screen.
 @OptIn(ExperimentalFoundationApi::class)
@@ -169,7 +172,7 @@ private fun ContextsSection(drawerOpen: Boolean, onClose: () -> Unit) {
     val context = LocalContext.current
     val app = context.applicationContext as TodoApp
     val scope = rememberCoroutineScope()
-    var open by remember { mutableStateOf(AppSettings.drawerContextsOpen(context)) }
+    var open by remember { mutableStateOf(contextsOpen) }
     var summaries by remember { mutableStateOf<List<ContextSummary>>(emptyList()) }
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(drawerOpen, tick) {
@@ -184,7 +187,7 @@ private fun ContextsSection(drawerOpen: Boolean, onClose: () -> Unit) {
         badge = { if (summaries.isNotEmpty()) Text(if (open) "▾" else "▸", color = LedgerMuted) },
         selected = false,
         // With none yet, there's nothing to open: the screen to add one.
-        onClick = { if (summaries.isEmpty()) manage() else { open = !open; AppSettings.setDrawerContextsOpen(context, open) } },
+        onClick = { if (summaries.isEmpty()) manage() else { open = !open; contextsOpen = open } },
         colors = NavigationDrawerItemDefaults.colors(unselectedTextColor = LedgerInk, unselectedIconColor = LedgerMuted),
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
     )
