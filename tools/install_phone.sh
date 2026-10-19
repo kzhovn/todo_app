@@ -39,7 +39,7 @@ if [[ "$state" != "mLockTaskModeState=NONE" ]]; then
 fi
 # Functions, so a retry after reconnecting uses the phone's new port.
 push() { "$ADB" -s "$S" push "$APK" /data/local/tmp/r.apk >/dev/null; }
-install() { "$ADB" -s "$S" shell pm install -r /data/local/tmp/r.apk; }
+install() { "$ADB" -s "$S" shell pm install -r --user 0 /data/local/tmp/r.apk; }
 retry push || { echo "push failed"; exit 1; }
 retry install || { echo "install failed"; exit 1; }
 "$ADB" -s "$S" shell dumpsys package com.kzhovn.todoapp | grep -m1 lastUpdateTime
