@@ -22,7 +22,8 @@ import java.net.URLEncoder
 // Google Calendar on the web: Doing's lines, the event sheet's add, linking from Related, the snooze, a cancel.
 class WebCalendarTest {
     private val store = Store(File.createTempFile("web", ".db").apply { deleteOnExit() }.path)
-    private var now = System.currentTimeMillis()
+    // Noon, so the events a few hours either side stay on today's Doing whenever the tests run.
+    private var now = java.time.LocalDate.now().atTime(12, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
     private val service = TaskService(store) { now }
     private val hour = 3_600_000L
     private val meeting = CalendarEvent("p/m1", "p", "Team meeting", now - hour, now + hour)
