@@ -1,5 +1,5 @@
 ---
-name: mockup
+name: rb-mockup
 description: Make an HTML mockup with options for a Raspberry feature or UI change, phone and web side by side, before building it. Use when Kira asks to mock something up, or for a UI change big enough to want sign-off first.
 ---
 

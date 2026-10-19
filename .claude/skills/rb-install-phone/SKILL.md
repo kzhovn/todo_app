@@ -1,5 +1,5 @@
 ---
-name: install-phone
+name: rb-install-phone
 description: Install the Raspberry Android app's debug build on Kira's phone over wireless debugging. Use when asked to install, put it on the phone, or "debug is on".
 ---
 

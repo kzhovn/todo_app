@@ -1,5 +1,5 @@
 ---
-name: web-preview
+name: rb-web-preview
 description: Run the Raspberry web app locally with sample data and look at it in the browser pane. Use to check a web change (the editor, lists, Doing's sections, popovers) before calling it done.
 ---
 

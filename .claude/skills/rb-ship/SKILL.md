@@ -1,5 +1,5 @@
 ---
-name: ship
+name: rb-ship
 description: Wrap up a Raspberry change - test, commit, build, and tell Kira what she has to do to get it everywhere (deploy the server, log out for the top bar, install on the phone). Use at the end of any change, or when she says "install and push" or asks what's left.
 ---
 
@@ -13,7 +13,7 @@ description: Wrap up a Raspberry change - test, commit, build, and tell Kira wha
 4. **Server**, if `server/` or `core/` changed: `tools/deploy.sh` (it backs up the database, swaps the build
    in, and rolls back if the server doesn't come up; `tools/deploy.sh status` shows recent warnings). A new
    task type or field: deploy before installing on the phone, or the phone's sync fails.
-5. **Phone**, if `app/` or `core/` changed: `tools/install_phone.sh` (see the install-phone skill).
+5. **Phone**, if `app/` or `core/` changed: `tools/install_phone.sh` (see the rb-install-phone skill).
 6. **Top bar / desktop app**, if `desktop/` changed: run `./desktop/install.sh` (it copies into this user's
    `~/.local/share` and leaves the config alone), then check `diff -rq desktop/raspberry@kzhovn
    ~/.local/share/gnome-shell/extensions/raspberry@kzhovn` is empty.

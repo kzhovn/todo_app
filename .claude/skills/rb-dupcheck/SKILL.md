@@ -1,5 +1,5 @@
 ---
-name: dupcheck
+name: rb-dupcheck
 description: Check Raspberry for drift between its clients and leftover code - wording written in both the app and the server, functions nothing calls, unused CSS. Use after a feature touching both clients, before pushing, or when asked to review for duplication.
 ---
 
