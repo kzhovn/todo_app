@@ -1,0 +1,69 @@
+#!/bin/bash
+# The deploy key's forced command (installed as /usr/local/bin/todo-deploy, root-owned). sshd runs it whatever
+# command the client sends; SSH_ORIGINAL_COMMAND picks `deploy` (server.tar on stdin) or `status`.
+set -euo pipefail
+APP=/opt/todo DATA=/var/lib/todo MAX=$((200 * 1024 * 1024))
+SYSTEMCTL="sudo /usr/bin/systemctl"
+
+healthy() {
+    # The JVM takes a few seconds to start.
+    for _ in $(seq 30); do
+        curl -fs -o /dev/null http://127.0.0.1:8080/ && return 0
+        sleep 2
+    done
+    return 1
+}
+
+# Code only: the schema is CREATE ... IF NOT EXISTS, so the database never needs rolling back, and restoring
+# the pre-deploy backup would throw away writes made since.
+roll_back() {
+    echo "$1, rolling back" >&2
+    rm -rf "$APP/server.failed"
+    mv "$APP/server" "$APP/server.failed"
+    mv "$APP/server.prev" "$APP/server"
+    $SYSTEMCTL restart todo-server
+    healthy && echo "rolled back; the failed build is in $APP/server.failed" >&2 || echo "rollback ALSO unhealthy" >&2
+    journalctl -u todo-server -n 40 --no-pager >&2
+    exit 1
+}
+
+case "${SSH_ORIGINAL_COMMAND:-}" in
+deploy)
+    exec 9>"$APP/.lock"
+    flock -n 9 || { echo "another deploy is running" >&2; exit 1; }
+    stage=$(mktemp -d "$APP/stage.XXXXXX")
+    trap 'rm -rf "$stage"' EXIT
+    head -c $((MAX + 1)) >"$stage/server.tar"
+    [ "$(stat -c %s "$stage/server.tar")" -le "$MAX" ] || { echo "tar over $MAX bytes" >&2; exit 1; }
+    # Only regular files and directories under server/: no links, no paths outside it. Listed to files first:
+    # grep -q in a pipe can stop tar early with SIGPIPE, and pipefail would then hide a bad entry.
+    tar -tvf "$stage/server.tar" >"$stage/long"
+    tar -tf "$stage/server.tar" >"$stage/names"
+    if grep -q -v -E '^[-d]' "$stage/long"; then echo "tar holds links or devices" >&2; exit 1; fi
+    if grep -q -v -E '^server/' "$stage/names"; then echo "tar holds paths outside server/" >&2; exit 1; fi
+    tar -xf "$stage/server.tar" -C "$stage" --no-same-owner --no-same-permissions
+    [ -x "$stage/server/bin/server" ] || { echo "no server/bin/server in the tar" >&2; exit 1; }
+    chmod -R a+rX "$stage/server"
+
+    backup="$DATA/backups/deploy-$(date +%F-%H%M%S).db"
+    sqlite3 "$DATA/todo.db" ".backup '$backup'"
+    ls -1t "$DATA"/backups/deploy-*.db | tail -n +11 | xargs -r rm --
+
+    rm -rf "$APP/server.prev"
+    mv "$APP/server" "$APP/server.prev"
+    mv "$stage/server" "$APP/server"
+    $SYSTEMCTL restart todo-server || roll_back "restart failed"
+    healthy || roll_back "health check failed"
+    echo "deployed; backup $backup"
+    ;;
+status)
+    echo "service: $(systemctl is-active todo-server), since $(systemctl show -p ActiveEnterTimestamp --value todo-server)"
+    echo "newest backup: $(ls -1t "$DATA"/backups/*.db 2>/dev/null | head -1)"
+    echo "warnings in the last 24h:"
+    journalctl -u todo-server -p warning --since "24 hours ago" -n 20 --no-pager
+    ;;
+*)
+    echo "only 'deploy' or 'status'" >&2
+    exit 1
+    ;;
+esac

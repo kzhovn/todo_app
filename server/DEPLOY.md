@@ -200,10 +200,10 @@ one, without Calendar; `HTTP 403 … has not been used` means the API isn't enab
 
 ## Updating
 
-Build a new `server.tar`, copy it over as before, then on the VM:
-
-```bash
-sudo systemctl stop todo-server && sudo tar xf /tmp/server.tar -C /opt/todo && sudo systemctl start todo-server
-```
+From the laptop, `tools/deploy.sh` builds `server.tar` and sends it to the VM over SSH with a deploy key that can
+only run `/usr/local/bin/todo-deploy` (`server/deploy/todo-deploy`): it backs up the database, swaps the new build
+in (keeping the old one as `/opt/todo/server.prev`), restarts, and rolls the code back if the server doesn't come
+up. `tools/deploy.sh status` shows the service, the newest backup and recent warnings. The key and the `deploy`
+user are set up once by `server/deploy/setup-deploy.sh` (which also moved the first VM from an older layout).
 
 The database lives in `/var/lib/todo`, so updating doesn't touch it.

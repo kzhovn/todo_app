@@ -5,8 +5,11 @@ Wants=network-online.target
 
 [Service]
 User=todo
+WorkingDirectory=/var/lib/todo
 EnvironmentFile=/etc/todo-server.env
 ExecStart=/opt/todo/server/bin/server
+# The JVM exits 143 on SIGTERM, which is a clean stop.
+SuccessExitStatus=143
 Restart=on-failure
 RestartSec=10
 
