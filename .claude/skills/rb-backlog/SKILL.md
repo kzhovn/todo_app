@@ -9,14 +9,14 @@ Kira DMs the Raspberry bot ideas and bugs; each DM is a dev note on the server. 
 session, unattended. Design: `docs/superpowers/specs/2026-10-18-dev-workflow-design.md` (read it if something here
 is unclear). Follow CLAUDE.md as for any change. Never push.
 
-**Permissions.** `tools/rb_permit.py` approves only these, in a scheduled run; anything else stops at a prompt
-nobody sees, so stay inside them:
-- the scripts used below (`tools/*.sh`, `./gradlew`, `./desktop/install.sh`), `cd` within the repo, `echo`,
-  `printf`, `sleep <n>`, and git's `status log diff show rev-parse add commit rebase` (main, `--abort`,
-  `--continue`), `merge --ff-only`, `worktree add/list/remove`, `branch -d`;
-- **one line per command, no `$`, no backticks, no `>` except to `/dev/null`**: write literal paths, and put free
-  text in a file first (Write tool) and pass it with `<` or `git commit -F <file>`;
-- edits inside `.worktrees/rb-*/` and to `docs/dev-*` files in the main checkout.
+**Permissions.** `tools/rb_permit.py` approves only exact command shapes, in a scheduled run; anything else
+stops at a prompt nobody sees, so use the commands below **exactly as written**:
+- **one command per Bash call**: no `&&`, `;`, `|`, `$`, quotes, backticks, globs or `~`; only `2>&1` or
+  `>/dev/null` as redirects. Write literal paths (run `cd <path>` as its own call when you need to move).
+- `tools/rb-check.sh`, `tools/dev_notes.sh`, `tools/deploy.sh`, `tools/install_phone.sh`, `./desktop/install.sh`
+  run from MAIN only; `tools/test.sh`, `tools/render_screens.sh` and `./gradlew` from the worktree.
+- free text (messages, commit messages) goes in `MAIN/docs/dev-msg.txt` / `MAIN/docs/dev-commit.txt` (Write tool)
+  first. Edits are allowed in `.worktrees/rb-*/` and those `docs/dev-*` files only.
 
 `MAIN` below means the main checkout's literal path: the first one in `git worktree list`. Logs live in
 `MAIN/docs/` (gitignored, so they're not in a worktree).
@@ -39,7 +39,7 @@ hold the lock, so a `working` note is a crashed run's; its branch `rb/<id>` may 
 
 Take the **oldest open note**, plus up to 3 more that touch the same feature or files (judge from the text and
 replies). Fewer is fine. Read each note's `replies` (Kira's answers to earlier questions) and fetch attachments
-with `tools/dev_notes.sh attachment <id> <name> <scratchpad file>`, then Read them (screenshots).
+with `tools/dev_notes.sh attachment <id> <name> MAIN/docs/dev-shots/in-<id>-<name>`, then Read them.
 
 **Ask before coding.** If a note is unclear, or is a behaviour change or needs a mockup (CLAUDE.md: ask first),
 ask now (section 5) before reading much code, and leave it out of the batch.
@@ -48,25 +48,26 @@ Mark each note in the batch: `tools/dev_notes.sh state <id> working`.
 
 ## 3. Set up
 
+From MAIN, one call each:
 ```
-git worktree add .worktrees/rb-<first id> -b rb/<first id> main     # or, if rb/<first id> exists: without -b
-cd .worktrees/rb-<first id>
+git worktree add .worktrees/rb-<first id> -b rb/<first id> main      (if rb/<first id> exists: without -b rb/…)
+cd MAIN/.worktrees/rb-<first id>
 tools/test.sh
 ```
 Work, test and commit **inside the worktree** (the commit hook checks the checkout you're in). If `tools/test.sh`
-fails on untouched `main`: write "main is red: <failing tests>" to `MAIN/docs/dev-msg.txt`, run
+fails on untouched `main`: write "main is red: <failing tests>" to `MAIN/docs/dev-msg.txt`, `cd MAIN`, run
 `tools/dev_notes.sh message < MAIN/docs/dev-msg.txt`, remove the worktree, unlock, stop.
 
 ## 4. Each note
 
 1. Make the change the normal way (CLAUDE.md conventions; both clients unless it's clearly one-sided; `Labels`).
 2. `tools/test.sh <modules>` green, then one commit for the note: the message in `MAIN/docs/dev-commit.txt`,
-   `git add <files>` and `git commit -F MAIN/docs/dev-commit.txt` (with the attribution line CLAUDE.md's commits
+   then `git add <files>` and `git commit -F MAIN/docs/dev-commit.txt` as two calls (with the attribution line CLAUDE.md's commits
    carry). The repo is public: describe the change, never quote the note or link Discord. Two failed attempts at green → treat it as a question (section 5).
-3. For a visible change, a screenshot (`ScreenshotRender` for the phone, the web-preview skill for the web) saved
-   under `MAIN/docs/dev-shots/`.
+3. For a visible phone change: `tools/render_screens.sh MAIN/docs/dev-shots/<note id>` (renders every screen;
+   name the relevant PNG in the log). No web screenshots in an unattended run: the browser tools aren't allowed.
 4. Append to `MAIN/docs/dev-log.md`: `- <date> note <id>: <what changed> (<commit>) [<screenshot>]`.
-5. `tools/dev_notes.sh state <id> done`, then `tools/rb-check.sh touch`.
+5. `tools/dev_notes.sh state <id> done`, then `tools/rb-check.sh touch` (both from MAIN: `cd` there and back).
 
 ## 5. A question for Kira
 

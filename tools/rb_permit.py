@@ -1,118 +1,144 @@
 #!/usr/bin/env python3
 """PreToolUse hook: approves the backlog worker's own commands in its scheduled runs only, so they don't stall at a
-prompt nobody sees (scheduled runs start in default permission mode). A session whose transcript doesn't start with
-one of our scheduled tasks gets no decision from here: Kira's sessions prompt as before. Anything not listed falls
-through to the normal prompt too, which in a scheduled run means it stalls rather than runs.
+prompt nobody sees (scheduled runs start in default permission mode). A session that isn't one of those runs gets no
+decision from here: Kira's sessions prompt as before. Anything not listed falls through to the normal prompt too,
+which in a scheduled run means it stalls rather than runs.
 
-It guards against the wrong command, not a hostile agent: the worker runs tests, which are code it writes."""
+Exact command shapes, one command per call, not a shell parser: parsing shell right is how hooks like this leak.
+It guards against the wrong command and against text the worker reads steering it, not a hostile agent: the worker
+runs tests, which are code it writes, so tools/test.sh, render_screens.sh and gradlew come from its worktree. Scripts
+that reach outside (Discord, the VM, the phone) only ever run from the main checkout."""
 import json
 import os
 import re
-import shlex
+import subprocess
 import sys
 
 MAIN = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-MARKER = 'scheduled-task name=\\"raspberry-'  # as it appears, JSON-escaped, on the transcript's first line
-SCRIPTS = {"tools/rb-check.sh", "tools/dev_notes.sh", "tools/deploy.sh", "tools/test.sh", "tools/install_phone.sh",
-           "desktop/install.sh", "gradlew"}
+TASKS = ('<scheduled-task name="raspberry-backlog"', '<scheduled-task name="raspberry-hygiene"')
 READ_ONLY_TOOLS = {"mcp__ccd_session_mgmt__get_usage", "mcp__ccd_session_mgmt__get_session"}
-PLAIN = {"echo", "printf", "true"}
-OPERATORS = {"|", "||", "&&", ";"}
+# No quotes, braces, globs, ~, #, $, backticks, parentheses or newlines: none are needed (free text goes through
+# files), and each is a way for the shell to read a command differently from this script.
+SAFE = re.compile(r"[A-Za-z0-9 _./:=@,+%<>&-]*")
+REDIRECTS = re.compile(r"(\s+(2>&1|>/dev/null|2>/dev/null))+$")
+# A worker's own checkout edits can't merge into main through the hook that guards it, or into settings.
+PROTECTED = (".claude/", "tools/rb_permit.py", "tools/check_tested.py", "tools/rb-check.sh")
+WORKTREE = re.compile(r"\.worktrees/rb-\d+")
+BRANCH = r"rb/\d+"
 
 
-def inside(path, *roots):
-    path = os.path.realpath(path)
-    return any(path == r or path.startswith(r + os.sep) for r in roots)
+def real(path, cwd):
+    return os.path.realpath(os.path.join(cwd, path))
 
 
-def worktrees():
-    return [os.path.join(MAIN, ".worktrees", d) for d in os.listdir(os.path.join(MAIN, ".worktrees"))
-            if d.startswith("rb-")] if os.path.isdir(os.path.join(MAIN, ".worktrees")) else []
+def worktree_of(path):
+    """The rb-<n> worktree a real path lies in, or None."""
+    m = re.match(re.escape(MAIN) + r"/\.worktrees/rb-\d+(?=/|$)", path)
+    return m.group(0) if m else None
+
+
+def is_doc(path, *names):
+    """A docs/dev-* file in the main checkout: one of `names`, or under docs/dev-shots/."""
+    docs = os.path.join(MAIN, "docs")
+    return path in [os.path.join(docs, n) for n in names] or path.startswith(os.path.join(docs, "dev-shots") + "/")
 
 
 def editable(path):
-    """The worker's worktrees, and its own files in docs/ (dev-log.md, dev-shots/, message and commit texts)."""
-    real = os.path.realpath(path)
-    if inside(real, *[os.path.realpath(w) for w in worktrees()]) and "/.git/" not in real:
-        return True
-    return real.startswith(os.path.join(MAIN, "docs", "dev-"))
+    p = os.path.realpath(path)
+    parts = p.split("/")
+    if ".git" in parts or ".claude" in parts:
+        return False
+    wt = worktree_of(p)
+    if wt:
+        return p != wt
+    return is_doc(p, "dev-log.md", "dev-msg.txt", "dev-commit.txt")
+
+
+def script(token, cwd, name, from_worktree=False):
+    p = real(token, cwd)
+    return p == os.path.join(MAIN, name) or (from_worktree and worktree_of(p) is not None and p == os.path.join(worktree_of(p), name))
+
+
+def touches_protected(branch):
+    files = subprocess.run(["git", "-C", MAIN, "diff", "--name-only", f"main...{branch}"], capture_output=True, text=True)
+    return files.returncode != 0 or any(f.startswith(PROTECTED) for f in files.stdout.split())
 
 
 def git_ok(args, cwd):
-    if args[:1] == ["-C"]:
-        if len(args) < 2 or not inside(os.path.join(cwd, args[1]), MAIN):
-            return False
-        args = args[2:]
-    if not args:
+    in_wt = worktree_of(os.path.realpath(cwd)) is not None
+    if args[:2] == ["-C", MAIN] or (args[:1] == ["-C"] and len(args) > 1 and real(args[1], cwd) == MAIN):
+        rest = args[2:]
+        return rest == ["status", "--porcelain"] or (
+            len(rest) == 3 and rest[:2] == ["merge", "--ff-only"] and re.fullmatch(BRANCH, rest[2]) is not None
+            and not touches_protected(rest[2]))
+    if not args or args[0].startswith("-"):
         return False
     verb, rest = args[0], args[1:]
-    if verb in ("status", "log", "diff", "show", "rev-parse", "add"):
-        return True
-    if verb == "commit":
-        return not any(a in ("--no-verify", "-n") or re.fullmatch(r"-[a-zA-Z]*n[a-zA-Z]*", a) for a in rest)
-    if verb == "rebase":
-        return set(rest) <= {"main", "--abort", "--continue"}
-    if verb == "merge":
-        return "--ff-only" in rest
+    if verb in ("status", "log", "diff", "show", "rev-parse"):
+        # Read-only, as long as nothing writes a file or runs an external diff.
+        return not any(a.startswith(("--output", "--ext-diff", "--textconv", "-o")) for a in rest)
     if verb == "worktree":
-        return rest[:1] in (["add"], ["list"]) or (rest[:1] == ["remove"] and not {"-f", "--force"} & set(rest))
+        return rest == ["list"] or (rest[:1] == ["remove"] and len(rest) == 2 and WORKTREE.fullmatch(rest[1]) is not None) or (
+            rest[:1] == ["add"] and cwd == MAIN and len(rest) in (3, 5) and WORKTREE.fullmatch(rest[1]) is not None
+            and rest[-1] == "main" and (len(rest) == 3 or (rest[2] == "-b" and re.fullmatch(BRANCH, rest[3]))))
     if verb == "branch":
-        return not {"-D", "-f", "--force", "-M", "-m", "-c", "-C"} & set(rest) and \
-            (not rest or rest[0] in ("-d", "--list", "--show-current"))
+        return len(rest) == 2 and rest[0] == "-d" and re.fullmatch(BRANCH, rest[1]) is not None
+    if not in_wt:  # the rest change history: only in a worker's worktree
+        return False
+    if verb == "add":
+        return bool(rest) and all(a == "-A" or (not a.startswith("-") and worktree_of(real(a, cwd))) for a in rest)
+    if verb == "commit":
+        return len(rest) == 2 and rest[0] == "-F" and real(rest[1], cwd) == os.path.join(MAIN, "docs", "dev-commit.txt")
+    if verb == "rebase":
+        return rest in (["main"], ["--abort"], ["--continue"])
     return False
 
 
-def segment_ok(words, cwd):
-    """One command between operators; returns the new cwd (for `cd`) or None if it isn't allowed."""
+def bash_ok(command, cwd):
+    if not SAFE.fullmatch(command):
+        return False
+    command = REDIRECTS.sub("", command.strip())
+    words = command.split()
+    if not words:
+        return False
+    # `<` only feeds dev_notes.sh message its text file (checked below); no other redirection survives.
+    if "<" in words and not script(words[0], cwd, "tools/dev_notes.sh"):
+        return False
+    if any(set(w) & set("<>&") and w != "<" for w in words):
+        return False
     prog, args = words[0], words[1:]
     if prog == "cd":
-        target = os.path.join(cwd, args[0]) if args else ""
-        return os.path.realpath(target) if args and inside(target, MAIN) else None
-    if prog in PLAIN or (prog == "sleep" and len(args) == 1 and args[0].isdigit()):
-        return cwd
+        return len(args) == 1 and (real(args[0], cwd) == MAIN or worktree_of(real(args[0], cwd)) is not None)
+    if prog == "sleep":
+        return len(args) == 1 and args[0].isdigit()
     if prog == "git":
-        return cwd if git_ok(args, cwd) else None
-    real = os.path.realpath(os.path.join(cwd, prog))
-    for root in [MAIN, *worktrees()]:
-        if any(real == os.path.join(os.path.realpath(root), s) for s in SCRIPTS):
-            return cwd
-    return None
-
-
-def bash_ok(command, cwd):
-    # Substitutions could run anything and variables hide what a path really is, so neither passes: the worker uses
-    # literal paths, and free text goes through files (`< docs/dev-msg.txt`, `git commit -F`). One line only.
-    if any(c in command for c in "`$\n\r"):
+        return git_ok(args, cwd)
+    if script(prog, cwd, "tools/rb-check.sh"):
+        return args in (["gate"], ["notes"], ["touch"], ["unlock"]) or (len(args) == 2 and args[0] == "lock" and args[1].isalpha())
+    if script(prog, cwd, "tools/dev_notes.sh"):
+        n = len(args)
+        if n == 2 and args[0] in ("list",) and args[1].isalpha():
+            return True
+        if n == 2 and args[0] == "wait" and args[1].isdigit():
+            return True
+        if n == 3 and args[0] == "state" and args[1].isdigit() and args[2] in ("working", "done", "question", "open", "skip"):
+            return True
+        if args[:1] == ["message"] and n in (3, 4) and args[-2] == "<" and (n == 3 or args[1].isdigit()):
+            return real(args[-1], cwd) == os.path.join(MAIN, "docs", "dev-msg.txt")
+        if n == 4 and args[0] == "attachment" and args[1].isdigit() and re.fullmatch(r"[A-Za-z0-9._-]+", args[2]):
+            return is_doc(real(args[3], cwd))
         return False
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>")
-    lexer.whitespace_split = True
-    try:
-        tokens = list(lexer)
-    except ValueError:
-        return False
-    words, i = [], 0
-    while i < len(tokens) + 1:
-        t = tokens[i] if i < len(tokens) else ";"
-        if t in OPERATORS:
-            if words:
-                cwd = segment_ok(words, cwd)
-                if cwd is None:
-                    return False
-            words = []
-        elif t in (">", ">&", "<", "<<<") and i + 1 < len(tokens):
-            target = tokens[i + 1]
-            # Output only to /dev/null or another stream; input from a file or a here-string.
-            if t in (">", ">&") and target not in ("/dev/null", "1", "2"):
-                return False
-            if words and t != "<<<" and words[-1] in ("1", "2"):  # the 2 of 2>&1
-                words.pop()
-            i += 1
-        elif set(t) <= set(";&|<>"):
-            return False  # >>, <<, &, and the like
-        else:
-            words.append(t)
-        i += 1
-    return True
+    if script(prog, cwd, "tools/deploy.sh"):
+        return args in ([], ["status"])
+    if script(prog, cwd, "tools/install_phone.sh") or script(prog, cwd, "desktop/install.sh"):
+        return args == []
+    if script(prog, cwd, "tools/test.sh", from_worktree=True):
+        return all(a in ("core", "server", "app") for a in args)
+    if script(prog, cwd, "tools/render_screens.sh", from_worktree=True):
+        return len(args) == 1 and is_doc(real(args[0], cwd))
+    if script(prog, cwd, "gradlew", from_worktree=True):
+        return True  # runs the worktree's build: code the worker writes anyway
+    return False
 
 
 def allowed(event):
@@ -122,16 +148,17 @@ def allowed(event):
     if tool in ("Edit", "Write", "NotebookEdit"):
         return editable(data.get("file_path") or data.get("notebook_path") or "")
     if tool == "Bash":
-        return bash_ok(data.get("command", ""), cwd)
+        return bash_ok(data.get("command", ""), os.path.realpath(cwd))
     return False
 
 
 def scheduled_run(event):
     try:
         with open(event.get("transcript_path") or "", encoding="utf-8") as f:
-            return MARKER in f.readline()
-    except OSError:
+            first = json.loads(f.readline())
+    except (OSError, ValueError):
         return False
+    return first.get("type") == "queue-operation" and str(first.get("content", "")).startswith(TASKS)
 
 
 if __name__ == "__main__":
