@@ -9,7 +9,10 @@ import shlex
 import subprocess
 import sys
 
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+# The checkout the commit runs in (hooks run in the session's directory): a worktree has its own staged files and
+# its own tools/test.sh stamps. Falls back to this script's checkout.
+top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
+os.chdir(top or os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 NEEDS = {"core": ["core", "server", "app"], "server": ["server"], "app": ["app"]}
 
 
