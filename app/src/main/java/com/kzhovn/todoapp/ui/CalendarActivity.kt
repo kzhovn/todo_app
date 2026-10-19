@@ -59,7 +59,6 @@ import com.kizitonwose.calendar.compose.rememberCalendarState
 import com.kizitonwose.calendar.compose.weekcalendar.rememberWeekCalendarState
 import com.kizitonwose.calendar.core.DayPosition
 import com.kzhovn.todoapp.AppSettings
-import androidx.compose.foundation.layout.widthIn
 import com.kzhovn.todoapp.data.timeText
 import com.kzhovn.todoapp.data.rows
 import com.kzhovn.todoapp.data.eventDays
@@ -254,10 +253,10 @@ internal fun CalendarScreen(
             DayOfWeek.entries.forEach { d -> Text(d.name.take(1) + d.name.drop(1).take(2).lowercase(), fontSize = 11.sp, color = LedgerMuted, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
         }
         if (week) WeekCalendar(state = weekState, modifier = Modifier.padding(horizontal = 10.dp), dayContent = { day ->
-            DayCell(day.date, dots[day.date].orEmpty(), faint = false, isToday = day.date == today, isPicked = day.date == picked) { pickDay(day.date) }
+            DayCell(day.date, dots[day.date].orEmpty(), faint = false, isToday = day.date == today, isPicked = day.date == picked, past = day.date < today) { pickDay(day.date) }
         })
         else HorizontalCalendar(state = state, modifier = Modifier.padding(horizontal = 10.dp), dayContent = { day ->
-            DayCell(day.date, dots[day.date].orEmpty(), faint = day.position != DayPosition.MonthDate, isToday = day.date == today, isPicked = day.date == picked) { pickDay(day.date) }
+            DayCell(day.date, dots[day.date].orEmpty(), faint = day.position != DayPosition.MonthDate, isToday = day.date == today, isPicked = day.date == picked, past = day.date < today) { pickDay(day.date) }
         })
         HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(top = 6.dp))
         LazyColumn(Modifier.weight(1f)) {
@@ -341,10 +340,10 @@ private fun Dot(color: Color, hollow: Boolean = false) = Box(
     Modifier.size(6.dp).clip(CircleShape).then(if (hollow) Modifier.border(1.5.dp, color, CircleShape) else Modifier.background(color))
 )
 
-// A day: its number (today's in a filled circle), and a dot per kind of date on it (a repeat's hollow). Days of the months either
-// side are fainter, and still tappable.
+// A day: its number (today's in a filled circle), and a dot per kind of date on it (a repeat's hollow), dimmed once
+// it's past. Days of the months either side are fainter, and still tappable.
 @Composable
-private fun DayCell(date: LocalDate, dots: List<Pair<Color, Boolean>>, faint: Boolean, isToday: Boolean, isPicked: Boolean, onClick: () -> Unit) {
+private fun DayCell(date: LocalDate, dots: List<Pair<Color, Boolean>>, faint: Boolean, isToday: Boolean, isPicked: Boolean, past: Boolean, onClick: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.aspectRatio(1.3f).padding(1.dp).clip(RoundedCornerShape(6.dp))
@@ -357,18 +356,17 @@ private fun DayCell(date: LocalDate, dots: List<Pair<Color, Boolean>>, faint: Bo
         ) {
             Text(date.dayOfMonth.toString(), fontSize = 13.sp, color = if (isToday) LedgerAccentInk else LedgerInk, fontWeight = if (isToday) FontWeight.SemiBold else null)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(top = 3.dp)) { dots.take(4).forEach { (color, hollow) -> Dot(color, hollow) } }
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(top = 3.dp).alpha(if (past) 0.45f else 1f)) { dots.take(4).forEach { (color, hollow) -> Dot(color, hollow) } }
     }
 }
 
-// An event in the agenda: its time, a bar in its calendar's colour, its title and place; faded once it's over.
+// An event in the agenda: its time, a bar in its calendar's colour and its title; faded once it's over.
 @Composable
 private fun EventRow(event: CalendarEvent, color: Color, now: Long, onClick: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min).alpha(if (event.end <= now) 0.55f else 1f).clickable(onClick = onClick)) {
         Box(Modifier.width(4.dp).height(44.dp).background(color))
         Text(if (event.allDay) Labels.ALL_DAY else timeText(event.start), fontSize = 12.sp, color = LedgerMuted, modifier = Modifier.width(64.dp).padding(start = 12.dp))
-        Text(event.title, fontSize = 16.sp, color = LedgerInk, modifier = Modifier.weight(1f))
-        event.location?.let { Text(it, fontSize = 12.sp, color = LedgerMuted, maxLines = 1, modifier = Modifier.padding(end = 14.dp).widthIn(max = 120.dp)) }
+        Text(event.title, fontSize = 16.sp, color = LedgerInk, modifier = Modifier.weight(1f).padding(end = 14.dp))
     }
 }
 

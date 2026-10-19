@@ -1,6 +1,8 @@
 package com.kzhovn.todoapp.server.web
 
 import com.kzhovn.todoapp.data.Task
+import com.kzhovn.todoapp.data.ancestors
+import kotlinx.html.ButtonType
 import com.kzhovn.todoapp.data.eventWhen
 import kotlinx.html.summary
 import kotlinx.html.details
@@ -205,28 +207,48 @@ fun DIV.relatedSection(service: TaskService, id: Long, mode: ListMode, focusAddI
         if (!isChecklist) add("subtask" to Labels.SUBTASK)
         if (task.type != TaskType.FOLDER) { add("prerequisite" to Labels.PREREQUISITE); add("dependent" to Labels.DEPENDENT) }
     }
-    if (kinds.isNotEmpty()) form(classes = "add-related") {
-        htmx("/tasks/$id/related?mode=$m")
+    if (kinds.isNotEmpty()) addRelatedForm("/tasks/$id/related?mode=$m", "/tasks/$id/related/suggest", "#related", kinds, addKind, focusAddItem)
+}
+
+// The add field (the editor's Related, an event's sheet): type a new task (Enter), or pick one of `suggest`'s
+// suggestions (↓, or a click); `kinds` say what to add.
+internal fun FlowContent.addRelatedForm(post: String, suggest: String, target: String, kinds: List<Pair<String, String>>, kind: String?, focus: Boolean) =
+    form(classes = "add-related") {
+        hx("post", post, target)
         attributes["autocomplete"] = "off"
         div(classes = "add-field") {
             textInput(name = "text") {
                 placeholder = "+"
-                attributes["aria-label"] = "Add a subtask, or link a task"
-                attributes["hx-get"] = "/tasks/$id/related/suggest"
+                attributes["aria-label"] = "Add a task, or link one"
+                attributes["hx-get"] = suggest
                 // Not on "change": that fires when ↓ leaves the field, and the refresh would drop the suggestion just focused.
                 attributes["hx-trigger"] = "input changed delay:200ms, kindchange, focus"
                 attributes["hx-target"] = "next .suggest"
                 attributes["hx-swap"] = "outerHTML"
                 attributes["hx-include"] = "closest form"
-                if (focusAddItem) autoFocus = true
+                if (focus) autoFocus = true
             }
             div(classes = "kind-seg") {
-                val selected = kinds.firstOrNull { it.first == addKind }?.first ?: kinds.first().first
+                val selected = kinds.firstOrNull { it.first == kind }?.first ?: kinds.first().first
                 kinds.forEach { (value, label) ->
                     label { radioInput(name = "kind") { this.value = value; checked = value == selected }; +label }
                 }
             }
         }
         div(classes = "suggest") {}
+    }
+
+// The add field's suggestions: "↵ New <noun>" for what's typed, then existing tasks under their headings.
+internal fun FlowContent.suggestTasks(q: String, newNoun: String, sections: List<Pair<String?, List<Task>>>, byId: Map<Long, Task>) {
+    if (q.isNotEmpty()) button(type = ButtonType.submit, classes = "sugg new") { +"↵ New $newNoun “$q”" }
+    sections.forEach { (label, matches) ->
+        label?.let { div(classes = "sugg-head") { +it } }
+        matches.forEach { t ->
+            button(type = ButtonType.submit, classes = "sugg") {
+                name = "existing"; value = t.id.toString()
+                span { +t.title }
+                span(classes = "where") { +ancestors(t, byId).joinToString(" › ") { it.title } }
+            }
+        }
     }
 }

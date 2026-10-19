@@ -48,6 +48,13 @@ fun planLinkEvent(all: List<Task>, taskId: Long, event: CalendarEvent, before: B
     return TaskChanges(creates = if (existing == null) listOf(item to emptySet()) else emptyList(), links = listOf(link))
 }
 
+// The open tasks an event's sheet offers to link on that side: its item's prerequisites (before) or dependents
+// (after), as the related pickers find them. The item stands in unsaved till the first link makes it.
+fun eventLinkCandidates(event: CalendarEvent, before: Boolean, all: List<Task>, edges: List<TaskDependency>): Pair<Task, List<Task>> {
+    val item = all.firstOrNull { it.type == TaskType.EVENT && it.eventId == event.id } ?: Task(id = 0L, title = event.title).asEvent(event)
+    return item to linkCandidates(item, if (before) LinkKind.PREREQUISITE else LinkKind.DEPENDENT, all, edges)
+}
+
 // The server, after reading the calendars: Event items follow their events. One gone from inside the window read
 // was cancelled: it resolves, so what waited on it is let go, and what it waited on keeps the due date it lent.
 fun planFollowEvents(all: List<Task>, edges: List<TaskDependency>, data: CalendarData, now: Long): TaskChanges {

@@ -16,7 +16,6 @@ import com.kzhovn.todoapp.data.hasTime
 import com.kzhovn.todoapp.data.atTimeMillis
 import com.kzhovn.todoapp.data.localDay
 import com.kzhovn.todoapp.data.nextRollover
-import com.kzhovn.todoapp.data.ancestors
 import com.kzhovn.todoapp.data.LinkKind
 import com.kzhovn.todoapp.data.linkCandidates
 import com.kzhovn.todoapp.data.nearbyFirst
@@ -176,17 +175,7 @@ fun Route.editorRoutes(service: TaskService) {
         // Linking, upcoming events too (soonest first), under the tasks.
         val events = if (kind == "subtask") emptyList() else service.shownEvents().filter { it.end > service.now() && it.title.contains(q, ignoreCase = true) }.sortedBy { it.start }.take(5)
         call.respondText(createHTML().div(classes = "suggest") {
-            if (q.isNotEmpty()) button(type = ButtonType.submit, classes = "sugg new") { +"↵ New ${KIND_NOUNS[kind] ?: "subtask"} “$q”" }
-            sections.forEach { (label, matches) ->
-                label?.let { div(classes = "sugg-head") { +it } }
-                matches.forEach { t ->
-                    button(type = ButtonType.submit, classes = "sugg") {
-                        name = "existing"; value = t.id.toString()
-                        span { +t.title }
-                        span(classes = "where") { +ancestors(t, byId).joinToString(" › ") { it.title } }
-                    }
-                }
-            }
+            suggestTasks(q, KIND_NOUNS[kind] ?: "subtask", sections, byId)
             if (events.isNotEmpty()) div(classes = "sugg-head") { +Labels.EVENTS }
             events.forEach { e ->
                 button(type = ButtonType.submit, classes = "sugg") {

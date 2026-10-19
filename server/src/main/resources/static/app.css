@@ -708,6 +708,8 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .calendar .fc-event.k-repeat .fc-event-title { color: var(--muted); font-style: italic; }
 .calendar .fc-event.k-done .fc-event-title { color: var(--muted); text-decoration: line-through; }
 .calendar .fc-event.maybe { opacity: .5; }
+/* Over and done (FullCalendar marks it); overdue stays loud. */
+.calendar .fc-event-past:not(.k-overdue) { opacity: .45; }
 .calendar .fc-popover { background: var(--panel); border-color: var(--border); }
 .agenda-day { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; color: var(--muted); padding: 14px 20px 4px; }
 .agenda-day.today { color: var(--ink); }
@@ -727,8 +729,6 @@ body.selecting #list .row:not([data-type="TASK"], [data-type="CHECKLIST"]), body
 .event-sheet { padding: 18px 20px; }
 .event-sheet h2 { margin: 18px 0 4px; font-size: 19px; display: flex; align-items: center; gap: 6px; }
 .event-sheet .hint { margin: 2px 0; }
-.event-sheet .event-add { display: flex; gap: 8px; align-items: center; margin: 14px 0 10px; }
-.event-sheet .event-add input[type=text] { flex: 1; }
 .today-events .running-label { color: var(--muted); }
 .today-events .running-row, .today-events.running-section .running-row { background: var(--tile); }
 .today-events .left, .cancelled-events .left { color: var(--muted); font-weight: 400; }

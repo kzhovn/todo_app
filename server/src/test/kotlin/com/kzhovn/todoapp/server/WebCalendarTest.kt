@@ -13,6 +13,7 @@ import io.ktor.http.parameters
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -39,11 +40,17 @@ class WebCalendarTest {
         val doing = client.get("/doing").bodyAsText()
         assertTrue(doing.contains("Team meeting") && doing.contains("Maya"))
 
-        client.submitForm("/event/add?id=${enc(party.id)}&mode=DOING", parameters { append("text", "Buy a gift"); append("side", "before") })
-        client.submitForm("/event/add?id=${enc(party.id)}&mode=DOING", parameters { append("text", "Thank-you note"); append("side", "after") })
+        client.submitForm("/event/add?id=${enc(party.id)}&mode=DOING", parameters { append("text", "Buy a gift"); append("kind", "before") })
+        client.submitForm("/event/add?id=${enc(party.id)}&mode=DOING", parameters { append("text", "Thank-you note"); append("kind", "after") })
         val sheet = client.get("/event?id=${enc(party.id)}&mode=DOING").bodyAsText().substringAfter("event-sheet")
         assertTrue(sheet.indexOf("Buy a gift") in sheet.indexOf("Before it")..sheet.indexOf("After it"))
         assertTrue(sheet.indexOf("Thank-you note") > sheet.indexOf("After it"))
+        // An existing task, as the editor's field suggests it; already before it, the gift isn't offered after.
+        val cake = service.create(Task(title = "Bake a cake"))
+        assertTrue(client.get("/event/suggest?id=${enc(party.id)}&kind=before&text=cake").bodyAsText().contains("value=\"${cake.id}\""))
+        assertFalse(client.get("/event/suggest?id=${enc(party.id)}&kind=after&text=gift").bodyAsText().contains("Buy a gift"))
+        client.submitForm("/event/add?id=${enc(party.id)}&mode=DOING", parameters { append("existing", cake.id.toString()); append("kind", "before") })
+        assertEquals(party.start, service.dueDates().at(service.get(cake.id)!!))
 
         val notes = service.create(Task(title = "Write up notes"))
         assertTrue(client.get("/tasks/${notes.id}/related/suggest?kind=prerequisite&text=team").bodyAsText().contains("value=\"p/m1\""))

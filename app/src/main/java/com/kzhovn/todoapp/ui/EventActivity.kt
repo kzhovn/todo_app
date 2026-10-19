@@ -6,25 +6,19 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -40,22 +34,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kzhovn.todoapp.AppSettings
 import com.kzhovn.todoapp.CalendarCache
 import com.kzhovn.todoapp.TodoApp
 import com.kzhovn.todoapp.data.CalendarEvent
 import com.kzhovn.todoapp.data.EventLinks
 import com.kzhovn.todoapp.data.Labels
 import com.kzhovn.todoapp.data.Task
-import com.kzhovn.todoapp.data.defaultFolder
+import com.kzhovn.todoapp.data.TaskDependency
+import com.kzhovn.todoapp.data.eventLinkCandidates
+import com.kzhovn.todoapp.data.nearbyFirst
+import com.kzhovn.todoapp.quickadd.QuickAddActivity
 import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.data.eventWhen
 import com.kzhovn.todoapp.data.DueDates
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
-import com.kzhovn.todoapp.ui.theme.LedgerAccentInk
 import com.kzhovn.todoapp.ui.theme.LedgerBorder
 import com.kzhovn.todoapp.ui.theme.LedgerInk
 import com.kzhovn.todoapp.ui.theme.LedgerMuted
@@ -63,10 +57,15 @@ import com.kzhovn.todoapp.ui.theme.LedgerSearchBackground
 import com.kzhovn.todoapp.ui.theme.LedgerTheme
 import kotlinx.coroutines.launch
 
-// An event's sheet (docs/superpowers/specs/2026-10-18-google-calendar-design.md): when and where, its calendar, the
-// tasks linked before and after it, a quick add that links what's typed (Before or After), and Open in Google
-// Calendar. Opened from the calendar, Doing's Today line and the editor's Related section.
+// An event's sheet (docs/superpowers/specs/2026-10-18-google-calendar-design.md): when, its calendar, the tasks
+// linked before and after it, + Before it / + After it (the related pickers), and Open in Google Calendar. Opened from the calendar, Doing's Today line and the editor's Related section.
 class EventActivity : ComponentActivity() {
+    private var onQuickAdded: ((List<Long>) -> Unit)? = null
+    private val quickAddForResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        result.data?.getLongArrayExtra(QuickAddActivity.EXTRA_CREATED_IDS)?.toList()?.takeIf { it.isNotEmpty() }?.let { onQuickAdded?.invoke(it) }
+        onQuickAdded = null
+    }
+
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,22 +76,40 @@ class EventActivity : ComponentActivity() {
                 val scope = rememberCoroutineScope()
                 var links by remember { mutableStateOf<EventLinks?>(null) }
                 var dues by remember { mutableStateOf<DueDates?>(null) }
+                var all by remember { mutableStateOf(emptyList<Task>()) }
+                var edges by remember { mutableStateOf(emptyList<TaskDependency>()) }
+                var picking by remember { mutableStateOf<Boolean?>(null) } // the side being added to
                 var version by remember { mutableIntStateOf(0) }
                 LaunchedEffect(version) {
                     links = app.repository.eventLinks(event.id)
-                    dues = DueDates(app.repository.getAllTasks(), app.database.taskDao().getAllDependencies())
+                    all = app.repository.getAllTasks()
+                    edges = app.database.taskDao().getAllDependencies()
+                    dues = DueDates(all, edges)
+                }
+                fun link(ids: List<Long>, before: Boolean) = scope.launch {
+                    ids.forEach { app.repository.linkEvent(it, event, before, System.currentTimeMillis()) }
+                    version++
                 }
                 val open: (Long) -> Unit = { startActivity(Intent(this, TaskEditActivity::class.java).putExtra(TaskEditActivity.EXTRA_TASK_ID, it)) }
                 ModalBottomSheet(onDismissRequest = ::finish, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = LedgerSearchBackground) {
-                    EventSheet(event, links, dues, onOpen = open, onAdd = { text, before ->
-                        scope.launch {
-                            val now = System.currentTimeMillis()
-                            val add = app.repository.planQuickAdd(text, AppSettings.rolloverHour(this@EventActivity), now)
-                            val home = defaultFolder(app.repository.getAllTasks(), AppSettings.modeFolderId(this@EventActivity))?.id
-                            app.repository.quickAdd(add, home, now)?.let { app.repository.linkEvent(it, event, before, now) }
-                            version++
-                        }
-                    }, onGoogle = { link -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) })
+                    EventSheet(event, links, dues, onOpen = open, onAdd = { picking = it }, onGoogle = { link -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) })
+                }
+                // The related pickers' own sheet: an existing task, or a new one through quick add.
+                picking?.let { before ->
+                    val close = { picking = null }
+                    val (item, candidates) = remember(all, edges, before) { eventLinkCandidates(event, before, all, edges) }
+                    TaskPickerDialog(
+                        title = if (before) Labels.BEFORE_IT else Labels.AFTER_IT,
+                        lists = remember(candidates) { nearbyFirst(item, candidates, all, System.currentTimeMillis()) },
+                        allById = remember(all) { all.associateBy { it.id } },
+                        onPick = { close(); link(listOf(it.id), before) },
+                        onCreateNew = {
+                            close()
+                            onQuickAdded = { ids -> link(ids, before) }
+                            quickAddForResult.launch(Intent(this, QuickAddActivity::class.java).putExtra(QuickAddActivity.EXTRA_RETURN_IDS, true))
+                        },
+                        onDismiss = close
+                    )
                 }
             }
         }
@@ -112,19 +129,17 @@ fun calendarColor(context: Context, calendarId: String): Color =
 fun CalendarDot(color: Color, size: Int = 8) = Box(Modifier.size(size.dp).clip(CircleShape).background(color))
 
 @Composable
-private fun EventSheet(event: CalendarEvent, links: EventLinks?, dues: DueDates?, onOpen: (Long) -> Unit, onAdd: (String, Boolean) -> Unit, onGoogle: (String) -> Unit) {
+private fun EventSheet(event: CalendarEvent, links: EventLinks?, dues: DueDates?, onOpen: (Long) -> Unit, onAdd: (before: Boolean) -> Unit, onGoogle: (String) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val now = System.currentTimeMillis()
-    var text by remember { mutableStateOf("") }
-    var before by remember { mutableStateOf(true) }
-    Column(Modifier.imePadding().padding(horizontal = 18.dp).padding(bottom = 16.dp)) {
+    Column(Modifier.padding(horizontal = 18.dp).padding(bottom = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CalendarDot(calendarColor(context, event.calendarId), 10)
             Text(event.title, fontSize = 19.sp, fontWeight = FontWeight.Bold, color = LedgerInk, modifier = Modifier.padding(start = 8.dp))
         }
         Text(eventWhen(event, now), fontSize = 13.sp, color = LedgerMuted, modifier = Modifier.padding(top = 4.dp))
-        val where = listOfNotNull(event.location, CalendarCache.data(context).calendar(event.calendarId)?.name).joinToString(" · ")
-        if (where.isNotEmpty()) Text(where, fontSize = 13.sp, color = LedgerMuted)
+        val where = CalendarCache.data(context).calendar(event.calendarId)?.name
+        if (where != null) Text(where, fontSize = 13.sp, color = LedgerMuted)
         @Composable
         fun Side(title: String, tasks: List<Task>) {
             if (tasks.isEmpty()) return
@@ -138,21 +153,9 @@ private fun EventSheet(event: CalendarEvent, links: EventLinks?, dues: DueDates?
             }
         }
         links?.let { Side(Labels.BEFORE_IT, it.before); Side(Labels.AFTER_IT, it.after) }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 14.dp)) {
-            Row(Modifier.border(1.dp, LedgerBorder, RoundedCornerShape(6.dp)).clip(RoundedCornerShape(6.dp))) {
-                listOf(true to Labels.BEFORE, false to Labels.AFTER).forEach { (side, label) ->
-                    Text(
-                        label, fontSize = 13.sp, color = if (before == side) LedgerAccentInk else LedgerMuted,
-                        modifier = Modifier.background(if (before == side) LedgerAccent else Color.Transparent).clickable { before = side }.padding(horizontal = 12.dp, vertical = 8.dp)
-                    )
-                }
-            }
-            OutlinedTextField(
-                value = text, onValueChange = { text = it }, singleLine = true, placeholder = { Text("+ " + Labels.ADD_FOR_EVENT) },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) { onAdd(text, before); text = "" } }),
-                modifier = Modifier.weight(1f)
-            )
+        Row(Modifier.padding(top = 8.dp)) {
+            AddLink(Labels.ADD_BEFORE_EVENT) { onAdd(true) }
+            AddLink(Labels.ADD_AFTER_EVENT) { onAdd(false) }
         }
         event.link?.let { link ->
             Text("${Labels.OPEN_IN_GOOGLE} ↗", fontSize = 14.sp, color = LedgerAccent, modifier = Modifier.padding(top = 14.dp).clickable { onGoogle(link) })

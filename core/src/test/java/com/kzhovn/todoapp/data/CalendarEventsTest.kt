@@ -43,6 +43,14 @@ class CalendarEventsTest {
         assertEquals(EventLinks(listOf(gift), listOf(thanks)), linkedToEvent(item.id, all, edges))
     }
 
+    @Test fun theSheetOffersTasksNotYetLinkedOnThatSide() {
+        assertEquals(tasks, eventLinkCandidates(party, before = true, tasks, emptyList()).second)
+        val (all, edges) = linked(tasks, Triple(1, party, true))
+        assertEquals(listOf(thanks), eventLinkCandidates(party, before = true, all, edges).second)
+        // Already before it, gift can't also come after it (a loop).
+        assertEquals(listOf(thanks), eventLinkCandidates(party, before = false, all, edges).second)
+    }
+
     @Test fun beforeIsDueWhenItStartsAndAfterWaitsTillItEnds() {
         val (all, edges) = linked(tasks, Triple(1, party, true), Triple(2, party, false))
         val due = DueDates(all, edges).of(gift)!!

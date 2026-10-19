@@ -7,6 +7,8 @@ import com.kzhovn.todoapp.data.TaskType
 import com.kzhovn.todoapp.data.cancelledEvents
 import com.kzhovn.todoapp.data.dueText
 import com.kzhovn.todoapp.data.eventWhen
+import com.kzhovn.todoapp.data.eventLinkCandidates
+import com.kzhovn.todoapp.data.nearbyFirst
 import com.kzhovn.todoapp.data.linkedToEvent
 import com.kzhovn.todoapp.data.nowAndNext
 import com.kzhovn.todoapp.data.nowNextTail
@@ -29,17 +31,13 @@ import kotlinx.html.a
 import kotlinx.html.button
 import kotlinx.html.details
 import kotlinx.html.div
-import kotlinx.html.form
 import kotlinx.html.h2
 import kotlinx.html.id
-import kotlinx.html.label
 import kotlinx.html.p
-import kotlinx.html.radioInput
 import kotlinx.html.span
 import kotlinx.html.stream.createHTML
 import kotlinx.html.style
 import kotlinx.html.summary
-import kotlinx.html.textInput
 import java.net.URLEncoder
 
 // Google Calendar on the web (docs/superpowers/specs/2026-10-18-google-calendar-design.md): an event's sheet in the
@@ -56,14 +54,14 @@ internal fun FlowContent.calDot(color: String) = span(classes = "cal-dot") { sty
 private fun HTML.eventPage(service: TaskService, list: ListData, event: CalendarEvent) =
     shellPage(service, "Raspberry · ${event.title}", list.path, list, detail = { eventPanel(service, list, event) }) { listColumn(list) }
 
-// When and where, its calendar, the tasks before and after it, and a quick add that links what's typed to it.
+// When, its calendar, the tasks before and after it, and the editor's add field to link more (new or existing).
 private fun ASIDE.eventPanel(service: TaskService, list: ListData, event: CalendarEvent) {
     a(href = list.path, classes = "detail-close") { attributes["aria-label"] = "Close"; +"✕" }
     val q = list.q
     div(classes = "event-sheet") {
         h2 { calDot(calendarColor(service, event.calendarId)); +" ${event.title}" }
         p(classes = "hint") { +eventWhen(event, service.now()) }
-        p(classes = "hint") { +listOfNotNull(event.location, service.calendar().calendar(event.calendarId)?.name).joinToString(" · ") }
+        service.calendar().calendar(event.calendarId)?.let { p(classes = "hint") { +it.name } }
         val all = service.tasks()
         val item = all.firstOrNull { it.type == TaskType.EVENT && it.eventId == event.id }
         val links = item?.let { linkedToEvent(it.id, all, service.dependencyEdges()) }
@@ -79,17 +77,10 @@ private fun ASIDE.eventPanel(service: TaskService, list: ListData, event: Calend
             }
         }
         links?.let { side(Labels.BEFORE_IT, it.before); side(Labels.AFTER_IT, it.after) }
-        form(classes = "inline event-add") {
-            attributes["hx-post"] = "/event/add?id=${enc(event.id)}&mode=$q"
-            attributes["hx-select"] = "#detail"
-            attributes["hx-target"] = "#detail"
-            attributes["hx-swap"] = "outerHTML"
-            div(classes = "kind-seg") {
-                label { radioInput(name = "side") { value = "before"; checked = true }; +Labels.BEFORE }
-                label { radioInput(name = "side") { value = "after" }; +Labels.AFTER }
-            }
-            textInput(name = "text") { placeholder = "+ ${Labels.ADD_FOR_EVENT}"; attributes["autocomplete"] = "off" }
-        }
+        addRelatedForm(
+            "/event/add?id=${enc(event.id)}&mode=$q", "/event/suggest?id=${enc(event.id)}", "#detail",
+            listOf("before" to Labels.BEFORE_IT, "after" to Labels.AFTER_IT), kind = null, focus = false
+        )
         event.link?.let { a(href = it, classes = "add-link") { attributes["target"] = "_blank"; attributes["rel"] = "noopener"; +"${Labels.OPEN_IN_GOOGLE} ↗" } }
     }
 }
@@ -142,13 +133,23 @@ fun Route.eventRoutes(service: TaskService) {
         val event = call.request.queryParameters["id"]?.let(service::event) ?: return@get call.respond(HttpStatusCode.NotFound)
         call.respondHtml { eventPage(service, call.listData(service, call.mode()), event) }
     }
-    // The sheet's add: quick add's syntax, linked before or after the event.
+    // The sheet's add: a picked task, or a new one in quick add's syntax, linked before or after the event.
     post("/event/add") {
         val event = call.request.queryParameters["id"]?.let(service::event) ?: return@post call.respond(HttpStatusCode.NotFound)
         val p = call.receiveParameters()
-        p["text"]?.takeIf { it.isNotBlank() }?.let { service.addTyped(it, folder = service.defaultFolderId()) }
-            ?.let { service.linkEvent(it.id, event.id, before = p["side"] != "after") }
+        val taskId = p["existing"]?.toLongOrNull() ?: p["text"]?.takeIf { it.isNotBlank() }?.let { service.addTyped(it, folder = service.defaultFolderId())?.id }
+        taskId?.let { service.linkEvent(it, event.id, before = p["kind"] != "after") }
         call.respondHtml { eventPage(service, call.listData(service, call.mode()), event) }
+    }
+    // Its suggestions, as the editor's: the nearest few when empty, else what matches.
+    get("/event/suggest") {
+        val event = call.request.queryParameters["id"]?.let(service::event) ?: return@get call.respond(HttpStatusCode.NotFound)
+        val q = call.request.queryParameters["text"].orEmpty().trim()
+        val all = service.tasks()
+        val (item, candidates) = eventLinkCandidates(event, call.request.queryParameters["kind"] != "after", all, service.dependencyEdges())
+        val sections = if (q.isEmpty()) nearbyFirst(item, candidates, all, service.now()).filter { it.first != Labels.EVERYTHING_ELSE }.map { (label, ts) -> label to ts.take(5) }
+            else listOf(null to candidates.filter { it.title.contains(q, ignoreCase = true) }.take(8))
+        call.respondText(createHTML().div(classes = "suggest") { suggestTasks(q, "task", sections, all.associateBy { it.id }) }, ContentType.Text.Html)
     }
     // A row's "After…" tile: the events to snooze until after, fetched when it's opened.
     get("/tasks/{id}/snooze-events") {

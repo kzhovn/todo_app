@@ -116,7 +116,6 @@ private fun FlowContent.eventRow(data: ListData, event: CalendarEvent) = div(cla
     div(classes = "main") {
         div(classes = "title") {
             a(href = eventHref(event.id, data.q), classes = "edit") { openInPanel(); +event.title }
-            event.location?.let { span(classes = "tail") { +" · $it" } }
         }
     }
 }
