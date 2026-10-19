@@ -316,9 +316,7 @@ object Labels {
     const val DELETE_THEM = "Delete them"
     const val NO_CALENDAR = "Not connected to Google Calendar."
     const val SHOW_CALENDARS = "Shown on the calendar, in Doing and when linking."
-    fun afterEvent(title: String) = "After $title"
     fun eventLinks(count: Int) = if (count == 1) "1 task" else "$count tasks"
-    fun wasCancelled(title: String) = "$title was cancelled"
     fun inMinutes(minutes: Int) = "in " + formatDuration(minutes.coerceAtLeast(1))
 
     // A checklist's items
