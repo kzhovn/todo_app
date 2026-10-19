@@ -6,6 +6,8 @@ import subprocess
 import sys
 import tempfile
 
+sys.dont_write_bytecode = True  # importing rb_permit would leave a __pycache__ in tools/
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rb_permit  # noqa: E402
 
