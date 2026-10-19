@@ -8,6 +8,7 @@ Exact command shapes, one command per call, not a shell parser: parsing shell ri
 It guards against the wrong command and against text the worker reads steering it, not a hostile agent: the worker
 runs tests, which are code it writes, so tools/test.sh, render_screens.sh and gradlew come from its worktree. Scripts
 that reach outside (Discord, the VM, the phone) only ever run from the main checkout."""
+import filecmp
 import json
 import os
 import re
@@ -21,8 +22,15 @@ READ_ONLY_TOOLS = {"mcp__ccd_session_mgmt__get_usage", "mcp__ccd_session_mgmt__g
 # files), and each is a way for the shell to read a command differently from this script.
 SAFE = re.compile(r"[A-Za-z0-9 _./:=@,+%<>&-]*")
 REDIRECTS = re.compile(r"(\s+(2>&1|>/dev/null|2>/dev/null))+$")
-# A worker's own checkout edits can't merge into main through the hook that guards it, or into settings.
-PROTECTED = (".claude/", "tools/rb_permit.py", "tools/check_tested.py", "tools/rb-check.sh")
+# What a worker's branch can't change and still merge through this hook: settings and skills, the guard scripts, and
+# every script the hook approves from the main checkout. Kira merges those herself.
+PROTECTED = (".claude/", "tools/", "desktop/install.sh", "gradlew", "gradle/wrapper/")
+# Run from a worktree, these must still be main's own copies: the worktree's build is the accepted code, not a
+# script the worker rewrote.
+FROM_WORKTREE = ("tools/test.sh", "tools/render_screens.sh", "gradlew")
+# Options that make a read-only git verb write a file, run an external program, or read outside the repo.
+READ_ONLY_FORBIDDEN = ("--output", "--ext-diff", "--textconv", "--no-index")
+GRADLE_ARG = re.compile(r"-q|--continue|--offline|:?[A-Za-z0-9_][A-Za-z0-9:_-]*")
 WORKTREE = re.compile(r"\.worktrees/rb-\d+")
 BRANCH = r"rb/\d+"
 
@@ -32,9 +40,13 @@ def real(path, cwd):
 
 
 def worktree_of(path):
-    """The rb-<n> worktree a real path lies in, or None."""
+    """The rb-<n> worktree a real path lies in, or None. A real one: git keeps a .git file in each."""
     m = re.match(re.escape(MAIN) + r"/\.worktrees/rb-\d+(?=/|$)", path)
-    return m.group(0) if m else None
+    return m.group(0) if m and os.path.isfile(os.path.join(m.group(0), ".git")) else None
+
+
+def in_main(path):
+    return path == MAIN or path.startswith(MAIN + "/")
 
 
 def is_doc(path, *names):
@@ -55,13 +67,30 @@ def editable(path):
 
 
 def script(token, cwd, name, from_worktree=False):
-    p = real(token, cwd)
-    return p == os.path.join(MAIN, name) or (from_worktree and worktree_of(p) is not None and p == os.path.join(worktree_of(p), name))
+    # No symlinks: a link to main's deploy.sh from a worktree would run it against the worktree's files.
+    p = os.path.normpath(os.path.join(cwd, token))
+    if p != os.path.realpath(p):
+        return False
+    if p == os.path.join(MAIN, name):
+        return True
+    wt = worktree_of(p)
+    return from_worktree and wt is not None and p == os.path.join(wt, name) and name in FROM_WORKTREE \
+        and filecmp.cmp(p, os.path.join(MAIN, name), shallow=False)
 
 
 def touches_protected(branch):
-    files = subprocess.run(["git", "-C", MAIN, "diff", "--name-only", f"main...{branch}"], capture_output=True, text=True)
-    return files.returncode != 0 or any(f.startswith(PROTECTED) for f in files.stdout.split())
+    # --no-renames lists a moved file under its old name too; -z keeps unusual names unquoted.
+    files = subprocess.run(["git", "-C", MAIN, "diff", "--no-renames", "-z", "--name-only", f"main...{branch}"],
+                           capture_output=True, text=True)
+    return files.returncode != 0 or any(f.startswith(PROTECTED) for f in files.stdout.split("\0") if f)
+
+
+def forbidden_option(arg):
+    """git takes any unambiguous abbreviation of a long option, so `--no-ind` is `--no-index`."""
+    if arg.startswith("-o"):
+        return True
+    name = arg.split("=", 1)[0]
+    return name.startswith("--") and any(f.startswith(name) or name.startswith(f) for f in READ_ONLY_FORBIDDEN)
 
 
 def git_ok(args, cwd):
@@ -75,12 +104,17 @@ def git_ok(args, cwd):
         return False
     verb, rest = args[0], args[1:]
     if verb in ("status", "log", "diff", "show", "rev-parse"):
-        # Read-only, as long as nothing writes a file or runs an external diff.
-        return not any(a.startswith(("--output", "--ext-diff", "--textconv", "-o")) for a in rest)
+        # Read-only, as long as nothing writes a file, runs an external diff, or reads outside the repo (a diff with
+        # a path outside it prints any file). Options go by prefix: git takes abbreviations.
+        return in_main(cwd) and not any(forbidden_option(a) or (not a.startswith("-") and not in_main(real(a, cwd)))
+                                        for a in rest)
     if verb == "worktree":
         return rest == ["list"] or (rest[:1] == ["remove"] and len(rest) == 2 and WORKTREE.fullmatch(rest[1]) is not None) or (
             rest[:1] == ["add"] and cwd == MAIN and len(rest) in (3, 5) and WORKTREE.fullmatch(rest[1]) is not None
-            and rest[-1] == "main" and (len(rest) == 3 or (rest[2] == "-b" and re.fullmatch(BRANCH, rest[3]))))
+            and rest[-1] == "main" and (len(rest) == 3 or (rest[2] == "-b" and re.fullmatch(BRANCH, rest[3])))) or (
+            # Resuming a crashed run's branch.
+            rest[:1] == ["add"] and cwd == MAIN and len(rest) == 3 and WORKTREE.fullmatch(rest[1]) is not None
+            and rest[2] == "rb/" + rest[1].rsplit("-", 1)[1])
     if verb == "branch":
         return len(rest) == 2 and rest[0] == "-d" and re.fullmatch(BRANCH, rest[1]) is not None
     if not in_wt:  # the rest change history: only in a worker's worktree
@@ -137,7 +171,8 @@ def bash_ok(command, cwd):
     if script(prog, cwd, "tools/render_screens.sh", from_worktree=True):
         return len(args) == 1 and is_doc(real(args[0], cwd))
     if script(prog, cwd, "gradlew", from_worktree=True):
-        return True  # runs the worktree's build: code the worker writes anyway
+        # The worktree's build is code the worker writes anyway; but no -p (another project) or -I (an init script).
+        return all(GRADLE_ARG.fullmatch(a) for a in args)
     return False
 
 

@@ -18,7 +18,7 @@ wt = os.path.join(root, ".worktrees", "rb-9")
 git = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-C", root]
 subprocess.run(["git", "init", "-q", "-b", "main", root], check=True)
 for f in ("tools/test.sh", "tools/dev_notes.sh", "tools/rb-check.sh", "tools/deploy.sh", "tools/install_phone.sh",
-          "tools/render_screens.sh", "desktop/install.sh", "gradlew", "README"):
+          "tools/render_screens.sh", "desktop/install.sh", "gradlew", "README", ".claude/settings.json"):
     os.makedirs(os.path.dirname(os.path.join(root, f)) or root, exist_ok=True)
     open(os.path.join(root, f), "w").close()
 subprocess.run(git + ["add", "-A"], check=True)
@@ -26,14 +26,29 @@ subprocess.run(git + ["commit", "-qm", "base"], check=True)
 subprocess.run(git + ["worktree", "add", "-q", wt, "-b", "rb/9", "main"], check=True)
 open(os.path.join(wt, "README"), "w").write("change\n")
 subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-C", wt, "commit", "-qam", "ok"], check=True)
-# A second branch that edits the hook itself: it must not merge through the hook.
-subprocess.run(git + ["branch", "rb/8", "main"], check=True)
-subprocess.run(git + ["worktree", "add", "-q", os.path.join(root, ".worktrees", "rb-8"), "rb/8"], check=True)
-open(os.path.join(root, ".worktrees", "rb-8", "tools", "rb_permit.py"), "w").write("evil\n")
-subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-C", os.path.join(root, ".worktrees", "rb-8"),
-                "add", "-A"], check=True)
-subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-C", os.path.join(root, ".worktrees", "rb-8"),
-                "commit", "-qm", "evil"], check=True)
+
+
+def branch(n, change):
+    """A worker branch rb/<n> in its own worktree, with `change(worktree)` committed on it."""
+    path = os.path.join(root, ".worktrees", f"rb-{n}")
+    subprocess.run(git + ["worktree", "add", "-q", path, "-b", f"rb/{n}", "main"], check=True)
+    change(path)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-C", path, "add", "-A"], check=True)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-C", path, "commit", "-q", "--allow-empty", "-m", "x"], check=True)
+
+
+# Branches that must not merge through the hook: the hook itself, a renamed settings file, a skill under a
+# non-ASCII path (git quotes those), and a script the hook approves from main.
+branch(8, lambda w: open(os.path.join(w, "tools", "rb_permit.py"), "w").write("evil\n"))
+branch(7, lambda w: subprocess.run(["git", "-C", w, "mv", ".claude/settings.json", "moved.json"], check=True))
+branch(6, lambda w: (os.makedirs(os.path.join(w, ".claude/skills/é")), open(os.path.join(w, ".claude/skills/é/SKILL.md"), "w").write("x")))
+branch(5, lambda w: open(os.path.join(w, "tools", "dev_notes.sh"), "w").write("evil\n"))
+# A worktree whose own test.sh was rewritten, a fake worktree (no .git), and a symlink to main's deploy.sh.
+branch(4, lambda w: None)
+open(os.path.join(root, ".worktrees", "rb-4", "tools", "test.sh"), "w").write("git push\n")
+os.makedirs(os.path.join(root, ".worktrees", "rb-999", "tools"))
+open(os.path.join(root, ".worktrees", "rb-999", "tools", "test.sh"), "w").close()
+os.symlink(os.path.join(root, "tools", "deploy.sh"), os.path.join(wt, "d.sh"))
 os.makedirs(os.path.join(root, ".worktrees", "android-widget-plan"))
 
 
@@ -63,6 +78,7 @@ allowed = [  # (command, cwd)
     (f"git commit -F {root}/docs/dev-commit.txt", wt),
     ("git rebase main", wt), ("git rebase --abort", wt),
     ("git worktree add .worktrees/rb-10 -b rb/10 main", root), ("git worktree add .worktrees/rb-9 main", root),
+    ("git worktree add .worktrees/rb-9 rb/9", root), ("./gradlew --offline :server:test", wt),
     ("git worktree remove .worktrees/rb-9", root), ("git worktree list", root), ("git branch -d rb/9", root),
     (f"git -C {root} status --porcelain", wt), (f"git -C {root} merge --ff-only rb/9", wt),
 ]
@@ -95,6 +111,15 @@ refused = [  # (command, cwd)
     ("python3 -c print", wt), ("sleep 1 && reboot", wt), ("RENDER_DIR=x ./gradlew test", wt),
     (f"tools/render_screens.sh {root}/server", wt), ("tools/dev_notes.sh state 5 deleted", root),
     ("tools/rb-check.sh lock x y", root), ("tools/deploy.sh now", root), ("echo hi", wt), ("", wt),
+    # The second review's.
+    *[(f"git -C {root} merge --ff-only rb/{n}", wt) for n in (7, 6, 5)],
+    ("git diff /dev/null /home/x/notes.txt", wt), ("git diff --no-index a b", wt), ("git diff --no-ind a b", wt),
+    ("git show --ext HEAD", wt), ("git log --out=x", wt), ("git status", "/tmp"),
+    ("./gradlew -p /home/x/other :x", wt), ("./gradlew -I /home/x/a.gradle help", wt), ("./gradlew --init-script=a help", wt),
+    ("git worktree add .worktrees/rb-9 rb/8", root),
+    ("tools/test.sh", os.path.join(root, ".worktrees", "rb-4")),  # its test.sh isn't main's
+    ("tools/test.sh", os.path.join(root, ".worktrees", "rb-999")), (f"cd {root}/.worktrees/rb-999", root),
+    ("./d.sh", wt), (f"{wt}/d.sh status", root),
 ]
 for c, cwd in allowed:
     assert bash(c, cwd), f"should allow: {c!r} in {cwd}"
@@ -115,6 +140,7 @@ assert not edit(os.path.join(wt, ".git"))  # a worktree's .git file
 assert not edit(os.path.join(wt, ".claude/settings.json"))
 assert not edit(os.path.join(root, ".claude/settings.local.json"))
 assert not edit(wt)
+assert not edit(os.path.join(root, ".worktrees/rb-999/tools/test.sh"))  # not a real worktree
 assert not edit("/etc/passwd")
 assert rb_permit.allowed({"tool_name": "mcp__ccd_session_mgmt__get_usage", "tool_input": {}})
 assert not rb_permit.allowed({"tool_name": "WebFetch", "tool_input": {"url": "x"}})
@@ -125,7 +151,9 @@ def hook(first, command="git status"):
     transcript = os.path.join(root, "t.jsonl")
     with open(transcript, "w") as f:
         f.write(json.dumps(first) + "\n")
-    event = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": root, "transcript_path": transcript}
+    # The script's own checkout (it isn't pointed at the fake one).
+    repo = os.path.realpath(os.path.join(os.path.dirname(script), ".."))
+    event = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": repo, "transcript_path": transcript}
     return subprocess.run([sys.executable, script], input=json.dumps(event), capture_output=True, text=True).stdout
 def queued(content):
     return {"type": "queue-operation", "operation": "enqueue", "content": content}

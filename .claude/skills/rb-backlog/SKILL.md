@@ -17,6 +17,12 @@ stops at a prompt nobody sees, so use the commands below **exactly as written**:
   run from MAIN only; `tools/test.sh`, `tools/render_screens.sh` and `./gradlew` from the worktree.
 - free text (messages, commit messages) goes in `MAIN/docs/dev-msg.txt` / `MAIN/docs/dev-commit.txt` (Write tool)
   first. Edits are allowed in `.worktrees/rb-*/` and those `docs/dev-*` files only.
+- read-only git (`status log diff show`) only for paths inside the repo; `./gradlew` takes only task names and
+  `-q`, `--continue`, `--offline`.
+- don't use subagents for commands or edits: their calls may not be approved.
+- a note that needs changes under `tools/`, `.claude/`, `desktop/install.sh` or the gradle wrapper can't merge
+  unattended (and the worktree's `tools/test.sh`, `tools/render_screens.sh` and `gradlew` must stay main's or they
+  won't run): commit it on the branch, leave it unmerged, and ask Kira to merge it herself (section 5).
 
 `MAIN` below means the main checkout's literal path: the first one in `git worktree list`. Logs live in
 `MAIN/docs/` (gitignored, so they're not in a worktree).
@@ -50,7 +56,7 @@ Mark each note in the batch: `tools/dev_notes.sh state <id> working`.
 
 From MAIN, one call each:
 ```
-git worktree add .worktrees/rb-<first id> -b rb/<first id> main      (if rb/<first id> exists: without -b rb/…)
+git worktree add .worktrees/rb-<first id> -b rb/<first id> main      (if rb/<first id> exists: git worktree add .worktrees/rb-<first id> rb/<first id>)
 cd MAIN/.worktrees/rb-<first id>
 tools/test.sh
 ```
