@@ -10,10 +10,10 @@ application { mainClass.set("com.kzhovn.todoapp.server.MainKt") }
 
 dependencies {
     implementation(project(":core"))
-    implementation("io.ktor:ktor-server-netty:3.1.3")
-    implementation("io.ktor:ktor-server-content-negotiation:3.1.3")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.3")
-    implementation("io.ktor:ktor-server-html-builder:3.1.3")
+    implementation("io.ktor:ktor-server-netty:3.6.0")
+    implementation("io.ktor:ktor-server-content-negotiation:3.6.0")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:3.6.0")
+    implementation("io.ktor:ktor-server-html-builder:3.6.0")
     // htmx as a webjar: served from the classpath, so there's no CDN and no vendored copy to update.
     runtimeOnly("org.webjars.npm:htmx.org:2.0.11")
     // Its one-file bundle has the plugins in it already.
@@ -24,7 +24,7 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation(testFixtures(project(":core")))
-    testImplementation("io.ktor:ktor-server-test-host:3.1.3")
+    testImplementation("io.ktor:ktor-server-test-host:3.6.0")
 }
 
 // The benchmark harness (src/test/.../bench/Bench.kt): ./gradlew :server:bench --args="3000 10000", or tools/bench.sh.
