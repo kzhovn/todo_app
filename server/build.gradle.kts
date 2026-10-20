@@ -15,7 +15,7 @@ dependencies {
     implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.3")
     implementation("io.ktor:ktor-server-html-builder:3.1.3")
     // htmx as a webjar: served from the classpath, so there's no CDN and no vendored copy to update.
-    runtimeOnly("org.webjars.npm:htmx.org:2.0.11")
+    runtimeOnly("org.webjars.npm:htmx.org:4.0.0")
     // Its one-file bundle has the plugins in it already.
     runtimeOnly("org.webjars.npm:fullcalendar:6.1.15") { isTransitive = false }
     implementation("org.xerial:sqlite-jdbc:3.53.4.0")
