@@ -21,6 +21,9 @@ gate)
     # deeper and move with their session's own file, so only top-level ones are looked at.
     while IFS= read -r f; do
         head -n 1 "$f" | grep -qE '"type":"queue-operation".*"content":"<scheduled-task name=\\"raspberry-(backlog|backlog-now|hygiene|hygiene-now)\\"' && continue
+        # The desktop app resumes an interrupted session on relaunch by itself: that's not Kira.
+        # ponytail: misses her if she typed and the app then resumed within the window; check prompt times if that bites.
+        grep -o '"role":"user","content":"[^"]\{0,60\}' "$f" | tail -n 1 | grep -q 'The app was quit while you were working' && continue
         echo "Claude was used in the last 30 minutes ($(basename "$(dirname "$f")"))"
         exit 0
     done < <(find ~/.claude/projects -mindepth 2 -maxdepth 2 -name '*.jsonl' -mmin -30)
