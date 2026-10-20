@@ -17,6 +17,8 @@ stops at a prompt nobody sees, so use the commands below **exactly as written**:
   run from MAIN only; `tools/test.sh`, `tools/render_screens.sh` and `./gradlew` from the worktree.
 - free text (messages, commit messages) goes in `MAIN/docs/dev-msg.txt` / `MAIN/docs/dev-commit.txt` (Write tool)
   first. Edits are allowed in `.worktrees/rb-*/` and those `docs/dev-*` files only.
+- **search with the Grep and Glob tools and read with Read** (no approval needed); in Bash only plain `grep`,
+  `ls`, `wc`, `head`, `tail` on repo paths, and `mkdir -p` in your worktree or `docs/dev-*`.
 - read-only git (`status log diff show`) only for paths inside the repo; `./gradlew` takes only task names and
   `-q`, `--continue`, `--offline`.
 - don't use subagents for commands or edits: their calls may not be approved.

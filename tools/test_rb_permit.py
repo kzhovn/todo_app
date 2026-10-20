@@ -79,6 +79,9 @@ allowed = [  # (command, cwd)
     ("git rebase main", wt), ("git rebase --abort", wt),
     ("git worktree add .worktrees/rb-10 -b rb/10 main", root), ("git worktree add .worktrees/rb-9 main", root),
     ("git worktree add .worktrees/rb-9 rb/9", root), ("./gradlew --offline :server:test", wt),
+    ("grep -rn FlowRow app/src/main", wt), ("grep -n -A3 OptIn README", wt), ("ls -la docs", root), ("ls", wt),
+    ("wc -l README", wt), ("head -n 40 README", wt), ("tail -20 README", wt),
+    (f"mkdir -p {root}/docs/dev-shots/2", wt), (f"mkdir -p {wt}/build/x", root),
     ("git worktree remove .worktrees/rb-9", root), ("git worktree list", root), ("git branch -d rb/9", root),
     (f"git -C {root} status --porcelain", wt), (f"git -C {root} merge --ff-only rb/9", wt),
 ]
@@ -120,6 +123,11 @@ refused = [  # (command, cwd)
     ("tools/test.sh", os.path.join(root, ".worktrees", "rb-4")),  # its test.sh isn't main's
     ("tools/test.sh", os.path.join(root, ".worktrees", "rb-999")), (f"cd {root}/.worktrees/rb-999", root),
     ("./d.sh", wt), (f"{wt}/d.sh status", root),
+    # Read-only commands stay read-only and inside the repo.
+    ("grep -rn token /home/x/.config", wt), ("grep -r x ../../..", wt), ("cat /etc/passwd", wt), ("ls /home/x", wt),
+    ("grep -f /home/x/patterns x", wt), ("grep --exclude-from=/x y z", wt), ("head -c 100 /home/x/key", wt),
+    ("grep -rn", wt), ("mkdir /tmp/x", wt), (f"mkdir -p {root}/server", wt), ("mkdir -p", wt),
+    ("grep -rn 'a b' app", wt), ("grep -rn a\\|b app", wt),
 ]
 for c, cwd in allowed:
     assert bash(c, cwd), f"should allow: {c!r} in {cwd}"

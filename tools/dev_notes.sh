@@ -19,7 +19,7 @@ list) api "$url/api/dev${2:+?project=$2}" ;;
 state) api -o /dev/null --data-urlencode "state=$3" "$url/api/dev/$2/state" && echo "note $2: $3" ;;
 message) api -o /dev/null ${2:+--data-urlencode "id=$2"} --data-urlencode "text@-" "$url/api/dev/message" && echo sent ;;
 propose) api --data-urlencode "tag=$2" --data-urlencode "project=${3:-raspberry}" --data-urlencode "text@-" "$url/api/dev/propose" ;;
-attachment) api -o "$4" "$url/api/dev/$2/attachments/$3" ;;
+attachment) mkdir -p "$(dirname "$4")" && api -o "$4" "$url/api/dev/$2/attachments/$3" ;;
 wait)
     # Run in the background by a waiting worker: costs no tokens until it exits and wakes the session.
     for _ in $(seq $((48 * 60))); do

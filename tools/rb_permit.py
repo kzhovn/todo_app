@@ -30,6 +30,14 @@ PROTECTED = (".claude/", "tools/", "desktop/install.sh", "gradlew", "gradle/wrap
 FROM_WORKTREE = ("tools/test.sh", "tools/render_screens.sh", "gradlew")
 # Options that make a read-only git verb write a file, run an external program, or read outside the repo.
 READ_ONLY_FORBIDDEN = ("--output", "--ext-diff", "--textconv", "--no-index")
+# Read-only commands and the flags they may take (none that write, follow commands or run anything).
+READERS = {
+    "grep": re.compile(r"-[rRnilcvwxEFoHhsq]+|-[ABCm]\d+|--include=[A-Za-z0-9_.*-]+"),
+    "ls": re.compile(r"-[laAhRt1d]+"),
+    "wc": re.compile(r"-[lwc]+"),
+    "head": re.compile(r"-n\d+|-\d+|-n"),
+    "tail": re.compile(r"-n\d+|-\d+|-n"),
+}
 GRADLE_ARG = re.compile(r"-q|--continue|--offline|:?[A-Za-z0-9_][A-Za-z0-9:_-]*")
 WORKTREE = re.compile(r"\.worktrees/rb-\d+")
 BRANCH = r"rb/\d+"
@@ -145,6 +153,15 @@ def bash_ok(command, cwd):
         return len(args) == 1 and (real(args[0], cwd) == MAIN or worktree_of(real(args[0], cwd)) is not None)
     if prog == "sleep":
         return len(args) == 1 and args[0].isdigit()
+    if prog in READERS:
+        # Read-only, plain flags, paths inside the repo. Anything fancier (a quoted pattern) prompts: the skill points
+        # the worker at the Grep, Glob and Read tools, which need no approval.
+        flags = [a for a in args if a.startswith("-")]
+        return all(READERS[prog].fullmatch(f) for f in flags) and all(in_main(real(a, cwd)) for a in args if not a.startswith("-")) \
+            and (prog != "grep" or len(args) > len(flags))
+    if prog == "mkdir":
+        return args[:1] == ["-p"] and len(args) > 1 and all(
+            worktree_of(real(a, cwd)) or is_doc(real(a, cwd)) for a in args[1:])
     if prog == "git":
         return git_ok(args, cwd)
     if script(prog, cwd, "tools/rb-check.sh"):
