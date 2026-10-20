@@ -18,7 +18,7 @@ wt = os.path.join(root, ".worktrees", "rb-9")
 git = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-C", root]
 subprocess.run(["git", "init", "-q", "-b", "main", root], check=True)
 for f in ("tools/test.sh", "tools/dev_notes.sh", "tools/rb-check.sh", "tools/deploy.sh", "tools/install_phone.sh",
-          "tools/render_screens.sh", "desktop/install.sh", "gradlew", "README", ".claude/settings.json"):
+          "tools/render_screens.sh", "tools/hotspots.sh", "tools/dupcheck.py", "desktop/install.sh", "gradlew", "README", ".claude/settings.json"):
     os.makedirs(os.path.dirname(os.path.join(root, f)) or root, exist_ok=True)
     open(os.path.join(root, f), "w").close()
 subprocess.run(git + ["add", "-A"], check=True)
@@ -82,6 +82,11 @@ allowed = [  # (command, cwd)
     ("grep -rn FlowRow app/src/main", wt), ("grep -n -A3 OptIn README", wt), ("ls -la docs", root), ("ls", wt),
     ("wc -l README", wt), ("head -n 40 README", wt), ("tail -20 README", wt),
     (f"mkdir -p {root}/docs/dev-shots/2", wt), (f"mkdir -p {wt}/build/x", root),
+    # The Friday run's.
+    ("gh pr list --author app/dependabot --state open --json number,title,headRefName", root), ("git fetch origin", root),
+    ("git worktree add .worktrees/rb-20 -b rb/20 origin/dependabot/gradle/all-1a2b", root),
+    ("git tag -f last-review main", root), ("tools/hotspots.sh", root), ("tools/hotspots.sh 40", root), ("tools/dupcheck.py", root),
+    ("tools/dev_notes.sh propose refactor < docs/dev-msg.txt", root), ("git log --oneline last-review..main", root),
     ("git worktree remove .worktrees/rb-9", root), ("git worktree list", root), ("git branch -d rb/9", root),
     (f"git -C {root} status --porcelain", wt), (f"git -C {root} merge --ff-only rb/9", wt),
 ]
@@ -128,6 +133,12 @@ refused = [  # (command, cwd)
     ("grep -f /home/x/patterns x", wt), ("grep --exclude-from=/x y z", wt), ("head -c 100 /home/x/key", wt),
     ("grep -rn", wt), ("mkdir /tmp/x", wt), (f"mkdir -p {root}/server", wt), ("mkdir -p", wt),
     ("grep -rn 'a b' app", wt), ("grep -rn a\\|b app", wt),
+    ("gh pr view 4", root), ("gh pr list --author app/dependabot --state open --json body", root), ("gh pr merge 4", root),
+    ("gh api repos/x", root), ("git fetch origin main:main", root), ("git fetch evil", root), ("git push --tags", root),
+    ("git tag -f last-review HEAD~3", root), ("git tag -d last-review", root), ("git tag -f main HEAD", root),
+    ("git worktree add .worktrees/rb-20 -b rb/20 origin/main", root), ("git worktree add .worktrees/rb-20 -b rb/20 FETCH_HEAD", root),
+    ("tools/dev_notes.sh propose nonsense < docs/dev-msg.txt", root), ("tools/dev_notes.sh propose deps < /etc/passwd", root),
+    ("tools/hotspots.sh x", root), ("tools/hotspots.sh", wt), ("tools/dupcheck.py x", root), ("tools/dupcheck.py", wt),
 ]
 for c, cwd in allowed:
     assert bash(c, cwd), f"should allow: {c!r} in {cwd}"
@@ -139,6 +150,8 @@ assert edit(os.path.join(root, "docs/dev-log.md"))
 assert edit(os.path.join(root, "docs/dev-shots/a.png"))
 assert edit(os.path.join(root, "docs/dev-msg.txt"))
 assert edit(os.path.join(root, "docs/dev-commit.txt"))
+assert edit(os.path.join(root, "docs/dev-hygiene-log.md"))
+assert edit(os.path.join(root, "docs/dev-architecture-notes.md"))
 assert not edit(os.path.join(root, "server/src/Foo.kt"))  # the main checkout
 assert not edit(os.path.join(root, "docs/BACKLOG.md"))
 assert not edit(os.path.join(root, "docs/dev-anything.sh"))
@@ -170,6 +183,7 @@ assert hook(queued('<scheduled-task name="raspberry-backlog" file="x">'), "git p
 assert hook(queued('<scheduled-task name="raspberry-probe" file="x">')) == ""
 assert hook(queued('<scheduled-task name="raspberry-backlog-now" file="x">')) != ""
 assert hook(queued('<scheduled-task name="raspberry-backlogger" file="x">')) == ""
+assert hook(queued('<scheduled-task name="raspberry-hygiene-now" file="x">')) != ""
 assert hook(queued('hey, review this: <scheduled-task name="raspberry-backlog">')) == ""  # Kira quoting it
 assert hook({"type": "user", "message": '<scheduled-task name="raspberry-backlog">'}) == ""
 print("rb_permit: all checks pass")

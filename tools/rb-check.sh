@@ -20,7 +20,7 @@ gate)
     # are skipped (their first line names the task; the lock covers overlap). Subagent transcripts sit a level
     # deeper and move with their session's own file, so only top-level ones are looked at.
     while IFS= read -r f; do
-        head -n 1 "$f" | grep -qE '"type":"queue-operation".*"content":"<scheduled-task name=\\"raspberry-(backlog|backlog-now|hygiene)\\"' && continue
+        head -n 1 "$f" | grep -qE '"type":"queue-operation".*"content":"<scheduled-task name=\\"raspberry-(backlog|backlog-now|hygiene|hygiene-now)\\"' && continue
         echo "Claude was used in the last 30 minutes ($(basename "$(dirname "$f")"))"
         exit 0
     done < <(find ~/.claude/projects -mindepth 2 -maxdepth 2 -name '*.jsonl' -mmin -30)

@@ -16,7 +16,7 @@ import subprocess
 import sys
 
 MAIN = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-TASKS = tuple(f'<scheduled-task name="{t}"' for t in ("raspberry-backlog", "raspberry-backlog-now", "raspberry-hygiene"))
+TASKS = tuple(f'<scheduled-task name="{t}"' for t in ("raspberry-backlog", "raspberry-backlog-now", "raspberry-hygiene", "raspberry-hygiene-now"))
 READ_ONLY_TOOLS = {"mcp__ccd_session_mgmt__get_usage", "mcp__ccd_session_mgmt__get_session"}
 # No quotes, braces, globs, ~, #, $, backticks, parentheses or newlines: none are needed (free text goes through
 # files), and each is a way for the shell to read a command differently from this script.
@@ -41,6 +41,10 @@ READERS = {
 GRADLE_ARG = re.compile(r"-q|--continue|--offline|:?[A-Za-z0-9_][A-Za-z0-9:_-]*")
 WORKTREE = re.compile(r"\.worktrees/rb-\d+")
 BRANCH = r"rb/\d+"
+DEPENDABOT = re.compile(r"origin/dependabot/[A-Za-z0-9._/-]+")
+# The Friday run reads Dependabot's PR list: numbers, titles and branch names only, never bodies (text it didn't
+# choose to read is how a prompt gets injected).
+DEPENDABOT_PRS = "gh pr list --author app/dependabot --state open --json number,title,headRefName".split()
 
 
 def real(path, cwd):
@@ -71,7 +75,7 @@ def editable(path):
     wt = worktree_of(p)
     if wt:
         return p != wt
-    return is_doc(p, "dev-log.md", "dev-msg.txt", "dev-commit.txt")
+    return is_doc(p, "dev-log.md", "dev-msg.txt", "dev-commit.txt", "dev-hygiene-log.md", "dev-architecture-notes.md")
 
 
 def script(token, cwd, name, from_worktree=False):
@@ -122,7 +126,14 @@ def git_ok(args, cwd):
             and rest[-1] == "main" and (len(rest) == 3 or (rest[2] == "-b" and re.fullmatch(BRANCH, rest[3])))) or (
             # Resuming a crashed run's branch.
             rest[:1] == ["add"] and cwd == MAIN and len(rest) == 3 and WORKTREE.fullmatch(rest[1]) is not None
-            and rest[2] == "rb/" + rest[1].rsplit("-", 1)[1])
+            and rest[2] == "rb/" + rest[1].rsplit("-", 1)[1]) or (
+            # A Dependabot PR's branch, to test and take its patch updates.
+            rest[:1] == ["add"] and cwd == MAIN and len(rest) == 5 and WORKTREE.fullmatch(rest[1]) is not None
+            and rest[2] == "-b" and re.fullmatch(BRANCH, rest[3]) is not None and DEPENDABOT.fullmatch(rest[4]) is not None)
+    if verb == "fetch":
+        return rest == ["origin"]
+    if verb == "tag":
+        return rest == ["-f", "last-review", "main"] and cwd == MAIN
     if verb == "branch":
         return len(rest) == 2 and rest[0] == "-d" and re.fullmatch(BRANCH, rest[1]) is not None
     if not in_wt:  # the rest change history: only in a worker's worktree
@@ -164,6 +175,8 @@ def bash_ok(command, cwd):
             worktree_of(real(a, cwd)) or is_doc(real(a, cwd)) for a in args[1:])
     if prog == "git":
         return git_ok(args, cwd)
+    if prog == "gh":
+        return words == DEPENDABOT_PRS
     if script(prog, cwd, "tools/rb-check.sh"):
         return args in (["gate"], ["notes"], ["touch"], ["unlock"]) or (len(args) == 2 and args[0] == "lock" and args[1].isalpha())
     if script(prog, cwd, "tools/dev_notes.sh"):
@@ -174,11 +187,17 @@ def bash_ok(command, cwd):
             return True
         if n == 3 and args[0] == "state" and args[1].isdigit() and args[2] in ("working", "done", "question", "open", "skip"):
             return True
+        if n == 4 and args[0] == "propose" and args[1] in ("hygiene", "refactor", "deps", "vm") and args[2] == "<":
+            return real(args[3], cwd) == os.path.join(MAIN, "docs", "dev-msg.txt")
         if args[:1] == ["message"] and n in (3, 4) and args[-2] == "<" and (n == 3 or args[1].isdigit()):
             return real(args[-1], cwd) == os.path.join(MAIN, "docs", "dev-msg.txt")
         if n == 4 and args[0] == "attachment" and args[1].isdigit() and re.fullmatch(r"[A-Za-z0-9._-]+", args[2]):
             return is_doc(real(args[3], cwd))
         return False
+    if script(prog, cwd, "tools/dupcheck.py"):
+        return args == []
+    if script(prog, cwd, "tools/hotspots.sh"):
+        return args == [] or (len(args) == 1 and args[0].isdigit())
     if script(prog, cwd, "tools/deploy.sh"):
         return args in ([], ["status"])
     if script(prog, cwd, "tools/install_phone.sh") or script(prog, cwd, "desktop/install.sh"):
