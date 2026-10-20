@@ -60,4 +60,13 @@ class QuickAddPlanTest {
         assertEquals(TaskType.FOLDER, folder.type)
         assertEquals(TaskType.WAITING, plan("wait landlord").withChips(false, null, null, false, null, 0, 4).task!!.type)
     }
+
+    @Test
+    fun `the Folder chip offers open projects, and a project there takes the task as a step`() {
+        val done = Task(id = 5, title = "Old move", type = TaskType.PROJECT, isComplete = true)
+        val template = Task(id = 6, title = "Trip", type = TaskType.PROJECT, isTemplate = true)
+        assertEquals(listOf(work, groceries, move, workList), quickAddTargets(tasks + done + template))
+        assertEquals(move.id, plan("book van").withChips(false, null, null, false, move, 0, 4).task!!.parentId)
+        assertEquals(work.id, plan("work: book van").withChips(false, null, null, false, move, 0, 4).task!!.parentId)
+    }
 }

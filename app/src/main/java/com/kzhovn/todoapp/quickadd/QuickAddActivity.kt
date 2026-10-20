@@ -108,7 +108,7 @@ class QuickAddActivity : ComponentActivity() {
             val folderColorsOf = remember(folders) { folderColors(folders.filter { it.type == TaskType.FOLDER }) }
 
             LaunchedEffect(Unit) {
-                // Checklists too: picking one makes the text its new items ("milk, eggs").
+                // Projects and checklists too: picking a checklist makes the text its new items ("milk, eggs").
                 folders = quickAddTargets(repository.getAllTasks())
                 // With no folder asked for, new tasks land in folder mode's folder, or Personal (if it exists),
                 // as Discord adds do.

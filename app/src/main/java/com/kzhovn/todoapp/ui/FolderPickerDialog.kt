@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Checklist
@@ -44,9 +45,9 @@ import com.kzhovn.todoapp.ui.theme.LedgerMuted
 import com.kzhovn.todoapp.ui.theme.folderColors
 
 // Shared by TaskEditActivity (editing an existing task: needs cycle protection + Labels.NO_FOLDER +
-// inline folder creation), BulkEditActivity and QuickAddActivity (whose list has checklists too).
-// A tree: each folder in its own colour, subfolders indented under their parent, the current one
-// (selectedId) highlighted with a tick.
+// inline folder creation), BulkEditActivity and QuickAddActivity (whose list has projects and checklists too).
+// A tree: each folder in its own colour, subfolders and projects indented under their parent, the current one
+// (selectedId) highlighted with a tick. Checklists come last, on their own below a line.
 @Composable
 fun FolderPickerDialog(
     folders: List<Task>,
@@ -61,7 +62,8 @@ fun FolderPickerDialog(
     noFolderLabel: String = Labels.NO_FOLDER
 ) {
     val colors = remember(folders) { folderColors(folders) }
-    val rows = remember(folders, excludeDescendantsOf) { folderTree(folders, excludeDescendantsOf, allById.ifEmpty { folders.associateBy { it.id } }) }
+    val (checklists, tree) = remember(folders) { folders.partition { it.type == TaskType.CHECKLIST } }
+    val rows = remember(folders, excludeDescendantsOf) { folderTree(tree, excludeDescendantsOf, allById.ifEmpty { folders.associateBy { it.id } }) }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {},
@@ -70,11 +72,15 @@ fun FolderPickerDialog(
             Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) {
                 if (showNoFolderOption) PickerRow(noFolderLabel, Icons.Filled.FolderOff, LedgerMuted, depth = 0, selected = selectedId == null, muted = true) { onPick(null) }
                 rows.forEach { (f, depth) ->
-                    val checklist = f.type == TaskType.CHECKLIST
+                    val project = f.type == TaskType.PROJECT
                     PickerRow(
-                        f.title, if (checklist) Icons.Filled.Checklist else Icons.Filled.Folder, if (checklist) LedgerMuted else colors[f.id] ?: LedgerMuted,
+                        f.title, if (project) Icons.Filled.AccountTree else Icons.Filled.Folder, if (project) LedgerMuted else colors[f.id] ?: LedgerMuted,
                         depth, selected = f.id == selectedId
                     ) { onPick(f) }
+                }
+                if (checklists.isNotEmpty()) HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(vertical = 4.dp))
+                checklists.sortedBy { it.title.lowercase() }.forEach { c ->
+                    PickerRow(c.title, Icons.Filled.Checklist, LedgerMuted, depth = 0, selected = c.id == selectedId) { onPick(c) }
                 }
                 if (onCreateNew != null) {
                     HorizontalDivider(color = LedgerBorder, modifier = Modifier.padding(top = 6.dp))

@@ -92,7 +92,8 @@ fun trayState(service: TaskService, list: String?): TrayState {
     val focus = CurrentTask.focusSession(all)?.let { FocusRow(it.id, it.title, it.isComplete, it.notes?.takeIf { n -> n.isNotBlank() }?.lines()?.take(4)?.joinToString("\n")?.take(300), question(it)) }
     // The quick add and mode pickers only come with a list.
     val withList = list in LISTS
-    val folders = if (!withList) emptyList() else quickAddTargets(all)
+    // No projects yet: the top bar's flat list would show them as folders.
+    val folders = if (!withList) emptyList() else quickAddTargets(all).filter { it.type != TaskType.PROJECT }
         .sortedBy { it.title.lowercase() }.map { FolderRow(it.id, it.title, checklist = it.type == TaskType.CHECKLIST) }
     val defaultFolder = if (!withList) null else service.defaultFolderId()
     // The same folders, in the same tree, as the phone's and the web's mode pickers.

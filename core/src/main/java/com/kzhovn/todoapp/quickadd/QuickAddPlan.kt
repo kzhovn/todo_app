@@ -67,8 +67,12 @@ private fun fromTemplate(input: String, tasks: Collection<Task>, now: Long): Qui
     return QuickAdd(task = Task(title = title, startDate = parsed?.task?.startDate, dueDate = parsed?.task?.dueDate), fromTemplate = template.id, pin = parsed?.pin == true, focus = parsed?.focus == true)
 }
 
-// What quick add's Folder chip offers: folders, and open checklists (whose items the text then is).
-fun quickAddTargets(tasks: Collection<Task>): List<Task> = tasks.filter { it.type == TaskType.FOLDER || (it.type == TaskType.CHECKLIST && !it.isComplete) }
+// What quick add's Folder chip offers: folders, open projects (the task becomes a step) and open checklists
+// (whose items the text then is).
+fun quickAddTargets(tasks: Collection<Task>): List<Task> = tasks.filter {
+    it.type == TaskType.FOLDER || (it.type in CHIP_LISTS && !it.isComplete && !it.isTemplate)
+}
+private val CHIP_LISTS = setOf(TaskType.PROJECT, TaskType.CHECKLIST)
 
 // A checklist on the Folder chip: the text is its new items.
 fun chipItems(text: String, chip: Task?): QuickAdd? =
@@ -93,7 +97,7 @@ fun QuickAdd.withChips(star: Boolean, start: Long?, due: Long?, todayOnly: Boole
         isStarred = task.isStarred || star,
         startDate = start ?: task.startDate,
         dueDate = due ?: task.dueDate,
-        parentId = task.parentId ?: folder?.takeIf { it.type == TaskType.FOLDER }?.id,
+        parentId = task.parentId ?: folder?.takeIf { it.type == TaskType.FOLDER || it.type == TaskType.PROJECT }?.id,
         expiresAt = if (todayOnly) nextRollover(now, rolloverHour) else task.expiresAt
     ))
 }
