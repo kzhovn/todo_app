@@ -15,6 +15,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.longClick
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.unit.dp
@@ -184,6 +185,8 @@ class ScreenshotRender {
             val errands = app.contextRepository.createContext(com.kzhovn.todoapp.data.TaskContext(name = "Errands", type = com.kzhovn.todoapp.data.ContextType.LABEL, forced = false))
             listOf("Renew passport", "Buy stamps").forEach { app.contextRepository.setTaskContexts(app.repository.createTask(Task(title = it)), setOf(errands)) }
             app.repository.createTask(Task(title = "Pay rent", isStarred = true))
+            app.contextRepository.createContext(com.kzhovn.todoapp.data.TaskContext(name = "Home", type = com.kzhovn.todoapp.data.ContextType.PLACE, wifiSsid = "Raspberry", isCurrentlySatisfied = true))
+            app.contextRepository.createContext(com.kzhovn.todoapp.data.TaskContext(name = "Work", type = com.kzhovn.todoapp.data.ContextType.TIME, forced = true))
             errands
         }
         viewModel.load(TaskListMode.ACTIVE, "stamps", com.kzhovn.todoapp.data.SearchFilters(contextId = errands))
@@ -192,7 +195,7 @@ class ScreenshotRender {
                 Column {
                     androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         SearchBar("stamps", searching = true, onStart = {}, onChange = {}, Modifier.weight(1f).padding(8.dp))
-                        ContextButton(viewModel.contextSummaries.collectAsState().value, errands, onPick = {})
+                        ContextButton(viewModel.contextSummaries.collectAsState().value, errands, onPick = {}, onCycle = {})
                     }
                     ContextFilterBar(errands, viewModel.contextSummaries.collectAsState().value, picked = true) {}
                     TaskListScreen(viewModel, {}, {}, {}, { _, _ -> }, {}, sectioned = true)
@@ -202,6 +205,12 @@ class ScreenshotRender {
         // The view model's loads hop back to the main looper, which nothing else idles here.
         compose.waitUntil(5000) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); viewModel.tasks.value.isNotEmpty() && viewModel.contextSummaries.value.isNotEmpty() }
         draw(compose.activity.window.decorView, "filtered_list")
+        // The @ menu open over it.
+        compose.onNodeWithText("@Errands").performClick()
+        compose.waitForIdle()
+        val global = Class.forName("android.view.WindowManagerGlobal").let { it.getMethod("getInstance").invoke(null) }
+        val views = global.javaClass.getDeclaredField("mViews").apply { isAccessible = true }.get(global) as List<*>
+        draw(views.last() as android.view.View, "context_menu")
     }
 
     @Test

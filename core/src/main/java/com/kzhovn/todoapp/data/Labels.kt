@@ -101,6 +101,14 @@ object Labels {
     }
     // TaskContext.forced's choices: on its own (wifi, the clock), or held on or off by hand.
     val CONTEXT_FORCED = listOf(null to "Auto", true to "On", false to "Off")
+    // Why a context holds or not now, under its name in the @ menu (ContextStates.why).
+    fun switchedByHand(on: Boolean) = "switched ${if (on) "On" else "Off"}"
+    fun onWifi(ssid: String, on: Boolean) = (if (on) "on " else "not on ") + ssid
+    fun windowUntil(time: String) = "until $time"
+    fun windowFrom(time: String, day: String?) = "from $time" + (day?.let { " $it" } ?: "")
+    const val TOMORROW = "tomorrow"
+    // The @ menu's key to its dots.
+    val CONTEXT_DOTS = listOf("now", "not now", LABEL_CONTEXT.lowercase())
 
     // Repeat
     const val DONT_REPEAT = "Don't repeat"

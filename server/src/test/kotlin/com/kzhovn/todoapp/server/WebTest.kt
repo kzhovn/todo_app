@@ -252,6 +252,10 @@ class WebTest {
         assertTrue(filtered.contains("href=\"/doing?context=${errands.id}\"")) // kept going to another list
         assertTrue(client.get("/list/active?q=@errands").bodyAsText().contains(">Buy stamps<"))
 
+        // The @ menu: its row says why, and its button (posting a form outside the search's) turns it back On.
+        assertTrue(page.contains("id=\"context-pick\"") && page.contains("switched Off"))
+        assertTrue(page.contains("form=\"forced-${errands.id}\" value=\"auto\"") && page.contains("id=\"forced-${errands.id}\""))
+
         // Switched back On from the sidebar's ⋯, back to the page it was on.
         val noRedirects = createClient { followRedirects = false }
         val back = noRedirects.submitForm("/contexts/${errands.id}/forced?back=%2Factive", parameters { append("forced", "auto") })

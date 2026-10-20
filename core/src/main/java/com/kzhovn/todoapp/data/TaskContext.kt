@@ -66,6 +66,12 @@ fun forcedChoices(context: TaskContext): List<Pair<Boolean?, String>> =
 // Which of forcedChoices is picked: a filter-only one set On by hand is the same as Auto.
 fun forcedShown(context: TaskContext): Boolean? = context.forced.takeUnless { context.type == ContextType.LABEL && it == true }
 
+// The @ menu's rotating button: Auto → On → Off → Auto (a filter-only one: On ⇄ Off).
+fun nextForced(context: TaskContext): Boolean? =
+    forcedChoices(context).map { it.first }.let { it[(it.indexOf(forcedShown(context)) + 1) % it.size] }
+
+fun forcedLabel(context: TaskContext): String = forcedChoices(context).first { it.first == forcedShown(context) }.second
+
 // Open tasks by context, their own or inherited: the context menus' counts.
 fun openByContext(all: Collection<Task>, contextsByTaskId: Map<Long, Set<Long>>): Map<Long, Int> {
     val byId = all.associateBy { it.id }

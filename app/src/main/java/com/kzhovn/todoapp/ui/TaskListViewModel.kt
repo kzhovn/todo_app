@@ -22,6 +22,7 @@ import com.kzhovn.todoapp.repository.contextSummaries
 import com.kzhovn.todoapp.data.Task
 import com.kzhovn.todoapp.data.TaskDependency
 import com.kzhovn.todoapp.data.TaskContext
+import com.kzhovn.todoapp.data.nextForced
 import com.kzhovn.todoapp.repository.ContextRepository
 import com.kzhovn.todoapp.repository.TaskRepository
 import com.kzhovn.todoapp.repository.filterDoing
@@ -198,6 +199,8 @@ class TaskListViewModel(
         _contextSummaries.value = contextSummaries(contexts, contextRepository.getAllTimeWindows(), all, _contextsByTaskId.value, clock(), repository.calendarEvents())
         return all
     }
+
+    fun cycleForced(context: TaskContext) = act { contextRepository.setForced(context.id, nextForced(context)) }
 
     fun toggleStar(taskId: Long) = act { repository.toggleStar(taskId) }
 

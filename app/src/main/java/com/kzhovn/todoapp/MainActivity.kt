@@ -284,7 +284,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         val summaries by viewModel.contextSummaries.collectAsState()
-                        ContextButton(summaries, pickedContext, onPick = { ContextFilter.id.value = it })
+                        ContextButton(summaries, pickedContext, onPick = { ContextFilter.id.value = it }, onCycle = viewModel::cycleForced)
                     }
                     if (showFilters) {
                         // The list's own data (it reloads on any change), for the filters' choices.

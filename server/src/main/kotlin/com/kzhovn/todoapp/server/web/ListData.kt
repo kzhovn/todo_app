@@ -2,6 +2,8 @@ package com.kzhovn.todoapp.server.web
 
 import com.kzhovn.todoapp.data.waitingBlocks
 import com.kzhovn.todoapp.repository.RunningWait
+import com.kzhovn.todoapp.repository.ContextSummary
+import com.kzhovn.todoapp.repository.contextSummaries
 import com.kzhovn.todoapp.data.nearestFolder
 import com.kzhovn.todoapp.repository.dimmedInTree
 import com.kzhovn.todoapp.data.inMode
@@ -118,6 +120,8 @@ class ListData(
     // Google Calendar's events: every calendar for contexts, the shown ones for everything you see.
     val events: List<CalendarEvent> by lazy { service.events() }
     val shownEvents: List<CalendarEvent> by lazy { service.shownEvents() }
+    // The contexts as the @ menu and the sidebar show them.
+    val contextRows: List<ContextSummary> by lazy { contextSummaries(contexts, contexts.flatMap { windows(it.id) }, all, service.contextIdsByTask(), now, events) }
     // The search's text, an "@home" typed in it read as the context filter (over the one picked).
     private val parsed by lazy { parseSearch(search.text, contexts) }
     val searchText: String get() = parsed.first

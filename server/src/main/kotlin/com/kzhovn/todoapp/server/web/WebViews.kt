@@ -9,6 +9,8 @@ import com.kzhovn.todoapp.data.ShownDue
 import com.kzhovn.todoapp.repository.dimmedInTree
 import com.kzhovn.todoapp.quickadd.typedType
 import io.ktor.http.Parameters
+import io.ktor.http.encodeURLParameter
+import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.SearchFilters
 import com.kzhovn.todoapp.data.notesMatch
 import com.kzhovn.todoapp.data.folderTree
@@ -163,8 +165,41 @@ fun FlowContent.listColumn(data: ListData) {
 }
 
 // The list's search box (/ jumps to it) and its filters, narrowing the list below as you type. The context filter
-// is picked in the sidebar; here it's a pill that clears it.
-private fun FlowContent.listSearch(data: ListData) = form(action = data.mode.path, method = FormMethod.get, classes = "list-search") {
+// is picked from the @ (or the sidebar); the pill clears it.
+private fun FlowContent.listSearch(data: ListData) {
+    searchForm(data)
+    // The @ menu's Auto/On/Off buttons post these: a form can't sit inside the search's.
+    data.contextRows.filter { it.inFilter }.forEach { s ->
+        form(action = "/contexts/${s.context.id}/forced?back=${(data.path + "#context-pick").encodeURLParameter()}", method = FormMethod.post) { id = "forced-${s.context.id}" }
+    }
+}
+
+// The @: a context's name filters by it; its button rotates Auto/On/Off and comes back with the menu open.
+private fun FlowContent.contextPick(data: ListData) = details(classes = "pp context-pick") {
+    id = "context-pick"
+    summary(classes = "pill") { attributes["aria-label"] = Labels.CONTEXT; +"@" }
+    div(classes = "pop") {
+        fun href(context: Long?) = data.pathOf(data.mode, data.folder, data.search.copy(context = context))
+        a(href = href(null), classes = if (data.search.context == null) "cp-any current" else "cp-any") { +Labels.ANY_CONTEXT }
+        data.contextRows.filter { it.inFilter }.forEach { s ->
+            val c = s.context
+            div(classes = if (data.search.context == c.id) "cp-row current" else "cp-row") {
+                a(href = href(c.id)) {
+                    span(classes = "cdot" + when { !s.holds -> " off"; c.type == ContextType.LABEL -> " label"; else -> "" }) {}
+                    span(classes = "cp-name") { +c.name; s.why?.let { span(classes = "why") { +it } } }
+                    span(classes = "n") { +"${s.open}" }
+                }
+                forcedButton(c, form = "forced-${c.id}")
+            }
+        }
+        a(href = href(SearchFilters.NO_CONTEXT), classes = "cp-none") { +Labels.NO_CONTEXT }
+        div(classes = "cp-key") {
+            listOf("", " off", " label").zip(Labels.CONTEXT_DOTS).forEach { (dot, word) -> span { span(classes = "cdot$dot") {}; +word } }
+        }
+    }
+}
+
+private fun FlowContent.searchForm(data: ListData) = form(action = data.mode.path, method = FormMethod.get, classes = "list-search") {
     attributes["hx-get"] = "/list/${data.mode.name.lowercase()}"
     attributes["hx-trigger"] = "input changed delay:250ms, search, change"
     attributes["hx-target"] = "#list"
@@ -183,6 +218,7 @@ private fun FlowContent.listSearch(data: ListData) = form(action = data.mode.pat
             +(if (id == SearchFilters.NO_CONTEXT) name else Labels.contextFilter(name, holds)); if (data.search.context == id) +" ✕"
         }
     }
+    contextPick(data)
     val filtersSet = data.search.copy(text = "", context = null) != ListSearch() || (data.folder != null && data.mode != ListMode.ALL)
     details(classes = if (filtersSet) "pp filters set" else "pp filters") {
         summary(classes = "pill") { +"Filters ▾" }

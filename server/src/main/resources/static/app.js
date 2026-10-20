@@ -10,6 +10,8 @@
     "Review:\n← →  earlier / later    − / +  zoom out / in\n\n" +
     "z  zoom into the folder on screen (folder mode), or out of the mode";
   if (location.hash === "#search") document.querySelector(".search-q")?.focus();
+  // Back from the @ menu's Auto/On/Off: the menu opens again, as on the phone.
+  if (location.hash === "#context-pick") document.getElementById("context-pick")?.setAttribute("open", "");
   // The sidebar's Contexts start shut and stay open or shut from page to page, until the window closes.
   const contexts = document.getElementById("nav-contexts");
   if (contexts) {

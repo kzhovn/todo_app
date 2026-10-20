@@ -70,8 +70,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import com.kzhovn.todoapp.MainActivity
 import com.kzhovn.todoapp.data.ContextType
-import com.kzhovn.todoapp.data.forcedChoices
-import com.kzhovn.todoapp.data.forcedShown
+import com.kzhovn.todoapp.data.nextForced
 import com.kzhovn.todoapp.repository.ContextSummary
 import com.kzhovn.todoapp.repository.contextSummaries
 import com.kzhovn.todoapp.ui.theme.LedgerAccent
@@ -216,12 +215,7 @@ private fun ContextsSection(drawerOpen: Boolean, onClose: () -> Unit) {
             }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-                    forcedChoices(c).forEach { (value, label) ->
-                        SelectablePill(label = label, selected = forcedShown(c) == value, fontSize = 13.sp, onClick = {
-                            scope.launch { app.contextRepository.setForced(c.id, value); tick++ }
-                        })
-                        Spacer(Modifier.width(6.dp))
-                    }
+                    ForcedButton(c) { scope.launch { app.contextRepository.setForced(c.id, nextForced(c)); tick++ } }
                 }
                 DropdownMenuItem(text = { Text(Labels.editContext(c.name)) }, onClick = {
                     menu = false
@@ -235,13 +229,16 @@ private fun ContextsSection(drawerOpen: Boolean, onClose: () -> Unit) {
 
 // A context's dot: green while it holds, grey while it doesn't, a ring for a filter-only one (as on the web).
 @Composable
-internal fun ContextDot(summary: ContextSummary) {
+internal fun ContextDot(summary: ContextSummary) = ContextDot(summary.holds, summary.context.type == ContextType.LABEL)
+
+@Composable
+internal fun ContextDot(holds: Boolean, label: Boolean) {
     val shape = CircleShape
     val m = Modifier.size(8.dp)
     Box(
         when {
-            !summary.holds -> m.background(LedgerCheckBorder, shape)
-            summary.context.type == ContextType.LABEL -> m.border(1.5.dp, LedgerCheckBorder, shape)
+            !holds -> m.background(LedgerCheckBorder, shape)
+            label -> m.border(1.5.dp, LedgerCheckBorder, shape)
             else -> m.background(LedgerGood, shape)
         }
     )

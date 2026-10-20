@@ -6,6 +6,7 @@ import com.kzhovn.todoapp.data.CalendarEvent
 import com.kzhovn.todoapp.data.ContextTimeWindow
 import com.kzhovn.todoapp.data.matchingEvents
 import com.kzhovn.todoapp.data.timeText
+import com.kzhovn.todoapp.data.clockTime
 import com.kzhovn.todoapp.data.resolvesBy
 import com.kzhovn.todoapp.data.ContextType
 import com.kzhovn.todoapp.data.dueStatus
@@ -119,6 +120,31 @@ class ContextStates(
     fun eventStateText(id: Long): String? = byId[id]?.takeIf { it.forced == null }?.let { eventNow(id) }
         ?.let { e -> Labels.untilEvent(holds(id), timeText(e.end), e.title) }
 
+    // Why it holds or not now, for the @ menu: "switched Off", an event's text, "on HomeNet", "until 21:00",
+    // "from 09:00 tomorrow", "filter only". An Events context goes by its event alone.
+    fun why(id: Long): String? {
+        val ctx = byId[id] ?: return null
+        ctx.forced?.let { return Labels.switchedByHand(it) }
+        eventStateText(id)?.let { return it }
+        return when (ctx.type) {
+            ContextType.LABEL -> Labels.LABEL_CONTEXT.lowercase()
+            ContextType.PLACE -> Labels.onWifi(ctx.wifiSsid.orEmpty(), ctx.isCurrentlySatisfied)
+            ContextType.TIME -> windowWhy(windowsByContext[id].orEmpty())
+            ContextType.EVENTS -> null
+        }
+    }
+
+    // The end of the window it's in, else the next start within a week.
+    private fun windowWhy(windows: List<ContextTimeWindow>): String? {
+        windows.firstOrNull { inWindow(it, minute, mask) }?.let { return Labels.windowUntil(clockTime(it.windowEndMinute)) }
+        val today = Integer.numberOfTrailingZeros(mask)
+        return (0..7).firstNotNullOfOrNull { d ->
+            val day = (today + d) % 7
+            windows.filter { it.daysMask and (1 shl day) != 0 && (d > 0 || it.windowStartMinute > minute) }.minOfOrNull { it.windowStartMinute }
+                ?.let { start -> Labels.windowFrom(clockTime(start), when (d) { 0 -> null; 1 -> Labels.TOMORROW; else -> Labels.WEEKDAYS.first { it.first == day }.second }) }
+        }
+    }
+
     // The event that has it held, or off, now: "Off until 15:00 (Dentist)".
     fun eventNow(id: Long): CalendarEvent? {
         val ctx = byId[id] ?: return null
@@ -136,30 +162,33 @@ fun contextHolds(ctx: TaskContext, windows: List<ContextTimeWindow>, currentMinu
         ContextType.PLACE -> ctx.isCurrentlySatisfied
         ContextType.LABEL -> true
         ContextType.EVENTS -> false
-        ContextType.TIME -> windows.any { w ->
-            (w.daysMask and todayMask) != 0 &&
-                if (w.windowStartMinute <= w.windowEndMinute) {
-                    currentMinuteOfDay in w.windowStartMinute..w.windowEndMinute
-                } else { // window spans midnight
-                    currentMinuteOfDay >= w.windowStartMinute || currentMinuteOfDay <= w.windowEndMinute
-                }
-        }
+        ContextType.TIME -> windows.any { inWindow(it, currentMinuteOfDay, todayMask) }
     }
 }
+
+private fun inWindow(w: ContextTimeWindow, currentMinuteOfDay: Int, todayMask: Int): Boolean =
+    (w.daysMask and todayMask) != 0 &&
+        if (w.windowStartMinute <= w.windowEndMinute) {
+            currentMinuteOfDay in w.windowStartMinute..w.windowEndMinute
+        } else { // window spans midnight
+            currentMinuteOfDay >= w.windowStartMinute || currentMinuteOfDay <= w.windowEndMinute
+        }
 
 fun contextHolds(ctx: TaskContext, windows: List<ContextTimeWindow>, now: Long): Boolean = contextHolds(ctx, windows, minuteOfDay(now), dayOfWeekMask(now))
 
 // A context as its menus show it (the phone's @ menu and side menu, the web's sidebar): its open tasks, and
 // whether it holds now.
-data class ContextSummary(val context: TaskContext, val open: Int, val holds: Boolean) {
+data class ContextSummary(val context: TaskContext, val open: Int, val holds: Boolean, val why: String? = null) {
     // A filter-only one switched Off says so; a place or time one's grey dot does.
     val countText: String get() = if (!holds && context.type == ContextType.LABEL) "$open ${Labels.OFF}" else "$open"
+    // The @ menu leaves Events contexts out: they hold no tasks of their own to filter by.
+    val inFilter: Boolean get() = context.type != ContextType.EVENTS
 }
 
 fun contextSummaries(contexts: Collection<TaskContext>, windows: List<ContextTimeWindow>, all: Collection<Task>, contextsByTaskId: Map<Long, Set<Long>>, now: Long, events: List<CalendarEvent> = emptyList()): List<ContextSummary> {
     val open = openByContext(all, contextsByTaskId)
     val states = ContextStates(contexts.toList(), windows, events, now)
-    return contexts.sortedBy { it.name.lowercase() }.map { ContextSummary(it, open[it.id] ?: 0, states.holds(it.id)) }
+    return contexts.sortedBy { it.name.lowercase() }.map { ContextSummary(it, open[it.id] ?: 0, states.holds(it.id), states.why(it.id)) }
 }
 
 // A list filtered by a context shows its tasks as if it held, whatever it's doing now; never saved.

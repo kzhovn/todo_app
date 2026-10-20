@@ -5,8 +5,10 @@ import com.kzhovn.todoapp.data.inMode
 import com.kzhovn.todoapp.data.TaskOrder
 import io.ktor.http.encodeURLParameter
 import com.kzhovn.todoapp.data.ContextType
-import com.kzhovn.todoapp.data.forcedChoices
+import com.kzhovn.todoapp.data.TaskContext
+import com.kzhovn.todoapp.data.forcedLabel
 import com.kzhovn.todoapp.data.forcedShown
+import com.kzhovn.todoapp.data.nextForced
 import com.kzhovn.todoapp.repository.ContextSummary
 import com.kzhovn.todoapp.repository.contextSummaries
 import kotlinx.html.FormMethod
@@ -171,8 +173,8 @@ private class SideNav(service: TaskService, list: ListData?) {
         shown.map { it to (inFolder[it.id] ?: 0) }
     }
     val topFolders get() = all.filter { it.type == TaskType.FOLDER && it.parentId == null }.sortedWith(TaskOrder)
-    val contexts: List<ContextSummary> = (list?.contexts ?: service.contexts()).let { cs ->
-        contextSummaries(cs, cs.flatMap { list?.windows(it.id) ?: service.timeWindows(it.id) }, all, service.contextIdsByTask(), list?.now ?: service.now(), service.events())
+    val contexts: List<ContextSummary> = list?.contextRows ?: service.contexts().let { cs ->
+        contextSummaries(cs, cs.flatMap { service.timeWindows(it.id) }, all, service.contextIdsByTask(), service.now(), service.events())
     }
 }
 
@@ -192,16 +194,21 @@ private fun FlowContent.contextLink(summary: ContextSummary, list: ListData?, ba
     details(classes = "pp context-menu") {
         summary { attributes["aria-label"] = c.name; +"⋯" }
         div(classes = "pop") {
-            form(action = "/contexts/${c.id}/forced?back=${back.encodeURLParameter()}", method = FormMethod.post, classes = "pills context-forced") {
-                forcedChoices(c).forEach { (value, label) ->
-                    button(type = ButtonType.submit, name = "forced", classes = if (forcedShown(c) == value) "pill set" else "pill") { this.value = value?.toString() ?: "auto"; +label }
-                }
-            }
+            form(action = "/contexts/${c.id}/forced?back=${back.encodeURLParameter()}", method = FormMethod.post, classes = "context-forced") { forcedButton(c) }
             a(href = "/contexts?edit=${c.id}") { +Labels.editContext(c.name) }
             a(href = "/contexts") { +Labels.MANAGE_CONTEXTS }
         }
     }
 }
+
+// A context's Auto/On/Off as one button showing where it is now; a click moves it on (nextForced). `form`: the
+// form it posts, when it can't sit inside it.
+internal fun FlowContent.forcedButton(c: TaskContext, form: String? = null) =
+    button(type = ButtonType.submit, name = "forced", classes = "cyc " + when (forcedShown(c)) { null -> "auto"; true -> "on"; false -> "off" }) {
+        form?.let { attributes["form"] = it }
+        value = nextForced(c)?.toString() ?: "auto"
+        +forcedLabel(c)
+    }
 
 // After a list action, the counts elsewhere on the page (the list's own, the sidebar's), swapped in
 // beside the list by htmx.
