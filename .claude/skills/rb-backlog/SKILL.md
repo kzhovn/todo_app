@@ -31,7 +31,8 @@ stops at a prompt nobody sees, so use the commands below **exactly as written**:
 
 ## 1. Should this run go ahead?
 
-Scheduled runs only (the prompt says "scheduled"); a run Kira started skips to the lock.
+Scheduled runs only (the prompt says "scheduled"); a manual run (the "Raspberry backlog (now)" task, or Kira
+typing `/rb-backlog`) skips to the lock.
 1. `tools/rb-check.sh gate`: any output is the reason to stop. Say it in one line and end.
 2. `mcp__ccd_session_mgmt__get_usage`: the 5-hour window over 50% used → stop ("leaving the window to Kira").
 3. `tools/rb-check.sh notes`: `none` → stop.
@@ -62,6 +63,8 @@ git worktree add .worktrees/rb-<first id> -b rb/<first id> main      (if rb/<fir
 cd MAIN/.worktrees/rb-<first id>
 tools/test.sh
 ```
+Before the tests: if the worktree has no `local.properties` (the Android SDK path, gitignored), Write a copy of
+MAIN's there.
 Work, test and commit **inside the worktree** (the commit hook checks the checkout you're in). If `tools/test.sh`
 fails on untouched `main`: write "main is red: <failing tests>" to `MAIN/docs/dev-msg.txt`, `cd MAIN`, run
 `tools/dev_notes.sh message < MAIN/docs/dev-msg.txt`, remove the worktree, unlock, stop.
@@ -95,7 +98,7 @@ fails on untouched `main`: write "main is red: <failing tests>" to `MAIN/docs/de
 
 ## 6. Ship
 
-From the worktree:
+From the worktree (`cd` into it; never `git -C <worktree>`, which needs approval):
 1. `git rebase main`. A conflict: `git rebase --abort`, ask about it (section 5), stop shipping. If `main` had
    moved, `tools/test.sh` again.
 2. Only if `git -C MAIN status --porcelain` prints nothing: `git -C MAIN merge --ff-only rb/<first id>`.

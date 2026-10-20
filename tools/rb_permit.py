@@ -16,7 +16,7 @@ import subprocess
 import sys
 
 MAIN = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-TASKS = ('<scheduled-task name="raspberry-backlog"', '<scheduled-task name="raspberry-hygiene"')
+TASKS = tuple(f'<scheduled-task name="{t}"' for t in ("raspberry-backlog", "raspberry-backlog-now", "raspberry-hygiene"))
 READ_ONLY_TOOLS = {"mcp__ccd_session_mgmt__get_usage", "mcp__ccd_session_mgmt__get_session"}
 # No quotes, braces, globs, ~, #, $, backticks, parentheses or newlines: none are needed (free text goes through
 # files), and each is a way for the shell to read a command differently from this script.

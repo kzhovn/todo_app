@@ -168,6 +168,8 @@ def queued(content):
 assert json.loads(hook(queued('<scheduled-task name="raspberry-backlog" file="x">')))["hookSpecificOutput"]["permissionDecision"] == "allow"
 assert hook(queued('<scheduled-task name="raspberry-backlog" file="x">'), "git push") == ""
 assert hook(queued('<scheduled-task name="raspberry-probe" file="x">')) == ""
+assert hook(queued('<scheduled-task name="raspberry-backlog-now" file="x">')) != ""
+assert hook(queued('<scheduled-task name="raspberry-backlogger" file="x">')) == ""
 assert hook(queued('hey, review this: <scheduled-task name="raspberry-backlog">')) == ""  # Kira quoting it
 assert hook({"type": "user", "message": '<scheduled-task name="raspberry-backlog">'}) == ""
 print("rb_permit: all checks pass")
