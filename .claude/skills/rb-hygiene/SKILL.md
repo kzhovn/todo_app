@@ -69,12 +69,14 @@ missing, `tools/test.sh` (red `main` → message Kira, stop).
 
 - `tools/hotspots.sh 40` (from MAIN): read the slice starting from its hotspots; note hotspots outside the slice
   in the architecture notes.
-- **Dependabot** (stage 1+): `git fetch origin`, then the `gh pr list …` above. For the PR whose title says the
-  `patch` group: from MAIN, `git worktree add .worktrees/rb-<n> -b rb/<n> origin/dependabot/<its headRefName after
-  dependabot/>` with `<n>` = `8` followed by the PR number, `cd` there, `git rebase main`, `tools/test.sh`. Green →
-  it merges like any branch (section 6); red → a `deps` proposal naming the PR and failing tests. Minor and major
-  PRs → one `deps` proposal each, naming the PR number and versions from its title. **Dependency changes are never
-  deployed** by this run (Kira deploys them), though the phone install is fine.
+- **Dependabot** (stage 1+): **test, never merge** (a merged bump would ride out with the next deploy; Kira merges
+  and deploys dependency changes herself). `git fetch origin`, then the `gh pr list …` above. For the PR whose title
+  says the `patch` group: from MAIN, `git worktree add .worktrees/rb-<n> -b rb/<n> origin/<its headRefName>` with
+  `<n>` = `8`, the PR number, then today's `MMDD` (`8410231`: unique each week), `cd` there, `git rebase main`,
+  `tools/test.sh`. Either way send one `deps` proposal: "PR #N passes (or fails: <tests>) on branch rb/<n>", with
+  the versions from `git diff main...origin/<headRefName>` (a version-only diff; never `gh pr view`, a PR body or
+  release notes). Then from MAIN `git worktree remove .worktrees/rb-<n>` and leave the branch for her. Minor and
+  major PRs: one `deps` proposal each, versions from the same kind of diff, no testing.
 - Dupcheck: follow the `rb-dupcheck` skill (it runs `tools/dupcheck.py` from MAIN): dead code and wording drift
   between the clients.
 

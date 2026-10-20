@@ -138,6 +138,9 @@ refused = [  # (command, cwd)
     ("git tag -f last-review HEAD~3", root), ("git tag -d last-review", root), ("git tag -f main HEAD", root),
     ("git worktree add .worktrees/rb-20 -b rb/20 origin/main", root), ("git worktree add .worktrees/rb-20 -b rb/20 FETCH_HEAD", root),
     ("tools/dev_notes.sh propose nonsense < docs/dev-msg.txt", root), ("tools/dev_notes.sh propose deps < /etc/passwd", root),
+    ("git worktree add .worktrees/rb-20 -b rb/20 origin/dependabot/x..main", root),
+    ("git worktree add .worktrees/rb-20 -b rb/20 origin/dependabot/../../../heads/rb/8", root),
+    ("grep -R x app", wt), ("grep --include=a x app", wt), ("git fetch origin", "/tmp"), ("git branch -d rb/9", "/tmp"),
     ("tools/hotspots.sh x", root), ("tools/hotspots.sh", wt), ("tools/dupcheck.py x", root), ("tools/dupcheck.py", wt),
 ]
 for c, cwd in allowed:

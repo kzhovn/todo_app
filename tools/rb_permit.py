@@ -32,7 +32,7 @@ FROM_WORKTREE = ("tools/test.sh", "tools/render_screens.sh", "gradlew")
 READ_ONLY_FORBIDDEN = ("--output", "--ext-diff", "--textconv", "--no-index")
 # Read-only commands and the flags they may take (none that write, follow commands or run anything).
 READERS = {
-    "grep": re.compile(r"-[rRnilcvwxEFoHhsq]+|-[ABCm]\d+|--include=[A-Za-z0-9_.*-]+"),
+    "grep": re.compile(r"-[rnilcvwxEFoHhsq]+|-[ABCm]\d+"),  # -r, not -R: no following symlinks out
     "ls": re.compile(r"-[laAhRt1d]+"),
     "wc": re.compile(r"-[lwc]+"),
     "head": re.compile(r"-n\d+|-\d+|-n"),
@@ -41,7 +41,7 @@ READERS = {
 GRADLE_ARG = re.compile(r"-q|--continue|--offline|:?[A-Za-z0-9_][A-Za-z0-9:_-]*")
 WORKTREE = re.compile(r"\.worktrees/rb-\d+")
 BRANCH = r"rb/\d+"
-DEPENDABOT = re.compile(r"origin/dependabot/[A-Za-z0-9._/-]+")
+DEPENDABOT = re.compile(r"origin/dependabot/(?!.*\.\.)[A-Za-z0-9._/-]+")  # no `..`: a ref range or a climb out
 # The Friday run reads Dependabot's PR list: numbers, titles and branch names only, never bodies (text it didn't
 # choose to read is how a prompt gets injected).
 DEPENDABOT_PRS = "gh pr list --author app/dependabot --state open --json number,title,headRefName".split()
@@ -121,7 +121,7 @@ def git_ok(args, cwd):
         return in_main(cwd) and not any(forbidden_option(a) or (not a.startswith("-") and not in_main(real(a, cwd)))
                                         for a in rest)
     if verb == "worktree":
-        return rest == ["list"] or (rest[:1] == ["remove"] and len(rest) == 2 and WORKTREE.fullmatch(rest[1]) is not None) or (
+        return in_main(cwd) and rest == ["list"] or (rest[:1] == ["remove"] and len(rest) == 2 and WORKTREE.fullmatch(rest[1]) is not None) or (
             rest[:1] == ["add"] and cwd == MAIN and len(rest) in (3, 5) and WORKTREE.fullmatch(rest[1]) is not None
             and rest[-1] == "main" and (len(rest) == 3 or (rest[2] == "-b" and re.fullmatch(BRANCH, rest[3])))) or (
             # Resuming a crashed run's branch.
@@ -131,11 +131,11 @@ def git_ok(args, cwd):
             rest[:1] == ["add"] and cwd == MAIN and len(rest) == 5 and WORKTREE.fullmatch(rest[1]) is not None
             and rest[2] == "-b" and re.fullmatch(BRANCH, rest[3]) is not None and DEPENDABOT.fullmatch(rest[4]) is not None)
     if verb == "fetch":
-        return rest == ["origin"]
+        return rest == ["origin"] and in_main(cwd)
     if verb == "tag":
         return rest == ["-f", "last-review", "main"] and cwd == MAIN
     if verb == "branch":
-        return len(rest) == 2 and rest[0] == "-d" and re.fullmatch(BRANCH, rest[1]) is not None
+        return in_main(cwd) and len(rest) == 2 and rest[0] == "-d" and re.fullmatch(BRANCH, rest[1]) is not None
     if not in_wt:  # the rest change history: only in a worker's worktree
         return False
     if verb == "add":
