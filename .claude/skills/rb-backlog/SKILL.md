@@ -35,9 +35,10 @@ Scheduled runs only (the prompt says "scheduled"); a manual run (the "Raspberry 
 typing `/rb-backlog`) skips to the lock. The hourly prompt has already run `tools/rb-check.sh go` (pause, lock,
 activity gate, open notes) and only got here with work to do, or with `digest` (go straight to section 7). Then:
 - `mcp__ccd_session_mgmt__get_usage`: stop ("leaving the quota to Kira") if the 5-hour window is over 50% used, or
-  the **weekly** window is over twice its fair share so far: with `elapsed` = 7 days minus the weekly `resetsIn`,
-  stop when `percentUsed` > 2 × 100 × elapsed / 7 days (over 29% after day 1, over 57% after day 2; from day 3.5 it
-  never stops a run). Manual runs check this too: Kira can say to go ahead anyway.
+  the **weekly** window is over its cutoff. On Friday (the reset is Friday 18:00) there is none: spare quota is
+  there to be used. Any other day the cutoff is the lower of 95% and twice the fair share so far: with `elapsed` =
+  7 days minus the weekly `resetsIn`, stop when `percentUsed` > min(95, 2 × 100 × elapsed / 7 days) (over 29% after
+  day 1, 57% after day 2, then 95%). Manual runs check this too: Kira can say to go ahead anyway.
 
 Then `tools/rb-check.sh lock backlog` (fails if another run holds it: stop). From here on, **always** finish
 with `tools/rb-check.sh unlock`, whatever happens, and run `tools/rb-check.sh touch` after each note.

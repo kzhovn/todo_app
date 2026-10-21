@@ -34,13 +34,13 @@ Scheduled runs only (the prompt says "scheduled"); a manual run (the "Raspberry 
 `/rb-hygiene`) skips to the lock.
 1. `tools/rb-check.sh gate`: any output → stop with it in one line.
 2. `tools/rb-check.sh notes`: anything but `none` → stop (the backlog comes first).
-3. `mcp__ccd_session_mgmt__get_usage`: the **weekly** window over 90% used → stop. (Not the 5-hour gate: spending
-   the window is the point.)
+3. No weekly cutoff: this runs on Friday, when spare quota is there to be used.
 
 Then `tools/rb-check.sh lock hygiene` (held → stop). Always end with `tools/rb-check.sh unlock`; run
 `tools/rb-check.sh touch` after each step.
 
-**Budget:** check `get_usage` after each step and lens; stop cleanly at weekly ~97% or 5-hour ~90%. Every fix is
+**Budget:** check `get_usage` after each step and lens; stop cleanly if the 5-hour window passes ~90% (the weekly
+window can run out: it resets at 18:00). Every fix is
 its own commit, so stopping loses nothing. The 13:00 run carries on from the log.
 
 ## 2. Pick up where things are
