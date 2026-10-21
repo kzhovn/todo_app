@@ -178,7 +178,7 @@ def bash_ok(command, cwd):
     if prog == "gh":
         return words == DEPENDABOT_PRS
     if script(prog, cwd, "tools/rb-check.sh"):
-        return args in (["gate"], ["notes"], ["touch"], ["unlock"]) or (len(args) == 2 and args[0] == "lock" and args[1].isalpha())
+        return args in (["go"], ["gate"], ["notes"], ["touch"], ["unlock"]) or (len(args) == 2 and args[0] == "lock" and args[1].isalpha())
     if script(prog, cwd, "tools/dev_notes.sh"):
         n = len(args)
         if n == 2 and args[0] in ("list",) and args[1].isalpha():

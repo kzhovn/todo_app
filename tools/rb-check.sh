@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # The backlog worker's cheap checks and its lock (docs/superpowers/specs/2026-10-18-dev-workflow-design.md).
-# Usage: tools/rb-check.sh gate      prints why a scheduled run shouldn't start; nothing means go
+# Usage: tools/rb-check.sh go        the hourly run's one cheap check: a reason to stop, "digest" (23:00 with work
+#                                    logged today, nothing to do), or nothing (work to do)
+#        tools/rb-check.sh gate      prints why a scheduled run shouldn't start; nothing means go
 #        tools/rb-check.sh notes     prints "none" if no raspberry note is open
 #        tools/rb-check.sh lock      takes the global lock (fails if another run holds it)
 #        tools/rb-check.sh touch     marks the lock as still held (call between steps)
@@ -13,6 +15,15 @@ STALE_MIN=120
 held() { [ -f "$LOCK" ] && [ -n "$(find "$LOCK" -mmin -"$STALE_MIN")" ]; }
 
 case "${1:-}" in
+go)
+    reason=$("$0" gate)
+    [ -z "$reason" ] && [ "$("$0" notes)" = none ] && reason="nothing open"
+    if [ -n "$reason" ] && [ "$(date +%H)" = 23 ] && ! held && grep -q "^- $(date +%F)" "$(dirname "$0")/../docs/dev-log.md" 2>/dev/null; then
+        echo digest
+    else
+        echo "$reason"
+    fi
+    ;;
 gate)
     [ -e ~/.config/raspberry/paused ] && { echo "paused (~/.config/raspberry/paused)"; exit 0; }
     held && { echo "another run holds the lock: $(cat "$LOCK")"; exit 0; }
@@ -40,5 +51,5 @@ lock)
     ;;
 touch) touch "$LOCK" ;;
 unlock) rm -f "$LOCK" ;;
-*) sed -n 3,7p "$0"; exit 1 ;;
+*) sed -n 3,9p "$0"; exit 1 ;;
 esac

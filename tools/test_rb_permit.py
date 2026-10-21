@@ -64,7 +64,7 @@ allowed = [  # (command, cwd)
     ("tools/test.sh", wt), ("tools/test.sh server app", wt), ("tools/test.sh 2>&1", wt),
     ("./gradlew -q :app:assembleDebug", wt),
     (f"tools/render_screens.sh {root}/docs/dev-shots/7", wt),
-    ("tools/rb-check.sh gate", root), ("tools/rb-check.sh lock backlog", root), ("tools/rb-check.sh unlock", root),
+    ("tools/rb-check.sh gate", root), ("tools/rb-check.sh go", root), ("tools/rb-check.sh lock backlog", root), ("tools/rb-check.sh unlock", root),
     ("tools/dev_notes.sh list raspberry", root), ("tools/dev_notes.sh state 5 working", root),
     ("tools/dev_notes.sh wait 5", root),
     (f"tools/dev_notes.sh message 5 < {root}/docs/dev-msg.txt", root),

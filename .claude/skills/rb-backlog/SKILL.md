@@ -32,10 +32,9 @@ stops at a prompt nobody sees, so use the commands below **exactly as written**:
 ## 1. Should this run go ahead?
 
 Scheduled runs only (the prompt says "scheduled"); a manual run (the "Raspberry backlog (now)" task, or Kira
-typing `/rb-backlog`) skips to the lock.
-1. `tools/rb-check.sh gate`: any output is the reason to stop. Say it in one line and end.
-2. `mcp__ccd_session_mgmt__get_usage`: the 5-hour window over 50% used → stop ("leaving the window to Kira").
-3. `tools/rb-check.sh notes`: `none` → stop.
+typing `/rb-backlog`) skips to the lock. The hourly prompt has already run `tools/rb-check.sh go` (pause, lock,
+activity gate, open notes) and only got here with work to do, or with `digest` (go straight to section 7). Then:
+- `mcp__ccd_session_mgmt__get_usage`: the 5-hour window over 50% used → stop ("leaving the window to Kira").
 
 Then `tools/rb-check.sh lock backlog` (fails if another run holds it: stop). From here on, **always** finish
 with `tools/rb-check.sh unlock`, whatever happens, and run `tools/rb-check.sh touch` after each note.
@@ -114,7 +113,7 @@ From the worktree (`cd` into it; never `git -C <worktree>`, which needs approval
 
 ## 7. Digest and end
 
-The 23:00 scheduled run (or a run Kira asks for one in) sends the day's digest:
+The 23:00 scheduled run (or a run Kira asks for one in) sends the day's digest, whether or not it had work:
 write it to `MAIN/docs/dev-msg.txt` and run `tools/dev_notes.sh message < MAIN/docs/dev-msg.txt`. It covers today's
 `MAIN/docs/dev-log.md` lines: done (commits), waiting on
 Kira, branches waiting on a clean checkout, leftover worktrees, failed installs, what to try on the phone, and
